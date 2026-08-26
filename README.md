@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EduManage BD - Coaching Management System
 
-## Getting Started
+A full-featured coaching center management solution built with Next.js 14 and Supabase, deployable on Vercel.
 
-First, run the development server:
+## Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Student Management** - Registration, enrollment, batch assignment, referral system
+- **Batch & Class Management** - Create batches, assign teachers, track occupancy
+- **Fee & Payment** - Record payments, auto-receipt generation, due tracking
+- **Biometric Entry** - Fingerprint scan simulation with RED/GREEN siren for fee alerts
+- **Exam & Results** - Create exams, enter marks, leaderboard
+- **Study Materials** - Inventory management for books, notes, worksheets
+- **Referral System** - Student referral codes with commission tracking
+- **Bulk SMS** - Send SMS to guardians (mock, SSL Wireless, or Twilio)
+- **Course Marketplace** - Teacher course uploads, admin approval, public browsing
+- **Multi-role Dashboard** - Owner, Receptionist, Teacher, Accountant
+- **Public Pages** - Online enrollment, parent portal, course marketplace
+- **Analytics** - Revenue, expenses, profit tracking with charts
+
+## Tech Stack
+
+- **Frontend**: Next.js 14 (App Router), Tailwind CSS, Radix UI, Recharts
+- **Backend**: Supabase (PostgreSQL, Auth, Realtime, Storage)
+- **Forms**: react-hook-form + Zod
+- **PDF**: jsPDF + jsPDF-autotable
+- **Hosting**: Vercel (free tier)
+
+## Setup
+
+### 1. Supabase Setup
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. Go to SQL Editor, run `supabase/migrations/001_schema.sql`
+3. Copy your project URL and keys
+
+### 2. Environment Variables
+
+Copy `.env.local` and fill in your Supabase keys:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Create Owner Account
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+In Supabase Dashboard:
+1. Go to Authentication > Users, create a user (email/password)
+2. Go to SQL Editor, run:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```sql
+INSERT INTO branches (name) VALUES ('Main Branch');
 
-## Learn More
+INSERT INTO staff (auth_user_id, name, email, role, branch_id)
+VALUES (
+  'paste-auth-user-uuid-here',
+  'Admin',
+  'admin@example.com',
+  'owner',
+  (SELECT id FROM branches LIMIT 1)
+);
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 4. Local Development
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm install
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Visit http://localhost:3000
 
-## Deploy on Vercel
+### 5. Deploy to Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npx vercel
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Or connect your GitHub repo at [vercel.com](https://vercel.com) and set environment variables in the Vercel dashboard.
+
+## User Roles
+
+| Role | Access |
+|------|--------|
+| **Owner** | Full access to all modules |
+| **Receptionist** | Students, payments, attendance, biometric entry |
+| **Teacher** | Own batches, attendance, exams, courses |
+| **Accountant** | Payments, fee dues, expenses, reports |
+
+## License
+
+MIT
