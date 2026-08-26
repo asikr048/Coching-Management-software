@@ -11,6 +11,7 @@ interface BatchData {
   id: string; name: string; subject?: string; class_level?: string; teacher_id?: string
   max_seats: number; current_seats: number; monthly_fee: number; admission_fee: number
   fee_type: string; is_active: boolean; teacher?: { name: string; subject?: string }
+  schedule_days?: string; schedule_time?: string; description?: string; image_url?: string
 }
 
 export default function BatchesClient({ batches: initialBatches, teachers, rooms }: { batches: BatchData[]; teachers: Teacher[]; rooms: Room[] }) {
