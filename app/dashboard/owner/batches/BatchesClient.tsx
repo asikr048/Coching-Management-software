@@ -77,6 +77,11 @@ export default function BatchesClient({ batches: initialBatches, teachers, rooms
                   <span>Teacher: {batch.teacher?.name || "Unassigned"}</span>
                   <span className="font-medium text-gray-700">{formatCurrency(batch.monthly_fee)}/mo</span>
                 </div>
+                {(batch.schedule_days || batch.schedule_time) && (
+                  <div className="text-xs text-indigo-600 bg-indigo-50 rounded-lg px-2 py-1.5 mt-1">
+                    📅 {batch.schedule_days}{batch.schedule_time ? ` • ${batch.schedule_time}` : ""}
+                  </div>
+                )}
               </div>
             </div>
           )
