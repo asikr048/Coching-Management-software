@@ -4,19 +4,15 @@ import { GraduationCap, BookOpen, Users, Clock, Calendar, MapPin, Star, ArrowRig
 import Link from "next/link"
 
 export default async function HomePage() {
-  const supabase = await createClient()
   let batches: any[] = []
   let courses: any[] = []
   let studentCount: number | null = 0
   try {
+    const supabase = await createClient()
     const { data: b } = await supabase.from("batches").select("*, teacher:staff(name)").eq("is_active", true).order("created_at", { ascending: false })
     batches = b || []
-  } catch {}
-  try {
     const { data: c } = await supabase.from("courses").select("*, teacher:staff(name)").eq("status", "published").order("total_sales", { ascending: false }).limit(6)
     courses = c || []
-  } catch {}
-  try {
     const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("is_active", true)
     studentCount = count
   } catch {}
