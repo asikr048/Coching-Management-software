@@ -5,9 +5,21 @@ import Link from "next/link"
 
 export default async function HomePage() {
   const supabase = await createClient()
-  const { data: batches } = await supabase.from("batches").select("*, teacher:staff(name)").eq("is_active", true).order("created_at", { ascending: false })
-  const { data: courses } = await supabase.from("courses").select("*, teacher:staff(name)").eq("status", "published").order("total_sales", { ascending: false }).limit(6)
-  const { count: studentCount } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("is_active", true)
+  let batches: any[] = []
+  let courses: any[] = []
+  let studentCount: number | null = 0
+  try {
+    const { data: b } = await supabase.from("batches").select("*, teacher:staff(name)").eq("is_active", true).order("created_at", { ascending: false })
+    batches = b || []
+  } catch {}
+  try {
+    const { data: c } = await supabase.from("courses").select("*, teacher:staff(name)").eq("status", "published").order("total_sales", { ascending: false }).limit(6)
+    courses = c || []
+  } catch {}
+  try {
+    const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("is_active", true)
+    studentCount = count
+  } catch {}
 
   return (
     <div className="min-h-screen bg-white">
