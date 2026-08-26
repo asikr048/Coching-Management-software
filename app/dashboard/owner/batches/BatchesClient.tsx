@@ -18,7 +18,7 @@ export default function BatchesClient({ batches: initialBatches, teachers, rooms
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
-  const [form, setForm] = useState({ name: "", subject: "", class_level: "", teacher_id: "", room_id: "", max_seats: "30", monthly_fee: "0", admission_fee: "0", fee_type: "monthly" })
+  const [form, setForm] = useState({ name: "", subject: "", class_level: "", teacher_id: "", room_id: "", max_seats: "30", monthly_fee: "0", admission_fee: "0", fee_type: "monthly", schedule_days: "", schedule_time: "", description: "" })
 
   function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })) }
 
@@ -31,11 +31,13 @@ export default function BatchesClient({ batches: initialBatches, teachers, rooms
         teacher_id: form.teacher_id || null, room_id: form.room_id || null,
         max_seats: parseInt(form.max_seats), monthly_fee: parseFloat(form.monthly_fee),
         admission_fee: parseFloat(form.admission_fee), fee_type: form.fee_type,
+        schedule_days: form.schedule_days || null, schedule_time: form.schedule_time || null,
+        description: form.description || null,
       }).select("*, teacher:staff(name, subject)").single()
       if (error) throw error
       setBatches([data, ...batches])
       setShowModal(false)
-      setForm({ name: "", subject: "", class_level: "", teacher_id: "", room_id: "", max_seats: "30", monthly_fee: "0", admission_fee: "0", fee_type: "monthly" })
+      setForm({ name: "", subject: "", class_level: "", teacher_id: "", room_id: "", max_seats: "30", monthly_fee: "0", admission_fee: "0", fee_type: "monthly", schedule_days: "", schedule_time: "", description: "" })
       toast.success(`Batch "${form.name}" created!`)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to create batch")
@@ -114,6 +116,9 @@ export default function BatchesClient({ batches: initialBatches, teachers, rooms
                     <option value="monthly">Monthly</option><option value="quarterly">Quarterly</option><option value="one_time">One-time</option>
                   </select>
                 </div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Schedule Days</label><input value={form.schedule_days} onChange={e => update("schedule_days", e.target.value)} className={inputClass} placeholder="e.g., Sat, Mon, Wed" /></div>
+                <div><label className="block text-sm font-medium text-gray-700 mb-1">Schedule Time</label><input value={form.schedule_time} onChange={e => update("schedule_time", e.target.value)} className={inputClass} placeholder="e.g., 4:00 PM - 6:00 PM" /></div>
+                <div className="col-span-2"><label className="block text-sm font-medium text-gray-700 mb-1">Description (shown on website)</label><textarea value={form.description} onChange={e => update("description", e.target.value)} className={inputClass} rows={2} placeholder="Brief description for prospective students..." /></div>
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">Cancel</button>
