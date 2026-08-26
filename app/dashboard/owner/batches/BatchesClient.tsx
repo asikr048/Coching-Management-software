@@ -45,7 +45,7 @@ export default function BatchesClient({ batches: initialBatches, teachers, rooms
     } finally { setLoading(false) }
   }
 
-  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
 
   return (
     <div>

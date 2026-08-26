@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -55,7 +55,7 @@ export default function EditStudentPage() {
     finally { setLoading(false) }
   }
 
-  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
 
   if (fetching) return <div className="flex items-center justify-center h-64 text-gray-400"><Loader2 className="w-6 h-6 animate-spin" /></div>
 
