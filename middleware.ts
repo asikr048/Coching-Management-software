@@ -2,12 +2,24 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+
+  // Public routes - no auth needed
+  const publicRoutes = ["/login", "/enroll", "/marketplace", "/parent-portal"]
+  const isPublic = publicRoutes.some(r => pathname.startsWith(r)) || pathname === "/"
+  if (isPublic) return NextResponse.next()
+
+  // Check if Supabase is configured
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!supabaseUrl || !supabaseKey || supabaseUrl.includes("placeholder")) {
+    return NextResponse.next()
+  }
+
   let supabaseResponse = NextResponse.next({ request })
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  try {
+    const supabase = createServerClient(supabaseUrl, supabaseKey, {
       cookies: {
         getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
@@ -18,36 +30,33 @@ export async function middleware(request: NextRequest) {
           )
         },
       },
+    })
+
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.redirect(new URL("/login", request.url))
     }
-  )
 
-  const { data: { user } } = await supabase.auth.getUser()
-  const pathname = request.nextUrl.pathname
+    const { data: staff } = await supabase
+      .from("staff")
+      .select("role")
+      .eq("auth_user_id", user.id)
+      .single()
 
-  const publicRoutes = ["/login", "/enroll", "/marketplace", "/parent-portal"]
-  const isPublic = publicRoutes.some(r => pathname.startsWith(r)) || pathname === "/"
-  if (isPublic) return supabaseResponse
+    if (!staff) {
+      return NextResponse.redirect(new URL("/login", request.url))
+    }
 
-  if (!user) {
+    const role = staff.role
+    if (pathname.startsWith("/dashboard/owner") && role !== "owner") {
+      return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
+    if (pathname.startsWith("/dashboard/accountant") && !["owner", "accountant"].includes(role)) {
+      return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
+  } catch {
     return NextResponse.redirect(new URL("/login", request.url))
-  }
-
-  const { data: staff } = await supabase
-    .from("staff")
-    .select("role")
-    .eq("auth_user_id", user.id)
-    .single()
-
-  if (!staff) {
-    return NextResponse.redirect(new URL("/login", request.url))
-  }
-
-  const role = staff.role
-  if (pathname.startsWith("/dashboard/owner") && role !== "owner") {
-    return NextResponse.redirect(new URL("/dashboard", request.url))
-  }
-  if (pathname.startsWith("/dashboard/accountant") && !["owner", "accountant"].includes(role)) {
-    return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
   return supabaseResponse
