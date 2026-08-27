@@ -11,7 +11,7 @@ export default async function PublicMarketplace() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2"><GraduationCap className="w-7 h-7 text-indigo-600" /><span className="text-xl font-bold text-gray-900">EduManage BD</span></div>
+          <div className="flex items-center gap-2"><GraduationCap className="w-7 h-7 text-indigo-600" /><span className="text-xl font-bold text-gray-900">MedhaShiri</span></div>
           <div className="flex gap-3"><Link href="/enroll" className="px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50 rounded-lg font-medium">Enroll</Link><Link href="/login" className="px-4 py-2 text-sm bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700">Login</Link></div>
         </div>
       </header>

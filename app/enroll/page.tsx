@@ -58,7 +58,7 @@ export default function PublicEnrollPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 bg-indigo-600 rounded-2xl mb-3"><GraduationCap className="w-7 h-7 text-white" /></div>
           <h1 className="text-3xl font-bold text-gray-900">Student Enrollment</h1>
-          <p className="text-gray-500 mt-1">EduManage BD - Online Registration Form</p>
+          <p className="text-gray-500 mt-1">MedhaShiri - Online Registration Form</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -87,7 +87,7 @@ export default function PublicEnrollPage() {
             {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit Enrollment"}
           </button>
         </form>
-        <p className="text-center text-gray-400 text-xs mt-6">© {new Date().getFullYear()} EduManage BD</p>
+        <p className="text-center text-gray-400 text-xs mt-6">© {new Date().getFullYear()} MedhaShiri</p>
       </div>
     </div>
   )

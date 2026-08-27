@@ -44,7 +44,7 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 backdrop-blur-sm rounded-2xl mb-4">
             <GraduationCap className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">EduManage BD</h1>
+          <h1 className="text-3xl font-bold text-white">MedhaShiri</h1>
           <p className="text-indigo-200 mt-1">Coaching Management System</p>
         </div>
         <div className="bg-white rounded-2xl shadow-2xl p-8">
@@ -87,7 +87,7 @@ export default function LoginPage() {
             </div>
           </div>
         </div>
-        <p className="text-center text-indigo-300 text-xs mt-6">&copy; {new Date().getFullYear()} EduManage BD. All rights reserved.</p>
+        <p className="text-center text-indigo-300 text-xs mt-6">&copy; {new Date().getFullYear()} MedhaShiri. All rights reserved.</p>
       </div>
     </div>
   )

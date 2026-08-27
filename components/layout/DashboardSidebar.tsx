@@ -7,7 +7,7 @@ import {
   GraduationCap, LayoutDashboard, Users, BookOpen, CreditCard,
   BarChart3, UserCheck, MessageSquare, Settings, ChevronLeft,
   ChevronRight, Package, Trophy, Fingerprint, ShoppingBag,
-  DollarSign, GitMerge, Home, FileText
+  DollarSign, GitMerge, Home, FileText, ImageIcon
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
 
@@ -22,6 +22,7 @@ const ownerNav = [
   { href: "/dashboard/owner/materials", icon: Package, label: "Materials" },
   { href: "/dashboard/owner/staff", icon: UserCheck, label: "Staff" },
   { href: "/dashboard/owner/sms", icon: MessageSquare, label: "Bulk SMS" },
+  { href: "/dashboard/owner/slider", icon: ImageIcon, label: "Homepage Slider" },
   { href: "/dashboard/owner/marketplace", icon: ShoppingBag, label: "Marketplace" },
   { href: "/dashboard/owner/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/dashboard/owner/expenses", icon: DollarSign, label: "Expenses" },
@@ -80,7 +81,7 @@ export default function DashboardSidebar({ role, name }: { role: Role; name: str
         {!collapsed && (
           <div className="flex items-center gap-2">
             <GraduationCap className="w-7 h-7 text-white flex-shrink-0" />
-            <span className="font-bold text-base truncate">EduManage BD</span>
+            <span className="font-bold text-base truncate">MedhaShiri</span>
           </div>
         )}
         {collapsed && <GraduationCap className="w-7 h-7 text-white mx-auto" />}

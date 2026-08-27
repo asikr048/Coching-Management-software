@@ -1,4 +1,4 @@
-﻿import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import { notFound } from "next/navigation"
 import { formatCurrency } from "@/lib/utils"
 import { GraduationCap, BookOpen, Users, Clock, Calendar, MapPin, ArrowLeft, CheckCircle } from "lucide-react"
@@ -20,7 +20,7 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ id
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center"><GraduationCap className="w-4 h-4 text-white" /></div>
-            <span className="text-lg font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">EduManage BD</span>
+            <span className="text-lg font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">MedhaShiri</span>
           </Link>
           <div className="flex items-center gap-3">
             <Link href="/login" className="px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg">Sign In</Link>

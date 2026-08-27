@@ -6,7 +6,7 @@ export default function SettingsPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-6">
           <h3 className="font-semibold text-gray-800 mb-4">General Settings</h3>
           <div className="space-y-4 text-sm text-gray-600">
-            <p>Center Name: <strong>EduManage BD</strong></p>
+            <p>Center Name: <strong>MedhaShiri</strong></p>
             <p>SMS Provider: <strong>Mock (Test Mode)</strong></p>
             <p>Payment Gateway: <strong>SSLCommerz (Sandbox)</strong></p>
             <p>Default Fee Due Day: <strong>10th of every month</strong></p>
