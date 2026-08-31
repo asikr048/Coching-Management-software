@@ -5,7 +5,7 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
   // Public routes - no auth needed
-  const publicRoutes = ["/login", "/enroll", "/marketplace", "/parent-portal", "/batch"]
+  const publicRoutes = ["/login", "/signup", "/enroll", "/marketplace", "/parent-portal", "/batch"]
   const isPublic = publicRoutes.some(r => pathname.startsWith(r)) || pathname === "/"
   if (isPublic) return NextResponse.next()
 
