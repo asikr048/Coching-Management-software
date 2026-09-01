@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
-import { GraduationCap, BookOpen, Users, Clock, Calendar, MapPin, Star, ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, Play, CheckCircle, Sparkles, TrendingUp, Shield } from "lucide-react"
+import { GraduationCap, BookOpen, Users, User, Clock, Calendar, MapPin, Star, ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, Play, CheckCircle, Sparkles, TrendingUp, Shield } from "lucide-react"
 import Link from "next/link"
 
 export default function HomePage() {
