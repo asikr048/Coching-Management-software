@@ -30,32 +30,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(`${origin}/login?error=no_user_after_exchange`)
     }
 
-    // Try to create user_profile (ignore if table doesn't exist or already exists)
-    try {
-      const { data: existing } = await supabase.from("user_profiles").select("user_id").eq("auth_user_id", user.id).single()
-      if (!existing) {
-        const userId = "MS-" + (10001 + Math.floor(Math.random() * 89999))
-        await supabase.from("user_profiles").insert({
-          user_id: userId,
-          email: user.email || "",
-          name: user.user_metadata?.full_name || user.email?.split("@")[0] || "",
-          auth_user_id: user.id,
-        })
-      }
-    } catch {
-      // user_profiles table might not exist yet, continue anyway
+    // Check staff role for redirect
+    const { data: staff, error: staffError } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle()
+    
+    if (staffError) {
+      return NextResponse.redirect(`${origin}/login?error=staff_query_error_${encodeURIComponent(staffError.message)}`)
     }
 
-    // Check staff role for redirect
-    const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).single()
     const role = staff?.role
     if (role === "owner") return NextResponse.redirect(`${origin}/dashboard/owner`)
     if (role === "receptionist") return NextResponse.redirect(`${origin}/dashboard/reception`)
     if (role === "teacher") return NextResponse.redirect(`${origin}/dashboard/teacher`)
     if (role === "accountant") return NextResponse.redirect(`${origin}/dashboard/accountant`)
 
-    // Non-staff user — go to homepage
-    return NextResponse.redirect(`${origin}/`)
+    // Non-staff user — go to homepage, but append error if staff record was missing
+    return NextResponse.redirect(`${origin}/?no_staff_record=${user.id}`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown_error"
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(msg)}`)
