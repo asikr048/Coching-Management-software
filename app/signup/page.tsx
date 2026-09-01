@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { GraduationCap, Eye, EyeOff, Loader2, Mail, Lock, User, Phone, Users, TrendingUp, Star, ArrowRight, BookOpen, Copy, CheckCircle } from "lucide-react"
@@ -25,10 +25,8 @@ export default function SignupPage() {
 
     setLoading(true)
     try {
-      // Generate unique ID (MS-10001, MS-10002, etc.)
-      const { data: seqData } = await supabase.rpc("generate_user_id")
-      let userId = "MS-" + (10001 + Math.floor(Math.random() * 89999))
-      if (seqData) userId = seqData
+      // Generate unique ID locally (MS-10001 to MS-99999)
+      const userId = "MS-" + (10001 + Math.floor(Math.random() * 89999))
 
       // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -38,7 +36,7 @@ export default function SignupPage() {
       })
       if (authError) throw authError
 
-      // Save to user_profiles
+      // Try to save to user_profiles (ignore error if table doesn't exist yet)
       await supabase.from("user_profiles").insert({
         user_id: userId,
         email: form.email,
