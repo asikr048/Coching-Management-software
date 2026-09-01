@@ -1,12 +1,18 @@
-import { createServerClient } from "@supabase/ssr"
+﻿import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
+  // Always pass through static assets and auth routes untouched
+  const bypassRoutes = ["/auth/callback", "/auth/confirm", "/_next", "/favicon.ico"]
+  if (bypassRoutes.some(r => pathname.startsWith(r))) {
+    return NextResponse.next()
+  }
+
   // Public routes - no auth needed
-  const publicRoutes = ["/login", "/signup", "/auth", "/enroll", "/marketplace", "/parent-portal", "/batch"]
-  const isPublic = publicRoutes.some(r => pathname.startsWith(r)) || pathname === "/"
+  const publicRoutes = ["/login", "/signup", "/auth", "/enroll", "/marketplace", "/parent-portal", "/batch", "/"]
+  const isPublic = publicRoutes.some(r => pathname === r || (r !== "/" && pathname.startsWith(r)))
   if (isPublic) return NextResponse.next()
 
   // Check if Supabase is configured
