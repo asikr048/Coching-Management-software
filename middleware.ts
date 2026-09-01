@@ -1,4 +1,4 @@
-﻿import { createServerClient } from "@supabase/ssr"
+import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
@@ -44,14 +44,30 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/login", request.url))
     }
 
-    const { data: staff } = await supabase
+    let { data: staff } = await supabase
       .from("staff")
-      .select("role")
+      .select("id, role, auth_user_id")
       .eq("auth_user_id", user.id)
-      .single()
+      .maybeSingle()
+
+    if (!staff && user.email) {
+      const { data: staffByEmail } = await supabase
+        .from("staff")
+        .select("id, role, auth_user_id")
+        .eq("email", user.email)
+        .maybeSingle()
+      if (staffByEmail) {
+        await supabase.from("staff").update({ auth_user_id: user.id }).eq("id", staffByEmail.id)
+        staff = staffByEmail
+      }
+    }
 
     if (!staff) {
-      return NextResponse.redirect(new URL("/login", request.url))
+      // Non-staff users (students/parents) trying to access /dashboard routes get redirected to home
+      if (pathname.startsWith("/dashboard")) {
+        return NextResponse.redirect(new URL("/", request.url))
+      }
+      return supabaseResponse
     }
 
     const role = staff.role

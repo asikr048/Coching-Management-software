@@ -20,30 +20,62 @@ export default function LoginPage() {
     setLoading(true)
     setError("")
     try {
-      let email = userId
+      let email = userId.trim()
 
       // If input looks like an ID (e.g. MS-10234), look up the email
-      if (!userId.includes("@")) {
-        const { data: profile } = await supabase.from("user_profiles").select("email").eq("user_id", userId.toUpperCase()).single()
-        if (!profile) { setError("ID not found. Please check your ID."); setLoading(false); return }
+      if (!email.includes("@")) {
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("email")
+          .eq("user_id", email.toUpperCase())
+          .maybeSingle()
+        if (!profile) {
+          setError("User ID not found. Please check your ID or use your email.")
+          setLoading(false)
+          return
+        }
         email = profile.email
       }
 
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
       if (authError) throw authError
-      const { data: { user } } = await supabase.auth.getUser()
+
+      const user = authData.user
       if (user) {
-        const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).single()
+        // Auto-link staff record if auth_user_id is not set
+        let { data: staff } = await supabase
+          .from("staff")
+          .select("id, role, auth_user_id")
+          .eq("auth_user_id", user.id)
+          .maybeSingle()
+
+        if (!staff && user.email) {
+          const { data: staffByEmail } = await supabase
+            .from("staff")
+            .select("id, role, auth_user_id")
+            .eq("email", user.email)
+            .maybeSingle()
+          if (staffByEmail) {
+            await supabase.from("staff").update({ auth_user_id: user.id }).eq("id", staffByEmail.id)
+            staff = staffByEmail
+          }
+        }
+
         const r = staff?.role
-        if (r === "owner") router.push("/dashboard/owner")
-        else if (r === "receptionist") router.push("/dashboard/reception")
-        else if (r === "teacher") router.push("/dashboard/teacher")
-        else if (r === "accountant") router.push("/dashboard/accountant")
-        else router.push("/dashboard")
+        if (r === "owner") window.location.href = "/dashboard/owner"
+        else if (r === "receptionist") window.location.href = "/dashboard/reception"
+        else if (r === "teacher") window.location.href = "/dashboard/teacher"
+        else if (r === "accountant") window.location.href = "/dashboard/accountant"
+        else window.location.href = "/"
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed. Please try again.")
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
