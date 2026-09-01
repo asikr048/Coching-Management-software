@@ -29,5 +29,5 @@ export default async function DashboardPage() {
   else if (role === "receptionist") redirect("/dashboard/reception")
   else if (role === "teacher") redirect("/dashboard/teacher")
   else if (role === "accountant") redirect("/dashboard/accountant")
-  else redirect("/")
+  else redirect("/student/profile")
 }

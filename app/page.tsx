@@ -11,10 +11,20 @@ export default function HomePage() {
   const [studentCount, setStudentCount] = useState<number>(0)
   const [slides, setSlides] = useState<any[]>([])
   const [currentSlide, setCurrentSlide] = useState(0)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [userRole, setUserRole] = useState<string | null>(null)
 
   useEffect(() => {
     const supabase = createClient()
     async function load() {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          setCurrentUser(user)
+          const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle()
+          setUserRole(staff?.role || "student")
+        }
+      } catch {}
       try {
         const { data: b } = await supabase.from("batches").select("*, teacher:staff(name)").eq("is_active", true).order("created_at", { ascending: false })
         if (b) setBatches(b)
@@ -66,7 +76,15 @@ export default function HomePage() {
             <a href="#contact" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Contact</a>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">Sign In</Link>
+            {currentUser ? (
+              <Link 
+                href={userRole === "owner" ? "/dashboard/owner" : userRole === "teacher" ? "/dashboard/teacher" : userRole === "receptionist" ? "/dashboard/reception" : userRole === "accountant" ? "/dashboard/accountant" : "/student/profile"} 
+                className="px-4 py-2 text-sm font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all flex items-center gap-1.5 border border-indigo-200/80">
+                <User className="w-4 h-4" /> {userRole === "owner" ? "Admin Panel" : "My Profile"}
+              </Link>
+            ) : (
+              <Link href="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">Sign In</Link>
+            )}
             <Link href="/enroll" className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-200 transition-all">Enroll Now</Link>
           </div>
         </div>

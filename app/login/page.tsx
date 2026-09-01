@@ -69,7 +69,7 @@ export default function LoginPage() {
         else if (r === "receptionist") window.location.href = "/dashboard/reception"
         else if (r === "teacher") window.location.href = "/dashboard/teacher"
         else if (r === "accountant") window.location.href = "/dashboard/accountant"
-        else window.location.href = "/"
+        else window.location.href = "/student/profile"
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed. Please try again.")

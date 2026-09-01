@@ -36,7 +36,7 @@ export default function SignupPage() {
       })
       if (authError) throw authError
 
-      // Try to save to user_profiles (ignore error if table doesn't exist yet)
+      // Try to save to user_profiles
       await supabase.from("user_profiles").insert({
         user_id: userId,
         email: form.email,
@@ -44,6 +44,18 @@ export default function SignupPage() {
         phone: form.phone || null,
         auth_user_id: authData.user?.id || null,
       })
+
+      // Also create student entry in students table
+      try {
+        await supabase.from("students").insert({
+          student_id: userId,
+          name: form.name,
+          email: form.email,
+          phone: form.phone || null,
+          guardian_phone: form.phone || "01700000000",
+          is_active: true,
+        })
+      } catch {}
 
       setGeneratedId(userId)
     } catch (err: unknown) {

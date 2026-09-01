@@ -63,9 +63,9 @@ export async function middleware(request: NextRequest) {
     }
 
     if (!staff) {
-      // Non-staff users (students/parents) trying to access /dashboard routes get redirected to home
+      // Non-staff users (students/parents) trying to access /dashboard routes get redirected to student profile
       if (pathname.startsWith("/dashboard")) {
-        return NextResponse.redirect(new URL("/", request.url))
+        return NextResponse.redirect(new URL("/student/profile", request.url))
       }
       return supabaseResponse
     }
