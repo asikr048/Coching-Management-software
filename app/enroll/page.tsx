@@ -29,12 +29,34 @@ export default function PublicEnrollPage() {
         school_college: form.school_college || null, class_level: form.class_level || null,
         referred_by_code: form.referred_by_code || null,
       }).select("id, student_id").single()
-      if (error) throw error
+
+      if (error) {
+        // If duplicate error, try to find existing student by email or phone
+        if (error.message.includes("duplicate") || error.code === "23505") {
+          let existingStudent = null
+          if (form.email) {
+            const { data: byEmail } = await supabase.from("students").select("id, student_id").eq("email", form.email).maybeSingle()
+            existingStudent = byEmail
+          }
+          if (!existingStudent && form.phone) {
+            const { data: byPhone } = await supabase.from("students").select("id, student_id").eq("phone", form.phone).maybeSingle()
+            existingStudent = byPhone
+          }
+          if (existingStudent) {
+            setStudentId(existingStudent.student_id)
+            setStudentDbId(existingStudent.id)
+            setSuccess(true)
+            toast.success("Student found! Proceed to payment.")
+            return
+          }
+        }
+        throw new Error(error.message)
+      }
       setStudentId(data.student_id)
       setStudentDbId(data.id)
       setSuccess(true)
       toast.success("Enrollment submitted!")
-    } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Failed") }
+    } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Failed to submit enrollment") }
     finally { setLoading(false) }
   }
 
