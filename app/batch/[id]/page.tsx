@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/utils"
 import { GraduationCap, BookOpen, Users, Clock, Calendar, MapPin, ArrowLeft, CheckCircle } from "lucide-react"
 import Link from "next/link"
 import PublicNavbar from "@/components/layout/PublicNavbar"
+import EnrollButton from "./EnrollButton"
 
 export default async function BatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -117,13 +118,9 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ id
                 {seatsLeft <= 5 && seatsLeft > 0 && <p className="text-xs text-red-500 mt-1 font-medium">Only {seatsLeft} seats left! Enroll now.</p>}
               </div>
 
-              {isFull ? (
-                <div className="w-full py-3.5 bg-gray-200 text-gray-500 rounded-xl font-semibold text-center">Batch Full</div>
-              ) : (
-                <Link href={`/enroll?batch=${batch.id}`} className="block w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold text-center hover:shadow-lg hover:shadow-indigo-200 transition-all">
-                  Enroll in This Batch
-                </Link>
-              )}
+              {/* Enroll Button — checks auth + enrollment status */}
+              <EnrollButton batchId={batch.id} isFull={isFull} />
+
 
               <p className="text-xs text-gray-400 text-center mt-3">No registration fee • Cancel anytime</p>
             </div>
