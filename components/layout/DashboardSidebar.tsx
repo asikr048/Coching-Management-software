@@ -7,7 +7,7 @@ import {
   GraduationCap, LayoutDashboard, Users, BookOpen, CreditCard,
   BarChart3, UserCheck, MessageSquare, Settings, ChevronLeft,
   ChevronRight, Package, Trophy, Fingerprint, ShoppingBag,
-  DollarSign, GitMerge, Home, FileText, ImageIcon
+  DollarSign, GitMerge, Home, FileText, ImageIcon, Shield
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
 
@@ -16,6 +16,7 @@ const ownerNav = [
   { href: "/dashboard/owner/students", icon: Users, label: "Students" },
   { href: "/dashboard/owner/batches", icon: BookOpen, label: "Batches & Classes" },
   { href: "/dashboard/owner/payments", icon: CreditCard, label: "Payments" },
+  { href: "/dashboard/owner/payment-approvals", icon: Shield, label: "Payment Approvals" },
   { href: "/dashboard/owner/fee-dues", icon: DollarSign, label: "Fee Dues" },
   { href: "/dashboard/owner/referrals", icon: GitMerge, label: "Referrals" },
   { href: "/dashboard/owner/exams", icon: FileText, label: "Exams & Results" },

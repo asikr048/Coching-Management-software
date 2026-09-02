@@ -1,14 +1,16 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { GraduationCap, Loader2, CheckCircle } from "lucide-react"
+import { GraduationCap, Loader2, CheckCircle, CreditCard, ArrowRight, Copy, Check } from "lucide-react"
 
 export default function PublicEnrollPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
   const [studentId, setStudentId] = useState("")
+  const [studentDbId, setStudentDbId] = useState("")
+  const [copied, setCopied] = useState(false)
   const [form, setForm] = useState({
     name: "", phone: "", email: "", gender: "male", date_of_birth: "",
     guardian_name: "", guardian_phone: "", guardian_relation: "Parent",
@@ -26,13 +28,21 @@ export default function PublicEnrollPage() {
         guardian_relation: form.guardian_relation, address: form.address || null,
         school_college: form.school_college || null, class_level: form.class_level || null,
         referred_by_code: form.referred_by_code || null,
-      }).select("student_id").single()
+      }).select("id, student_id").single()
       if (error) throw error
       setStudentId(data.student_id)
+      setStudentDbId(data.id)
       setSuccess(true)
       toast.success("Enrollment submitted!")
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Failed") }
     finally { setLoading(false) }
+  }
+
+  function copyId() {
+    navigator.clipboard.writeText(studentId)
+    setCopied(true)
+    toast.success("Student ID copied!")
+    setTimeout(() => setCopied(false), 2000)
   }
 
   const inputClass = "w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -43,10 +53,27 @@ export default function PublicEnrollPage() {
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
           <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Enrollment Submitted!</h2>
-          <p className="text-gray-600 mb-4">Your student ID is:</p>
-          <p className="text-3xl font-mono font-bold text-indigo-600 bg-indigo-50 rounded-xl py-3">{studentId}</p>
-          <p className="text-sm text-gray-500 mt-4">Please visit the center to complete enrollment and select a batch.</p>
-          <a href="/enroll" className="mt-6 inline-block px-6 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700">Enroll Another</a>
+          <p className="text-gray-600 mb-3">Your student ID is:</p>
+          <div className="flex items-center justify-center gap-2 mb-6">
+            <p className="text-3xl font-mono font-bold text-indigo-600 bg-indigo-50 rounded-xl py-3 px-6">{studentId}</p>
+            <button onClick={copyId} className="p-2 rounded-lg hover:bg-gray-100 transition-colors" title="Copy ID">
+              {copied ? <Check className="w-5 h-5 text-emerald-500" /> : <Copy className="w-5 h-5 text-gray-400" />}
+            </button>
+          </div>
+
+          <div className="border-t border-gray-100 pt-6 space-y-3">
+            <a
+              href={`/enroll/payment?student_id=${studentDbId}&student_code=${studentId}&name=${encodeURIComponent(form.name)}`}
+              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-indigo-200 transition-all"
+            >
+              <CreditCard className="w-5 h-5" /> Proceed to Payment <ArrowRight className="w-4 h-4" />
+            </a>
+            <p className="text-xs text-gray-400">Select a batch and complete your payment</p>
+          </div>
+
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <a href="/enroll" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">Enroll Another Student</a>
+          </div>
         </div>
       </div>
     )
