@@ -1,4 +1,4 @@
-﻿import { createClient } from "@/lib/supabase/server"
+import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
@@ -44,12 +44,12 @@ export async function GET(request: NextRequest) {
 
     const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle()
     const role = staff?.role
-    if (role === "owner") return NextResponse.redirect(`${origin}/dashboard/owner`)
+    if (role === "owner" || role === "super_manager" || role === "manager") return NextResponse.redirect(`${origin}/dashboard/owner`)
     if (role === "receptionist") return NextResponse.redirect(`${origin}/dashboard/reception`)
     if (role === "teacher") return NextResponse.redirect(`${origin}/dashboard/teacher`)
     if (role === "accountant") return NextResponse.redirect(`${origin}/dashboard/accountant`)
 
-    return NextResponse.redirect(`${origin}/`)
+    return NextResponse.redirect(`${origin}/student/profile`)
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown_error"
     return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(msg)}`)

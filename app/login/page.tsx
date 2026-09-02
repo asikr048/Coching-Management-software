@@ -65,7 +65,7 @@ export default function LoginPage() {
         }
 
         const r = staff?.role
-        if (r === "owner") window.location.href = "/dashboard/owner"
+        if (r === "owner" || r === "super_manager" || r === "manager") window.location.href = "/dashboard/owner"
         else if (r === "receptionist") window.location.href = "/dashboard/reception"
         else if (r === "teacher") window.location.href = "/dashboard/teacher"
         else if (r === "accountant") window.location.href = "/dashboard/accountant"

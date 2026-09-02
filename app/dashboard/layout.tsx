@@ -7,8 +7,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect("/login")
-  const { data: staff } = await supabase.from("staff").select("*").eq("auth_user_id", user.id).single()
-  if (!staff) redirect("/login")
+  const { data: staff } = await supabase.from("staff").select("*").eq("auth_user_id", user.id).maybeSingle()
+  if (!staff) redirect("/student/profile")
   return (
     <div className="flex h-screen bg-gray-50">
       <DashboardSidebar role={staff.role} name={staff.name} />

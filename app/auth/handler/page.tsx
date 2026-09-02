@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -31,13 +31,13 @@ export default function AuthHandlerPage() {
       // Check role and redirect
       const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle()
       const role = staff?.role
-      if (role === "owner") { router.push("/dashboard/owner"); return }
+      if (role === "owner" || role === "super_manager" || role === "manager") { router.push("/dashboard/owner"); return }
       if (role === "receptionist") { router.push("/dashboard/reception"); return }
       if (role === "teacher") { router.push("/dashboard/teacher"); return }
       if (role === "accountant") { router.push("/dashboard/accountant"); return }
 
       // Non-staff user
-      router.push("/")
+      router.push("/student/profile")
     }
 
     handleAuth()

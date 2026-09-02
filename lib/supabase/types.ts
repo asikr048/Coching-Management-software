@@ -1,4 +1,4 @@
-export type Role = "owner" | "receptionist" | "teacher" | "accountant" | "course_teacher"
+export type Role = "owner" | "super_manager" | "manager" | "receptionist" | "teacher" | "accountant" | "course_teacher"
 
 export interface Branch {
   id: string; name: string; address?: string; phone?: string; email?: string

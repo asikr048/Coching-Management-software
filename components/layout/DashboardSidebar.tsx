@@ -55,6 +55,8 @@ const accountantNav = [
 
 const navByRole: Record<string, typeof ownerNav> = {
   owner: ownerNav,
+  super_manager: ownerNav,
+  manager: ownerNav,
   receptionist: receptionNav,
   teacher: teacherNav,
   accountant: accountantNav,
@@ -63,6 +65,8 @@ const navByRole: Record<string, typeof ownerNav> = {
 
 const roleColors: Record<string, string> = {
   owner: "from-indigo-900 to-indigo-800",
+  super_manager: "from-amber-900 to-amber-800",
+  manager: "from-teal-900 to-teal-800",
   receptionist: "from-emerald-900 to-emerald-800",
   teacher: "from-blue-900 to-blue-800",
   accountant: "from-purple-900 to-purple-800",
@@ -91,7 +95,7 @@ export default function DashboardSidebar({ role, name }: { role: Role; name: str
       </div>
       {!collapsed && (
         <div className="px-4 py-3 border-b border-white/10">
-          <p className="text-xs text-white/50 uppercase tracking-wider">{role}</p>
+          <p className="text-xs text-white/50 uppercase tracking-wider">{role === "super_manager" ? "Super Manager" : role === "course_teacher" ? "Course Teacher" : role.charAt(0).toUpperCase() + role.slice(1)}</p>
           <p className="font-medium text-white truncate text-sm">{name}</p>
         </div>
       )}

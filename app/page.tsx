@@ -78,9 +78,9 @@ export default function HomePage() {
           <div className="flex items-center gap-2">
             {currentUser ? (
               <Link 
-                href={userRole === "owner" ? "/dashboard/owner" : userRole === "teacher" ? "/dashboard/teacher" : userRole === "receptionist" ? "/dashboard/reception" : userRole === "accountant" ? "/dashboard/accountant" : "/student/profile"} 
+                href={["owner", "super_manager", "manager"].includes(userRole || "") ? "/dashboard/owner" : userRole === "teacher" ? "/dashboard/teacher" : userRole === "receptionist" ? "/dashboard/reception" : userRole === "accountant" ? "/dashboard/accountant" : "/student/profile"} 
                 className="px-4 py-2 text-sm font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all flex items-center gap-1.5 border border-indigo-200/80">
-                <User className="w-4 h-4" /> {userRole === "owner" ? "Admin Panel" : "My Profile"}
+                <User className="w-4 h-4" /> {["owner", "super_manager", "manager"].includes(userRole || "") ? "Admin Panel" : "My Profile"}
               </Link>
             ) : (
               <Link href="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">Sign In</Link>
