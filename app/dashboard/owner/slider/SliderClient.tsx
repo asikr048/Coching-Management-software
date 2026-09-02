@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -99,7 +99,7 @@ export default function SliderClient({ slides: initial }: { slides: Slide[] }) {
               <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
             </div>
             <form onSubmit={addSlide} className="space-y-4">
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">Title *</label><input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className={inputClass} placeholder="Welcome to MedhaShiri" /></div>
+              <div><label className="block text-sm font-medium text-gray-700 mb-1">Title *</label><input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className={inputClass} placeholder="Welcome to MedhaShiree" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Subtitle</label><input value={form.subtitle} onChange={e => setForm(f => ({ ...f, subtitle: e.target.value }))} className={inputClass} placeholder="Optional subtitle" /></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Image URL *</label><input required value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))} className={inputClass} placeholder="https://example.com/image.jpg" /><p className="text-xs text-gray-400 mt-1">Use any image hosting URL (Imgur, Cloudinary, etc.)</p></div>
               <div><label className="block text-sm font-medium text-gray-700 mb-1">Link URL</label><input value={form.link_url} onChange={e => setForm(f => ({ ...f, link_url: e.target.value }))} className={inputClass} placeholder="/enroll (optional)" /></div>

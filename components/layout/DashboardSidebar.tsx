@@ -86,7 +86,7 @@ export default function DashboardSidebar({ role, name }: { role: Role; name: str
         {!collapsed && (
           <div className="flex items-center gap-2">
             <GraduationCap className="w-7 h-7 text-white flex-shrink-0" />
-            <span className="font-bold text-base truncate">MedhaShiri</span>
+            <span className="font-bold text-base truncate">MedhaShiree</span>
           </div>
         )}
         {collapsed && <GraduationCap className="w-7 h-7 text-white mx-auto" />}

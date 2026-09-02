@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -236,7 +236,7 @@ export default function StudentProfilePage() {
             <div className="flex sm:flex-col items-center sm:items-end gap-2 w-full sm:w-auto justify-between border-t sm:border-t-0 border-white/10 pt-4 sm:pt-0">
               <span className="text-xs text-indigo-200">Registered Coaching ID</span>
               <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/15 text-center">
-                <p className="text-xs text-indigo-300">MedhaShiri ID</p>
+                <p className="text-xs text-indigo-300">MedhaShiree ID</p>
                 <p className="text-lg font-mono font-bold text-white">{profile?.user_id}</p>
               </div>
             </div>

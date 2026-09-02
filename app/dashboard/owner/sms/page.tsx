@@ -67,9 +67,9 @@ export default function SmsPage() {
           <h3 className="font-semibold text-gray-800 mb-3">Quick Templates</h3>
           <div className="space-y-2">
             {[
-              { label: "Fee Reminder", text: "Dear Parent, your child's monthly fee is due. Please pay at the earliest to avoid late charges. - MedhaShiri" },
-              { label: "Holiday Notice", text: "Dear Parent, please note that classes will be closed on [DATE] due to [REASON]. Regular classes will resume on [DATE]. - MedhaShiri" },
-              { label: "Exam Notice", text: "Dear Parent, the upcoming exam is scheduled for [DATE]. Please ensure your child is prepared. - MedhaShiri" },
+              { label: "Fee Reminder", text: "Dear Parent, your child's monthly fee is due. Please pay at the earliest to avoid late charges. - MedhaShiree" },
+              { label: "Holiday Notice", text: "Dear Parent, please note that classes will be closed on [DATE] due to [REASON]. Regular classes will resume on [DATE]. - MedhaShiree" },
+              { label: "Exam Notice", text: "Dear Parent, the upcoming exam is scheduled for [DATE]. Please ensure your child is prepared. - MedhaShiree" },
             ].map((t, i) => (
               <button key={i} onClick={() => setMessage(t.text)} className="w-full text-left p-3 rounded-lg border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all">
                 <p className="text-sm font-medium text-gray-700">{t.label}</p>

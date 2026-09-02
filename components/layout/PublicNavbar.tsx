@@ -39,7 +39,7 @@ export default function PublicNavbar() {
           <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
             <GraduationCap className="w-4 h-4 text-white" />
           </div>
-          <span className="text-lg font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">MedhaShiri</span>
+          <span className="text-lg font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">MedhaShiree</span>
         </Link>
         <div className="flex items-center gap-3">
           {loaded && currentUser ? (

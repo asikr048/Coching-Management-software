@@ -7,7 +7,7 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "MedhaShiri - Coaching Management System",
+  title: "MedhaShiree - Coaching Management System",
   description: "Complete coaching center management solution with biometric attendance, fee management, course marketplace and more.",
 }
 

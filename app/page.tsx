@@ -53,7 +53,7 @@ export default function HomePage() {
   }, [slides.length])
 
   const defaultSlides = slides.length > 0 ? slides : [
-    { title: "Welcome to MedhaShiri", subtitle: "Rajshahi's Premier Coaching Center", image_url: "" },
+    { title: "Welcome to MedhaShiree", subtitle: "Rajshahi's Premier Coaching Center", image_url: "" },
     { title: "Expert Teachers", subtitle: "Learn from the best faculty", image_url: "" },
     { title: "Admissions Open 2026", subtitle: "Limited seats available — enroll now", image_url: "" },
   ]
@@ -312,7 +312,7 @@ export default function HomePage() {
             <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-60" />
             <div className="relative">
               <h2 className="text-3xl md:text-5xl font-bold leading-tight">Ready to Start Your<br />Academic Journey?</h2>
-              <p className="mt-4 text-white/60 text-lg max-w-xl mx-auto">Join hundreds of students who trust MedhaShiri.</p>
+              <p className="mt-4 text-white/60 text-lg max-w-xl mx-auto">Join hundreds of students who trust MedhaShiree.</p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
                 <Link href="/enroll" className="px-8 py-4 bg-white text-gray-900 rounded-xl font-semibold hover:bg-gray-100 shadow-xl transition-all">Enroll Now</Link>
                 <Link href="/parent-portal" className="px-8 py-4 border-2 border-white/30 text-white rounded-xl font-semibold hover:bg-white/10 transition-all">Parent Portal</Link>
@@ -347,11 +347,11 @@ export default function HomePage() {
               <div className="space-y-2.5 text-sm">
                 <p className="flex items-center gap-2"><MapPin className="w-4 h-4 flex-shrink-0" /> Rajshahi, Bangladesh</p>
                 <p className="flex items-center gap-2"><Phone className="w-4 h-4 flex-shrink-0" /> 01XXXXXXXXX</p>
-                <p className="flex items-center gap-2"><Mail className="w-4 h-4 flex-shrink-0" /> info@medhashiri.com</p>
+                <p className="flex items-center gap-2"><Mail className="w-4 h-4 flex-shrink-0" /> info@MedhaShiree.com</p>
               </div>
             </div>
           </div>
-          <div className="pt-8 text-center text-xs text-gray-600"><p>&copy; 2026 MedhaShiri. All rights reserved.</p></div>
+          <div className="pt-8 text-center text-xs text-gray-600"><p>&copy; 2026 MedhaShiree. All rights reserved.</p></div>
         </div>
       </footer>
     </div>

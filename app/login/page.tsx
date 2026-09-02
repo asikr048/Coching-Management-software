@@ -116,12 +116,12 @@ export default function LoginPage() {
 
             <div className="bg-white/[0.05] backdrop-blur border border-white/[0.08] rounded-xl p-5">
               <div className="flex gap-0.5 mb-2">{[0,1,2,3,4].map(i => <Star key={i} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />)}</div>
-              <p className="text-white/70 text-sm italic leading-relaxed">&ldquo;MedhaShiri transformed how we manage our coaching center. Attendance, fees, and results — everything is automated now.&rdquo;</p>
+              <p className="text-white/70 text-sm italic leading-relaxed">&ldquo;MedhaShiree transformed how we manage our coaching center. Attendance, fees, and results — everything is automated now.&rdquo;</p>
               <p className="text-white/40 text-xs mt-3">&mdash; Coaching Center Director, Rajshahi</p>
             </div>
           </div>
 
-          <p className="text-white/30 text-xs">&copy; 2026 MedhaShiri. All rights reserved.</p>
+          <p className="text-white/30 text-xs">&copy; 2026 MedhaShiree. All rights reserved.</p>
         </div>
       </div>
 

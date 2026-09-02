@@ -131,7 +131,7 @@ export default function SignupPage() {
               </div>
             </div>
           </div>
-          <p className="text-white/30 text-xs">&copy; 2026 MedhaShiri. All rights reserved.</p>
+          <p className="text-white/30 text-xs">&copy; 2026 MedhaShiree. All rights reserved.</p>
         </div>
       </div>
 

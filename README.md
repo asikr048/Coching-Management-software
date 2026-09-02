@@ -1,4 +1,4 @@
-# MedhaShiri - Coaching Management System
+# MedhaShiree - Coaching Management System
 
 A full-featured coaching center management solution built with Next.js 14 and Supabase, deployable on Vercel.
 

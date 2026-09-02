@@ -69,11 +69,11 @@ export async function sendSms(to: string, message: string) {
 
 export const SMS_TEMPLATES = {
   absent: (studentName: string, date: string, batchName: string) =>
-    `MedhaShiri: Dear Parent, ${studentName} was ABSENT from ${batchName} class on ${date}. Please contact us.`,
+    `MedhaShiree: Dear Parent, ${studentName} was ABSENT from ${batchName} class on ${date}. Please contact us.`,
   feeReminder: (studentName: string, amount: number, dueDate: string) =>
-    `MedhaShiri: Dear Parent, Fee of BDT ${amount} for ${studentName} is due on ${dueDate}. Please pay to avoid late charges.`,
+    `MedhaShiree: Dear Parent, Fee of BDT ${amount} for ${studentName} is due on ${dueDate}. Please pay to avoid late charges.`,
   paymentConfirmed: (studentName: string, amount: number, receiptNo: string) =>
-    `MedhaShiri: Payment of BDT ${amount} for ${studentName} received. Receipt: ${receiptNo}. Thank you!`,
+    `MedhaShiree: Payment of BDT ${amount} for ${studentName} received. Receipt: ${receiptNo}. Thank you!`,
   feeAlert: (studentName: string, amount: number) =>
-    `MedhaShiri: URGENT - ${studentName} has overdue fee of BDT ${amount}. Please clear immediately.`,
+    `MedhaShiree: URGENT - ${studentName} has overdue fee of BDT ${amount}. Please clear immediately.`,
 }

@@ -309,7 +309,7 @@ function PaymentContent() {
                       </div>
                       <div>
                         <h4 className="font-bold text-gray-900 mb-1">Offline / Cash Payment</h4>
-                        <p className="text-sm text-gray-500">Visit <strong>MedhaShiri</strong> center to pay in person. Add a reference note below so staff can identify your payment.</p>
+                        <p className="text-sm text-gray-500">Visit <strong>MedhaShiree</strong> center to pay in person. Add a reference note below so staff can identify your payment.</p>
                       </div>
                     </div>
                   </div>
