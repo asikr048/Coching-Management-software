@@ -99,12 +99,12 @@ export default function ApprovalsClient({
       }
 
       // 5. Increment batch current_seats
-      await supabase.rpc("increment_seats", { batch_id: sub.batch_id }).catch(() => {
-        // If RPC doesn't exist, try direct update
-        supabase.from("batches").select("current_seats").eq("id", sub.batch_id).single().then(({ data }) => {
-          if (data) supabase.from("batches").update({ current_seats: (data.current_seats || 0) + 1 }).eq("id", sub.batch_id)
-        })
-      })
+      try {
+        const { data: batchData } = await supabase.from("batches").select("current_seats").eq("id", sub.batch_id).single()
+        if (batchData) {
+          await supabase.from("batches").update({ current_seats: (batchData.current_seats || 0) + 1 }).eq("id", sub.batch_id)
+        }
+      } catch { /* ignore seat increment errors */ }
 
       setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: "approved", approved_by: staffId, approved_at: new Date().toISOString() } : s))
       toast.success("Payment approved! Student enrolled successfully.")
