@@ -2,11 +2,11 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
-import { CheckCircle, Clock, User, Loader2 } from "lucide-react"
+import { CheckCircle, Clock, User, Loader2, LayoutDashboard } from "lucide-react"
 
 export default function EnrollButton({ batchId, isFull }: { batchId: string; isFull: boolean }) {
   const supabase = createClient()
-  const [status, setStatus] = useState<"loading" | "not_logged_in" | "enrolled" | "pending" | "can_enroll">("loading")
+  const [status, setStatus] = useState<"loading" | "not_logged_in" | "is_staff" | "enrolled" | "pending" | "can_enroll">("loading")
   const [studentDbId, setStudentDbId] = useState("")
   const [studentCode, setStudentCode] = useState("")
   const [studentName, setStudentName] = useState("")
@@ -16,15 +16,13 @@ export default function EnrollButton({ batchId, isFull }: { batchId: string; isF
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setStatus("not_logged_in"); return }
 
-      // Find student record by auth user id via user_profiles or students table
-      // First check user_profiles
-      const { data: profile } = await supabase
-        .from("user_profiles").select("auth_user_id, email, name").eq("auth_user_id", user.id).maybeSingle()
+      // Check if user is staff — admins don't enroll as students
+      const { data: staffRecord } = await supabase
+        .from("staff").select("id, role").eq("auth_user_id", user.id).maybeSingle()
+      if (staffRecord) { setStatus("is_staff"); return }
 
-      let studentEmail = profile?.email || user.email || ""
-      let studentNameVal = profile?.name || ""
-
-      // Find student by email
+      // Find student record by email
+      const studentEmail = user.email || ""
       const { data: student } = await supabase
         .from("students").select("id, student_id, name").eq("email", studentEmail).maybeSingle()
 
@@ -38,15 +36,12 @@ export default function EnrollButton({ batchId, isFull }: { batchId: string; isF
       const { data: enrollment } = await supabase
         .from("enrollments").select("id, status")
         .eq("student_id", student.id).eq("batch_id", batchId).maybeSingle()
-
       if (enrollment?.status === "active") { setStatus("enrolled"); return }
 
       // Check pending payment submission for this batch
       const { data: pendingPayment } = await supabase
         .from("payment_submissions").select("id, status")
-        .eq("student_id", student.id).eq("batch_id", batchId)
-        .in("status", ["pending"]).maybeSingle()
-
+        .eq("student_id", student.id).eq("batch_id", batchId).eq("status", "pending").maybeSingle()
       if (pendingPayment) { setStatus("pending"); return }
 
       setStatus("can_enroll")
@@ -56,12 +51,24 @@ export default function EnrollButton({ batchId, isFull }: { batchId: string; isF
 
   if (status === "loading") return (
     <div className="w-full py-3.5 bg-gray-100 text-gray-400 rounded-xl font-semibold text-center flex items-center justify-center gap-2">
-      <Loader2 className="w-4 h-4 animate-spin" /> Checking enrollment...
+      <Loader2 className="w-4 h-4 animate-spin" /> Checking...
     </div>
   )
 
   if (isFull) return (
     <div className="w-full py-3.5 bg-gray-200 text-gray-500 rounded-xl font-semibold text-center">Batch Full</div>
+  )
+
+  // Admin/staff account — show dashboard link, not enroll
+  if (status === "is_staff") return (
+    <div className="space-y-3">
+      <div className="w-full py-3 bg-violet-50 border-2 border-violet-200 text-violet-700 rounded-xl font-semibold text-center flex items-center justify-center gap-2 text-sm">
+        <LayoutDashboard className="w-4 h-4" /> Admin Account
+      </div>
+      <Link href="/dashboard/owner" className="block w-full py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-semibold text-center hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm">
+        <LayoutDashboard className="w-4 h-4" /> Go to Dashboard
+      </Link>
+    </div>
   )
 
   if (status === "enrolled") return (
@@ -92,7 +99,7 @@ export default function EnrollButton({ batchId, isFull }: { batchId: string; isF
     <Link
       href={
         status === "not_logged_in"
-          ? `/login`
+          ? "/login"
           : `/enroll/payment?student_id=${studentDbId}&student_code=${studentCode}&name=${encodeURIComponent(studentName)}&batch=${batchId}`
       }
       className="block w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold text-center hover:shadow-lg hover:shadow-indigo-200 transition-all"
