@@ -8,6 +8,7 @@ export default function PublicEnrollPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [alreadyEnrolled, setAlreadyEnrolled] = useState(false)
   const [studentId, setStudentId] = useState("")
   const [studentDbId, setStudentDbId] = useState("")
   const [copied, setCopied] = useState(false)
@@ -47,10 +48,23 @@ export default function PublicEnrollPage() {
             existingStudent = byPhone
           }
           if (existingStudent) {
+            // Check if student already has an active enrollment or approved payment
+            const { data: activeEnrollment } = await supabase.from("enrollments")
+              .select("id").eq("student_id", existingStudent.id).eq("status", "active").maybeSingle()
+            const { data: approvedPayment } = await supabase.from("payment_submissions")
+              .select("id").eq("student_id", existingStudent.id).eq("status", "approved").maybeSingle()
+
             setStudentId(existingStudent.student_id)
             setStudentDbId(existingStudent.id)
-            setSuccess(true)
-            toast.success("Student found! Proceed to payment.")
+
+            if (activeEnrollment || approvedPayment) {
+              setAlreadyEnrolled(true)
+              setSuccess(true)
+              toast.success("You're already enrolled! Go to your profile.")
+            } else {
+              setSuccess(true)
+              toast.success("Student found! Proceed to payment.")
+            }
             return
           }
         }
@@ -78,7 +92,9 @@ export default function PublicEnrollPage() {
       <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-blue-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
           <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Enrollment Submitted!</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            {alreadyEnrolled ? "Already Enrolled!" : "Enrollment Submitted!"}
+          </h2>
           <p className="text-gray-600 mb-3">Your student ID is:</p>
           <div className="flex items-center justify-center gap-2 mb-6">
             <p className="text-3xl font-mono font-bold text-indigo-600 bg-indigo-50 rounded-xl py-3 px-6">{studentId}</p>
@@ -87,15 +103,29 @@ export default function PublicEnrollPage() {
             </button>
           </div>
 
-          <div className="border-t border-gray-100 pt-6 space-y-3">
-            <a
-              href={`/enroll/payment?student_id=${studentDbId}&student_code=${studentId}&name=${encodeURIComponent(form.name)}`}
-              className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-indigo-200 transition-all"
-            >
-              <CreditCard className="w-5 h-5" /> Proceed to Payment <ArrowRight className="w-4 h-4" />
-            </a>
-            <p className="text-xs text-gray-400">Select a batch and complete your payment</p>
-          </div>
+          {alreadyEnrolled ? (
+            <div className="border-t border-gray-100 pt-6 space-y-3">
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4">
+                <p className="text-sm text-emerald-700">✅ You are already enrolled and your payment has been approved. Go to your profile to view your courses.</p>
+              </div>
+              <a href="/student/profile" className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-emerald-200 transition-all">
+                Go to My Profile <ArrowRight className="w-4 h-4" />
+              </a>
+              <a href="/login" className="block text-sm text-indigo-600 hover:text-indigo-700 font-medium mt-3">
+                Sign In to your account
+              </a>
+            </div>
+          ) : (
+            <div className="border-t border-gray-100 pt-6 space-y-3">
+              <a
+                href={`/enroll/payment?student_id=${studentDbId}&student_code=${studentId}&name=${encodeURIComponent(form.name)}`}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:shadow-lg hover:shadow-indigo-200 transition-all"
+              >
+                <CreditCard className="w-5 h-5" /> Proceed to Payment <ArrowRight className="w-4 h-4" />
+              </a>
+              <p className="text-xs text-gray-400">Select a batch and complete your payment</p>
+            </div>
+          )}
 
           <div className="mt-4 pt-4 border-t border-gray-100">
             <a href="/enroll" className="text-sm text-indigo-600 hover:text-indigo-700 font-medium">Enroll Another Student</a>
