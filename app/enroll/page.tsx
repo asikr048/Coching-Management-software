@@ -21,7 +21,11 @@ export default function PublicEnrollPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault(); setLoading(true)
     try {
+      // Generate unique student ID
+      const genId = `MS-${String(Math.floor(10000 + Math.random() * 90000))}`
+
       const { data, error } = await supabase.from("students").insert({
+        student_id: genId,
         name: form.name, phone: form.phone || null, email: form.email || null,
         gender: form.gender, date_of_birth: form.date_of_birth || null,
         guardian_name: form.guardian_name || null, guardian_phone: form.guardian_phone,
