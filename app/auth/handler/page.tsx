@@ -22,7 +22,7 @@ export default function AuthHandlerPage() {
 
       // Auto-link staff record by email
       if (user.email) {
-        const { data: matchingStaff } = await supabase.from("staff").select("*").eq("email", user.email).single()
+        const { data: matchingStaff } = await supabase.from("staff").select("*").eq("email", user.email).maybeSingle()
         if (matchingStaff && matchingStaff.auth_user_id !== user.id) {
           await supabase.from("staff").update({ auth_user_id: user.id }).eq("id", matchingStaff.id)
         }

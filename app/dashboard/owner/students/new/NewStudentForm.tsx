@@ -60,7 +60,7 @@ export default function NewStudentForm({ batches }: { batches: Batch[] }) {
         }
 
         if (form.referred_by_code) {
-          const { data: referrer } = await supabase.from("students").select("id").eq("referral_code", form.referred_by_code).single()
+          const { data: referrer } = await supabase.from("students").select("id").eq("referral_code", form.referred_by_code).maybeSingle()
           if (referrer) {
             await supabase.from("referrals").insert({ referrer_id: referrer.id, referee_id: student.id, commission_rate: 10 })
             await supabase.from("students").update({ referred_by_student_id: referrer.id }).eq("id", student.id)
