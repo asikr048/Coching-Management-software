@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate, formatCurrency } from '@/lib/utils'
+import { toast } from 'sonner'
 import { 
   ArrowLeft, 
   Calendar, 
@@ -19,7 +20,16 @@ import {
   BookOpen,
   GraduationCap,
   Info,
-  Loader2
+  Loader2,
+  Phone,
+  Hash,
+  Send,
+  Smartphone,
+  Banknote,
+  X,
+  Check,
+  Copy,
+  DollarSign
 } from 'lucide-react'
 
 export default function StudentBatchDetailPage() {
@@ -39,6 +49,15 @@ export default function StudentBatchDetailPage() {
   const [dues, setDues] = useState<any[]>([])
   const [examResults, setExamResults] = useState<any[]>([])
   const [materials, setMaterials] = useState<any[]>([])
+
+  // Pay Due modal state
+  const [payingDue, setPayingDue] = useState<any>(null)  // the due being paid
+  const [payMethod, setPayMethod] = useState('bkash')
+  const [senderNumber, setSenderNumber] = useState('')
+  const [transactionId, setTransactionId] = useState('')
+  const [submittingPayment, setSubmittingPayment] = useState(false)
+  const [paymentAccounts, setPaymentAccounts] = useState<any[]>([])
+  const [copied, setCopied] = useState<string | null>(null)
   
   const supabase = createClient()
   
@@ -164,6 +183,13 @@ export default function StudentBatchDetailPage() {
           const batchMaterials = materialData.filter((m: any) => m.material?.batch_id === batchId)
           setMaterials(batchMaterials)
         }
+
+        // 8. Get payment accounts (bKash, Nagad, etc.)
+        const { data: acctData } = await supabase
+          .from('payment_accounts')
+          .select('*')
+          .eq('is_active', true)
+        if (acctData) setPaymentAccounts(acctData)
         
       } catch (err: any) {
         console.error('Error fetching data:', err)
@@ -177,6 +203,46 @@ export default function StudentBatchDetailPage() {
       fetchData()
     }
   }, [batchId, router, supabase])
+
+  function copyNumber(num: string) {
+    navigator.clipboard.writeText(num)
+    setCopied(num)
+    setTimeout(() => setCopied(null), 2000)
+  }
+
+  async function handlePayDue() {
+    if (!senderNumber.trim()) { toast.error('Enter your bKash/Nagad number'); return }
+    if (!transactionId.trim()) { toast.error('Enter the transaction ID'); return }
+    if (!payingDue || !student || !batch) return
+
+    setSubmittingPayment(true)
+    try {
+      const amountDue = payingDue.due_amount - (payingDue.paid_amount || 0)
+      const { error } = await supabase.from('payment_submissions').insert({
+        student_id: student.id,
+        batch_id: batchId,
+        fee_due_id: payingDue.id,
+        amount: amountDue,
+        total_fee: amountDue,
+        due_amount: 0,
+        payment_method: payMethod,
+        sender_number: senderNumber.trim(),
+        transaction_id: transactionId.trim(),
+        status: 'pending',
+        notes: `Due payment for ${payingDue.due_month}`,
+      })
+      if (error) throw error
+
+      toast.success('Payment submitted! Admin will verify and update your dues.')
+      setPayingDue(null)
+      setSenderNumber('')
+      setTransactionId('')
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to submit payment')
+    } finally {
+      setSubmittingPayment(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -209,6 +275,7 @@ export default function StudentBatchDetailPage() {
   const totalDuesAmount = dues.reduce((sum, due) => sum + (due.due_amount - (due.paid_amount || 0)), 0)
 
   return (
+    <>
     <div className="container mx-auto p-4 md:p-6 max-w-7xl space-y-6 pb-20">
       {/* Header & Back Button */}
       <div className="flex items-center gap-4">
@@ -483,12 +550,22 @@ export default function StudentBatchDetailPage() {
                         <h4 className="font-semibold text-slate-800">Fee for {due.due_month ? new Date(due.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Unknown Month'}</h4>
                         <p className="text-sm text-slate-600 mt-1">
                           Amount due: <span className="font-semibold text-slate-900">{formatCurrency(due.due_amount - (due.paid_amount || 0))}</span>
+                          {due.paid_amount > 0 && <span className="text-slate-400 ml-2">(৳{due.paid_amount} already paid)</span>}
                         </p>
                       </div>
                     </div>
-                    <span className="inline-flex items-center self-start md:self-auto px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700 capitalize border border-rose-200">
-                      {due.status}
-                    </span>
+                    <div className="flex items-center gap-3 self-start md:self-auto">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700 capitalize border border-rose-200">
+                        {due.status}
+                      </span>
+                      <button
+                        onClick={() => { setPayingDue(due); setPayMethod('bkash'); setSenderNumber(''); setTransactionId('') }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
+                      >
+                        <DollarSign className="h-4 w-4" />
+                        Pay Now
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -691,5 +768,141 @@ export default function StudentBatchDetailPage() {
         )}
       </div>
     </div>
+
+    {/* Pay Due Modal */}
+    {payingDue && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+          {/* Modal Header */}
+          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold">Pay Due</h2>
+                <p className="text-indigo-200 text-sm mt-0.5">
+                  {payingDue.due_month ? new Date(payingDue.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Fee Payment'}
+                </p>
+              </div>
+              <button
+                onClick={() => setPayingDue(null)}
+                className="p-2 hover:bg-white/20 rounded-xl transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="mt-4 bg-white/10 rounded-2xl p-4 border border-white/20">
+              <p className="text-xs text-indigo-200 uppercase tracking-wider font-semibold">Amount to Pay</p>
+              <p className="text-3xl font-extrabold mt-1">
+                {formatCurrency(payingDue.due_amount - (payingDue.paid_amount || 0))}
+              </p>
+            </div>
+          </div>
+
+          <div className="p-6 space-y-5">
+            {/* Payment Method Selection */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Payment Method</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'bkash', label: 'bKash', color: 'bg-pink-500' },
+                  { id: 'nagad', label: 'Nagad', color: 'bg-orange-500' },
+                  { id: 'rocket', label: 'Rocket', color: 'bg-purple-600' },
+                ].map(m => (
+                  <button
+                    key={m.id}
+                    onClick={() => setPayMethod(m.id)}
+                    className={`py-2.5 px-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                      payMethod === m.id
+                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Coaching Account Number */}
+            {(() => {
+              const account = paymentAccounts.find((a: any) =>
+                a.method?.toLowerCase() === payMethod || a.type?.toLowerCase() === payMethod
+              )
+              const accountNumber = account?.number || account?.account_number || null
+              return accountNumber ? (
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Send to this {payMethod} number</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xl font-mono font-bold text-slate-900 tracking-wider">{accountNumber}</p>
+                    <button
+                      onClick={() => copyNumber(accountNumber)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                    >
+                      {copied === accountNumber ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copied === accountNumber ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  {account?.account_name && <p className="text-xs text-slate-400 mt-1">Account: {account.account_name}</p>}
+                </div>
+              ) : (
+                <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
+                  <p className="text-sm text-amber-700 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    Contact admin for the {payMethod} payment number.
+                  </p>
+                </div>
+              )
+            })()}
+
+            {/* Sender Number */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Your {payMethod} Number</label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  value={senderNumber}
+                  onChange={e => setSenderNumber(e.target.value)}
+                  placeholder="01XXXXXXXXX"
+                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+
+            {/* Transaction ID */}
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Transaction ID</label>
+              <div className="relative">
+                <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  value={transactionId}
+                  onChange={e => setTransactionId(e.target.value)}
+                  placeholder="e.g. 8A2BF9KL3P"
+                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+              </div>
+              <p className="text-xs text-slate-400 mt-1">Enter the TrxID from your {payMethod} confirmation SMS.</p>
+            </div>
+
+            {/* Submit */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setPayingDue(null)}
+                className="flex-1 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handlePayDue}
+                disabled={submittingPayment}
+                className="flex-1 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {submittingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                Submit Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
