@@ -90,16 +90,18 @@ export default async function OwnerDashboard() {
         <h3 className="font-semibold text-gray-800 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { href: "/dashboard/owner/students/new", label: "Add Student", color: "indigo" },
-            { href: "/dashboard/owner/payments", label: "Record Payment", color: "emerald" },
-            { href: "/dashboard/owner/exams", label: "Create Exam", color: "blue" },
-            { href: "/dashboard/owner/sms", label: "Send Bulk SMS", color: "orange" },
-            { href: "/dashboard/owner/batches", label: "New Batch", color: "purple" },
-            { href: "/dashboard/owner/materials", label: "Issue Book", color: "red" },
-            { href: "/dashboard/owner/referrals", label: "Referrals", color: "indigo" },
-            { href: "/dashboard/owner/analytics", label: "Analytics", color: "blue" },
+            { href: "/dashboard/owner/students/new", label: "Add Student", icon: "👨‍🎓", bg: "from-indigo-500 to-violet-500", hover: "hover:shadow-indigo-200" },
+            { href: "/dashboard/owner/payments", label: "Record Payment", icon: "💳", bg: "from-emerald-500 to-teal-500", hover: "hover:shadow-emerald-200" },
+            { href: "/dashboard/owner/exams", label: "Create Exam", icon: "📝", bg: "from-blue-500 to-cyan-500", hover: "hover:shadow-blue-200" },
+            { href: "/dashboard/owner/sms", label: "Send Bulk SMS", icon: "📱", bg: "from-orange-500 to-amber-500", hover: "hover:shadow-orange-200" },
+            { href: "/dashboard/owner/batches", label: "New Batch", icon: "📚", bg: "from-purple-500 to-fuchsia-500", hover: "hover:shadow-purple-200" },
+            { href: "/dashboard/owner/materials", label: "Issue Book", icon: "📖", bg: "from-rose-500 to-pink-500", hover: "hover:shadow-rose-200" },
+            { href: "/dashboard/owner/referrals", label: "Referrals", icon: "🤝", bg: "from-sky-500 to-blue-500", hover: "hover:shadow-sky-200" },
+            { href: "/dashboard/owner/analytics", label: "Analytics", icon: "📊", bg: "from-violet-500 to-purple-600", hover: "hover:shadow-violet-200" },
           ].map(action => (
-            <Link key={action.href} href={action.href} className="p-3 text-center rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all text-sm font-medium text-gray-700 hover:text-indigo-700">
+            <Link key={action.href} href={action.href}
+              className={`p-4 text-center rounded-xl bg-gradient-to-br ${action.bg} text-white font-semibold text-sm shadow-md ${action.hover} hover:shadow-lg hover:scale-[1.03] transition-all flex flex-col items-center gap-2`}>
+              <span className="text-2xl">{action.icon}</span>
               {action.label}
             </Link>
           ))}
