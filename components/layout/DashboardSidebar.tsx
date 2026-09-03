@@ -7,19 +7,20 @@ import {
   GraduationCap, LayoutDashboard, Users, BookOpen, CreditCard,
   BarChart3, UserCheck, MessageSquare, Settings, ChevronLeft,
   ChevronRight, Package, Trophy, Fingerprint, ShoppingBag,
-  DollarSign, GitMerge, Home, FileText, ImageIcon, Shield
+  DollarSign, GitMerge, Home, FileText, ImageIcon, Shield, ClipboardList
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
 
 const ownerNav = [
   { href: "/dashboard/owner", icon: LayoutDashboard, label: "Dashboard", exact: true },
   { href: "/dashboard/owner/students", icon: Users, label: "Students" },
-  { href: "/dashboard/owner/batches", icon: BookOpen, label: "Batches & Classes" },
+  { href: "/dashboard/owner/batches", icon: BookOpen, label: "Batches" },
   { href: "/dashboard/owner/payments", icon: CreditCard, label: "Payments" },
   { href: "/dashboard/owner/payment-approvals", icon: Shield, label: "Payment Approvals" },
+  { href: "/dashboard/owner/attendance", icon: ClipboardList, label: "Attendance" },
   { href: "/dashboard/owner/fee-dues", icon: DollarSign, label: "Fee Dues" },
   { href: "/dashboard/owner/referrals", icon: GitMerge, label: "Referrals" },
-  { href: "/dashboard/owner/exams", icon: FileText, label: "Exams & Results" },
+  { href: "/dashboard/owner/exams", icon: FileText, label: "Exams" },
   { href: "/dashboard/owner/materials", icon: Package, label: "Materials" },
   { href: "/dashboard/owner/staff", icon: UserCheck, label: "Staff" },
   { href: "/dashboard/owner/sms", icon: MessageSquare, label: "Bulk SMS" },

@@ -42,12 +42,12 @@ export default async function OwnerDashboard() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatsCard title="Total Students" value={totalStudents} subtitle={`${activeStudents} active`} icon={Users} color="indigo" />
-        <StatsCard title="Active Batches" value={activeBatches.length} subtitle="Running classes" icon={BookOpen} color="blue" />
-        <StatsCard title="Monthly Revenue" value={formatCurrency(monthlyRevenue)} subtitle="This month" icon={CreditCard} color="emerald" />
-        <StatsCard title="Pending Dues" value={formatCurrency(totalDues)} subtitle="Outstanding fees" icon={AlertCircle} color="red" />
-        <StatsCard title="Today's Attendance" value={todayPresent} subtitle="Students present" icon={UserCheck} color="orange" />
-        <StatsCard title="Pending Exams" value={pendingExams} subtitle="Awaiting publish" icon={TrendingUp} color="purple" />
+        <StatsCard title="Total Students" value={totalStudents} subtitle={`${activeStudents} active`} icon={Users} color="indigo" href="/dashboard/owner/students" />
+        <StatsCard title="Active Batches" value={activeBatches.length} subtitle="Running classes" icon={BookOpen} color="blue" href="/dashboard/owner/batches" />
+        <StatsCard title="Monthly Revenue" value={formatCurrency(monthlyRevenue)} subtitle="This month" icon={CreditCard} color="emerald" href="/dashboard/owner/analytics" />
+        <StatsCard title="Pending Dues" value={formatCurrency(totalDues)} subtitle="Outstanding fees" icon={AlertCircle} color="red" href="/dashboard/owner/fee-dues" />
+        <StatsCard title="Attendance" value={todayPresent} subtitle="View all attendance" icon={UserCheck} color="orange" href="/dashboard/owner/attendance" />
+        <StatsCard title="Exams" value={pendingExams} subtitle="Manage exams" icon={TrendingUp} color="purple" href="/dashboard/owner/exams" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

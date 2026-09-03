@@ -14,6 +14,15 @@ export default async function StudentsPage() {
     .select("id, name")
     .eq("is_active", true)
 
+  const { data: feeDues } = await supabase
+    .from("fee_dues")
+    .select("student_id, due_amount, paid_amount, due_date, status")
+    .in("status", ["pending", "partial"])
+
+  const { data: examResults } = await supabase
+    .from("exam_results")
+    .select("student_id, obtained_marks, exams(total_marks)")
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -25,12 +34,17 @@ export default async function StudentsPage() {
           <Link href="/enroll" target="_blank" className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
             Public Enroll Form
           </Link>
-          <Link href="/dashboard/owner/students/new" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+          <Link href="/dashboard/owner/students/new" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200">
             + Add Student
           </Link>
         </div>
       </div>
-      <StudentsClient students={students || []} batches={batches || []} />
+      <StudentsClient 
+        students={students || []} 
+        batches={batches || []}
+        dueData={feeDues || []}
+        examData={examResults as any || []}
+      />
     </div>
   )
 }

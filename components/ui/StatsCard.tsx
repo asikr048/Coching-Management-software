@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils"
 import type { LucideIcon } from "lucide-react"
+import Link from "next/link"
 
 interface Props {
   title: string
@@ -8,6 +9,7 @@ interface Props {
   icon: LucideIcon
   color?: "indigo" | "emerald" | "orange" | "red" | "blue" | "purple"
   trend?: { value: number; label: string }
+  href?: string
 }
 
 const colorMap = {
@@ -19,9 +21,9 @@ const colorMap = {
   purple: "bg-purple-50 text-purple-600 border-purple-100",
 }
 
-export default function StatsCard({ title, value, subtitle, icon: Icon, color = "indigo", trend }: Props) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow">
+export default function StatsCard({ title, value, subtitle, icon: Icon, color = "indigo", trend, href }: Props) {
+  const content = (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition-shadow h-full">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-sm font-medium text-gray-500">{title}</p>
@@ -40,4 +42,15 @@ export default function StatsCard({ title, value, subtitle, icon: Icon, color = 
       </div>
     </div>
   )
+
+  if (href) {
+    return (
+      <Link href={href} className="block h-full transition-transform hover:scale-[1.02]">
+        {content}
+      </Link>
+    )
+  }
+
+  return content
 }
+
