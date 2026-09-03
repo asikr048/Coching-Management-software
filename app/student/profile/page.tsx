@@ -35,6 +35,9 @@ export default function StudentProfilePage() {
   const [showPassword, setShowPassword] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
 
+  // Edit mode toggle for account settings
+  const [isEditingProfile, setIsEditingProfile] = useState(false)
+
   // Analytics modals
   const [activeModal, setActiveModal] = useState<'attendance' | 'dues' | 'exams' | null>(null)
   // Pay due from profile
@@ -173,6 +176,7 @@ export default function StudentProfilePage() {
       }
       setProfile((p: any) => ({ ...p, name: editName.trim(), phone: editPhone.trim() }))
       toast.success("Profile updated successfully!")
+      setIsEditingProfile(false)
     } catch (err) {
       toast.error("Failed to update profile")
     } finally {
@@ -451,48 +455,90 @@ export default function StudentProfilePage() {
 
       {/* Account Settings */}
       <div className="space-y-4">
-        <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-          <Pencil className="w-5 h-5 text-indigo-600" /> Account Settings
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Pencil className="w-5 h-5 text-indigo-600" /> Account Settings
+          </h2>
+          {!isEditingProfile && (
+            <button
+              onClick={() => { setEditName(profile?.name || ""); setEditPhone(profile?.phone || ""); setIsEditingProfile(true) }}
+              className="inline-flex items-center gap-2 px-4 py-2 border border-indigo-200 text-indigo-600 font-semibold rounded-xl text-sm hover:bg-indigo-50 transition-colors"
+            >
+              <Pencil className="w-4 h-4" /> Edit
+            </button>
+          )}
+        </div>
 
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
-              <div className="relative">
-                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input value={editName} onChange={e => setEditName(e.target.value)} className={`${inputClass} pl-10`} placeholder="Your name" />
-              </div>
+          {/* VIEW MODE */}
+          {!isEditingProfile ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {[
+                { label: "Full Name", value: profile?.name || "—", icon: <User className="w-4 h-4 text-gray-400" /> },
+                { label: "Phone Number", value: profile?.phone || "—", icon: <Phone className="w-4 h-4 text-gray-400" /> },
+                { label: "Email Address", value: profile?.email || "—", icon: <Mail className="w-4 h-4 text-gray-400" />, note: "Cannot be changed" },
+                { label: "Student ID", value: profile?.user_id || "—", icon: <ShieldCheck className="w-4 h-4 text-gray-400" />, mono: true, note: "Read-only" },
+              ].map(field => (
+                <div key={field.label}>
+                  <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">{field.label}</p>
+                  <div className="flex items-center gap-2.5 px-4 py-3 bg-gray-50 rounded-xl border border-gray-100">
+                    {field.icon}
+                    <span className={`text-sm font-semibold text-gray-800 ${field.mono ? 'font-mono' : ''}`}>{field.value}</span>
+                  </div>
+                  {field.note && <p className="text-xs text-gray-400 mt-1">{field.note}</p>}
+                </div>
+              ))}
             </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Phone Number</label>
-              <div className="relative">
-                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className={`${inputClass} pl-10`} placeholder="01XXXXXXXXX" />
+          ) : (
+            /* EDIT MODE */
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input value={editName} onChange={e => setEditName(e.target.value)} className={`${inputClass} pl-10`} placeholder="Your name" autoFocus />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Phone Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className={`${inputClass} pl-10`} placeholder="01XXXXXXXXX" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input value={profile?.email || ""} disabled className={`${inputClass} pl-10 bg-gray-50 text-gray-500 cursor-not-allowed`} />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">Email is linked to your login and cannot be changed here.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Student ID</label>
+                  <div className="relative">
+                    <ShieldCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input value={profile?.user_id || ""} disabled className={`${inputClass} pl-10 bg-gray-50 text-gray-500 cursor-not-allowed font-mono`} />
+                  </div>
+                </div>
               </div>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Email Address</label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input value={profile?.email || ""} disabled className={`${inputClass} pl-10 bg-gray-50 text-gray-500 cursor-not-allowed`} />
-              </div>
-              <p className="text-xs text-gray-400 mt-1">Email is linked to your login and cannot be changed here.</p>
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Student ID</label>
-              <div className="relative">
-                <ShieldCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input value={profile?.user_id || ""} disabled className={`${inputClass} pl-10 bg-gray-50 text-gray-500 cursor-not-allowed font-mono`} />
-              </div>
-            </div>
-          </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
-            <button onClick={handleSaveProfile} disabled={saving}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 shadow-sm">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes
-            </button>
+              <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-gray-100">
+                <button onClick={handleSaveProfile} disabled={saving}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 shadow-sm">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes
+                </button>
+                <button onClick={() => setIsEditingProfile(false)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 border border-gray-200 text-gray-600 font-semibold rounded-xl text-sm hover:bg-gray-50 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Change Password — always visible */}
+          <div className="border-t border-gray-100 pt-4">
             <button onClick={() => setShowPasswordSection(!showPasswordSection)}
               className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 transition-colors">
               <Lock className="w-4 h-4" /> {showPasswordSection ? "Cancel" : "Change Password"}
