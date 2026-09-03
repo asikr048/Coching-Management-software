@@ -1,10 +1,11 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Loader2, UserPlus, User, BookOpen, CreditCard, Check, Calendar, DollarSign } from "lucide-react"
+import { Loader2, UserPlus, User, BookOpen, CreditCard, Check, Calendar, DollarSign, ShieldAlert } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
+import { checkFinancialAccess } from "@/lib/financial-access"
 
 interface Batch {
   id: string; name: string; subject?: string; class_level?: string
@@ -15,6 +16,22 @@ export default function NewStudentForm({ batches }: { batches: Batch[] }) {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
+  const [financialAccess, setFinancialAccess] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    checkFinancialAccess().then(({ hasAccess }) => setFinancialAccess(hasAccess))
+  }, [])
+
+  if (financialAccess === false) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
+        <ShieldAlert className="w-12 h-12 text-red-400 mx-auto mb-3" />
+        <h3 className="text-lg font-bold text-red-700 mb-1">Financial Access Required</h3>
+        <p className="text-sm text-red-600">You don&apos;t have financial access permission. Only the Owner can grant this.</p>
+        <p className="text-xs text-red-500 mt-2">Contact the owner to get financial access to enroll students.</p>
+      </div>
+    )
+  }
 
   const [form, setForm] = useState({
     name: "", phone: "", email: "", gender: "male", date_of_birth: "",

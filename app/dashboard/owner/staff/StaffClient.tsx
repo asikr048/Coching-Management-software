@@ -2,7 +2,7 @@
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Plus, X, Loader2, UserCheck, Shield, ShieldCheck, Crown, ChevronDown } from "lucide-react"
+import { Plus, X, Loader2, UserCheck, Shield, ShieldCheck, Crown, ChevronDown, Banknote } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Staff } from "@/lib/supabase/types"
 
@@ -105,6 +105,18 @@ export default function StaffClient({ staff: initial, myRole }: { staff: Staff[]
     }
   }
 
+  async function handleToggleFinancialAccess(staffId: string, current: boolean) {
+    if (myRole !== "owner") { toast.error("Only owner can change financial access"); return }
+    try {
+      const { error } = await supabase.from("staff").update({ has_financial_access: !current }).eq("id", staffId)
+      if (error) throw error
+      setStaff(prev => prev.map(s => s.id === staffId ? { ...s, has_financial_access: !current } as any : s))
+      toast.success(!current ? "Financial access granted ✅" : "Financial access revoked ❌")
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed")
+    }
+  }
+
   const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
   const assignableRoles = getAssignableRoles()
   const canAddStaff = myRole === "owner" || myRole === "super_manager"
@@ -157,6 +169,36 @@ export default function StaffClient({ staff: initial, myRole }: { staff: Staff[]
               <span>Salary: {formatCurrency(s.salary)}</span>
               <span>Joined: {formatDate(s.joined_at)}</span>
             </div>
+
+            {/* Financial Access Badge + Toggle (Owner only) */}
+            {s.role !== "owner" && (
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Banknote className={`w-3.5 h-3.5 ${(s as any).has_financial_access ? "text-emerald-600" : "text-gray-400"}`} />
+                  <span className={`text-xs font-semibold ${(s as any).has_financial_access ? "text-emerald-600" : "text-gray-400"}`}>
+                    Financial Access: {(s as any).has_financial_access ? "Granted" : "None"}
+                  </span>
+                </div>
+                {myRole === "owner" && (
+                  <button
+                    onClick={() => handleToggleFinancialAccess(s.id, !!(s as any).has_financial_access)}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors ${
+                      (s as any).has_financial_access
+                        ? "border-red-200 text-red-600 hover:bg-red-50"
+                        : "border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                    }`}
+                  >
+                    {(s as any).has_financial_access ? "Revoke" : "Grant"}
+                  </button>
+                )}
+              </div>
+            )}
+            {s.role === "owner" && (
+              <div className="mt-3 pt-3 border-t border-gray-100 flex items-center gap-1.5">
+                <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-xs font-semibold text-emerald-600">Financial Access: Always</span>
+              </div>
+            )}
 
             {/* Role change dropdown */}
             {canChangeRole(s.role) && assignableRoles.length > 0 && (

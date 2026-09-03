@@ -1,12 +1,13 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatCurrency, formatDate, getMonthLabel } from "@/lib/utils"
 import {
   AlertCircle, Search, Filter, Calendar, DollarSign, CheckCircle,
-  X, Loader2, MessageSquare, Download, Clock, ArrowUpDown
+  X, Loader2, MessageSquare, Download, Clock, ArrowUpDown, ShieldAlert
 } from "lucide-react"
+import { checkFinancialAccess } from "@/lib/financial-access"
 
 interface Due {
   id: string; student_id: string; batch_id: string; due_month: string
@@ -22,6 +23,11 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
   const [search, setSearch] = useState("")
   const [batchFilter, setBatchFilter] = useState("")
   const [sortBy, setSortBy] = useState<"date" | "amount">("date")
+  const [hasFinancialAccess, setHasFinancialAccess] = useState(true)
+
+  useEffect(() => {
+    checkFinancialAccess().then(({ hasAccess }) => setHasFinancialAccess(hasAccess))
+  }, [])
 
   // Modals
   const [extendModal, setExtendModal] = useState<Due | null>(null)
@@ -180,12 +186,18 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
-                        <button onClick={() => { setExtendModal(d); setNewDate(d.due_date) }} title="Extend due date"
-                          className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors"><Calendar className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setReduceModal(d)} title="Reduce due"
-                          className="p-1.5 hover:bg-orange-50 rounded-lg text-orange-600 transition-colors"><DollarSign className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => markPaid(d)} title="Mark as paid/waived"
-                          className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors"><CheckCircle className="w-3.5 h-3.5" /></button>
+                        {hasFinancialAccess ? (
+                          <>
+                            <button onClick={() => { setExtendModal(d); setNewDate(d.due_date) }} title="Extend due date"
+                              className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors"><Calendar className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setReduceModal(d)} title="Reduce due"
+                              className="p-1.5 hover:bg-orange-50 rounded-lg text-orange-600 transition-colors"><DollarSign className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => markPaid(d)} title="Mark as paid/waived"
+                              className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors"><CheckCircle className="w-3.5 h-3.5" /></button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-gray-400 flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> No access</span>
+                        )}
                         <button onClick={() => { setSmsModal(d); setSmsMessage(`Dear Parent, fee of ${formatCurrency(outstanding)} for ${d.student?.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`) }} title="Send SMS reminder"
                           className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-600 transition-colors"><MessageSquare className="w-3.5 h-3.5" /></button>
                       </div>
