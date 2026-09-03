@@ -103,7 +103,7 @@ export default function BatchesClient({ batches: initialBatches, teachers, rooms
           
           return (
             <div key={batch.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow relative group">
-              <Link href={`/dashboard/owner/batches/${batch.id}`} className="absolute inset-0 z-0"></Link>
+              <Link href={`/batch/${batch.id}`} className="absolute inset-0 z-0"></Link>
               <div className="flex items-start justify-between mb-3 relative z-10">
                 <div className="flex items-center gap-2">
                   <div className="p-2 bg-indigo-50 rounded-lg"><BookOpen className="w-4 h-4 text-indigo-600" /></div>
