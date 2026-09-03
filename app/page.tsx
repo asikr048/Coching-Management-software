@@ -67,7 +67,7 @@ export default function HomePage() {
             <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
               <GraduationCap className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-gray-900 tracking-tight">Medha<span className="text-indigo-600">Shiri</span></span>
+            <span className="text-xl font-bold text-gray-900 tracking-tight">Medha<span className="text-indigo-600">Shiree</span></span>
           </Link>
           <div className="hidden md:flex items-center gap-1">
             <a href="#batches" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Batches</a>
@@ -329,7 +329,7 @@ export default function HomePage() {
             <div className="md:col-span-2">
               <div className="flex items-center gap-2.5 mb-4">
                 <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-violet-500 rounded-xl flex items-center justify-center"><GraduationCap className="w-4 h-4 text-white" /></div>
-                <span className="text-lg font-bold text-white">Medha<span className="text-indigo-400">Shiri</span></span>
+                <span className="text-lg font-bold text-white">Medha<span className="text-indigo-400">Shiree</span></span>
               </div>
               <p className="text-sm leading-relaxed max-w-sm">Rajshahi&apos;s premier coaching center. Quality education, expert teachers, and a proven track record of student success.</p>
             </div>
@@ -346,12 +346,12 @@ export default function HomePage() {
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wide">Contact</h4>
               <div className="space-y-2.5 text-sm">
                 <p className="flex items-center gap-2"><MapPin className="w-4 h-4 flex-shrink-0" /> Rajshahi, Bangladesh</p>
-                <p className="flex items-center gap-2"><Phone className="w-4 h-4 flex-shrink-0" /> 01XXXXXXXXX</p>
-                <p className="flex items-center gap-2"><Mail className="w-4 h-4 flex-shrink-0" /> info@MedhaShiree.com</p>
+                <p className="flex items-center gap-2"><Phone className="w-4 h-4 flex-shrink-0" /> 01302201431</p>
+                <p className="flex items-center gap-2"><Mail className="w-4 h-4 flex-shrink-0" /> info@medhashiree.com</p>
               </div>
             </div>
           </div>
-          <div className="pt-8 text-center text-xs text-gray-600"><p>&copy; 2026 MedhaShiree. All rights reserved.</p></div>
+          <div className="pt-8 text-center text-xs text-gray-600"><p>&copy; {new Date().getFullYear()} MedhaShiree. All rights reserved.</p></div>
         </div>
       </footer>
     </div>

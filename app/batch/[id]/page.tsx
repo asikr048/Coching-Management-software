@@ -122,7 +122,7 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ id
               <EnrollButton batchId={batch.id} isFull={isFull} />
 
 
-              <p className="text-xs text-gray-400 text-center mt-3">No registration fee • Cancel anytime</p>
+              <p className="text-xs text-gray-400 text-center mt-3">Admission fee may apply • Contact for details</p>
             </div>
           </div>
         </div>

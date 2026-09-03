@@ -17,7 +17,7 @@ export default function ParentPortal() {
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setError("")
     try {
-      const { data: s } = await supabase.from("students").select("*").eq("student_id", studentId).eq("guardian_phone", phone).single()
+      const { data: s } = await supabase.from("students").select("*").eq("student_id", studentId).eq("guardian_phone", phone).maybeSingle()
       if (!s) { setError("Student not found. Check ID and phone number."); setStudent(null); return }
       setStudent(s)
       const [pmts, fDues] = await Promise.all([
@@ -40,7 +40,7 @@ export default function ParentPortal() {
         </div>
         <form onSubmit={handleSearch} className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label><input required value={studentId} onChange={e => setStudentId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="EDU-2024-0001" /></div>
+            <div><label className="block text-sm font-medium text-gray-700 mb-1">Student ID</label><input required value={studentId} onChange={e => setStudentId(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="MS-12345" /></div>
             <div><label className="block text-sm font-medium text-gray-700 mb-1">Guardian Phone</label><input required value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="01XXXXXXXXX" /></div>
           </div>
           {error && <p className="text-red-600 text-sm mt-3">{error}</p>}

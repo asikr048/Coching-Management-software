@@ -52,7 +52,7 @@ export default function SignupPage() {
           name: form.name,
           email: form.email,
           phone: form.phone || null,
-          guardian_phone: form.phone || "01700000000",
+          guardian_phone: form.phone || "N/A",
           is_active: true,
         })
       } catch {}
@@ -114,7 +114,7 @@ export default function SignupPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/10"><GraduationCap className="w-6 h-6 text-white" /></div>
-            <span className="text-2xl font-bold text-white">Medha<span className="text-indigo-300">Shiri</span></span>
+            <span className="text-2xl font-bold text-white">Medha<span className="text-indigo-300">Shiree</span></span>
           </div>
           <div className="space-y-8 max-w-md">
             <h2 className="text-4xl font-extrabold text-white leading-tight">Join the Future of Coaching Management</h2>
@@ -131,7 +131,7 @@ export default function SignupPage() {
               </div>
             </div>
           </div>
-          <p className="text-white/30 text-xs">&copy; 2026 MedhaShiree. All rights reserved.</p>
+          <p className="text-white/30 text-xs">&copy; {new Date().getFullYear()} MedhaShiree. All rights reserved.</p>
         </div>
       </div>
 
@@ -140,7 +140,7 @@ export default function SignupPage() {
         <div className="w-full max-w-[420px] space-y-6">
           <div className="lg:hidden text-center mb-4">
             <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl mb-3"><GraduationCap className="w-6 h-6 text-white" /></div>
-            <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiri</span></h1>
+            <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiree</span></h1>
           </div>
 
           <div className="flex items-center justify-between">

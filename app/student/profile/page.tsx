@@ -15,6 +15,7 @@ export default function StudentProfilePage() {
   const [profile, setProfile] = useState<any>(null)
   const [studentData, setStudentData] = useState<any>(null)
   const [enrollments, setEnrollments] = useState<any[]>([])
+  const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([])
   const [attendance, setAttendance] = useState<any[]>([])
   const [payments, setPayments] = useState<any[]>([])
   const [dues, setDues] = useState<any[]>([])
@@ -74,7 +75,7 @@ export default function StudentProfilePage() {
         if (studentRecord?.id) {
           const studentId = studentRecord.id
 
-          const [enrRes, attRes, pmtRes, dueRes, examRes] = await Promise.all([
+          const [enrRes, attRes, pmtRes, dueRes, examRes, pendingRes] = await Promise.all([
             supabase
               .from("enrollments")
               .select("*, batch:batches(*, teacher:staff(name), room:rooms(name))")
@@ -102,6 +103,12 @@ export default function StudentProfilePage() {
               .select("*, exam:exams(title, exam_date, total_marks, pass_marks, batch:batches(name))")
               .eq("student_id", studentId)
               .order("created_at", { ascending: false }),
+            supabase
+              .from("payment_submissions")
+              .select("*, batch:batches(*, teacher:staff(name), room:rooms(name))")
+              .eq("student_id", studentId)
+              .eq("status", "pending")
+              .order("created_at", { ascending: false }),
           ])
 
           if (enrRes.data) setEnrollments(enrRes.data)
@@ -109,6 +116,7 @@ export default function StudentProfilePage() {
           if (pmtRes.data) setPayments(pmtRes.data)
           if (dueRes.data) setDues(dueRes.data)
           if (examRes.data) setExamResults(examRes.data)
+          if (pendingRes.data) setPendingSubmissions(pendingRes.data)
         }
       } catch (err) {
         console.error("Failed to load student data:", err)
@@ -161,7 +169,7 @@ export default function StudentProfilePage() {
               <GraduationCap className="w-5 h-5 text-white" />
             </div>
             <div>
-              <span className="text-lg font-bold text-gray-900 tracking-tight">Medha<span className="text-indigo-600">Shiri</span></span>
+              <span className="text-lg font-bold text-gray-900 tracking-tight">Medha<span className="text-indigo-600">Shiree</span></span>
               <span className="ml-2 text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-full border border-indigo-100">Student Portal</span>
             </div>
           </Link>
@@ -250,8 +258,12 @@ export default function StudentProfilePage() {
               <span className="text-xs font-semibold uppercase tracking-wider">Enrolled Batches</span>
               <BookOpen className="w-5 h-5 text-indigo-600" />
             </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-gray-900">{enrollments.length}</p>
-            <p className="text-xs text-gray-500">Active subjects &amp; classes</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-gray-900">{enrollments.length + pendingSubmissions.length}</p>
+            <p className="text-xs text-gray-500">
+              {pendingSubmissions.length > 0
+                ? `${enrollments.length} active, ${pendingSubmissions.length} pending`
+                : "Active subjects & classes"}
+            </p>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
@@ -287,7 +299,7 @@ export default function StudentProfilePage() {
         {/* Tab Navigation */}
         <div className="flex items-center gap-2 border-b border-gray-200 overflow-x-auto pb-2">
           {[
-            { id: "batches", label: `My Batches (${enrollments.length})`, icon: BookOpen },
+            { id: "batches", label: `My Batches (${enrollments.length + pendingSubmissions.length})`, icon: BookOpen },
             { id: "attendance", label: `Attendance (${attendance.length})`, icon: Clock },
             { id: "payments", label: `Fees & Payments (${payments.length})`, icon: DollarSign },
             { id: "exams", label: `Exam Results (${examResults.length})`, icon: Award },
@@ -311,7 +323,7 @@ export default function StudentProfilePage() {
         {/* 1. Batches Tab */}
         {activeTab === "batches" && (
           <div className="space-y-4">
-            {enrollments.length === 0 ? (
+            {enrollments.length === 0 && pendingSubmissions.length === 0 ? (
               <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-4">
                 <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
                   <BookOpen className="w-8 h-8" />
@@ -330,40 +342,110 @@ export default function StudentProfilePage() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {enrollments.map((enr, i) => {
-                  const b = enr.batch
-                  return (
-                    <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow space-y-4">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <span className="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">
-                            {b?.subject || "Subject"}
-                          </span>
-                          <h3 className="text-lg font-bold text-gray-900 mt-2">{b?.name || "Batch Name"}</h3>
-                        </div>
-                        <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-200">
-                          {enr.status || "Active"}
-                        </span>
-                      </div>
-
-                      <div className="space-y-2 text-sm text-gray-600 border-t border-gray-100 pt-3">
-                        {b?.teacher?.name && (
-                          <p className="flex items-center gap-2"><User className="w-4 h-4 text-gray-400" /> Teacher: <span className="font-medium text-gray-900">{b.teacher.name}</span></p>
-                        )}
-                        {b?.schedule && (
-                          <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> Schedule: <span className="font-medium text-gray-900">{b.schedule}</span></p>
-                        )}
-                        {b?.room?.name && (
-                          <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> Room: <span className="font-medium text-gray-900">{b.room.name}</span></p>
-                        )}
-                        {b?.monthly_fee != null && (
-                          <p className="flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> Fee: <span className="font-medium text-gray-900">{formatCurrency(b.monthly_fee)}/mo</span></p>
-                        )}
-                      </div>
+              <div className="space-y-6">
+                {/* Pending Approval Section */}
+                {pendingSubmissions.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-amber-500" />
+                      <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider">Pending Approval ({pendingSubmissions.length})</h3>
                     </div>
-                  )
-                })}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {pendingSubmissions.map((sub, i) => {
+                        const b = sub.batch
+                        return (
+                          <div key={`pending-${i}`} className="bg-amber-50/50 rounded-2xl border-2 border-amber-200 border-dashed p-6 shadow-sm space-y-4 relative overflow-hidden">
+                            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-100/40 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
+                            <div className="flex items-start justify-between relative z-10">
+                              <div>
+                                <span className="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">
+                                  {b?.subject || "Subject"}
+                                </span>
+                                <h3 className="text-lg font-bold text-gray-900 mt-2">{b?.name || "Batch Name"}</h3>
+                              </div>
+                              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-amber-100 text-amber-700 font-semibold rounded-full border border-amber-300 animate-pulse">
+                                <Clock className="w-3 h-3" />
+                                Pending Approval
+                              </span>
+                            </div>
+
+                            <div className="space-y-2 text-sm text-gray-600 border-t border-amber-200/60 pt-3">
+                              {b?.teacher?.name && (
+                                <p className="flex items-center gap-2"><User className="w-4 h-4 text-gray-400" /> Teacher: <span className="font-medium text-gray-900">{b.teacher.name}</span></p>
+                              )}
+                              {b?.schedule && (
+                                <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> Schedule: <span className="font-medium text-gray-900">{b.schedule}</span></p>
+                              )}
+                              {b?.room?.name && (
+                                <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> Room: <span className="font-medium text-gray-900">{b.room.name}</span></p>
+                              )}
+                              {sub.amount != null && (
+                                <p className="flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> Paid: <span className="font-medium text-emerald-600">{formatCurrency(sub.amount)}</span></p>
+                              )}
+                              {sub.due_amount > 0 && (
+                                <p className="flex items-center gap-2"><AlertCircle className="w-4 h-4 text-amber-400" /> Due: <span className="font-medium text-amber-600">{formatCurrency(sub.due_amount)}</span></p>
+                              )}
+                            </div>
+
+                            <div className="bg-amber-100/70 rounded-xl p-3 border border-amber-200/50">
+                              <p className="text-xs text-amber-700 flex items-center gap-1.5">
+                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                                Your payment is being verified by the admin. You&apos;ll get access once approved.
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Enrollments */}
+                {enrollments.length > 0 && (
+                  <div className="space-y-3">
+                    {pendingSubmissions.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-500" />
+                        <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Active Enrollments ({enrollments.length})</h3>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {enrollments.map((enr, i) => {
+                        const b = enr.batch
+                        return (
+                          <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow space-y-4">
+                            <div className="flex items-start justify-between">
+                              <div>
+                                <span className="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">
+                                  {b?.subject || "Subject"}
+                                </span>
+                                <h3 className="text-lg font-bold text-gray-900 mt-2">{b?.name || "Batch Name"}</h3>
+                              </div>
+                              <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-200">
+                                {enr.status || "Active"}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2 text-sm text-gray-600 border-t border-gray-100 pt-3">
+                              {b?.teacher?.name && (
+                                <p className="flex items-center gap-2"><User className="w-4 h-4 text-gray-400" /> Teacher: <span className="font-medium text-gray-900">{b.teacher.name}</span></p>
+                              )}
+                              {b?.schedule && (
+                                <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> Schedule: <span className="font-medium text-gray-900">{b.schedule}</span></p>
+                              )}
+                              {b?.room?.name && (
+                                <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> Room: <span className="font-medium text-gray-900">{b.room.name}</span></p>
+                              )}
+                              {b?.monthly_fee != null && (
+                                <p className="flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> Fee: <span className="font-medium text-gray-900">{formatCurrency(b.monthly_fee)}/mo</span></p>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -437,7 +519,7 @@ export default function StudentProfilePage() {
                   {dues.map((d, i) => (
                     <div key={i} className="py-2.5 flex items-center justify-between">
                       <div>
-                        <p className="font-semibold text-gray-900">{d.batch?.name || "Batch Fee"} - {d.month} {d.year}</p>
+                        <p className="font-semibold text-gray-900">{d.batch?.name || "Batch Fee"} - {d.due_month || "N/A"}</p>
                         <p className="text-xs text-gray-500">Status: {d.status}</p>
                       </div>
                       <p className="font-bold text-amber-700">{formatCurrency(Number(d.due_amount) - Number(d.paid_amount || 0))}</p>
@@ -472,7 +554,7 @@ export default function StudentProfilePage() {
                       {payments.map((p, i) => (
                         <tr key={i} className="hover:bg-slate-50/60 transition-colors">
                           <td className="px-6 py-4 font-medium text-gray-900">{formatDate(p.paid_at)}</td>
-                          <td className="px-6 py-4 text-gray-600">{p.batch?.name || p.month_for || "Tuition Fee"}</td>
+                          <td className="px-6 py-4 text-gray-600">{p.batch?.name || p.payment_month || p.payment_for || "Tuition Fee"}</td>
                           <td className="px-6 py-4 text-xs font-mono text-gray-500 uppercase">{p.payment_method || "Cash"}</td>
                           <td className="px-6 py-4 text-right font-bold text-emerald-600">{formatCurrency(p.amount)}</td>
                         </tr>

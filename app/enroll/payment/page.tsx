@@ -32,6 +32,7 @@ function PaymentContent() {
   const studentDbId = searchParams.get("student_id") || ""
   const studentCode = searchParams.get("student_code") || ""
   const studentName = searchParams.get("name") || ""
+  const batchParam = searchParams.get("batch") || ""
 
   const supabase = createClient()
   const [batches, setBatches] = useState<Batch[]>([])
@@ -57,6 +58,9 @@ function PaymentContent() {
       ])
       setBatches(batchRes.data || [])
       setAccounts(accountRes.data || [])
+      if (batchParam && batchRes.data?.some(b => b.id === batchParam)) {
+        setSelectedBatch(batchParam)
+      }
       setLoading(false)
     }
     load()
@@ -80,6 +84,7 @@ function PaymentContent() {
     setSubmitting(true)
     try {
       const dueDate = new Date()
+      dueDate.setDate(1)
       dueDate.setMonth(dueDate.getMonth() + 1)
       dueDate.setDate(10)
 
@@ -189,7 +194,7 @@ function PaymentContent() {
                   </div>
                   <div className="flex justify-between items-center pt-2">
                     <span className="font-bold text-gray-900">Total Amount</span>
-                    <span className="text-3xl font-black bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">৳{totalFee.toLocaleString()}</span>
+                    <span className="text-3xl font-black bg-gradient-to-r from-indigo-600 to-violet-600 bg-clip-text text-transparent">{formatCurrency(totalFee)}</span>
                   </div>
                 </div>
               )}
@@ -203,22 +208,22 @@ function PaymentContent() {
                   <h3 className="font-bold text-gray-900">Payment Amount</h3>
                 </div>
                 <label className="block text-sm font-medium text-gray-600 mb-2">How much are you paying now? (৳)</label>
-                <input type="number" required min="1" max={totalFee} value={payAmount} onChange={e => setPayAmount(e.target.value)} className={`${inputClass} text-lg font-semibold`} placeholder={`Max ৳${totalFee.toLocaleString()}`} />
+                <input type="number" required min="1" max={totalFee} value={payAmount} onChange={e => setPayAmount(e.target.value)} className={`${inputClass} text-lg font-semibold`} placeholder={`Max ${formatCurrency(totalFee)}`} />
 
                 <div className="grid grid-cols-2 gap-3 mt-5">
                   <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 border border-emerald-200 rounded-xl p-4 text-center">
                     <p className="text-xs text-emerald-600 font-semibold mb-1 uppercase tracking-wider">Paying Now</p>
-                    <p className="text-2xl font-black text-emerald-700">৳{payAmountNum.toLocaleString()}</p>
+                    <p className="text-2xl font-black text-emerald-700">{formatCurrency(payAmountNum)}</p>
                   </div>
                   <div className={`border rounded-xl p-4 text-center ${dueAmount > 0 ? "bg-gradient-to-br from-red-50 to-red-100 border-red-200" : "bg-gray-50 border-gray-200"}`}>
                     <p className={`text-xs font-semibold mb-1 uppercase tracking-wider ${dueAmount > 0 ? "text-red-600" : "text-gray-400"}`}>Due Amount</p>
-                    <p className={`text-2xl font-black ${dueAmount > 0 ? "text-red-600" : "text-gray-300"}`}>৳{dueAmount.toLocaleString()}</p>
+                    <p className={`text-2xl font-black ${dueAmount > 0 ? "text-red-600" : "text-gray-300"}`}>{formatCurrency(dueAmount)}</p>
                   </div>
                 </div>
                 {dueAmount > 0 && (
                   <div className="flex items-start gap-2 mt-4 bg-amber-50 border border-amber-200 rounded-xl p-3">
                     <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700">Remaining <strong>৳{dueAmount.toLocaleString()}</strong> will be due on the 10th of next month.</p>
+                    <p className="text-xs text-amber-700">Remaining <strong>{formatCurrency(dueAmount)}</strong> will be due on the 10th of next month.</p>
                   </div>
                 )}
               </div>
@@ -255,7 +260,7 @@ function PaymentContent() {
                     <div className="space-y-4">
                       <div className="flex items-start gap-3">
                         <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0"><Smartphone className="w-4 h-4 text-gray-600" /></div>
-                        <p className="text-sm text-gray-700 pt-1">Open <strong className={`bg-gradient-to-r ${methodConfig[paymentMethod]?.gradient} bg-clip-text text-transparent`}>{methodConfig[paymentMethod]?.label}</strong>, <strong className={`bg-gradient-to-r ${methodConfig[paymentMethod]?.gradient} bg-clip-text text-transparent`}>Nagad</strong>, <strong className={`bg-gradient-to-r ${methodConfig[paymentMethod]?.gradient} bg-clip-text text-transparent`}>Rocket</strong>, or <strong className={`bg-gradient-to-r ${methodConfig[paymentMethod]?.gradient} bg-clip-text text-transparent`}>Upay</strong> App — or Dial on Phone</p>
+                        <p className="text-sm text-gray-700 pt-1">Open <strong className={`bg-gradient-to-r ${methodConfig[paymentMethod]?.gradient} bg-clip-text text-transparent`}>{methodConfig[paymentMethod]?.label}</strong> App — or Dial on Phone</p>
                       </div>
                       <div className="flex items-start gap-3">
                         <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0"><Send className="w-4 h-4 text-gray-600" /></div>

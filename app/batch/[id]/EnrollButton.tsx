@@ -7,6 +7,7 @@ import { CheckCircle, Clock, User, Loader2, LayoutDashboard } from "lucide-react
 export default function EnrollButton({ batchId, isFull }: { batchId: string; isFull: boolean }) {
   const supabase = createClient()
   const [status, setStatus] = useState<"loading" | "not_logged_in" | "is_staff" | "enrolled" | "pending" | "can_enroll">("loading")
+  const [staffRole, setStaffRole] = useState("")
   const [studentDbId, setStudentDbId] = useState("")
   const [studentCode, setStudentCode] = useState("")
   const [studentName, setStudentName] = useState("")
@@ -19,7 +20,11 @@ export default function EnrollButton({ batchId, isFull }: { batchId: string; isF
       // Check if user is staff — admins don't enroll as students
       const { data: staffRecord } = await supabase
         .from("staff").select("id, role").eq("auth_user_id", user.id).maybeSingle()
-      if (staffRecord) { setStatus("is_staff"); return }
+      if (staffRecord) { 
+        setStaffRole(staffRecord.role || "")
+        setStatus("is_staff")
+        return 
+      }
 
       // Find student record by email
       const studentEmail = user.email || ""
@@ -60,16 +65,28 @@ export default function EnrollButton({ batchId, isFull }: { batchId: string; isF
   )
 
   // Admin/staff account — show dashboard link, not enroll
-  if (status === "is_staff") return (
-    <div className="space-y-3">
-      <div className="w-full py-3 bg-violet-50 border-2 border-violet-200 text-violet-700 rounded-xl font-semibold text-center flex items-center justify-center gap-2 text-sm">
-        <LayoutDashboard className="w-4 h-4" /> Admin Account
+  if (status === "is_staff") {
+    const dashboardHref = ["owner", "super_manager", "manager"].includes(staffRole)
+      ? "/dashboard/owner"
+      : staffRole === "teacher"
+      ? "/dashboard/teacher"
+      : staffRole === "receptionist"
+      ? "/dashboard/reception"
+      : staffRole === "accountant"
+      ? "/dashboard/accountant"
+      : "/dashboard/owner"
+
+    return (
+      <div className="space-y-3">
+        <div className="w-full py-3 bg-violet-50 border-2 border-violet-200 text-violet-700 rounded-xl font-semibold text-center flex items-center justify-center gap-2 text-sm">
+          <LayoutDashboard className="w-4 h-4" /> Admin Account
+        </div>
+        <Link href={dashboardHref} className="block w-full py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-semibold text-center hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm">
+          <LayoutDashboard className="w-4 h-4" /> Go to Dashboard
+        </Link>
       </div>
-      <Link href="/dashboard/owner" className="block w-full py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl font-semibold text-center hover:shadow-lg transition-all flex items-center justify-center gap-2 text-sm">
-        <LayoutDashboard className="w-4 h-4" /> Go to Dashboard
-      </Link>
-    </div>
-  )
+    )
+  }
 
   if (status === "enrolled") return (
     <div className="space-y-3">
