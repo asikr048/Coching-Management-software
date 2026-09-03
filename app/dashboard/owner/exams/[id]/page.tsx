@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -97,7 +97,17 @@ export default function ExamResultsPage() {
                   <td className="px-4 py-3 text-sm text-gray-500">{i + 1}</td>
                   <td className="px-4 py-3 text-sm font-medium text-gray-800">{s.name}</td>
                   <td className="px-4 py-3 text-sm text-gray-500 font-mono">{s.student_id}</td>
-                  <td className="px-4 py-3"><input type="number" min="0" max={exam.total_marks} value={r?.obtained_marks || ""} onChange={e => updateMark(s.id, e.target.value)} className="w-20 px-2 py-1.5 border border-gray-300 rounded-lg text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="-" /></td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max={exam.total_marks}
+                      value={r?.obtained_marks || ""}
+                      onChange={e => updateMark(s.id, e.target.value)}
+                      className="w-24 px-3 py-1.5 border-2 border-gray-300 rounded-lg text-sm text-center font-bold text-gray-900 bg-white focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-sm"
+                      placeholder="0"
+                    />
+                  </td>
                   <td className="px-4 py-3">{r?.grade && <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-700">{r.grade}</span>}</td>
                   <td className="px-4 py-3">{marks !== null && <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${passed ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>{passed ? "Pass" : "Fail"}</span>}</td>
                 </tr>
