@@ -58,46 +58,60 @@ export default function NewStudentForm({ batches }: { batches: Batch[] }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.batch_id) { toast.error("Please select a batch"); return }
+    if (!form.guardian_phone.trim()) { toast.error("Guardian phone is required"); return }
     setLoading(true)
     try {
+      // 1. Create student
       const { data: student, error: sErr } = await supabase.from("students").insert({
-        name: form.name, phone: form.phone || null, email: form.email || null,
-        gender: form.gender, date_of_birth: form.date_of_birth || null,
-        guardian_name: form.guardian_name || null, guardian_phone: form.guardian_phone,
-        guardian_relation: form.guardian_relation, address: form.address || null,
-        school_college: form.school_college || null, class_level: form.class_level || null,
+        name: form.name.trim(),
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        gender: form.gender,
+        date_of_birth: form.date_of_birth || null,
+        guardian_name: form.guardian_name.trim() || null,
+        guardian_phone: form.guardian_phone.trim(),
+        guardian_relation: form.guardian_relation,
+        address: form.address.trim() || null,
+        school_college: form.school_college.trim() || null,
+        class_level: form.class_level.trim() || null,
       }).select().single()
-      if (sErr) throw sErr
+      if (sErr) throw new Error(sErr.message || "Failed to create student")
 
+      // 2. Enroll in batch
       const { error: eErr } = await supabase.from("enrollments").insert({ student_id: student.id, batch_id: form.batch_id })
-      if (eErr) throw eErr
+      if (eErr) throw new Error(eErr.message || "Failed to enroll student")
 
-      try {
-        const { error: rpcErr } = await supabase.rpc("increment_batch_seats", { batch_id_input: form.batch_id })
-        if (rpcErr && selectedBatch) await supabase.from("batches").update({ current_seats: selectedBatch.current_seats + 1 }).eq("id", form.batch_id)
-      } catch { if (selectedBatch) await supabase.from("batches").update({ current_seats: selectedBatch.current_seats + 1 }).eq("id", form.batch_id) }
+      // 3. Increment batch seats (non-critical)
+      if (selectedBatch) {
+        await supabase.from("batches").update({ current_seats: selectedBatch.current_seats + 1 }).eq("id", form.batch_id)
+      }
 
+      // 4. Record payment if paid > 0
       if (paid > 0) {
-        await supabase.from("payments").insert({
+        const { error: pErr } = await supabase.from("payments").insert({
           student_id: student.id, batch_id: form.batch_id, amount: totalFee, total_paid: paid,
           payment_method: "cash", payment_for: "admission",
           payment_month: new Date().toISOString().slice(0, 7),
           notes: `Admission - Paid: ${formatCurrency(paid)}, Due: ${formatCurrency(dueAmount)}`,
         })
+        if (pErr) console.error("Payment insert error:", pErr.message)
       }
 
+      // 5. Create fee due if there's outstanding amount
       if (dueAmount > 0) {
         const now = new Date()
-        await supabase.from("fee_dues").insert({
+        const { error: fErr } = await supabase.from("fee_dues").insert({
           student_id: student.id, batch_id: form.batch_id,
           due_month: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
           due_amount: totalFee, paid_amount: paid, due_date: dueDate,
           status: paid > 0 ? "partial" : "pending",
         })
+        if (fErr) console.error("Fee due insert error:", fErr.message)
       }
 
-      if (form.referred_by_code) {
-        const { data: referrer } = await supabase.from("students").select("id").eq("referral_code", form.referred_by_code).maybeSingle()
+      // 6. Handle referral (non-critical)
+      if (form.referred_by_code.trim()) {
+        const { data: referrer } = await supabase.from("students").select("id").eq("referral_code", form.referred_by_code.trim()).maybeSingle()
         if (referrer) {
           await supabase.from("referrals").insert({ referrer_id: referrer.id, referee_id: student.id, commission_rate: 10 })
           await supabase.from("students").update({ referred_by_student_id: referrer.id }).eq("id", student.id)
@@ -106,8 +120,10 @@ export default function NewStudentForm({ batches }: { batches: Batch[] }) {
 
       toast.success(`Student ${form.name} added! ID: ${student?.student_id}`)
       router.push("/dashboard/owner/students")
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to add student")
+    } catch (err: any) {
+      const msg = err?.message || err?.details || "Failed to add student"
+      toast.error(msg)
+      console.error("Add student error:", err)
     } finally { setLoading(false) }
   }
 
