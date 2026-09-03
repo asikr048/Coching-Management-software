@@ -139,7 +139,7 @@ export default function HomePage() {
             ) : (
               <Link href="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">Sign In</Link>
             )}
-            <Link href="/enroll" className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-200 transition-all">Enroll Now</Link>
+            <a href="#batches" className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-200 transition-all">Enroll Now</a>
           </div>
         </div>
       </nav>
@@ -162,7 +162,7 @@ export default function HomePage() {
                     <h2 className="text-4xl md:text-6xl font-extrabold text-white leading-tight drop-shadow-lg">{slide.title}</h2>
                     {slide.subtitle && <p className="mt-4 text-xl text-white/80 drop-shadow">{slide.subtitle}</p>}
                     <div className="mt-8 flex gap-3">
-                      <Link href="/enroll" className="px-7 py-3.5 bg-white text-gray-900 rounded-xl font-semibold hover:bg-gray-100 shadow-xl transition-all">Enroll Now</Link>
+                      <a href="#batches" className="px-7 py-3.5 bg-white text-gray-900 rounded-xl font-semibold hover:bg-gray-100 shadow-xl transition-all">Enroll Now</a>
                       <a href="#batches" className="px-7 py-3.5 border-2 border-white/40 text-white rounded-xl font-semibold hover:bg-white/10 backdrop-blur transition-all">View Batches</a>
                     </div>
                   </div>
@@ -360,7 +360,7 @@ export default function HomePage() {
               <h2 className="text-3xl md:text-5xl font-bold leading-tight">Ready to Start Your<br />Academic Journey?</h2>
               <p className="mt-4 text-white/60 text-lg max-w-xl mx-auto">Join hundreds of students who trust MedhaShiree.</p>
               <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-                <Link href="/enroll" className="px-8 py-4 bg-white text-gray-900 rounded-xl font-semibold hover:bg-gray-100 shadow-xl transition-all">Enroll Now</Link>
+                <a href="#batches" className="px-8 py-4 bg-white text-gray-900 rounded-xl font-semibold hover:bg-gray-100 shadow-xl transition-all">Enroll Now</a>
                 <Link href="/parent-portal" className="px-8 py-4 border-2 border-white/30 text-white rounded-xl font-semibold hover:bg-white/10 transition-all">Parent Portal</Link>
               </div>
             </div>
@@ -383,7 +383,7 @@ export default function HomePage() {
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wide">Quick Links</h4>
               <div className="space-y-2.5 text-sm">
                 <p><a href="#batches" className="hover:text-white transition-colors">View Batches</a></p>
-                <p><Link href="/enroll" className="hover:text-white transition-colors">Enroll Now</Link></p>
+                <p><a href="#batches" className="hover:text-white transition-colors">Enroll Now</a></p>
                 <p><Link href="/parent-portal" className="hover:text-white transition-colors">Parent Portal</Link></p>
                 <p><Link href="/marketplace" className="hover:text-white transition-colors">Online Courses</Link></p>
               </div>
