@@ -327,43 +327,59 @@ export default function StudentBatchDetailPage() {
         </div>
       </div>
 
-      {/* Stats Row */}
+      {/* Stats Row — clickable to jump to tabs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-center">
+        <button
+          onClick={() => setActiveTab('attendance')}
+          className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-center text-left hover:border-emerald-300 hover:shadow-md hover:bg-emerald-50/30 transition-all group cursor-pointer"
+        >
           <div className="flex items-center gap-2 text-slate-500 mb-2">
             <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             <span className="text-sm font-medium">Attendance</span>
           </div>
-          <div className="text-2xl font-bold text-slate-800">{attendancePercentage}%</div>
+          <div className={`text-2xl font-bold ${attendancePercentage >= 75 ? 'text-emerald-600' : attendancePercentage >= 50 ? 'text-amber-600' : 'text-red-600'}`}>{attendancePercentage}%</div>
           <div className="text-xs text-slate-400 mt-1">{presentCount} of {attendance.length} days</div>
-        </div>
-        
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-center">
+          <div className="text-xs text-emerald-600 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">View details →</div>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('fees')}
+          className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-center text-left hover:border-rose-300 hover:shadow-md hover:bg-rose-50/30 transition-all group cursor-pointer"
+        >
           <div className="flex items-center gap-2 text-slate-500 mb-2">
             <CreditCard className="h-4 w-4 text-rose-500" />
             <span className="text-sm font-medium">Pending Dues</span>
           </div>
-          <div className="text-2xl font-bold text-slate-800">{formatCurrency(totalDuesAmount)}</div>
+          <div className={`text-2xl font-bold ${totalDuesAmount > 0 ? 'text-rose-600' : 'text-slate-800'}`}>{formatCurrency(totalDuesAmount)}</div>
           <div className="text-xs text-slate-400 mt-1">{dues.length} pending items</div>
-        </div>
-        
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-center">
+          <div className="text-xs text-rose-600 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">{dues.length > 0 ? 'Pay now →' : 'View history →'}</div>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('exams')}
+          className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-center text-left hover:border-indigo-300 hover:shadow-md hover:bg-indigo-50/30 transition-all group cursor-pointer"
+        >
           <div className="flex items-center gap-2 text-slate-500 mb-2">
             <GraduationCap className="h-4 w-4 text-indigo-500" />
             <span className="text-sm font-medium">Exams Taken</span>
           </div>
           <div className="text-2xl font-bold text-slate-800">{examResults.length}</div>
           <div className="text-xs text-slate-400 mt-1">Recorded results</div>
-        </div>
-        
-        <div className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-center">
+          <div className="text-xs text-indigo-600 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">View results →</div>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('materials')}
+          className="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm flex flex-col justify-center text-left hover:border-blue-300 hover:shadow-md hover:bg-blue-50/30 transition-all group cursor-pointer"
+        >
           <div className="flex items-center gap-2 text-slate-500 mb-2">
             <BookOpen className="h-4 w-4 text-blue-500" />
             <span className="text-sm font-medium">Materials</span>
           </div>
           <div className="text-2xl font-bold text-slate-800">{materials.length}</div>
           <div className="text-xs text-slate-400 mt-1">Issued items</div>
-        </div>
+          <div className="text-xs text-blue-600 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">View items →</div>
+        </button>
       </div>
 
       {/* Navigation Tabs */}

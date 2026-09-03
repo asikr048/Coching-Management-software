@@ -6,7 +6,8 @@ import { formatCurrency, formatDate } from "@/lib/utils"
 import { 
   User, Mail, Phone, BookOpen, 
   Clock, CheckCircle, AlertCircle, Award, DollarSign, 
-  ChevronRight, MapPin, Copy, ShieldCheck, Lock, Save, Loader2, Eye, EyeOff, Pencil
+  ChevronRight, MapPin, Copy, ShieldCheck, Lock, Save, Loader2, Eye, EyeOff, Pencil,
+  X, Hash, Send, CheckCircle2, GraduationCap
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -33,6 +34,17 @@ export default function StudentProfilePage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [changingPassword, setChangingPassword] = useState(false)
+
+  // Analytics modals
+  const [activeModal, setActiveModal] = useState<'attendance' | 'dues' | 'exams' | null>(null)
+  // Pay due from profile
+  const [payingDue, setPayingDue] = useState<any>(null)
+  const [payMethod, setPayMethod] = useState('bkash')
+  const [senderNumber, setSenderNumber] = useState('')
+  const [transactionId, setTransactionId] = useState('')
+  const [submittingPayment, setSubmittingPayment] = useState(false)
+  const [paymentAccounts, setPaymentAccounts] = useState<any[]>([])
+  const [copiedNum, setCopiedNum] = useState<string | null>(null)
 
   const router = useRouter()
   const supabase = createClient()
@@ -121,6 +133,10 @@ export default function StudentProfilePage() {
           if (dueRes.data) setDues(dueRes.data)
           if (examRes.data) setExamResults(examRes.data)
           if (pendingRes.data) setPendingSubmissions(pendingRes.data)
+
+          // Fetch payment accounts for pay-due modal
+          const { data: acctData } = await supabase.from('payment_accounts').select('*').eq('is_active', true)
+          if (acctData) setPaymentAccounts(acctData)
         }
       } catch (err) {
         console.error("Failed to load student data:", err)
@@ -182,6 +198,44 @@ export default function StudentProfilePage() {
     }
   }
 
+  function copyNumber(num: string) {
+    navigator.clipboard.writeText(num)
+    setCopiedNum(num)
+    setTimeout(() => setCopiedNum(null), 2000)
+  }
+
+  async function handlePayDue() {
+    if (!senderNumber.trim()) { toast.error('Enter your bKash/Nagad number'); return }
+    if (!transactionId.trim()) { toast.error('Enter the transaction ID'); return }
+    if (!payingDue || !studentData) return
+    setSubmittingPayment(true)
+    try {
+      const amountDue = payingDue.due_amount - (payingDue.paid_amount || 0)
+      const { error } = await supabase.from('payment_submissions').insert({
+        student_id: studentData.id,
+        batch_id: payingDue.batch_id,
+        fee_due_id: payingDue.id,
+        amount: amountDue,
+        total_fee: amountDue,
+        due_amount: 0,
+        payment_method: payMethod,
+        sender_number: senderNumber.trim(),
+        transaction_id: transactionId.trim(),
+        status: 'pending',
+        notes: `Due payment for ${payingDue.due_month}`,
+      })
+      if (error) throw error
+      toast.success('Payment submitted! Admin will verify and update your dues.')
+      setPayingDue(null)
+      setSenderNumber('')
+      setTransactionId('')
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to submit payment')
+    } finally {
+      setSubmittingPayment(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
@@ -207,6 +261,7 @@ export default function StudentProfilePage() {
   const inputClass = "w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
 
   return (
+    <>
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Profile Banner */}
       <div className="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
@@ -248,7 +303,7 @@ export default function StudentProfilePage() {
 
       {/* Analytics Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
+        <a href="#my-batches" className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-indigo-300 hover:shadow-md hover:bg-indigo-50/20 transition-all group cursor-pointer block">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs font-semibold uppercase tracking-wider">Enrolled Batches</span>
             <BookOpen className="w-5 h-5 text-indigo-600" />
@@ -257,18 +312,20 @@ export default function StudentProfilePage() {
           <p className="text-xs text-gray-500">
             {pendingSubmissions.length > 0 ? `${enrollments.length} active, ${pendingSubmissions.length} pending` : "Active subjects & classes"}
           </p>
-        </div>
+          <p className="text-xs text-indigo-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">View batches →</p>
+        </a>
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
+        <button onClick={() => setActiveModal('attendance')} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-emerald-300 hover:shadow-md hover:bg-emerald-50/20 transition-all group cursor-pointer text-left w-full">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs font-semibold uppercase tracking-wider">Attendance</span>
             <Clock className="w-5 h-5 text-emerald-600" />
           </div>
           <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600">{attendanceRate}%</p>
           <p className="text-xs text-gray-500">{presentClasses} of {totalClasses} classes attended</p>
-        </div>
+          <p className="text-xs text-emerald-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">View details →</p>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
+        <button onClick={() => setActiveModal('dues')} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-amber-300 hover:shadow-md hover:bg-amber-50/20 transition-all group cursor-pointer text-left w-full">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs font-semibold uppercase tracking-wider">Pending Dues</span>
             <DollarSign className="w-5 h-5 text-amber-600" />
@@ -277,20 +334,22 @@ export default function StudentProfilePage() {
             {formatCurrency(totalPendingDue)}
           </p>
           <p className="text-xs text-gray-500">{dues.length > 0 ? `${dues.length} pending months` : "All fees clear"}</p>
-        </div>
+          <p className="text-xs text-amber-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">{dues.length > 0 ? 'Pay now →' : 'View history →'}</p>
+        </button>
 
-        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
+        <button onClick={() => setActiveModal('exams')} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-violet-300 hover:shadow-md hover:bg-violet-50/20 transition-all group cursor-pointer text-left w-full">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs font-semibold uppercase tracking-wider">Avg Score</span>
             <Award className="w-5 h-5 text-violet-600" />
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-violet-600">{examResults.length > 0 ? `${avgScore}%` : "\u2014"}</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-violet-600">{examResults.length > 0 ? `${avgScore}%` : "—"}</p>
           <p className="text-xs text-gray-500">{examResults.length} exams taken</p>
-        </div>
+          <p className="text-xs text-violet-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">View results →</p>
+        </button>
       </div>
 
       {/* My Batches */}
-      <div className="space-y-4">
+      <div id="my-batches" className="space-y-4 scroll-mt-8">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-indigo-600" /> My Batches
@@ -471,5 +530,181 @@ export default function StudentProfilePage() {
         </div>
       </div>
     </main>
+
+    {/* Attendance Modal */}
+    {activeModal === 'attendance' && (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-6 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500" /> Attendance Overview</h2>
+            <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
+          </div>
+          <div className="p-6 overflow-y-auto">
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              {[
+                { label: 'Present', count: attendance.filter(a => a.status === 'present').length, color: 'bg-emerald-100 text-emerald-700' },
+                { label: 'Absent', count: attendance.filter(a => a.status === 'absent').length, color: 'bg-rose-100 text-rose-700' },
+                { label: 'Late', count: attendance.filter(a => a.status === 'late').length, color: 'bg-amber-100 text-amber-700' },
+              ].map(s => (
+                <div key={s.label} className={`rounded-2xl p-4 text-center ${s.color}`}>
+                  <p className="text-2xl font-extrabold">{s.count}</p>
+                  <p className="text-xs font-semibold mt-1">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            {attendance.length > 0 ? (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {attendance.slice(0, 30).map((a: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 text-sm">
+                    <span className="text-gray-600">{formatDate(a.date)}</span>
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${a.status === 'present' ? 'bg-emerald-100 text-emerald-700' : a.status === 'absent' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{a.status}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-400 py-8">No attendance records yet.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Dues Modal */}
+    {activeModal === 'dues' && (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-6 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-amber-500" /> Pending Dues</h2>
+            <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
+          </div>
+          <div className="p-6 overflow-y-auto space-y-3">
+            {dues.length > 0 ? dues.map((due: any, i: number) => (
+              <div key={i} className="flex items-center justify-between p-4 bg-rose-50 border border-rose-100 rounded-xl gap-4">
+                <div>
+                  <p className="font-semibold text-gray-900">{due.due_month ? new Date(due.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Unknown'}</p>
+                  <p className="text-sm text-rose-600 font-bold mt-0.5">{formatCurrency(due.due_amount - (due.paid_amount || 0))} due</p>
+                </div>
+                <button
+                  onClick={() => { setPayingDue(due); setActiveModal(null); setPayMethod('bkash'); setSenderNumber(''); setTransactionId('') }}
+                  className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
+                >
+                  Pay Now
+                </button>
+              </div>
+            )) : (
+              <div className="text-center py-10">
+                <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
+                <p className="font-semibold text-emerald-700">All fees are clear!</p>
+                <p className="text-sm text-gray-400 mt-1">No pending dues at the moment.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Exam Results Modal */}
+    {activeModal === 'exams' && (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-6 border-b border-gray-100">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><GraduationCap className="w-5 h-5 text-violet-500" /> Exam Results</h2>
+            <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
+          </div>
+          <div className="p-6 overflow-y-auto">
+            {examResults.length > 0 ? (
+              <div className="space-y-3">
+                {examResults.map((r: any, i: number) => {
+                  const total = r.exam?.total_marks || 100
+                  const obtained = r.marks_obtained || r.obtained_marks || 0
+                  const pct = Math.round((obtained / total) * 100)
+                  const passed = obtained >= (r.exam?.pass_marks || 0)
+                  return (
+                    <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                      <div>
+                        <p className="font-semibold text-gray-900">{r.exam?.title || 'Exam'}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{r.exam?.exam_date ? formatDate(r.exam.exam_date) : ''}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-xl font-extrabold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>{pct}%</p>
+                        <p className="text-xs text-gray-400">{obtained}/{total}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-center text-gray-400 py-10">No exam results recorded yet.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Pay Due Modal */}
+    {payingDue && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold">Pay Due</h2>
+                <p className="text-indigo-200 text-sm mt-0.5">{payingDue.due_month ? new Date(payingDue.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Fee Payment'}</p>
+              </div>
+              <button onClick={() => setPayingDue(null)} className="p-2 hover:bg-white/20 rounded-xl transition-colors"><X className="h-5 w-5" /></button>
+            </div>
+            <div className="mt-4 bg-white/10 rounded-2xl p-4 border border-white/20">
+              <p className="text-xs text-indigo-200 uppercase tracking-wider font-semibold">Amount to Pay</p>
+              <p className="text-3xl font-extrabold mt-1">{formatCurrency(payingDue.due_amount - (payingDue.paid_amount || 0))}</p>
+            </div>
+          </div>
+          <div className="p-6 space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Payment Method</label>
+              <div className="grid grid-cols-3 gap-2">
+                {['bkash', 'nagad', 'rocket'].map(m => (
+                  <button key={m} onClick={() => setPayMethod(m)} className={`py-2.5 px-3 rounded-xl text-sm font-semibold border-2 transition-all capitalize ${payMethod === m ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>{m}</button>
+                ))}
+              </div>
+            </div>
+            {(() => {
+              const account = paymentAccounts.find((a: any) => a.method?.toLowerCase() === payMethod || a.type?.toLowerCase() === payMethod)
+              const num = account?.number || account?.account_number || null
+              return num ? (
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Send to this {payMethod} number</p>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xl font-mono font-bold text-slate-900">{num}</p>
+                    <button onClick={() => copyNumber(num)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                      {copiedNum === num ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                      {copiedNum === num ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-amber-50 rounded-2xl p-3 border border-amber-200">
+                  <p className="text-sm text-amber-700 flex items-center gap-2"><AlertCircle className="h-4 w-4 flex-shrink-0" /> Contact admin for the {payMethod} payment number.</p>
+                </div>
+              )
+            })()}
+            <div className="relative">
+              <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input value={senderNumber} onChange={e => setSenderNumber(e.target.value)} placeholder={`Your ${payMethod} number`} className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div className="relative">
+              <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+              <input value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="Transaction ID (TrxID)" className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setPayingDue(null)} className="flex-1 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 text-sm">Cancel</button>
+              <button onClick={handlePayDue} disabled={submittingPayment} className="flex-1 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2">
+                {submittingPayment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Submit Payment
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   )
 }
