@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
-import { GraduationCap, BookOpen, Users, User, Clock, Calendar, MapPin, Star, ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, Play, CheckCircle, Sparkles, TrendingUp, Shield } from "lucide-react"
+import { GraduationCap, BookOpen, Users, User, Clock, Calendar, MapPin, Star, ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, CheckCircle, TrendingUp, Shield, Bell, MessageSquare, Send, Loader2, Megaphone, ExternalLink } from "lucide-react"
 import Link from "next/link"
 
 export default function HomePage() {
@@ -13,6 +13,18 @@ export default function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [notices, setNotices] = useState<any[]>([])
+  const [contactLink, setContactLink] = useState('https://wa.me/8801302201431')
+  const [contactLabel, setContactLabel] = useState('Contact Us')
+
+  // Feedback form state
+  const [fbName, setFbName] = useState('')
+  const [fbEmail, setFbEmail] = useState('')
+  const [fbPhone, setFbPhone] = useState('')
+  const [fbMessage, setFbMessage] = useState('')
+  const [fbRating, setFbRating] = useState(5)
+  const [fbSubmitting, setFbSubmitting] = useState(false)
+  const [fbDone, setFbDone] = useState(false)
 
   useEffect(() => {
     const supabase = createClient()
@@ -41,22 +53,61 @@ export default function HomePage() {
         const { data: s } = await supabase.from("slider_images").select("*").eq("is_active", true).order("sort_order")
         if (s) setSlides(s)
       } catch {}
+      // Notices
+      try {
+        const { data: n } = await supabase.from("notices").select("*").eq("is_active", true).order("created_at", { ascending: false }).limit(10)
+        if (n) setNotices(n)
+      } catch {}
+      // Site settings (contact link)
+      try {
+        const { data: settings } = await supabase.from("site_settings").select("key, value")
+        if (settings) {
+          const link = settings.find((s: any) => s.key === 'contact_link')?.value
+          const label = settings.find((s: any) => s.key === 'contact_label')?.value
+          if (link) setContactLink(link)
+          if (label) setContactLabel(label)
+        }
+      } catch {}
     }
     load()
   }, [])
 
-  // Auto slide every 5 seconds
   useEffect(() => {
     if (slides.length <= 1) return
     const timer = setInterval(() => setCurrentSlide(i => (i + 1) % slides.length), 5000)
     return () => clearInterval(timer)
   }, [slides.length])
 
+  async function submitFeedback() {
+    if (!fbName.trim() || !fbMessage.trim()) return
+    setFbSubmitting(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from('feedback').insert({
+        name: fbName.trim(),
+        email: fbEmail.trim() || null,
+        phone: fbPhone.trim() || null,
+        message: fbMessage.trim(),
+        rating: fbRating,
+      })
+      if (error) throw error
+      setFbDone(true)
+      setFbName(''); setFbEmail(''); setFbPhone(''); setFbMessage(''); setFbRating(5)
+    } catch { } finally { setFbSubmitting(false) }
+  }
+
   const defaultSlides = slides.length > 0 ? slides : [
     { title: "Welcome to MedhaShiree", subtitle: "Rajshahi's Premier Coaching Center", image_url: "" },
     { title: "Expert Teachers", subtitle: "Learn from the best faculty", image_url: "" },
     { title: "Admissions Open 2026", subtitle: "Limited seats available — enroll now", image_url: "" },
   ]
+
+  const priorityColors: Record<string, string> = {
+    urgent: 'bg-red-100 border-red-300 text-red-800',
+    high: 'bg-amber-100 border-amber-300 text-amber-800',
+    normal: 'bg-indigo-50 border-indigo-200 text-indigo-800',
+    low: 'bg-gray-50 border-gray-200 text-gray-700',
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-indigo-50/30">
@@ -72,13 +123,16 @@ export default function HomePage() {
           <div className="hidden md:flex items-center gap-1">
             <a href="#batches" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Batches</a>
             <a href="#courses" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Courses</a>
+            <a href="#notices" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Notices</a>
             <Link href="/parent-portal" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Parent Portal</Link>
-            <a href="#contact" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Contact</a>
           </div>
           <div className="flex items-center gap-2">
+            <a href={contactLink} target="_blank" rel="noopener noreferrer"
+              className="hidden md:flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
+              <MessageSquare className="w-4 h-4" /> {contactLabel}
+            </a>
             {currentUser ? (
-              <Link 
-                href={["owner", "super_manager", "manager"].includes(userRole || "") ? "/dashboard/owner" : userRole === "teacher" ? "/dashboard/teacher" : userRole === "receptionist" ? "/dashboard/reception" : userRole === "accountant" ? "/dashboard/accountant" : "/student/profile"} 
+              <Link href={["owner", "super_manager", "manager"].includes(userRole || "") ? "/dashboard/owner" : userRole === "teacher" ? "/dashboard/teacher" : userRole === "receptionist" ? "/dashboard/reception" : userRole === "accountant" ? "/dashboard/accountant" : "/student/profile"}
                 className="px-4 py-2 text-sm font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all flex items-center gap-1.5 border border-indigo-200/80">
                 <User className="w-4 h-4" /> {["owner", "super_manager", "manager"].includes(userRole || "") ? "Admin Panel" : "My Profile"}
               </Link>
@@ -95,21 +149,13 @@ export default function HomePage() {
         <div className="relative h-[500px] md:h-[600px] overflow-hidden">
           {defaultSlides.map((slide, i) => (
             <div key={i} className={`absolute inset-0 transition-all duration-700 ease-in-out ${i === currentSlide % defaultSlides.length ? "opacity-100 scale-100" : "opacity-0 scale-105"}`}>
-              {/* Background */}
               {slide.image_url ? (
                 <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${slide.image_url})` }}>
                   <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/40 to-gray-900/20" />
                 </div>
               ) : (
-                <div className={`absolute inset-0 ${
-                  ["bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700",
-                   "bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700",
-                   "bg-gradient-to-br from-orange-500 via-rose-500 to-pink-600"][i % 3]
-                }`}>
-                  <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-60" />
-                </div>
+                <div className={`absolute inset-0 ${["bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700", "bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700", "bg-gradient-to-br from-orange-500 via-rose-500 to-pink-600"][i % 3]}`} />
               )}
-              {/* Content */}
               <div className="absolute inset-0 flex items-center">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
                   <div className="max-w-2xl">
