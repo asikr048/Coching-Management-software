@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { 
-  GraduationCap, User, Mail, Phone, Calendar, BookOpen, 
-  Clock, CheckCircle, XCircle, AlertCircle, Award, DollarSign, 
-  LogOut, ChevronRight, Sparkles, School, MapPin, Copy, ExternalLink, ShieldCheck
+  User, Mail, Phone, BookOpen, 
+  Clock, CheckCircle, AlertCircle, Award, DollarSign, 
+  ChevronRight, MapPin, Copy, ShieldCheck, Lock, Save, Loader2, Eye, EyeOff, Pencil
 } from "lucide-react"
 import Link from "next/link"
+import { toast } from "sonner"
 
 export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true)
@@ -17,11 +18,22 @@ export default function StudentProfilePage() {
   const [enrollments, setEnrollments] = useState<any[]>([])
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([])
   const [attendance, setAttendance] = useState<any[]>([])
-  const [payments, setPayments] = useState<any[]>([])
   const [dues, setDues] = useState<any[]>([])
   const [examResults, setExamResults] = useState<any[]>([])
   const [copied, setCopied] = useState(false)
-  const [activeTab, setActiveTab] = useState<"batches" | "attendance" | "payments" | "exams">("batches")
+
+  // Account settings
+  const [editName, setEditName] = useState("")
+  const [editPhone, setEditPhone] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  // Password change
+  const [showPasswordSection, setShowPasswordSection] = useState(false)
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [changingPassword, setChangingPassword] = useState(false)
+
   const router = useRouter()
   const supabase = createClient()
 
@@ -35,11 +47,13 @@ export default function StudentProfilePage() {
         }
 
         // 1. Fetch user_profile
-        let { data: userProf } = await supabase
+        let userProf: any = null
+        const { data: byId } = await supabase
           .from("user_profiles")
           .select("*")
           .eq("auth_user_id", user.id)
           .maybeSingle()
+        userProf = byId
 
         if (!userProf && user.email) {
           const { data: byEmail } = await supabase
@@ -50,7 +64,6 @@ export default function StudentProfilePage() {
           userProf = byEmail
         }
 
-        // Fallback user profile info from auth user
         const currentProfile = userProf || {
           user_id: user.user_metadata?.user_id || "MS-" + user.id.slice(0, 5).toUpperCase(),
           name: user.user_metadata?.full_name || user.email?.split("@")[0] || "Student",
@@ -58,8 +71,10 @@ export default function StudentProfilePage() {
           phone: user.user_metadata?.phone || "",
         }
         setProfile(currentProfile)
+        setEditName(currentProfile.name || "")
+        setEditPhone(currentProfile.phone || "")
 
-        // 2. Fetch linked student record if available
+        // 2. Fetch linked student record
         let studentRecord = null
         if (currentProfile.email || currentProfile.user_id) {
           const { data: sData } = await supabase
@@ -71,49 +86,38 @@ export default function StudentProfilePage() {
         }
         setStudentData(studentRecord)
 
-        // If student record exists, load enrollments, attendance, payments, exam results
+        // 3. Load enrollments and stats
         if (studentRecord?.id) {
-          const studentId = studentRecord.id
+          const sid = studentRecord.id
 
-          const [enrRes, attRes, pmtRes, dueRes, examRes, pendingRes] = await Promise.all([
+          const [enrRes, attRes, dueRes, examRes, pendingRes] = await Promise.all([
             supabase
               .from("enrollments")
               .select("*, batch:batches(*, teacher:staff(name), room:rooms(name))")
-              .eq("student_id", studentId),
+              .eq("student_id", sid),
             supabase
               .from("attendance")
-              .select("*, batch:batches(name, subject)")
-              .eq("student_id", studentId)
-              .order("date", { ascending: false })
-              .limit(30),
-            supabase
-              .from("payments")
-              .select("*, batch:batches(name)")
-              .eq("student_id", studentId)
-              .order("paid_at", { ascending: false })
-              .limit(20),
+              .select("*")
+              .eq("student_id", sid),
             supabase
               .from("fee_dues")
               .select("*, batch:batches(name)")
-              .eq("student_id", studentId)
-              .in("status", ["pending", "partial"])
-              .order("created_at", { ascending: false }),
+              .eq("student_id", sid)
+              .in("status", ["pending", "partial"]),
             supabase
               .from("exam_results")
-              .select("*, exam:exams(title, exam_date, total_marks, pass_marks, batch:batches(name))")
-              .eq("student_id", studentId)
-              .order("created_at", { ascending: false }),
+              .select("*, exam:exams(title, total_marks, pass_marks)")
+              .eq("student_id", sid),
             supabase
               .from("payment_submissions")
               .select("*, batch:batches(*, teacher:staff(name), room:rooms(name))")
-              .eq("student_id", studentId)
+              .eq("student_id", sid)
               .eq("status", "pending")
               .order("created_at", { ascending: false }),
           ])
 
           if (enrRes.data) setEnrollments(enrRes.data)
           if (attRes.data) setAttendance(attRes.data)
-          if (pmtRes.data) setPayments(pmtRes.data)
           if (dueRes.data) setDues(dueRes.data)
           if (examRes.data) setExamResults(examRes.data)
           if (pendingRes.data) setPendingSubmissions(pendingRes.data)
@@ -128,11 +132,6 @@ export default function StudentProfilePage() {
     loadStudentProfile()
   }, [])
 
-  async function handleSignOut() {
-    await supabase.auth.signOut()
-    window.location.href = "/login"
-  }
-
   function copyId() {
     if (!profile?.user_id) return
     navigator.clipboard.writeText(profile.user_id)
@@ -140,486 +139,337 @@ export default function StudentProfilePage() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  async function handleSaveProfile() {
+    if (!editName.trim()) { toast.error("Name is required"); return }
+    setSaving(true)
+    try {
+      if (profile?.id) {
+        await supabase.from("user_profiles").update({
+          name: editName.trim(),
+          phone: editPhone.trim(),
+        }).eq("id", profile.id)
+      }
+      if (studentData?.id) {
+        await supabase.from("students").update({
+          name: editName.trim(),
+          phone: editPhone.trim() || null,
+        }).eq("id", studentData.id)
+      }
+      setProfile((p: any) => ({ ...p, name: editName.trim(), phone: editPhone.trim() }))
+      toast.success("Profile updated successfully!")
+    } catch (err) {
+      toast.error("Failed to update profile")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleChangePassword() {
+    if (newPassword.length < 6) { toast.error("Password must be at least 6 characters"); return }
+    if (newPassword !== confirmPassword) { toast.error("Passwords do not match"); return }
+    setChangingPassword(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+      toast.success("Password changed successfully!")
+      setNewPassword("")
+      setConfirmPassword("")
+      setShowPasswordSection(false)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to change password")
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-2xl flex items-center justify-center animate-pulse">
-          <GraduationCap className="w-6 h-6 text-white" />
-        </div>
-        <p className="text-gray-600 font-medium">Loading your student profile...</p>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <p className="text-gray-500 font-medium">Loading your profile...</p>
       </div>
     )
   }
 
-  // Attendance stats
+  // Analytics
   const totalClasses = attendance.length
   const presentClasses = attendance.filter(a => a.status === "present").length
   const attendanceRate = totalClasses > 0 ? Math.round((presentClasses / totalClasses) * 100) : 100
-
-  // Total pending dues
   const totalPendingDue = dues.reduce((acc, d) => acc + (Number(d.due_amount || 0) - Number(d.paid_amount || 0)), 0)
+  const avgScore = examResults.length > 0
+    ? Math.round(examResults.reduce((acc, r) => {
+        const total = r.exam?.total_marks || 100
+        const obtained = r.marks_obtained || r.obtained_marks || 0
+        return acc + (obtained / total) * 100
+      }, 0) / examResults.length)
+    : 0
+
+  const inputClass = "w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
 
   return (
-    <div className="min-h-screen bg-slate-50 text-gray-900">
-      {/* Top Navbar */}
-      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-200">
-              <GraduationCap className="w-5 h-5 text-white" />
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* Profile Banner */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
+        <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute top-0 right-1/4 w-48 h-48 bg-violet-400/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+          <div className="flex items-center gap-5">
+            <div className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-violet-400 rounded-2xl flex items-center justify-center text-3xl font-extrabold text-white shadow-lg border-2 border-white/20">
+              {profile?.name ? profile.name.charAt(0).toUpperCase() : "S"}
             </div>
-            <div>
-              <span className="text-lg font-bold text-gray-900 tracking-tight">Medha<span className="text-indigo-600">Shiree</span></span>
-              <span className="ml-2 text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-full border border-indigo-100">Student Portal</span>
-            </div>
-          </Link>
-
-          <div className="flex items-center gap-3">
-            <Link 
-              href="/marketplace" 
-              className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl text-sm font-semibold transition-colors">
-              <BookOpen className="w-4 h-4" /> Browse Courses
-            </Link>
-            <Link 
-              href="/enroll" 
-              className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-violet-600 text-white hover:opacity-95 rounded-xl text-sm font-semibold shadow-sm transition-all">
-              Enroll in Batch
-            </Link>
-            <button 
-              onClick={handleSignOut} 
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors" 
-              title="Sign Out">
-              <LogOut className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Profile Banner */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
-          <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
-          <div className="absolute top-0 right-1/4 w-48 h-48 bg-violet-400/10 rounded-full blur-2xl pointer-events-none" />
-
-          <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            <div className="flex items-center gap-5">
-              <div className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-violet-400 rounded-2xl flex items-center justify-center text-3xl font-extrabold text-white shadow-lg border-2 border-white/20">
-                {profile?.name ? profile.name.charAt(0).toUpperCase() : "S"}
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <h1 className="text-2xl sm:text-3xl font-bold">{profile?.name || "Student"}</h1>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold rounded-full">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Active Student
-                  </span>
-                </div>
-                
-                <div className="flex items-center gap-2 text-indigo-200 text-sm">
-                  <span className="font-mono bg-white/10 px-2.5 py-0.5 rounded-lg border border-white/10 font-bold tracking-wider text-white">
-                    {profile?.user_id || "N/A"}
-                  </span>
-                  <button 
-                    onClick={copyId} 
-                    className="p-1 hover:bg-white/10 rounded transition-colors" 
-                    title="Copy Student ID">
-                    {copied ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-indigo-200" />}
-                  </button>
-                </div>
-
-                <div className="flex items-center gap-4 text-xs sm:text-sm text-indigo-200/80 pt-1 flex-wrap">
-                  {profile?.email && (
-                    <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> {profile.email}</span>
-                  )}
-                  {profile?.phone && (
-                    <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {profile.phone}</span>
-                  )}
-                  {studentData?.class_level && (
-                    <span className="flex items-center gap-1.5"><School className="w-3.5 h-3.5" /> Class: {studentData.class_level}</span>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex sm:flex-col items-center sm:items-end gap-2 w-full sm:w-auto justify-between border-t sm:border-t-0 border-white/10 pt-4 sm:pt-0">
-              <span className="text-xs text-indigo-200">Registered Coaching ID</span>
-              <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/15 text-center">
-                <p className="text-xs text-indigo-300">MedhaShiree ID</p>
-                <p className="text-lg font-mono font-bold text-white">{profile?.user_id}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
-            <div className="flex items-center justify-between text-gray-500">
-              <span className="text-xs font-semibold uppercase tracking-wider">Enrolled Batches</span>
-              <BookOpen className="w-5 h-5 text-indigo-600" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-gray-900">{enrollments.length + pendingSubmissions.length}</p>
-            <p className="text-xs text-gray-500">
-              {pendingSubmissions.length > 0
-                ? `${enrollments.length} active, ${pendingSubmissions.length} pending`
-                : "Active subjects & classes"}
-            </p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
-            <div className="flex items-center justify-between text-gray-500">
-              <span className="text-xs font-semibold uppercase tracking-wider">Attendance</span>
-              <Clock className="w-5 h-5 text-emerald-600" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600">{attendanceRate}%</p>
-            <p className="text-xs text-gray-500">{presentClasses} of {totalClasses} classes attended</p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
-            <div className="flex items-center justify-between text-gray-500">
-              <span className="text-xs font-semibold uppercase tracking-wider">Pending Dues</span>
-              <DollarSign className="w-5 h-5 text-amber-600" />
-            </div>
-            <p className={`text-2xl sm:text-3xl font-extrabold ${totalPendingDue > 0 ? "text-amber-600" : "text-emerald-600"}`}>
-              {formatCurrency(totalPendingDue)}
-            </p>
-            <p className="text-xs text-gray-500">{dues.length > 0 ? `${dues.length} pending months` : "All fees clear"}</p>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
-            <div className="flex items-center justify-between text-gray-500">
-              <span className="text-xs font-semibold uppercase tracking-wider">Exams Taken</span>
-              <Award className="w-5 h-5 text-violet-600" />
-            </div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-violet-600">{examResults.length}</p>
-            <p className="text-xs text-gray-500">Results published</p>
-          </div>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-2 border-b border-gray-200 overflow-x-auto pb-2">
-          {[
-            { id: "batches", label: `My Batches (${enrollments.length + pendingSubmissions.length})`, icon: BookOpen },
-            { id: "attendance", label: `Attendance (${attendance.length})`, icon: Clock },
-            { id: "payments", label: `Fees & Payments (${payments.length})`, icon: DollarSign },
-            { id: "exams", label: `Exam Results (${examResults.length})`, icon: Award },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all whitespace-nowrap ${
-                activeTab === tab.id
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-                  : "bg-white text-gray-600 hover:text-gray-900 border border-gray-200/80 hover:border-gray-300"
-              }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab Contents */}
-        {/* 1. Batches Tab */}
-        {activeTab === "batches" && (
-          <div className="space-y-4">
-            {enrollments.length === 0 && pendingSubmissions.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-4">
-                <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
-                  <BookOpen className="w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-bold text-gray-900">No Batches Enrolled Yet</h3>
-                <p className="text-gray-500 text-sm max-w-md mx-auto">
-                  You are registered with ID <span className="font-semibold text-indigo-600">{profile?.user_id}</span>. Contact the coaching reception or enroll directly into an active batch!
-                </p>
-                <div className="flex items-center justify-center gap-3 pt-2">
-                  <Link href="/enroll" className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-sm">
-                    Enroll Now
-                  </Link>
-                  <Link href="/#batches" className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 transition-colors">
-                    View Available Batches
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                {/* Pending Approval Section */}
-                {pendingSubmissions.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-amber-500" />
-                      <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider">Pending Approval ({pendingSubmissions.length})</h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {pendingSubmissions.map((sub, i) => {
-                        const b = sub.batch
-                        return (
-                          <div key={`pending-${i}`} className="bg-amber-50/50 rounded-2xl border-2 border-amber-200 border-dashed p-6 shadow-sm space-y-4 relative overflow-hidden">
-                            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-100/40 rounded-full -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-                            <div className="flex items-start justify-between relative z-10">
-                              <div>
-                                <span className="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">
-                                  {b?.subject || "Subject"}
-                                </span>
-                                <h3 className="text-lg font-bold text-gray-900 mt-2">{b?.name || "Batch Name"}</h3>
-                              </div>
-                              <span className="inline-flex items-center gap-1 text-xs px-2.5 py-1 bg-amber-100 text-amber-700 font-semibold rounded-full border border-amber-300 animate-pulse">
-                                <Clock className="w-3 h-3" />
-                                Pending Approval
-                              </span>
-                            </div>
-
-                            <div className="space-y-2 text-sm text-gray-600 border-t border-amber-200/60 pt-3">
-                              {b?.teacher?.name && (
-                                <p className="flex items-center gap-2"><User className="w-4 h-4 text-gray-400" /> Teacher: <span className="font-medium text-gray-900">{b.teacher.name}</span></p>
-                              )}
-                              {b?.schedule && (
-                                <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> Schedule: <span className="font-medium text-gray-900">{b.schedule}</span></p>
-                              )}
-                              {b?.room?.name && (
-                                <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> Room: <span className="font-medium text-gray-900">{b.room.name}</span></p>
-                              )}
-                              {sub.amount != null && (
-                                <p className="flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> Paid: <span className="font-medium text-emerald-600">{formatCurrency(sub.amount)}</span></p>
-                              )}
-                              {sub.due_amount > 0 && (
-                                <p className="flex items-center gap-2"><AlertCircle className="w-4 h-4 text-amber-400" /> Due: <span className="font-medium text-amber-600">{formatCurrency(sub.due_amount)}</span></p>
-                              )}
-                            </div>
-
-                            <div className="bg-amber-100/70 rounded-xl p-3 border border-amber-200/50">
-                              <p className="text-xs text-amber-700 flex items-center gap-1.5">
-                                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                                Your payment is being verified by the admin. You&apos;ll get access once approved.
-                              </p>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Active Enrollments */}
-                {enrollments.length > 0 && (
-                  <div className="space-y-3">
-                    {pendingSubmissions.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Active Enrollments ({enrollments.length})</h3>
-                      </div>
-                    )}
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {enrollments.map((enr, i) => {
-                        const b = enr.batch
-                        return (
-                          <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow space-y-4">
-                            <div className="flex items-start justify-between">
-                              <div>
-                                <span className="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">
-                                  {b?.subject || "Subject"}
-                                </span>
-                                <h3 className="text-lg font-bold text-gray-900 mt-2">{b?.name || "Batch Name"}</h3>
-                              </div>
-                              <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-200">
-                                {enr.status || "Active"}
-                              </span>
-                            </div>
-
-                            <div className="space-y-2 text-sm text-gray-600 border-t border-gray-100 pt-3">
-                              {b?.teacher?.name && (
-                                <p className="flex items-center gap-2"><User className="w-4 h-4 text-gray-400" /> Teacher: <span className="font-medium text-gray-900">{b.teacher.name}</span></p>
-                              )}
-                              {b?.schedule && (
-                                <p className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> Schedule: <span className="font-medium text-gray-900">{b.schedule}</span></p>
-                              )}
-                              {b?.room?.name && (
-                                <p className="flex items-center gap-2"><MapPin className="w-4 h-4 text-gray-400" /> Room: <span className="font-medium text-gray-900">{b.room.name}</span></p>
-                              )}
-                              {b?.monthly_fee != null && (
-                                <p className="flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> Fee: <span className="font-medium text-gray-900">{formatCurrency(b.monthly_fee)}/mo</span></p>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 2. Attendance Tab */}
-        {activeTab === "attendance" && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Attendance Log</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Recent 30 class attendance records</p>
-              </div>
-              <div className="text-right">
-                <span className="text-sm font-semibold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100">
-                  Rate: {attendanceRate}%
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="text-2xl sm:text-3xl font-bold">{profile?.name || "Student"}</h1>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold rounded-full">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Active Student
                 </span>
               </div>
+              <div className="flex items-center gap-2 text-indigo-200 text-sm">
+                <span className="font-mono bg-white/10 px-2.5 py-0.5 rounded-lg border border-white/10 font-bold tracking-wider text-white">
+                  {profile?.user_id || "N/A"}
+                </span>
+                <button onClick={copyId} className="p-1 hover:bg-white/10 rounded transition-colors" title="Copy Student ID">
+                  {copied ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-indigo-200" />}
+                </button>
+              </div>
+              <div className="flex items-center gap-4 text-xs sm:text-sm text-indigo-200/80 pt-1 flex-wrap">
+                {profile?.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> {profile.email}</span>}
+                {profile?.phone && <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {profile.phone}</span>}
+              </div>
             </div>
-
-            {attendance.length === 0 ? (
-              <div className="p-12 text-center text-gray-500 text-sm">
-                No attendance records recorded yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-gray-500 text-xs uppercase font-semibold border-b border-gray-100">
-                    <tr>
-                      <th className="px-6 py-3.5">Date</th>
-                      <th className="px-6 py-3.5">Batch / Subject</th>
-                      <th className="px-6 py-3.5 text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {attendance.map((att, i) => (
-                      <tr key={i} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="px-6 py-4 font-medium text-gray-900">{formatDate(att.date)}</td>
-                        <td className="px-6 py-4 text-gray-600">{att.batch?.name || att.batch?.subject || "General Class"}</td>
-                        <td className="px-6 py-4 text-right">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
-                            att.status === "present"
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : att.status === "late"
-                              ? "bg-amber-50 text-amber-700 border border-amber-200"
-                              : "bg-red-50 text-red-700 border border-red-200"
-                          }`}>
-                            {att.status === "present" && <CheckCircle className="w-3.5 h-3.5" />}
-                            {att.status === "absent" && <XCircle className="w-3.5 h-3.5" />}
-                            {att.status.charAt(0).toUpperCase() + att.status.slice(1)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
           </div>
-        )}
+          <div className="hidden sm:block bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/15 text-center">
+            <p className="text-xs text-indigo-300">MedhaShiree ID</p>
+            <p className="text-lg font-mono font-bold text-white">{profile?.user_id}</p>
+          </div>
+        </div>
+      </div>
 
-        {/* 3. Payments Tab */}
-        {activeTab === "payments" && (
+      {/* Analytics Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-gray-500">
+            <span className="text-xs font-semibold uppercase tracking-wider">Enrolled Batches</span>
+            <BookOpen className="w-5 h-5 text-indigo-600" />
+          </div>
+          <p className="text-2xl sm:text-3xl font-extrabold text-gray-900">{enrollments.length + pendingSubmissions.length}</p>
+          <p className="text-xs text-gray-500">
+            {pendingSubmissions.length > 0 ? `${enrollments.length} active, ${pendingSubmissions.length} pending` : "Active subjects & classes"}
+          </p>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-gray-500">
+            <span className="text-xs font-semibold uppercase tracking-wider">Attendance</span>
+            <Clock className="w-5 h-5 text-emerald-600" />
+          </div>
+          <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600">{attendanceRate}%</p>
+          <p className="text-xs text-gray-500">{presentClasses} of {totalClasses} classes attended</p>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-gray-500">
+            <span className="text-xs font-semibold uppercase tracking-wider">Pending Dues</span>
+            <DollarSign className="w-5 h-5 text-amber-600" />
+          </div>
+          <p className={`text-2xl sm:text-3xl font-extrabold ${totalPendingDue > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+            {formatCurrency(totalPendingDue)}
+          </p>
+          <p className="text-xs text-gray-500">{dues.length > 0 ? `${dues.length} pending months` : "All fees clear"}</p>
+        </div>
+
+        <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1">
+          <div className="flex items-center justify-between text-gray-500">
+            <span className="text-xs font-semibold uppercase tracking-wider">Avg Score</span>
+            <Award className="w-5 h-5 text-violet-600" />
+          </div>
+          <p className="text-2xl sm:text-3xl font-extrabold text-violet-600">{examResults.length > 0 ? `${avgScore}%` : "\u2014"}</p>
+          <p className="text-xs text-gray-500">{examResults.length} exams taken</p>
+        </div>
+      </div>
+
+      {/* My Batches */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-indigo-600" /> My Batches
+          </h2>
+          <Link href="/enroll" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1">
+            Enroll in More <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
+
+        {enrollments.length === 0 && pendingSubmissions.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-4">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
+              <BookOpen className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">No Batches Enrolled Yet</h3>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">
+              You are registered with ID <span className="font-semibold text-indigo-600">{profile?.user_id}</span>. Contact the coaching reception or enroll directly into an active batch!
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Link href="/enroll" className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-sm">Enroll Now</Link>
+              <Link href="/#batches" className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 transition-colors">View Available Batches</Link>
+            </div>
+          </div>
+        ) : (
           <div className="space-y-6">
-            {dues.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3">
-                <div className="flex items-center gap-2 text-amber-800 font-bold">
-                  <AlertCircle className="w-5 h-5" /> Pending Fee Dues
+            {/* Pending */}
+            {pendingSubmissions.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider">Pending Approval ({pendingSubmissions.length})</h3>
                 </div>
-                <div className="divide-y divide-amber-200/60 text-sm">
-                  {dues.map((d, i) => (
-                    <div key={i} className="py-2.5 flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">{d.batch?.name || "Batch Fee"} - {d.due_month || "N/A"}</p>
-                        <p className="text-xs text-gray-500">Status: {d.status}</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pendingSubmissions.map((sub, i) => {
+                    const b = sub.batch
+                    return (
+                      <div key={`pending-${i}`} className="bg-amber-50/50 rounded-2xl border-2 border-amber-200 border-dashed p-5 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
+                            <h3 className="text-base font-bold text-gray-900 mt-1.5">{b?.name || "Batch"}</h3>
+                          </div>
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-100 text-amber-700 font-semibold rounded-full border border-amber-300 animate-pulse">
+                            <Clock className="w-3 h-3" /> Pending
+                          </span>
+                        </div>
+                        <div className="bg-amber-100/70 rounded-xl p-2.5 border border-amber-200/50">
+                          <p className="text-xs text-amber-700 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            Payment is being verified. Access granted once approved.
+                          </p>
+                        </div>
                       </div>
-                      <p className="font-bold text-amber-700">{formatCurrency(Number(d.due_amount) - Number(d.paid_amount || 0))}</p>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
 
-            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-gray-100">
-                <h3 className="text-lg font-bold text-gray-900">Payment History</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Recent fee transactions &amp; receipts</p>
-              </div>
-
-              {payments.length === 0 ? (
-                <div className="p-12 text-center text-gray-500 text-sm">
-                  No payment records found yet.
+            {/* Active */}
+            {enrollments.length > 0 && (
+              <div className="space-y-3">
+                {pendingSubmissions.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Active ({enrollments.length})</h3>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {enrollments.map((enr, i) => {
+                    const b = enr.batch
+                    return (
+                      <Link key={i} href={`/student/batch/${enr.batch_id || b?.id}`}
+                        className="group bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all space-y-3 cursor-pointer">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
+                            <h3 className="text-base font-bold text-gray-900 mt-1.5 group-hover:text-indigo-600 transition-colors">{b?.name || "Batch"}</h3>
+                          </div>
+                          <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-200">{enr.status || "Active"}</span>
+                        </div>
+                        <div className="space-y-1.5 text-sm text-gray-500">
+                          {b?.teacher?.name && <p className="flex items-center gap-2"><User className="w-3.5 h-3.5" /> {b.teacher.name}</p>}
+                          {b?.schedule && <p className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> {b.schedule}</p>}
+                          {b?.monthly_fee != null && <p className="flex items-center gap-2"><DollarSign className="w-3.5 h-3.5" /> {formatCurrency(b.monthly_fee)}/mo</p>}
+                        </div>
+                        <div className="flex items-center justify-end text-xs text-indigo-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity pt-1">
+                          View Details <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                        </div>
+                      </Link>
+                    )
+                  })}
                 </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-slate-50 text-gray-500 text-xs uppercase font-semibold border-b border-gray-100">
-                      <tr>
-                        <th className="px-6 py-3.5">Date</th>
-                        <th className="px-6 py-3.5">Batch / Purpose</th>
-                        <th className="px-6 py-3.5">Method</th>
-                        <th className="px-6 py-3.5 text-right">Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {payments.map((p, i) => (
-                        <tr key={i} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="px-6 py-4 font-medium text-gray-900">{formatDate(p.paid_at)}</td>
-                          <td className="px-6 py-4 text-gray-600">{p.batch?.name || p.payment_month || p.payment_for || "Tuition Fee"}</td>
-                          <td className="px-6 py-4 text-xs font-mono text-gray-500 uppercase">{p.payment_method || "Cash"}</td>
-                          <td className="px-6 py-4 text-right font-bold text-emerald-600">{formatCurrency(p.amount)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* 4. Exams Tab */}
-        {activeTab === "exams" && (
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="p-6 border-b border-gray-100">
-              <h3 className="text-lg font-bold text-gray-900">Exam Results</h3>
-              <p className="text-xs text-gray-500 mt-0.5">Scorecards and performance reviews</p>
-            </div>
-
-            {examResults.length === 0 ? (
-              <div className="p-12 text-center text-gray-500 text-sm">
-                No exam results published yet.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-slate-50 text-gray-500 text-xs uppercase font-semibold border-b border-gray-100">
-                    <tr>
-                      <th className="px-6 py-3.5">Exam Title</th>
-                      <th className="px-6 py-3.5">Date</th>
-                      <th className="px-6 py-3.5">Marks Obtained</th>
-                      <th className="px-6 py-3.5 text-right">Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {examResults.map((res, i) => {
-                      const total = res.exam?.total_marks || 100
-                      const obtained = res.marks_obtained || 0
-                      const percentage = Math.round((obtained / total) * 100)
-                      return (
-                        <tr key={i} className="hover:bg-slate-50/60 transition-colors">
-                          <td className="px-6 py-4">
-                            <p className="font-bold text-gray-900">{res.exam?.title || "Exam"}</p>
-                            <p className="text-xs text-gray-500">{res.exam?.batch?.name}</p>
-                          </td>
-                          <td className="px-6 py-4 text-gray-600">{formatDate(res.exam?.exam_date || res.created_at)}</td>
-                          <td className="px-6 py-4 font-mono font-semibold text-gray-900">
-                            {obtained} / {total} ({percentage}%)
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <span className="px-3 py-1 bg-indigo-50 text-indigo-700 font-bold rounded-lg border border-indigo-100 text-xs">
-                              {res.grade || (percentage >= 80 ? "A+" : percentage >= 70 ? "A" : percentage >= 60 ? "A-" : percentage >= 50 ? "B" : "Pass")}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
               </div>
             )}
           </div>
         )}
-      </main>
-    </div>
+      </div>
+
+      {/* Account Settings */}
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+          <Pencil className="w-5 h-5 text-indigo-600" /> Account Settings
+        </h2>
+
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Full Name</label>
+              <div className="relative">
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input value={editName} onChange={e => setEditName(e.target.value)} className={`${inputClass} pl-10`} placeholder="Your name" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Phone Number</label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className={`${inputClass} pl-10`} placeholder="01XXXXXXXXX" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Email Address</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input value={profile?.email || ""} disabled className={`${inputClass} pl-10 bg-gray-50 text-gray-500 cursor-not-allowed`} />
+              </div>
+              <p className="text-xs text-gray-400 mt-1">Email is linked to your login and cannot be changed here.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Student ID</label>
+              <div className="relative">
+                <ShieldCheck className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input value={profile?.user_id || ""} disabled className={`${inputClass} pl-10 bg-gray-50 text-gray-500 cursor-not-allowed font-mono`} />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-100">
+            <button onClick={handleSaveProfile} disabled={saving}
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors disabled:opacity-50 shadow-sm">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Changes
+            </button>
+            <button onClick={() => setShowPasswordSection(!showPasswordSection)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-200 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 transition-colors">
+              <Lock className="w-4 h-4" /> {showPasswordSection ? "Cancel" : "Change Password"}
+            </button>
+          </div>
+
+          {showPasswordSection && (
+            <div className="border-t border-gray-100 pt-5 space-y-4">
+              <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2"><Lock className="w-4 h-4 text-indigo-600" /> Change Password</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">New Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input type={showPassword ? "text" : "password"} value={newPassword} onChange={e => setNewPassword(e.target.value)} className={`${inputClass} pl-10 pr-10`} placeholder="Min 6 characters" />
+                    <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">Confirm Password</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input type={showPassword ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className={`${inputClass} pl-10`} placeholder="Confirm new password" />
+                  </div>
+                </div>
+              </div>
+              <button onClick={handleChangePassword} disabled={changingPassword}
+                className="inline-flex items-center gap-2 px-6 py-2.5 bg-violet-600 text-white font-semibold rounded-xl text-sm hover:bg-violet-700 transition-colors disabled:opacity-50 shadow-sm">
+                {changingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />} Update Password
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
   )
 }
