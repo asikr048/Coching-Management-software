@@ -273,9 +273,12 @@ CREATE TABLE IF NOT EXISTS public.materials (
   available_stock INTEGER DEFAULT 0,
   price NUMERIC(8,2) DEFAULT 0,
   description TEXT,
+  batch_ids JSONB DEFAULT '[]'::jsonb,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS batch_ids JSONB DEFAULT '[]'::jsonb;
 
 DO $$
 BEGIN

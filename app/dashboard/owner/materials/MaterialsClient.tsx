@@ -18,6 +18,7 @@ export interface Material {
   name: string
   type: MaterialType
   batch_id?: string | null
+  batch_ids?: string[] | null
   subject?: string | null
   total_stock: number
   available_stock: number
@@ -158,13 +159,13 @@ export default function MaterialsClient({
   const [whoGotItMaterial, setWhoGotItMaterial] = useState<Material | null>(null)
 
   // ==========================================
-  // ADD / EDIT MATERIAL FORM STATE
+  // ADD / EDIT MATERIAL FORM STATE (MULTI-BATCH)
   // ==========================================
   const [formData, setFormData] = useState({
     name: "",
     type: "sheet" as MaterialType,
     subject: "",
-    batch_id: "",
+    batch_ids: [] as string[],
     total_stock: 50,
     price: 0,
     description: ""
@@ -176,7 +177,7 @@ export default function MaterialsClient({
       name: "",
       type: "sheet",
       subject: "",
-      batch_id: "",
+      batch_ids: [],
       total_stock: 50,
       price: 0,
       description: ""
@@ -186,16 +187,29 @@ export default function MaterialsClient({
 
   const openEditModal = (m: Material) => {
     setEditingMaterial(m)
+    const initialBatchIds = m.batch_ids && m.batch_ids.length > 0 
+      ? m.batch_ids 
+      : (m.batch_id ? [m.batch_id] : [])
+
     setFormData({
       name: m.name,
       type: m.type,
       subject: m.subject || "",
-      batch_id: m.batch_id || "",
+      batch_ids: initialBatchIds,
       total_stock: m.total_stock,
       price: m.price || 0,
       description: m.description || ""
     })
     setAddModalOpen(true)
+  }
+
+  const toggleFormBatch = (batchId: string) => {
+    const exists = formData.batch_ids.includes(batchId)
+    if (exists) {
+      setFormData(f => ({ ...f, batch_ids: f.batch_ids.filter(id => id !== batchId) }))
+    } else {
+      setFormData(f => ({ ...f, batch_ids: [...f.batch_ids, batchId] }))
+    }
   }
 
   const handleSaveMaterial = async (e: React.FormEvent) => {
@@ -204,6 +218,8 @@ export default function MaterialsClient({
       toast.error("Please enter material name")
       return
     }
+
+    const primaryBatchId = formData.batch_ids.length > 0 ? formData.batch_ids[0] : null
 
     if (editingMaterial) {
       // Edit
@@ -215,7 +231,8 @@ export default function MaterialsClient({
         name: formData.name.trim(),
         type: formData.type,
         subject: formData.subject.trim() || null,
-        batch_id: formData.batch_id || null,
+        batch_id: primaryBatchId,
+        batch_ids: formData.batch_ids,
         total_stock: Number(formData.total_stock),
         available_stock: updatedAvailable,
         price: Number(formData.price) || 0,
@@ -230,7 +247,8 @@ export default function MaterialsClient({
           name: updatedMat.name,
           type: updatedMat.type,
           subject: updatedMat.subject,
-          batch_id: updatedMat.batch_id,
+          batch_id: primaryBatchId,
+          batch_ids: formData.batch_ids,
           total_stock: updatedMat.total_stock,
           available_stock: updatedMat.available_stock,
           price: updatedMat.price,
@@ -249,7 +267,8 @@ export default function MaterialsClient({
         name: formData.name.trim(),
         type: formData.type,
         subject: formData.subject.trim() || null,
-        batch_id: formData.batch_id || null,
+        batch_id: primaryBatchId,
+        batch_ids: formData.batch_ids,
         total_stock: Number(formData.total_stock),
         available_stock: Number(formData.total_stock),
         price: Number(formData.price) || 0,
@@ -266,7 +285,8 @@ export default function MaterialsClient({
           name: newMat.name,
           type: newMat.type,
           subject: newMat.subject,
-          batch_id: newMat.batch_id,
+          batch_id: primaryBatchId,
+          batch_ids: formData.batch_ids,
           total_stock: newMat.total_stock,
           available_stock: newMat.available_stock,
           price: newMat.price,
@@ -302,10 +322,10 @@ export default function MaterialsClient({
   }
 
   // ==========================================
-  // DISTRIBUTE MATERIAL MODAL STATE
+  // DISTRIBUTE MATERIAL MODAL STATE (MULTI-BATCH)
   // ==========================================
   const [distributeMode, setDistributeMode] = useState<"batch" | "search">("batch")
-  const [distributeSelectedBatch, setDistributeSelectedBatch] = useState<string>("")
+  const [distributeSelectedBatchIds, setDistributeSelectedBatchIds] = useState<string[]>([])
   const [distributeSearchStudentQuery, setDistributeSearchStudentQuery] = useState("")
   const [distributeSelectedStudentIds, setDistributeSelectedStudentIds] = useState<Set<string>>(new Set())
   const [distributeNotes, setDistributeNotes] = useState("")
@@ -314,21 +334,44 @@ export default function MaterialsClient({
     const target = m || materials[0] || null
     setDistributeMaterial(target)
     setDistributeMode("batch")
-    setDistributeSelectedBatch(target?.batch_id || batches[0]?.id || "")
+
+    // Default to material's assigned batches, or first batch
+    const initialBatches = target?.batch_ids && target.batch_ids.length > 0
+      ? target.batch_ids
+      : (target?.batch_id ? [target.batch_id] : (batches[0] ? [batches[0].id] : []))
+
+    setDistributeSelectedBatchIds(initialBatches)
     setDistributeSearchStudentQuery("")
     setDistributeSelectedStudentIds(new Set())
     setDistributeNotes("")
     setDistributeModalOpen(true)
   }
 
-  // Eligible students in selected batch
+  const toggleDistributeBatch = (batchId: string) => {
+    if (distributeSelectedBatchIds.includes(batchId)) {
+      setDistributeSelectedBatchIds(distributeSelectedBatchIds.filter(id => id !== batchId))
+    } else {
+      setDistributeSelectedBatchIds([...distributeSelectedBatchIds, batchId])
+    }
+  }
+
+  // Eligible students across ALL selected batches
   const batchStudents = useMemo(() => {
-    if (!distributeSelectedBatch) return []
-    return students.filter(s => {
-      const isEnrolled = s.enrollments?.some(e => e.batch_id === distributeSelectedBatch && e.status === "active")
-      return Boolean(isEnrolled)
+    if (distributeSelectedBatchIds.length === 0) return []
+    const setIds = new Set<string>()
+    const list: Student[] = []
+
+    students.forEach(s => {
+      const isEnrolledInAny = s.enrollments?.some(
+        e => distributeSelectedBatchIds.includes(e.batch_id) && e.status === "active"
+      )
+      if (isEnrolledInAny && !setIds.has(s.id)) {
+        setIds.add(s.id)
+        list.push(s)
+      }
     })
-  }, [students, distributeSelectedBatch])
+    return list
+  }, [students, distributeSelectedBatchIds])
 
   // Search filtered students for search mode
   const searchStudents = useMemo(() => {
@@ -394,13 +437,18 @@ export default function MaterialsClient({
 
     distributeSelectedStudentIds.forEach(stId => {
       const studentObj = students.find(s => s.id === stId)
-      const batchObj = batches.find(b => b.id === (distributeSelectedBatch || distributeMaterial.batch_id))
+      // Find matching batch among selected batches
+      const enrolledBatchId = studentObj?.enrollments?.find(
+        e => distributeSelectedBatchIds.includes(e.batch_id)
+      )?.batch_id || distributeSelectedBatchIds[0] || distributeMaterial.batch_id
+
+      const batchObj = batches.find(b => b.id === enrolledBatchId)
 
       newIssues.push({
         id: "issue_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
         material_id: distributeMaterial.id,
         student_id: stId,
-        batch_id: distributeSelectedBatch || distributeMaterial.batch_id || null,
+        batch_id: enrolledBatchId || null,
         issued_by: currentStaff.id,
         issued_at: nowIso,
         status: "issued",
@@ -446,7 +494,7 @@ export default function MaterialsClient({
       console.warn("Could not save issues to supabase:", e)
     }
 
-    toast.success(`✓ Distributed ${countToIssue} copies of "${distributeMaterial.name}"!`)
+    toast.success(`✓ Distributed ${countToIssue} copies of "${distributeMaterial.name}" across selected batches!`)
     setDistributeModalOpen(false)
   }
 
@@ -455,11 +503,13 @@ export default function MaterialsClient({
   // ==========================================
   const [whoGotItTab, setWhoGotItTab] = useState<"all" | "received" | "pending">("all")
   const [whoGotItSearch, setWhoGotItSearch] = useState("")
+  const [whoGotItBatchFilter, setWhoGotItBatchFilter] = useState<string>("all")
 
   const openWhoGotItModal = (m: Material) => {
     setWhoGotItMaterial(m)
     setWhoGotItTab("all")
     setWhoGotItSearch("")
+    setWhoGotItBatchFilter("all")
     setWhoGotItModalOpen(true)
   }
 
@@ -469,11 +519,15 @@ export default function MaterialsClient({
     return issues.filter(i => i.material_id === whoGotItMaterial.id && i.status === "issued")
   }, [whoGotItMaterial, issues])
 
-  // Target students for this material (either from target batch or all students)
+  // Target students for this material (across all assigned batches or all students)
   const targetStudentsForMaterial = useMemo(() => {
     if (!whoGotItMaterial) return []
-    if (whoGotItMaterial.batch_id) {
-      return students.filter(s => s.enrollments?.some(e => e.batch_id === whoGotItMaterial.batch_id && e.status === "active"))
+    const assignedBatches = whoGotItMaterial.batch_ids && whoGotItMaterial.batch_ids.length > 0
+      ? whoGotItMaterial.batch_ids
+      : (whoGotItMaterial.batch_id ? [whoGotItMaterial.batch_id] : [])
+
+    if (assignedBatches.length > 0) {
+      return students.filter(s => s.enrollments?.some(e => assignedBatches.includes(e.batch_id) && e.status === "active"))
     }
     return students
   }, [whoGotItMaterial, students])
@@ -486,11 +540,17 @@ export default function MaterialsClient({
       return
     }
 
+    const assignedBatches = whoGotItMaterial.batch_ids && whoGotItMaterial.batch_ids.length > 0
+      ? whoGotItMaterial.batch_ids
+      : (whoGotItMaterial.batch_id ? [whoGotItMaterial.batch_id] : [])
+
+    const enrolledBatch = student.enrollments?.find(e => assignedBatches.includes(e.batch_id))?.batch_id || assignedBatches[0] || null
+
     const newIssue: MaterialIssue = {
       id: "issue_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6),
       material_id: whoGotItMaterial.id,
       student_id: student.id,
-      batch_id: whoGotItMaterial.batch_id || null,
+      batch_id: enrolledBatch,
       issued_by: currentStaff.id,
       issued_at: new Date().toISOString(),
       status: "issued",
@@ -514,7 +574,7 @@ export default function MaterialsClient({
       await supabase.from("material_issues").insert({
         material_id: whoGotItMaterial.id,
         student_id: student.id,
-        batch_id: whoGotItMaterial.batch_id,
+        batch_id: enrolledBatch,
         issued_by: currentStaff.id.startsWith("admin") ? undefined : currentStaff.id,
         status: "issued",
         notes: "Quick distributed"
@@ -561,18 +621,21 @@ export default function MaterialsClient({
       const issue = materialIssuesList.find(i => i.student_id === s.id)
       const statusStr = issue ? "RECEIVED" : "NOT RECEIVED"
       const dateStr = issue ? formatDate(issue.issued_at) : "-"
+      const batchName = s.enrollments?.map(e => e.batch?.name).filter(Boolean).join("; ") || "General"
+
       return [
         idx + 1,
         `"${s.name}"`,
         `"${s.student_id}"`,
         `"${s.phone || '-'}"`,
+        `"${batchName}"`,
         `"${statusStr}"`,
         `"${dateStr}"`,
         `"_________________"`
       ].join(",")
     })
 
-    const headers = ["#", "Student Name", "Student ID", "Phone", "Status", "Received Date", "Signature"]
+    const headers = ["#", "Student Name", "Student ID", "Phone", "Batch", "Status", "Received Date", "Signature"]
     const csv = [headers.join(","), ...rows].join("\n")
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
     const url = URL.createObjectURL(blob)
@@ -598,7 +661,10 @@ export default function MaterialsClient({
       // 2. Type filter
       if (selectedType !== "all" && m.type !== selectedType) return false
       // 3. Batch filter
-      if (selectedBatchFilter !== "all" && m.batch_id !== selectedBatchFilter) return false
+      if (selectedBatchFilter !== "all") {
+        const hasBatch = (m.batch_ids && m.batch_ids.includes(selectedBatchFilter)) || m.batch_id === selectedBatchFilter
+        if (!hasBatch) return false
+      }
       // 4. Stock filter
       if (stockFilter === "in_stock" && m.available_stock <= 0) return false
       if (stockFilter === "low_stock" && (m.available_stock > 5 || m.available_stock <= 0)) return false
@@ -624,7 +690,7 @@ export default function MaterialsClient({
             Study Materials & Distribution
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            Manage books, lecture sheets, notes, and track student distribution
+            Manage books, lecture sheets, notes, and track student distribution across batches
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -767,7 +833,13 @@ export default function MaterialsClient({
           {filteredMaterials.map(m => {
             const config = typeConfigs[m.type] || typeConfigs.other
             const TypeIcon = config.icon
-            const batchObj = batches.find(b => b.id === m.batch_id)
+
+            // Get assigned batches for display
+            const assignedBatchIds = m.batch_ids && m.batch_ids.length > 0 
+              ? m.batch_ids 
+              : (m.batch_id ? [m.batch_id] : [])
+
+            const assignedBatches = batches.filter(b => assignedBatchIds.includes(b.id))
             const distributedForThis = issues.filter(i => i.material_id === m.id && i.status === "issued").length
             const isOutOfStock = m.available_stock <= 0
             const isLowStock = m.available_stock <= 5 && !isOutOfStock
@@ -804,16 +876,27 @@ export default function MaterialsClient({
                   <h3 className="font-bold text-gray-900 text-base group-hover:text-indigo-600 transition-colors">
                     {m.name}
                   </h3>
-                  <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                    <span>{m.subject || "All Subjects"}</span>
-                    <span>•</span>
-                    <span className="truncate max-w-[150px] font-medium text-gray-700">
-                      {batchObj ? batchObj.name : "All Batches"}
-                    </span>
+                  <p className="text-xs text-gray-500 mt-0.5 font-medium">
+                    {m.subject || "General Subject"}
+                  </p>
+
+                  {/* Assigned Batches List */}
+                  <div className="mt-2 flex flex-wrap gap-1 items-center">
+                    {assignedBatches.length === 0 ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                        All Batches
+                      </span>
+                    ) : (
+                      assignedBatches.map(b => (
+                        <span key={b.id} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                          {b.name}
+                        </span>
+                      ))
+                    )}
                   </div>
 
                   {m.description && (
-                    <p className="text-xs text-gray-500 mt-2 line-clamp-2">
+                    <p className="text-xs text-gray-500 mt-2.5 line-clamp-2">
                       {m.description}
                     </p>
                   )}
@@ -881,7 +964,7 @@ export default function MaterialsClient({
       )}
 
       {/* ========================================== */}
-      {/* 1. ADD / EDIT MATERIAL MODAL              */}
+      {/* 1. ADD / EDIT MATERIAL MODAL (MULTI-BATCH) */}
       {/* ========================================== */}
       {addModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-in fade-in">
@@ -942,26 +1025,97 @@ export default function MaterialsClient({
                 </div>
               </div>
 
+              {/* MULTI-BATCH SELECTOR */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Assigned Batches <span className="text-indigo-600 font-bold">(Multi-Select Supported)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (formData.batch_ids.length === batches.length) {
+                        setFormData({ ...formData, batch_ids: [] })
+                      } else {
+                        setFormData({ ...formData, batch_ids: batches.map(b => b.id) })
+                      }
+                    }}
+                    className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800"
+                  >
+                    {formData.batch_ids.length === batches.length ? "Deselect All" : "Select All Batches"}
+                  </button>
+                </div>
+
+                <div className="border border-gray-200 rounded-xl p-2.5 bg-gray-50/50 max-h-44 overflow-y-auto space-y-1.5">
+                  {/* Option: All Batches */}
+                  <div
+                    onClick={() => setFormData({ ...formData, batch_ids: [] })}
+                    className={`p-2 rounded-lg text-xs font-medium flex items-center justify-between cursor-pointer transition-colors ${
+                      formData.batch_ids.length === 0 
+                        ? "bg-indigo-600 text-white shadow-sm font-bold" 
+                        : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+                    }`}
+                  >
+                    <span>✨ Available for All Batches (Open to Everyone)</span>
+                    {formData.batch_ids.length === 0 && <Check className="w-4 h-4" />}
+                  </div>
+
+                  {/* Individual Batches */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+                    {batches.map(b => {
+                      const isSelected = formData.batch_ids.includes(b.id)
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => toggleFormBatch(b.id)}
+                          className={`p-2 rounded-lg text-xs font-medium flex items-center justify-between cursor-pointer border transition-all ${
+                            isSelected 
+                              ? "bg-indigo-50 border-indigo-300 text-indigo-900 font-semibold shadow-sm" 
+                              : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer pointer-events-none"
+                            />
+                            <span className="truncate">{b.name}</span>
+                          </div>
+                          {b.subject && (
+                            <span className="text-[10px] text-gray-400 shrink-0 ml-1">{b.subject}</span>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-gray-500 mt-1 px-0.5">
+                  <span>
+                    {formData.batch_ids.length === 0 ? (
+                      <strong className="text-indigo-600">All Batches Selected</strong>
+                    ) : (
+                      <span><strong>{formData.batch_ids.length}</strong> batches selected</span>
+                    )}
+                  </span>
+                  {formData.batch_ids.length > 0 && (
+                    <button 
+                      type="button" 
+                      onClick={() => setFormData({ ...formData, batch_ids: [] })}
+                      className="text-gray-400 hover:text-red-500"
+                    >
+                      Reset to All Batches
+                    </button>
+                  )}
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Assigned Batch
-                  </label>
-                  <select
-                    value={formData.batch_id}
-                    onChange={e => setFormData({ ...formData, batch_id: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 bg-white"
-                  >
-                    <option value="">Available for All Batches</option>
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Total Quantity / Stock <span className="text-red-500">*</span>
+                    Total Stock <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
@@ -972,19 +1126,19 @@ export default function MaterialsClient({
                     className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">
-                  Price (৳) <span className="text-gray-400 font-normal">(Leave 0 if free for enrolled students)</span>
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={formData.price}
-                  onChange={e => setFormData({ ...formData, price: Math.max(0, parseFloat(e.target.value) || 0) })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900"
-                />
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Price (৳) <span className="text-gray-400 font-normal">(0 = Free)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={formData.price}
+                    onChange={e => setFormData({ ...formData, price: Math.max(0, parseFloat(e.target.value) || 0) })}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900"
+                  />
+                </div>
               </div>
 
               <div>
@@ -995,7 +1149,7 @@ export default function MaterialsClient({
                   value={formData.description}
                   onChange={e => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
-                  placeholder="e.g., Covers Newton's laws and practice formulas..."
+                  placeholder="e.g., Covers chapter formulas, exercises, and past questions..."
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 resize-none"
                 />
               </div>
@@ -1021,7 +1175,7 @@ export default function MaterialsClient({
       )}
 
       {/* ========================================== */}
-      {/* 2. DISTRIBUTE MATERIAL MODAL               */}
+      {/* 2. DISTRIBUTE MATERIAL MODAL (MULTI-BATCH) */}
       {/* ========================================== */}
       {distributeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm animate-in fade-in">
@@ -1033,7 +1187,7 @@ export default function MaterialsClient({
                   Distribute Study Material
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Select a batch or search students to issue books or sheets
+                  Select single or multiple batches, or search individual students
                 </p>
               </div>
               <button onClick={() => setDistributeModalOpen(false)} className="text-gray-400 hover:text-gray-600">
@@ -1053,6 +1207,9 @@ export default function MaterialsClient({
                     const found = materials.find(m => m.id === e.target.value)
                     setDistributeMaterial(found || null)
                     setDistributeSelectedStudentIds(new Set())
+                    if (found?.batch_ids && found.batch_ids.length > 0) {
+                      setDistributeSelectedBatchIds(found.batch_ids)
+                    }
                   }}
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 bg-white"
                 >
@@ -1081,7 +1238,7 @@ export default function MaterialsClient({
                     distributeMode === "batch" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600 hover:text-gray-900"
                   }`}
                 >
-                  Distribute by Batch
+                  Distribute by Batch (Multi-Batch)
                 </button>
                 <button
                   type="button"
@@ -1097,30 +1254,59 @@ export default function MaterialsClient({
                 </button>
               </div>
 
-              {/* MODE 1: BY BATCH */}
+              {/* MODE 1: MULTI-BATCH DISTRIBUTION */}
               {distributeMode === "batch" && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
-                      Select Target Batch
-                    </label>
-                    <select
-                      value={distributeSelectedBatch}
-                      onChange={e => {
-                        setDistributeSelectedBatch(e.target.value)
-                        setDistributeSelectedStudentIds(new Set())
-                      }}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900 bg-white"
-                    >
-                      {batches.map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-gray-700">
+                        Select Batches to Distribute To:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (distributeSelectedBatchIds.length === batches.length) {
+                            setDistributeSelectedBatchIds([])
+                          } else {
+                            setDistributeSelectedBatchIds(batches.map(b => b.id))
+                          }
+                        }}
+                        className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold"
+                      >
+                        {distributeSelectedBatchIds.length === batches.length ? "Deselect All" : "Select All Batches"}
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-gray-50 border border-gray-200 rounded-xl max-h-28 overflow-y-auto">
+                      {batches.map(b => {
+                        const isSelected = distributeSelectedBatchIds.includes(b.id)
+                        return (
+                          <button
+                            type="button"
+                            key={b.id}
+                            onClick={() => toggleDistributeBatch(b.id)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-all ${
+                              isSelected 
+                                ? "bg-indigo-600 text-white border-indigo-600 shadow-sm" 
+                                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-100"
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {}}
+                              className="w-3 h-3 rounded pointer-events-none"
+                            />
+                            <span>{b.name}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-xs font-semibold text-gray-500 uppercase">
-                      Students Enrolled ({batchStudents.length})
+                      Students in Selected Batches ({batchStudents.length})
                     </span>
                     <button
                       type="button"
@@ -1133,11 +1319,16 @@ export default function MaterialsClient({
 
                   <div className="max-h-56 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 bg-gray-50/50">
                     {batchStudents.length === 0 ? (
-                      <p className="p-6 text-center text-xs text-gray-400">No students enrolled in this batch.</p>
+                      <p className="p-6 text-center text-xs text-gray-400">
+                        {distributeSelectedBatchIds.length === 0 
+                          ? "Please select at least one batch above." 
+                          : "No active students enrolled in the selected batches."}
+                      </p>
                     ) : (
                       batchStudents.map(student => {
                         const alreadyIssued = alreadyIssuedStudentIds.has(student.id)
                         const isSelected = distributeSelectedStudentIds.has(student.id)
+                        const studentBatchNames = student.enrollments?.map(e => e.batch?.name).filter(Boolean).join(", ")
 
                         return (
                           <div
@@ -1161,7 +1352,9 @@ export default function MaterialsClient({
                               />
                               <div>
                                 <p className="font-semibold text-gray-900">{student.name}</p>
-                                <p className="text-[11px] text-gray-500 font-mono">{student.student_id} • {student.phone || "No phone"}</p>
+                                <p className="text-[11px] text-gray-500 font-mono">
+                                  {student.student_id} • {studentBatchNames || "Enrolled"}
+                                </p>
                               </div>
                             </div>
 
@@ -1267,7 +1460,7 @@ export default function MaterialsClient({
                 <input
                   value={distributeNotes}
                   onChange={e => setDistributeNotes(e.target.value)}
-                  placeholder="e.g. Distributed in class / signed at reception counter"
+                  placeholder="e.g. Handed over in class / collection verified"
                   className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-900"
                 />
               </div>
@@ -1345,7 +1538,7 @@ export default function MaterialsClient({
                   onClick={handleExportChecklist}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-lg text-xs font-semibold transition-colors shadow-sm"
                 >
-                  <Download className="w-3.5 h-3.5" /> Export / Print Checklist
+                  <Download className="w-3.5 h-3.5" /> Export Checklist
                 </button>
                 <button onClick={() => setWhoGotItModalOpen(false)} className="text-gray-400 hover:text-gray-600">
                   <X className="w-5 h-5" />
@@ -1358,7 +1551,7 @@ export default function MaterialsClient({
               <div className="flex items-center gap-4">
                 <span>Total Target: <strong>{targetStudentsForMaterial.length}</strong></span>
                 <span>Distributed: <strong className="text-emerald-700">{materialIssuesList.length}</strong></span>
-                <span>Remaining to Issue: <strong className="text-amber-700">{Math.max(0, targetStudentsForMaterial.length - materialIssuesList.length)}</strong></span>
+                <span>Remaining: <strong className="text-amber-700">{Math.max(0, targetStudentsForMaterial.length - materialIssuesList.length)}</strong></span>
                 <span>Available Stock: <strong className="text-indigo-700">{whoGotItMaterial.available_stock}</strong></span>
               </div>
               <div>
@@ -1370,37 +1563,51 @@ export default function MaterialsClient({
               </div>
             </div>
 
-            {/* Sub Filter Tabs & Search */}
+            {/* Sub Filter Tabs, Batch Selector & Search */}
             <div className="px-6 py-3 border-b border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-              <div className="flex bg-gray-100 p-1 rounded-lg text-xs">
-                <button
-                  onClick={() => setWhoGotItTab("all")}
-                  className={`px-3 py-1 font-semibold rounded-md transition-all ${
-                    whoGotItTab === "all" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
-                  }`}
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex bg-gray-100 p-1 rounded-lg text-xs">
+                  <button
+                    onClick={() => setWhoGotItTab("all")}
+                    className={`px-3 py-1 font-semibold rounded-md transition-all ${
+                      whoGotItTab === "all" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    All ({targetStudentsForMaterial.length})
+                  </button>
+                  <button
+                    onClick={() => setWhoGotItTab("received")}
+                    className={`px-3 py-1 font-semibold rounded-md transition-all ${
+                      whoGotItTab === "received" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Received ({materialIssuesList.length})
+                  </button>
+                  <button
+                    onClick={() => setWhoGotItTab("pending")}
+                    className={`px-3 py-1 font-semibold rounded-md transition-all ${
+                      whoGotItTab === "pending" ? "bg-white text-amber-700 shadow-sm" : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Not Received Yet ({Math.max(0, targetStudentsForMaterial.length - materialIssuesList.length)})
+                  </button>
+                </div>
+
+                {/* Optional Batch filter within Who Got It */}
+                <select
+                  value={whoGotItBatchFilter}
+                  onChange={e => setWhoGotItBatchFilter(e.target.value)}
+                  className="px-2.5 py-1 text-xs border border-gray-200 rounded-lg text-gray-800 bg-white"
                 >
-                  All ({targetStudentsForMaterial.length})
-                </button>
-                <button
-                  onClick={() => setWhoGotItTab("received")}
-                  className={`px-3 py-1 font-semibold rounded-md transition-all ${
-                    whoGotItTab === "received" ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  Received ({materialIssuesList.length})
-                </button>
-                <button
-                  onClick={() => setWhoGotItTab("pending")}
-                  className={`px-3 py-1 font-semibold rounded-md transition-all ${
-                    whoGotItTab === "pending" ? "bg-white text-amber-700 shadow-sm" : "text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  Not Received Yet ({Math.max(0, targetStudentsForMaterial.length - materialIssuesList.length)})
-                </button>
+                  <option value="all">All Assigned Batches</option>
+                  {batches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
               </div>
 
               {/* In-Modal Search */}
-              <div className="relative min-w-[200px]">
+              <div className="relative min-w-[180px]">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
                   value={whoGotItSearch}
@@ -1419,7 +1626,7 @@ export default function MaterialsClient({
                     <tr className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase">
                       <th className="px-4 py-2.5">#</th>
                       <th className="px-4 py-2.5">Student</th>
-                      <th className="px-4 py-2.5">ID</th>
+                      <th className="px-4 py-2.5">Batch</th>
                       <th className="px-4 py-2.5">Status</th>
                       <th className="px-4 py-2.5">Date Issued</th>
                       <th className="px-4 py-2.5 text-right">Action</th>
@@ -1433,6 +1640,11 @@ export default function MaterialsClient({
 
                         if (whoGotItTab === "received" && !hasReceived) return false
                         if (whoGotItTab === "pending" && hasReceived) return false
+
+                        if (whoGotItBatchFilter !== "all") {
+                          const inBatch = s.enrollments?.some(e => e.batch_id === whoGotItBatchFilter)
+                          if (!inBatch) return false
+                        }
 
                         if (whoGotItSearch.trim()) {
                           const q = whoGotItSearch.toLowerCase()
@@ -1457,16 +1669,19 @@ export default function MaterialsClient({
                       return list.map((student, idx) => {
                         const issue = materialIssuesList.find(i => i.student_id === student.id)
                         const hasReceived = Boolean(issue)
+                        const batchNames = student.enrollments?.map(e => e.batch?.name).filter(Boolean).join(", ")
 
                         return (
                           <tr key={student.id} className="hover:bg-gray-50/70 transition-colors">
                             <td className="px-4 py-3 text-gray-400">{idx + 1}</td>
                             <td className="px-4 py-3">
                               <p className="font-semibold text-gray-900">{student.name}</p>
-                              <p className="text-[11px] text-gray-400">{student.phone || "No phone"}</p>
+                              <p className="text-[11px] text-gray-400 font-mono">{student.student_id} • {student.phone || "No phone"}</p>
                             </td>
-                            <td className="px-4 py-3 font-mono text-gray-600">
-                              {student.student_id}
+                            <td className="px-4 py-3 text-gray-600">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700">
+                                {batchNames || "General"}
+                              </span>
                             </td>
                             <td className="px-4 py-3">
                               {hasReceived ? (
