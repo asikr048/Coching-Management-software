@@ -15,7 +15,11 @@ export default function HomePage() {
   const [userRole, setUserRole] = useState<string | null>(null)
   const [notices, setNotices] = useState<any[]>([])
   const [contactLink, setContactLink] = useState('https://wa.me/8801302201431')
-  const [contactLabel, setContactLabel] = useState('Contact Us')
+  const [contactLabel, setContactLabel] = useState('WhatsApp Us')
+  const [contactPhone, setContactPhone] = useState('01302201431')
+  const [contactEmail, setContactEmail] = useState('info@medhashiree.com')
+  const [contactAddress, setContactAddress] = useState('Rajshahi, Bangladesh')
+  const [footerAbout, setFooterAbout] = useState("Rajshahi's premier coaching center. Quality education, expert teachers, and a proven track record of student success.")
 
   // Feedback form state
   const [fbName, setFbName] = useState('')
@@ -51,23 +55,66 @@ export default function HomePage() {
       } catch {}
       try {
         const { data: s } = await supabase.from("slider_images").select("*").eq("is_active", true).order("sort_order")
-        if (s) setSlides(s)
+        if (s) {
+          setSlides(s)
+          // Proactively repair any old spelling in database in background
+          for (const slide of s) {
+            const fixedTitle = slide.title ? slide.title.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree") : slide.title
+            const fixedSub = slide.subtitle ? slide.subtitle.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree") : slide.subtitle
+            if (fixedTitle !== slide.title || fixedSub !== slide.subtitle) {
+              supabase.from("slider_images").update({ title: fixedTitle, subtitle: fixedSub }).eq("id", slide.id).then(() => {})
+            }
+          }
+        }
       } catch {}
       // Notices
       try {
         const { data: n } = await supabase.from("notices").select("*").eq("is_active", true).order("created_at", { ascending: false }).limit(10)
         if (n) setNotices(n)
       } catch {}
-      // Site settings (contact link)
+      // Site settings (contact & footer info)
       try {
         const { data: settings } = await supabase.from("site_settings").select("key, value")
-        if (settings) {
-          const link = settings.find((s: any) => s.key === 'contact_link')?.value
-          const label = settings.find((s: any) => s.key === 'contact_label')?.value
-          if (link) setContactLink(link)
-          if (label) setContactLabel(label)
+        if (settings && settings.length > 0) {
+          const getVal = (k: string) => settings.find((s: any) => s.key === k)?.value
+          if (getVal('contact_link')) setContactLink(getVal('contact_link')!)
+          if (getVal('contact_label')) setContactLabel(getVal('contact_label')!)
+          if (getVal('contact_phone')) setContactPhone(getVal('contact_phone')!)
+          if (getVal('contact_email')) setContactEmail(getVal('contact_email')!)
+          if (getVal('contact_address')) setContactAddress(getVal('contact_address')!)
+          if (getVal('footer_about')) setFooterAbout(getVal('footer_about')!)
+        } else {
+          if (typeof window !== 'undefined') {
+            const lLink = localStorage.getItem('medhashiree_contact_link')
+            const lLabel = localStorage.getItem('medhashiree_contact_label')
+            const lPhone = localStorage.getItem('medhashiree_contact_phone')
+            const lEmail = localStorage.getItem('medhashiree_contact_email')
+            const lAddress = localStorage.getItem('medhashiree_contact_address')
+            const lAbout = localStorage.getItem('medhashiree_footer_about')
+            if (lLink) setContactLink(lLink)
+            if (lLabel) setContactLabel(lLabel)
+            if (lPhone) setContactPhone(lPhone)
+            if (lEmail) setContactEmail(lEmail)
+            if (lAddress) setContactAddress(lAddress)
+            if (lAbout) setFooterAbout(lAbout)
+          }
         }
-      } catch {}
+      } catch {
+        if (typeof window !== 'undefined') {
+          const lLink = localStorage.getItem('medhashiree_contact_link')
+          const lLabel = localStorage.getItem('medhashiree_contact_label')
+          const lPhone = localStorage.getItem('medhashiree_contact_phone')
+          const lEmail = localStorage.getItem('medhashiree_contact_email')
+          const lAddress = localStorage.getItem('medhashiree_contact_address')
+          const lAbout = localStorage.getItem('medhashiree_footer_about')
+          if (lLink) setContactLink(lLink)
+          if (lLabel) setContactLabel(lLabel)
+          if (lPhone) setContactPhone(lPhone)
+          if (lEmail) setContactEmail(lEmail)
+          if (lAddress) setContactAddress(lAddress)
+          if (lAbout) setFooterAbout(lAbout)
+        }
+      }
     }
     load()
   }, [])
@@ -96,11 +143,22 @@ export default function HomePage() {
     } catch { } finally { setFbSubmitting(false) }
   }
 
-  const defaultSlides = slides.length > 0 ? slides : [
+  const sanitizeSlideText = (text?: string | null) => {
+    if (!text) return text
+    return text.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree")
+  }
+
+  const rawSlides = slides.length > 0 ? slides : [
     { title: "Welcome to MedhaShiree", subtitle: "Rajshahi's Premier Coaching Center", image_url: "" },
     { title: "Expert Teachers", subtitle: "Learn from the best faculty", image_url: "" },
     { title: "Admissions Open 2026", subtitle: "Limited seats available — enroll now", image_url: "" },
   ]
+
+  const defaultSlides = rawSlides.map(slide => ({
+    ...slide,
+    title: sanitizeSlideText(slide.title) || slide.title,
+    subtitle: sanitizeSlideText(slide.subtitle) || slide.subtitle,
+  }))
 
   const priorityColors: Record<string, string> = {
     urgent: 'bg-red-100 border-red-300 text-red-800',
@@ -376,7 +434,7 @@ export default function HomePage() {
                 <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-violet-500 rounded-xl flex items-center justify-center"><GraduationCap className="w-4 h-4 text-white" /></div>
                 <span className="text-lg font-bold text-white">Medha<span className="text-indigo-400">Shiree</span></span>
               </div>
-              <p className="text-sm leading-relaxed max-w-sm">Rajshahi&apos;s premier coaching center. Quality education, expert teachers, and a proven track record of student success.</p>
+              <p className="text-sm leading-relaxed max-w-sm">{footerAbout}</p>
             </div>
             <div>
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wide">Quick Links</h4>
@@ -390,9 +448,9 @@ export default function HomePage() {
             <div>
               <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wide">Contact</h4>
               <div className="space-y-2.5 text-sm">
-                <p className="flex items-center gap-2"><MapPin className="w-4 h-4 flex-shrink-0" /> Rajshahi, Bangladesh</p>
-                <p className="flex items-center gap-2"><Phone className="w-4 h-4 flex-shrink-0" /> 01302201431</p>
-                <p className="flex items-center gap-2"><Mail className="w-4 h-4 flex-shrink-0" /> info@medhashiree.com</p>
+                <p className="flex items-center gap-2"><MapPin className="w-4 h-4 flex-shrink-0 text-indigo-400" /> {contactAddress}</p>
+                <p className="flex items-center gap-2"><Phone className="w-4 h-4 flex-shrink-0 text-indigo-400" /> <a href={`tel:${contactPhone.replace(/\s+/g, '')}`} className="hover:text-white transition-colors">{contactPhone}</a></p>
+                <p className="flex items-center gap-2"><Mail className="w-4 h-4 flex-shrink-0 text-indigo-400" /> <a href={`mailto:${contactEmail}`} className="hover:text-white transition-colors">{contactEmail}</a></p>
               </div>
             </div>
           </div>
