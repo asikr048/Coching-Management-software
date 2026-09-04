@@ -56,15 +56,70 @@ class TwilioProvider implements SmsProvider {
   }
 }
 
-export function getSmsProvider(): SmsProvider {
+class DynamicGatewayProvider implements SmsProvider {
+  private config: { apiKey: string; callType: string; urlTemplate: string; senderId?: string }
+
+  constructor(config: { apiKey: string; callType: string; urlTemplate: string; senderId?: string }) {
+    this.config = config
+  }
+
+  async send(to: string, message: string) {
+    try {
+      let normalized = to.replace(/[^0-9]/g, "")
+      if (normalized.startsWith("01")) normalized = "88" + normalized
+
+      if (this.config.callType === "POST_JSON") {
+        const baseUrl = this.config.urlTemplate.split("?")[0]
+        const res = await fetch(baseUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ api_key: this.config.apiKey, msg: message, to: normalized, sender_id: this.config.senderId }),
+        })
+        const text = await res.text()
+        return { success: res.ok, error: res.ok ? undefined : text }
+      } else if (this.config.callType === "POST_FORM") {
+        const baseUrl = this.config.urlTemplate.split("?")[0]
+        const form = new URLSearchParams()
+        form.append("api_key", this.config.apiKey)
+        form.append("msg", message)
+        form.append("to", normalized)
+        if (this.config.senderId) form.append("sender_id", this.config.senderId)
+        const res = await fetch(baseUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: form.toString(),
+        })
+        const text = await res.text()
+        return { success: res.ok, error: res.ok ? undefined : text }
+      } else {
+        // GET (default)
+        let url = this.config.urlTemplate
+        url = url.replace(/\{api_key\}|\{API_KEY\}|\{YOUR_API_KEY\}/g, encodeURIComponent(this.config.apiKey))
+        url = url.replace(/\{msg\}|\{MSG\}|\{YOUR_MSG\}|\{message\}/g, encodeURIComponent(message))
+        url = url.replace(/\{to\}|\{TO\}|\{YOUR_TO\}|\{number\}|\{phone\}|\{msisdn\}/g, encodeURIComponent(normalized))
+        const res = await fetch(url, { method: "GET" })
+        const text = await res.text()
+        const isOk = res.ok && !text.includes("error") && !text.includes("FAILED")
+        return { success: isOk, error: isOk ? undefined : text }
+      }
+    } catch (e: any) {
+      return { success: false, error: e?.message || String(e) }
+    }
+  }
+}
+
+export function getSmsProvider(dynamicConfig?: { apiKey: string; callType: string; urlTemplate: string; senderId?: string }): SmsProvider {
+  if (dynamicConfig?.apiKey && dynamicConfig?.urlTemplate) {
+    return new DynamicGatewayProvider(dynamicConfig)
+  }
   const provider = process.env.SMS_PROVIDER || "mock"
   if (provider === "ssl_wireless") return new SslWirelessProvider()
   if (provider === "twilio") return new TwilioProvider()
   return new MockSmsProvider()
 }
 
-export async function sendSms(to: string, message: string) {
-  return getSmsProvider().send(to, message)
+export async function sendSms(to: string, message: string, dynamicConfig?: { apiKey: string; callType: string; urlTemplate: string; senderId?: string }) {
+  return getSmsProvider(dynamicConfig).send(to, message)
 }
 
 export const SMS_TEMPLATES = {
