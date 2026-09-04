@@ -84,7 +84,14 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         const email = form.email.trim() || `student_${Date.now()}@medhashiree.local`
         const { error: aErr } = await supabase.auth.signUp({ email, password: form.password })
         if (aErr) throw new Error(aErr.message)
+
+        // Generate unique student ID (MS-XXXXX)
+        const { count } = await supabase.from("students").select("*", { count: "exact", head: true })
+        const seq = (count || 0) + 1
+        const studentIdStr = `MS-${String(seq).padStart(5, "0")}`
+
         const { data: st, error: sErr } = await supabase.from("students").insert({
+          student_id: studentIdStr,
           name: form.name.trim(), phone: form.phone.trim() || null, email: form.email.trim() || null,
           gender: form.gender, date_of_birth: form.date_of_birth || null,
           guardian_name: form.guardian_name.trim() || null, guardian_phone: form.guardian_phone.trim(),
