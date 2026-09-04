@@ -7,7 +7,7 @@ import {
   User, Mail, Phone, BookOpen, 
   Clock, CheckCircle, AlertCircle, Award, DollarSign, 
   ChevronRight, MapPin, Copy, ShieldCheck, Lock, Save, Loader2, Eye, EyeOff, Pencil,
-  X, Hash, Send, CheckCircle2, GraduationCap
+  X, Hash, Send, CheckCircle2, GraduationCap, Video, PlayCircle, Sparkles
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -17,6 +17,7 @@ export default function StudentProfilePage() {
   const [profile, setProfile] = useState<any>(null)
   const [studentData, setStudentData] = useState<any>(null)
   const [enrollments, setEnrollments] = useState<any[]>([])
+  const [courses, setCourses] = useState<any[]>([])
   const [pendingSubmissions, setPendingSubmissions] = useState<any[]>([])
   const [attendance, setAttendance] = useState<any[]>([])
   const [dues, setDues] = useState<any[]>([])
@@ -55,106 +56,63 @@ export default function StudentProfilePage() {
   useEffect(() => {
     async function loadStudentProfile() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
+        setLoading(true)
+
+        // 1. Fetch complete student profile data from server API (immune to client-side RLS)
+        const res = await fetch("/api/student/profile")
+        if (res.ok) {
+          const data = await res.json()
+          if (data.profile) {
+            setProfile(data.profile)
+            setEditName(data.profile.name || "")
+            setEditPhone(data.profile.phone || "")
+          }
+          if (data.student) setStudentData(data.student)
+          if (data.enrollments) setEnrollments(data.enrollments)
+          if (data.courses) setCourses(data.courses)
+          if (data.pendingSubmissions) setPendingSubmissions(data.pendingSubmissions)
+          if (data.attendance) setAttendance(data.attendance)
+          if (data.dues) setDues(data.dues)
+          if (data.examResults) setExamResults(data.examResults)
+        } else if (res.status === 401) {
           router.push("/login")
           return
+        } else {
+          // Fallback client query
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) {
+            router.push("/login")
+            return
+          }
+
+          const { data: byId } = await supabase.from("user_profiles").select("*").eq("auth_user_id", user.id).maybeSingle()
+          const currentProfile = byId || {
+            user_id: user.user_metadata?.user_id || "MS-" + user.id.slice(0, 5).toUpperCase(),
+            name: user.user_metadata?.full_name || user.email?.split("@")[0] || "Student",
+            email: user.email,
+            phone: user.user_metadata?.phone || "",
+          }
+          setProfile(currentProfile)
+          setEditName(currentProfile.name || "")
+          setEditPhone(currentProfile.phone || "")
+
+          let studentRecord = null
+          if (currentProfile.user_id) {
+            const { data: sByCode } = await supabase.from("students").select("*").eq("student_id", currentProfile.user_id).maybeSingle()
+            if (sByCode) studentRecord = sByCode
+          }
+          if (!studentRecord && currentProfile.email) {
+            const { data: sByEmail } = await supabase.from("students").select("*").ilike("email", currentProfile.email).maybeSingle()
+            if (sByEmail) studentRecord = sByEmail
+          }
+          if (studentRecord) setStudentData(studentRecord)
         }
 
-        // 1. Fetch user_profile
-        let userProf: any = null
-        const { data: byId } = await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("auth_user_id", user.id)
-          .maybeSingle()
-        userProf = byId
-
-        if (!userProf && user.email) {
-          const { data: byEmail } = await supabase
-            .from("user_profiles")
-            .select("*")
-            .eq("email", user.email)
-            .maybeSingle()
-          userProf = byEmail
-        }
-
-        const currentProfile = userProf || {
-          user_id: user.user_metadata?.user_id || "MS-" + user.id.slice(0, 5).toUpperCase(),
-          name: user.user_metadata?.full_name || user.email?.split("@")[0] || "Student",
-          email: user.email,
-          phone: user.user_metadata?.phone || "",
-        }
-        setProfile(currentProfile)
-        setEditName(currentProfile.name || "")
-        setEditPhone(currentProfile.phone || "")
-
-        // 2. Fetch linked student record
-        let studentRecord = null
-        if (currentProfile.email || currentProfile.user_id) {
-          const { data: sData } = await supabase
-            .from("students")
-            .select("*")
-            .or(`email.eq.${currentProfile.email},student_id.eq.${currentProfile.user_id}`)
-            .maybeSingle()
-          studentRecord = sData
-        }
-
-        // Keep profile name and ID in sync with the canonical student record if found
-        if (studentRecord) {
-          setProfile({
-            user_id: studentRecord.student_id,
-            name: studentRecord.name,
-            email: studentRecord.email || user.email,
-            phone: studentRecord.phone || "",
-          })
-          setEditName(studentRecord.name || "")
-          setEditPhone(studentRecord.phone || "")
-        }
-        setStudentData(studentRecord)
-
-        // 3. Load enrollments and stats
-        if (studentRecord?.id) {
-          const sid = studentRecord.id
-
-          const [enrRes, attRes, dueRes, examRes, pendingRes] = await Promise.all([
-            supabase
-              .from("enrollments")
-              .select("*, batch:batches(*, teacher:staff(name), room:rooms(name))")
-              .eq("student_id", sid),
-            supabase
-              .from("attendance")
-              .select("*")
-              .eq("student_id", sid),
-            supabase
-              .from("fee_dues")
-              .select("*, batch:batches(name)")
-              .eq("student_id", sid)
-              .in("status", ["pending", "partial"]),
-            supabase
-              .from("exam_results")
-              .select("*, exam:exams(title, total_marks, pass_marks)")
-              .eq("student_id", sid),
-            supabase
-              .from("payment_submissions")
-              .select("*, batch:batches(*, teacher:staff(name), room:rooms(name))")
-              .eq("student_id", sid)
-              .eq("status", "pending")
-              .order("created_at", { ascending: false }),
-          ])
-
-          if (enrRes.data) setEnrollments(enrRes.data)
-          if (attRes.data) setAttendance(attRes.data)
-          if (dueRes.data) setDues(dueRes.data)
-          if (examRes.data) setExamResults(examRes.data)
-          if (pendingRes.data) setPendingSubmissions(pendingRes.data)
-
-          // Fetch payment accounts for pay-due modal
-          const { data: acctData } = await supabase.from('payment_accounts').select('*').eq('is_active', true)
-          if (acctData) setPaymentAccounts(acctData)
-        }
+        // Fetch payment accounts for pay-due modal
+        const { data: acctData } = await supabase.from("payment_accounts").select("*").eq("is_active", true)
+        if (acctData) setPaymentAccounts(acctData)
       } catch (err) {
-        console.error("Failed to load student data:", err)
+        console.error("Failed to load student profile data:", err)
       } finally {
         setLoading(false)
       }
@@ -261,6 +219,10 @@ export default function StudentProfilePage() {
     )
   }
 
+  // Segregate pending submissions
+  const pendingBatchSubmissions = pendingSubmissions.filter(s => s.batch_id || s.item_type !== "course")
+  const pendingCourseSubmissions = pendingSubmissions.filter(s => s.course_id || s.item_type === "course")
+
   // Analytics
   const totalClasses = attendance.length
   const presentClasses = attendance.filter(a => a.status === "present").length
@@ -318,33 +280,45 @@ export default function StudentProfilePage() {
       </div>
 
       {/* Analytics Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-        <a href="#my-batches" className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-indigo-300 hover:shadow-md hover:bg-indigo-50/20 transition-all group cursor-pointer block">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
+        <a href="#my-batches" className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-indigo-300 hover:shadow-md hover:bg-indigo-50/20 transition-all group cursor-pointer block">
           <div className="flex items-center justify-between text-gray-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Enrolled Batches</span>
-            <BookOpen className="w-5 h-5 text-indigo-600" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Batches</span>
+            <BookOpen className="w-4 h-4 text-indigo-600" />
           </div>
-          <p className="text-2xl sm:text-3xl font-extrabold text-gray-900">{enrollments.length + pendingSubmissions.length}</p>
+          <p className="text-2xl sm:text-3xl font-extrabold text-gray-900">{enrollments.length + pendingBatchSubmissions.length}</p>
           <p className="text-xs text-gray-500">
-            {pendingSubmissions.length > 0 ? `${enrollments.length} active, ${pendingSubmissions.length} pending` : "Active subjects & classes"}
+            {pendingBatchSubmissions.length > 0 ? `${enrollments.length} active, ${pendingBatchSubmissions.length} pending` : "Classroom batches"}
           </p>
           <p className="text-xs text-indigo-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">View batches →</p>
         </a>
 
-        <button onClick={() => setActiveModal('attendance')} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-emerald-300 hover:shadow-md hover:bg-emerald-50/20 transition-all group cursor-pointer text-left w-full">
+        <a href="#my-courses" className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-purple-300 hover:shadow-md hover:bg-purple-50/20 transition-all group cursor-pointer block">
           <div className="flex items-center justify-between text-gray-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Attendance</span>
-            <Clock className="w-5 h-5 text-emerald-600" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Online Courses</span>
+            <Video className="w-4 h-4 text-purple-600" />
+          </div>
+          <p className="text-2xl sm:text-3xl font-extrabold text-purple-600">{courses.length + pendingCourseSubmissions.length}</p>
+          <p className="text-xs text-gray-500">
+            {pendingCourseSubmissions.length > 0 ? `${courses.length} active, ${pendingCourseSubmissions.length} pending` : "Video courses & materials"}
+          </p>
+          <p className="text-xs text-purple-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">View courses →</p>
+        </a>
+
+        <button onClick={() => setActiveModal('attendance')} className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-emerald-300 hover:shadow-md hover:bg-emerald-50/20 transition-all group cursor-pointer text-left w-full">
+          <div className="flex items-center justify-between text-gray-500">
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Attendance</span>
+            <Clock className="w-4 h-4 text-emerald-600" />
           </div>
           <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600">{attendanceRate}%</p>
           <p className="text-xs text-gray-500">{presentClasses} of {totalClasses} classes attended</p>
           <p className="text-xs text-emerald-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">View details →</p>
         </button>
 
-        <button onClick={() => setActiveModal('dues')} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-amber-300 hover:shadow-md hover:bg-amber-50/20 transition-all group cursor-pointer text-left w-full">
+        <button onClick={() => setActiveModal('dues')} className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-amber-300 hover:shadow-md hover:bg-amber-50/20 transition-all group cursor-pointer text-left w-full">
           <div className="flex items-center justify-between text-gray-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Pending Dues</span>
-            <DollarSign className="w-5 h-5 text-amber-600" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Pending Dues</span>
+            <DollarSign className="w-4 h-4 text-amber-600" />
           </div>
           <p className={`text-2xl sm:text-3xl font-extrabold ${totalPendingDue > 0 ? "text-amber-600" : "text-emerald-600"}`}>
             {formatCurrency(totalPendingDue)}
@@ -353,10 +327,10 @@ export default function StudentProfilePage() {
           <p className="text-xs text-amber-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">{dues.length > 0 ? 'Pay now →' : 'View history →'}</p>
         </button>
 
-        <button onClick={() => setActiveModal('exams')} className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-violet-300 hover:shadow-md hover:bg-violet-50/20 transition-all group cursor-pointer text-left w-full">
+        <button onClick={() => setActiveModal('exams')} className="col-span-2 sm:col-span-1 bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-violet-300 hover:shadow-md hover:bg-violet-50/20 transition-all group cursor-pointer text-left w-full">
           <div className="flex items-center justify-between text-gray-500">
-            <span className="text-xs font-semibold uppercase tracking-wider">Avg Score</span>
-            <Award className="w-5 h-5 text-violet-600" />
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Avg Score</span>
+            <Award className="w-4 h-4 text-violet-600" />
           </div>
           <p className="text-2xl sm:text-3xl font-extrabold text-violet-600">{examResults.length > 0 ? `${avgScore}%` : "—"}</p>
           <p className="text-xs text-gray-500">{examResults.length} exams taken</p>
@@ -364,18 +338,155 @@ export default function StudentProfilePage() {
         </button>
       </div>
 
-      {/* My Batches */}
+      {/* 1. My Online Courses Section */}
+      <div id="my-courses" className="space-y-4 scroll-mt-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center text-purple-700">
+              <Video className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">My Online Courses</h2>
+              <p className="text-xs text-gray-500">Video lectures, study materials, and curriculum access</p>
+            </div>
+          </div>
+          <Link href="/marketplace" className="text-sm text-purple-600 hover:text-purple-700 font-semibold flex items-center gap-1">
+            Browse Courses <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
+
+        {courses.length === 0 && pendingCourseSubmissions.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 p-8 sm:p-10 text-center space-y-3">
+            <div className="w-14 h-14 bg-purple-50 rounded-2xl flex items-center justify-center mx-auto text-purple-600">
+              <Video className="w-7 h-7" />
+            </div>
+            <h3 className="text-base font-bold text-gray-900">No Online Courses Enrolled Yet</h3>
+            <p className="text-gray-500 text-xs sm:text-sm max-w-md mx-auto">
+              Enroll in expert-led recorded video courses and study materials anytime, anywhere.
+            </p>
+            <div className="pt-1">
+              <Link href="/marketplace" className="px-5 py-2 bg-purple-600 text-white font-semibold rounded-xl text-xs sm:text-sm hover:bg-purple-700 transition-colors inline-flex items-center gap-1.5 shadow-xs">
+                <PlayCircle className="w-4 h-4" /> Explore Courses
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Pending Course Submissions */}
+            {pendingCourseSubmissions.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <h3 className="text-xs sm:text-sm font-bold text-amber-700 uppercase tracking-wider">
+                    Pending Course Verification ({pendingCourseSubmissions.length})
+                  </h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pendingCourseSubmissions.map((sub, i) => {
+                    const c = sub.course
+                    return (
+                      <div key={`pending-course-${i}`} className="bg-amber-50/50 rounded-2xl border-2 border-amber-200 border-dashed p-5 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 font-semibold rounded-lg border border-purple-100">
+                              {c?.category || "Online Course"}
+                            </span>
+                            <h3 className="text-base font-bold text-gray-900 mt-1.5">{c?.title || "Online Course"}</h3>
+                          </div>
+                          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 bg-amber-100 text-amber-800 font-semibold rounded-full border border-amber-300 animate-pulse">
+                            <Clock className="w-3 h-3" /> Pending
+                          </span>
+                        </div>
+                        <div className="bg-amber-100/70 rounded-xl p-2.5 border border-amber-200/50">
+                          <p className="text-xs text-amber-800 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-amber-600" />
+                            Payment verification in progress. Access granted immediately upon approval.
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Active Purchased Courses */}
+            {courses.length > 0 && (
+              <div className="space-y-3">
+                {pendingCourseSubmissions.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <h3 className="text-xs sm:text-sm font-bold text-emerald-700 uppercase tracking-wider">
+                      Enrolled Courses ({courses.length})
+                    </h3>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {courses.map((item, idx) => {
+                    const c = item.course || {}
+                    const teacherName = c.teacher?.name || "Senior Faculty"
+                    return (
+                      <Link
+                        key={`course-${item.course_id || idx}`}
+                        href={`/student/course/${item.course_id || c.id}`}
+                        className="group bg-white rounded-2xl border border-gray-200 p-5 shadow-xs hover:shadow-lg hover:border-purple-300 transition-all space-y-3 flex flex-col justify-between cursor-pointer"
+                      >
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-lg bg-purple-50 text-purple-700 border border-purple-100">
+                              {c.category || "Online Course"}
+                            </span>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3" /> Active
+                            </span>
+                          </div>
+
+                          <div>
+                            <h3 className="text-base font-bold text-gray-900 group-hover:text-purple-700 transition-colors line-clamp-2">
+                              {c.title || "Online Course"}
+                            </h3>
+                            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
+                              <User className="w-3.5 h-3.5 text-gray-400" /> Instructor: {teacherName}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
+                          <span className="text-gray-400">
+                            {item.amount_paid ? `Paid: ${formatCurrency(item.amount_paid)}` : "Enrolled"}
+                          </span>
+                          <span className="text-purple-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                            Start Learning <PlayCircle className="w-4 h-4 ml-0.5" />
+                          </span>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 2. My Classroom Batches */}
       <div id="my-batches" className="space-y-4 scroll-mt-8">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-            <BookOpen className="w-5 h-5 text-indigo-600" /> My Batches
-          </h2>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">My Classroom Batches</h2>
+              <p className="text-xs text-gray-500">Live offline batches, room schedules, and teachers</p>
+            </div>
+          </div>
           <Link href="/marketplace" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1">
             Browse Batches <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
 
-        {enrollments.length === 0 && pendingSubmissions.length === 0 ? (
+        {enrollments.length === 0 && pendingBatchSubmissions.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-4">
             <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
               <BookOpen className="w-8 h-8" />
@@ -390,18 +501,18 @@ export default function StudentProfilePage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Pending */}
-            {pendingSubmissions.length > 0 && (
+            {/* Pending Batches */}
+            {pendingBatchSubmissions.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-amber-500" />
-                  <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider">Pending Approval ({pendingSubmissions.length})</h3>
+                  <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider">Pending Batch Approval ({pendingBatchSubmissions.length})</h3>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {pendingSubmissions.map((sub, i) => {
+                  {pendingBatchSubmissions.map((sub, i) => {
                     const b = sub.batch
                     return (
-                      <div key={`pending-${i}`} className="bg-amber-50/50 rounded-2xl border-2 border-amber-200 border-dashed p-5 space-y-3">
+                      <div key={`pending-batch-${i}`} className="bg-amber-50/50 rounded-2xl border-2 border-amber-200 border-dashed p-5 space-y-3">
                         <div className="flex items-start justify-between">
                           <div>
                             <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
@@ -424,13 +535,13 @@ export default function StudentProfilePage() {
               </div>
             )}
 
-            {/* Active */}
+            {/* Active Batches */}
             {enrollments.length > 0 && (
               <div className="space-y-3">
-                {pendingSubmissions.length > 0 && (
+                {pendingBatchSubmissions.length > 0 && (
                   <div className="flex items-center gap-2">
                     <CheckCircle className="w-4 h-4 text-emerald-500" />
-                    <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Active ({enrollments.length})</h3>
+                    <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Active Batches ({enrollments.length})</h3>
                   </div>
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
