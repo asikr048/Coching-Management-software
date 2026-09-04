@@ -21,15 +21,17 @@ import {
   Smartphone,
   Eye,
   EyeOff,
-  Copy,
   RefreshCw,
   FileText,
   Check,
   X,
-  ChevronRight,
   ShieldCheck,
-  HelpCircle,
+  Plus,
   Trash2,
+  CheckSquare,
+  Square,
+  PhoneCall,
+  Link2,
 } from "lucide-react"
 
 interface Student {
@@ -64,10 +66,20 @@ interface DueRecord {
   }
 }
 
+interface ParamItem {
+  id: string
+  key: string
+  value: string
+  description?: string
+  isStandard?: boolean
+}
+
 interface GatewayConfig {
   apiKey: string
   callType: "GET" | "POST_FORM" | "POST_JSON"
+  baseUrl: string
   urlTemplate: string
+  params: ParamItem[]
   senderId?: string
 }
 
@@ -91,7 +103,7 @@ interface CsvRecipient {
 export default function SmsPage() {
   const supabase = useMemo(() => createClient(), [])
 
-  // Active Tab: "compose" | "gateway" | "logs"
+  // Navigation Tabs: "compose" | "gateway" | "logs"
   const [activeTab, setActiveTab] = useState<"compose" | "gateway" | "logs">("compose")
 
   // Core Data
@@ -102,11 +114,19 @@ export default function SmsPage() {
   const [logs, setLogs] = useState<SmsLog[]>([])
   const [loadingData, setLoadingData] = useState(true)
 
-  // Gateway Configuration State
+  // ==========================================
+  // GATEWAY & API BUILDER STATE
+  // ==========================================
   const [gatewayConfig, setGatewayConfig] = useState<GatewayConfig>({
     apiKey: "",
     callType: "GET",
+    baseUrl: "https://api.sms.net.bd/sendsms",
     urlTemplate: "https://api.sms.net.bd/sendsms?api_key={api_key}&msg={msg}&to={to}",
+    params: [
+      { id: "p1", key: "api_key", value: "{api_key}", description: "Your API Key / Secret Token", isStandard: true },
+      { id: "p2", key: "msg", value: "{msg}", description: "URL-encoded SMS text content", isStandard: true },
+      { id: "p3", key: "to", value: "{to}", description: "Recipient mobile number", isStandard: true },
+    ],
     senderId: "",
   })
   const [showApiKey, setShowApiKey] = useState(false)
@@ -115,33 +135,41 @@ export default function SmsPage() {
   const [testPhone, setTestPhone] = useState("")
   const [testResult, setTestResult] = useState<any>(null)
 
-  // Audience Target Selection
-  // "all" | "batch" | "due" | "search" | "csv"
-  const [targetType, setTargetType] = useState<"all" | "batch" | "due" | "search" | "csv">("all")
+  // Drag over target tracking
+  const [activeDragSlot, setActiveDragSlot] = useState<string | null>(null)
+
+  // ==========================================
+  // AUDIENCE TARGET SELECTION STATE
+  // ==========================================
+  // "all" | "batch" | "due" | "custom_picker" | "direct_numbers" | "csv"
+  const [targetType, setTargetType] = useState<"all" | "batch" | "due" | "custom_picker" | "direct_numbers" | "csv">("all")
   const [targetPhoneType, setTargetPhoneType] = useState<"guardian" | "student" | "both">("guardian")
 
   // Batch Filter
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([])
 
-  // Individual Search & Selection
-  const [studentSearchQuery, setStudentSearchQuery] = useState("")
-  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
+  // Custom Student Picker Filter & Checkbox Selection
+  const [pickerSearchQuery, setPickerSearchQuery] = useState("")
+  const [pickerBatchFilter, setPickerBatchFilter] = useState<string>("all")
+  const [customSelectedStudentIds, setCustomSelectedStudentIds] = useState<string[]>([])
+
+  // Direct Custom Numbers
+  const [directNumbersText, setDirectNumbersText] = useState("")
 
   // CSV Upload
   const [csvRecipients, setCsvRecipients] = useState<CsvRecipient[]>([])
   const [csvFileName, setCsvFileName] = useState("")
 
-  // Compose Message
+  // ==========================================
+  // COMPOSE & DISPATCH STATE
+  // ==========================================
   const [message, setMessage] = useState("")
   const messageTextareaRef = useRef<HTMLTextAreaElement>(null)
-  const urlTemplateInputRef = useRef<HTMLInputElement>(null)
-
-  // Sending State & Progress
   const [sending, setSending] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [sendProgress, setSendProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 })
 
-  // 1. Load Initial Data & Settings
+  // 1. Load Data on Mount
   useEffect(() => {
     async function loadAll() {
       try {
@@ -163,7 +191,11 @@ export default function SmsPage() {
         if (settingsRes.data?.value) {
           try {
             const parsed = JSON.parse(settingsRes.data.value)
-            setGatewayConfig((prev) => ({ ...prev, ...parsed }))
+            setGatewayConfig((prev) => ({
+              ...prev,
+              ...parsed,
+              params: parsed.params?.length ? parsed.params : prev.params,
+            }))
           } catch (e) {
             console.error("Failed to parse gateway config:", e)
           }
@@ -178,19 +210,136 @@ export default function SmsPage() {
     loadAll()
   }, [supabase])
 
-  // Save Gateway Configuration
+  // ==========================================
+  // GATEWAY BUILDER HELPERS
+  // ==========================================
+  // Synchronize urlTemplate when baseUrl or params change
+  function syncUrlTemplate(base: string, paramsList: ParamItem[]) {
+    if (!base) return ""
+    const queryString = paramsList
+      .filter((p) => p.key.trim().length > 0)
+      .map((p) => `${encodeURIComponent(p.key.trim())}=${p.value || ""}`)
+      .join("&")
+    return queryString ? `${base}?${queryString}` : base
+  }
+
+  // Update a parameter key
+  function updateParamKey(id: string, newKey: string) {
+    const updated = gatewayConfig.params.map((p) => (p.id === id ? { ...p, key: newKey } : p))
+    const newTemplate = syncUrlTemplate(gatewayConfig.baseUrl, updated)
+    setGatewayConfig({ ...gatewayConfig, params: updated, urlTemplate: newTemplate })
+  }
+
+  // Assign token to parameter slot (via drop or click)
+  function assignTokenToParam(paramId: string, token: string) {
+    const updated = gatewayConfig.params.map((p) => (p.id === paramId ? { ...p, value: token } : p))
+    const newTemplate = syncUrlTemplate(gatewayConfig.baseUrl, updated)
+    setGatewayConfig({ ...gatewayConfig, params: updated, urlTemplate: newTemplate })
+    toast.success(`Assigned ${token} token`)
+  }
+
+  // Add a new custom parameter
+  function addCustomParam() {
+    const newId = "param_" + Date.now()
+    const updated = [...gatewayConfig.params, { id: newId, key: "custom_key", value: "value", isStandard: false }]
+    const newTemplate = syncUrlTemplate(gatewayConfig.baseUrl, updated)
+    setGatewayConfig({ ...gatewayConfig, params: updated, urlTemplate: newTemplate })
+    toast.info("Added custom parameter slot")
+  }
+
+  // Remove a parameter
+  function removeParam(id: string) {
+    const updated = gatewayConfig.params.filter((p) => p.id !== id)
+    const newTemplate = syncUrlTemplate(gatewayConfig.baseUrl, updated)
+    setGatewayConfig({ ...gatewayConfig, params: updated, urlTemplate: newTemplate })
+  }
+
+  // Apply Quick Gateway Preset
+  function applyGatewayPreset(preset: "sms_net_bd" | "greenweb" | "mimsms" | "ssl_wireless") {
+    if (preset === "sms_net_bd") {
+      const base = "https://api.sms.net.bd/sendsms"
+      const paramsList: ParamItem[] = [
+        { id: "p1", key: "api_key", value: "{api_key}", description: "sms.net.bd API Key", isStandard: true },
+        { id: "p2", key: "msg", value: "{msg}", description: "Encoded SMS message", isStandard: true },
+        { id: "p3", key: "to", value: "{to}", description: "Recipient (88018...)", isStandard: true },
+      ]
+      setGatewayConfig({
+        apiKey: gatewayConfig.apiKey,
+        callType: "GET",
+        baseUrl: base,
+        params: paramsList,
+        urlTemplate: syncUrlTemplate(base, paramsList),
+        senderId: "",
+      })
+      toast.success("Applied sms.net.bd preset (GET)")
+    } else if (preset === "greenweb") {
+      const base = "http://api.greenweb.com.bd/api.php"
+      const paramsList: ParamItem[] = [
+        { id: "p1", key: "token", value: "{api_key}", description: "Greenweb Token", isStandard: true },
+        { id: "p2", key: "message", value: "{msg}", description: "SMS text", isStandard: true },
+        { id: "p3", key: "to", value: "{to}", description: "Mobile number", isStandard: true },
+      ]
+      setGatewayConfig({
+        apiKey: gatewayConfig.apiKey,
+        callType: "GET",
+        baseUrl: base,
+        params: paramsList,
+        urlTemplate: syncUrlTemplate(base, paramsList),
+        senderId: "",
+      })
+      toast.success("Applied Greenweb BD preset")
+    } else if (preset === "mimsms") {
+      const base = "https://api.mimsms.com/api/v3/send-sms"
+      const paramsList: ParamItem[] = [
+        { id: "p1", key: "api_key", value: "{api_key}", description: "MIM SMS Key", isStandard: true },
+        { id: "p2", key: "msg", value: "{msg}", description: "SMS text", isStandard: true },
+        { id: "p3", key: "to", value: "{to}", description: "Recipient", isStandard: true },
+      ]
+      setGatewayConfig({
+        apiKey: gatewayConfig.apiKey,
+        callType: "POST_JSON",
+        baseUrl: base,
+        params: paramsList,
+        urlTemplate: base,
+        senderId: "",
+      })
+      toast.success("Applied MIM SMS preset (POST JSON)")
+    } else if (preset === "ssl_wireless") {
+      const base = "http://sms.sslwireless.com/pushapi/dynamic/server.php"
+      const paramsList: ParamItem[] = [
+        { id: "p1", key: "api_token", value: "{api_key}", description: "SSL Wireless API Token", isStandard: true },
+        { id: "p2", key: "sms", value: "{msg}", description: "SMS text", isStandard: true },
+        { id: "p3", key: "msisdn", value: "{to}", description: "Recipient Phone", isStandard: true },
+      ]
+      setGatewayConfig({
+        apiKey: gatewayConfig.apiKey,
+        callType: "POST_FORM",
+        baseUrl: base,
+        params: paramsList,
+        urlTemplate: base,
+        senderId: "",
+      })
+      toast.success("Applied SSL Wireless preset (POST Form)")
+    }
+  }
+
+  // Save Gateway Configuration to Supabase
   async function handleSaveGateway(e?: React.FormEvent) {
     if (e) e.preventDefault()
     if (!gatewayConfig.apiKey.trim()) {
       toast.error("Please enter your SMS Gateway API Key")
       return
     }
-    if (!gatewayConfig.urlTemplate.includes("{msg}") && !gatewayConfig.urlTemplate.includes("{MSG}")) {
-      toast.error("URL Template must include {msg} token")
+
+    const hasMsg = gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}")
+    const hasTo = gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}")
+
+    if (!hasMsg) {
+      toast.error("Please assign the {msg} token to your message parameter")
       return
     }
-    if (!gatewayConfig.urlTemplate.includes("{to}") && !gatewayConfig.urlTemplate.includes("{TO}")) {
-      toast.error("URL Template must include {to} token")
+    if (!hasTo) {
+      toast.error("Please assign the {to} token to your phone number parameter")
       return
     }
 
@@ -203,7 +352,7 @@ export default function SmsPage() {
       })
 
       if (error) throw error
-      toast.success("SMS Gateway configuration saved! All message options are now active.")
+      toast.success("✓ SMS Gateway configuration saved! All messaging options are now ready.")
     } catch (err: any) {
       toast.error(err.message || "Failed to save gateway config")
     } finally {
@@ -243,7 +392,7 @@ export default function SmsPage() {
         toast.success(`✓ Test SMS sent successfully to ${testPhone}!`)
         refreshLogs()
       } else {
-        toast.error(`Test failed: ${data.error || "Gateway returned error"}`)
+        toast.error(`Test failed: ${data.error || "Gateway returned an error"}`)
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to send test SMS")
@@ -259,80 +408,62 @@ export default function SmsPage() {
     if (data) setLogs(data)
   }
 
-  // Drag & Drop Handler for Gateway URL Builder
-  function handleDragStart(e: React.DragEvent, token: string) {
-    e.dataTransfer.setData("text/plain", token)
-  }
-
-  function handleDropToken(e: React.DragEvent) {
-    e.preventDefault()
-    const token = e.dataTransfer.getData("text/plain")
-    if (token) {
-      insertTokenIntoUrl(token)
-    }
-  }
-
-  function insertTokenIntoUrl(token: string) {
-    setGatewayConfig((prev) => {
-      // Append or insert at cursor
-      const input = urlTemplateInputRef.current
-      if (!input) {
-        return { ...prev, urlTemplate: prev.urlTemplate + token }
-      }
-      const start = input.selectionStart || prev.urlTemplate.length
-      const end = input.selectionEnd || prev.urlTemplate.length
-      const newUrl = prev.urlTemplate.substring(0, start) + token + prev.urlTemplate.substring(end)
-      return { ...prev, urlTemplate: newUrl }
-    })
-    toast.info(`Added ${token} to URL pattern`)
-  }
-
-  // Gateway Configuration Checklist Status
+  // Gateway Readiness Indicator
   const isGatewayReady = useMemo(() => {
     const hasKey = Boolean(gatewayConfig.apiKey && gatewayConfig.apiKey.trim().length > 0)
-    const hasMsg = gatewayConfig.urlTemplate.includes("{msg}") || gatewayConfig.urlTemplate.includes("{MSG}")
-    const hasTo = gatewayConfig.urlTemplate.includes("{to}") || gatewayConfig.urlTemplate.includes("{TO}")
+    const hasMsg = gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}")
+    const hasTo = gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}")
     return hasKey && hasMsg && hasTo
   }, [gatewayConfig])
 
-  // Presets for Bangladeshi SMS Providers
-  function applyGatewayPreset(preset: "sms_net_bd" | "greenweb" | "mimsms" | "ssl_wireless") {
-    if (preset === "sms_net_bd") {
-      setGatewayConfig({
-        apiKey: gatewayConfig.apiKey,
-        callType: "GET",
-        urlTemplate: "https://api.sms.net.bd/sendsms?api_key={api_key}&msg={msg}&to={to}",
-        senderId: "",
-      })
-      toast.success("Applied sms.net.bd preset URL template")
-    } else if (preset === "greenweb") {
-      setGatewayConfig({
-        apiKey: gatewayConfig.apiKey,
-        callType: "GET",
-        urlTemplate: "http://api.greenweb.com.bd/api.php?token={api_key}&to={to}&message={msg}",
-        senderId: "",
-      })
-      toast.success("Applied Greenweb BD preset URL template")
-    } else if (preset === "mimsms") {
-      setGatewayConfig({
-        apiKey: gatewayConfig.apiKey,
-        callType: "POST_JSON",
-        urlTemplate: "https://api.mimsms.com/api/v3/send-sms",
-        senderId: "",
-      })
-      toast.success("Applied MIM SMS BD preset (POST JSON)")
-    } else if (preset === "ssl_wireless") {
-      setGatewayConfig({
-        apiKey: gatewayConfig.apiKey,
-        callType: "POST_FORM",
-        urlTemplate: "http://sms.sslwireless.com/pushapi/dynamic/server.php",
-        senderId: "",
-      })
-      toast.success("Applied SSL Wireless preset (POST Form)")
-    }
+  // ==========================================
+  // AUDIENCE RESOLUTION LOGIC
+  // ==========================================
+  interface ResolvedRecipient {
+    phone: string
+    name: string
+    studentId?: string
+    batchName?: string
+    dueAmount?: number
   }
 
-  // CSV File Upload Handler
+  // Parse Direct Custom Numbers Textarea
+  const parsedDirectNumbers = useMemo(() => {
+    if (!directNumbersText.trim()) return []
+    // Split by commas, semicolons, whitespace, or newlines
+    const rawTokens = directNumbersText.split(/[,;\s\n\r]+/).filter(Boolean)
+    const valid: string[] = []
+    for (const t of rawTokens) {
+      const clean = t.replace(/[^0-9]/g, "")
+      if (clean.length >= 10 && clean.length <= 14) {
+        valid.push(clean)
+      }
+    }
+    return Array.from(new Set(valid))
+  }, [directNumbersText])
+
+  // Filtered Students in the Custom Student Picker
+  const filteredStudentsInPicker = useMemo(() => {
+    return students.filter((s) => {
+      // 1. Batch filter
+      if (pickerBatchFilter !== "all") {
+        const isEnrolled = enrollments.some((e) => e.student_id === s.id && e.batch_id === pickerBatchFilter)
+        if (!isEnrolled && s.batch_id !== pickerBatchFilter) return false
+      }
+      // 2. Search query
+      const q = pickerSearchQuery.trim().toLowerCase()
+      if (q) {
+        const nameMatch = (s.name || "").toLowerCase().includes(q)
+        const idMatch = (s.student_id || "").toLowerCase().includes(q)
+        const phoneMatch = (s.phone || "").includes(q)
+        const gPhoneMatch = (s.guardian_phone || "").includes(q)
+        if (!nameMatch && !idMatch && !phoneMatch && !gPhoneMatch) return false
+      }
+      return true
+    })
+  }, [students, pickerBatchFilter, pickerSearchQuery, enrollments])
+
+  // CSV File Handler
   function handleCsvUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -347,7 +478,6 @@ export default function SmsPage() {
       const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0)
       if (lines.length === 0) return
 
-      // Inspect header
       const headerLine = lines[0].toLowerCase()
       const isHeader =
         headerLine.includes("phone") ||
@@ -359,7 +489,6 @@ export default function SmsPage() {
       const parsed: CsvRecipient[] = []
 
       for (const line of dataLines) {
-        // Split by comma or semicolon
         const parts = line.split(/[,;\t]/).map((p) => p.trim().replace(/^["']|["']$/g, ""))
         let phone = ""
         let name = ""
@@ -367,7 +496,6 @@ export default function SmsPage() {
         if (parts.length === 1) {
           phone = parts[0]
         } else if (parts.length >= 2) {
-          // If first part looks like phone
           if (parts[0].replace(/[^0-9]/g, "").length >= 10) {
             phone = parts[0]
             name = parts[1]
@@ -381,34 +509,22 @@ export default function SmsPage() {
         const isValid = cleanedPhone.length >= 10
 
         if (phone) {
-          parsed.push({
-            phone,
-            name: name || undefined,
-            isValid,
-          })
+          parsed.push({ phone, name: name || undefined, isValid })
         }
       }
 
       setCsvRecipients(parsed)
-      toast.success(`Loaded ${parsed.length} contacts from CSV file (${parsed.filter((p) => p.isValid).length} valid)`)
+      toast.success(`Loaded ${parsed.length} contacts (${parsed.filter((p) => p.isValid).length} valid numbers)`)
     }
 
     reader.readAsText(file)
   }
 
-  // Dynamic Audience Calculation
-  interface ResolvedRecipient {
-    phone: string
-    name: string
-    studentId?: string
-    batchName?: string
-    dueAmount?: number
-  }
-
+  // Complete Resolved Audience List
   const resolvedRecipients: ResolvedRecipient[] = useMemo(() => {
     const list: ResolvedRecipient[] = []
 
-    function addRecipient(s: Student, dueAmt?: number, bName?: string) {
+    function addStudentPhones(s: Student, dueAmt?: number, bName?: string) {
       const phonesToAdd: string[] = []
       if (targetPhoneType === "guardian" || targetPhoneType === "both") {
         if (s.guardian_phone) phonesToAdd.push(s.guardian_phone)
@@ -416,7 +532,6 @@ export default function SmsPage() {
       if (targetPhoneType === "student" || targetPhoneType === "both") {
         if (s.phone) phonesToAdd.push(s.phone)
       }
-      // If neither was matched but one exists, fallback to available phone
       if (phonesToAdd.length === 0) {
         if (s.guardian_phone) phonesToAdd.push(s.guardian_phone)
         else if (s.phone) phonesToAdd.push(s.phone)
@@ -434,16 +549,15 @@ export default function SmsPage() {
     }
 
     if (targetType === "all") {
-      students.forEach((s) => addRecipient(s))
+      students.forEach((s) => addStudentPhones(s))
     } else if (targetType === "batch") {
       if (selectedBatchIds.length === 0) return []
-      // Find students enrolled in selected batches
       const enrolledStudentIds = new Set(
         enrollments.filter((e) => selectedBatchIds.includes(e.batch_id)).map((e) => e.student_id)
       )
       students.filter((s) => enrolledStudentIds.has(s.id)).forEach((s) => {
         const batchObj = batches.find((b) => selectedBatchIds.includes(b.id))
-        addRecipient(s, undefined, batchObj?.name)
+        addStudentPhones(s, undefined, batchObj?.name)
       })
     } else if (targetType === "due") {
       dues.forEach((d) => {
@@ -456,12 +570,19 @@ export default function SmsPage() {
             guardian_phone: d.student.guardian_phone,
             guardian_name: null,
           }
-          addRecipient(sObj, d.due_amount, d.due_month)
+          addStudentPhones(sObj, d.due_amount, d.due_month)
         }
       })
-    } else if (targetType === "search") {
-      const selected = students.filter((s) => selectedStudentIds.includes(s.id))
-      selected.forEach((s) => addRecipient(s))
+    } else if (targetType === "custom_picker") {
+      const selected = students.filter((s) => customSelectedStudentIds.includes(s.id))
+      selected.forEach((s) => addStudentPhones(s))
+    } else if (targetType === "direct_numbers") {
+      parsedDirectNumbers.forEach((num, idx) => {
+        list.push({
+          phone: num,
+          name: `Recipient ${idx + 1}`,
+        })
+      })
     } else if (targetType === "csv") {
       csvRecipients
         .filter((r) => r.isValid)
@@ -473,7 +594,7 @@ export default function SmsPage() {
         })
     }
 
-    // Deduplicate by phone number
+    // Deduplicate by clean phone
     const seen = new Set<string>()
     return list.filter((item) => {
       const clean = item.phone.replace(/[^0-9]/g, "")
@@ -481,25 +602,11 @@ export default function SmsPage() {
       seen.add(clean)
       return true
     })
-  }, [targetType, targetPhoneType, students, batches, enrollments, selectedBatchIds, dues, selectedStudentIds, csvRecipients])
+  }, [targetType, targetPhoneType, students, batches, enrollments, selectedBatchIds, dues, customSelectedStudentIds, parsedDirectNumbers, csvRecipients])
 
-  // Filtered students for individual selection search
-  const filteredStudentsForSearch = useMemo(() => {
-    const q = studentSearchQuery.trim().toLowerCase()
-    if (!q) return students.slice(0, 30)
-    return students.filter(
-      (s) =>
-        (s.name || "").toLowerCase().includes(q) ||
-        (s.student_id || "").toLowerCase().includes(q) ||
-        (s.phone || "").includes(q) ||
-        (s.guardian_phone || "").includes(q)
-    )
-  }, [students, studentSearchQuery])
-
-  // Character and SMS Count Calculator
+  // Message length & SMS Parts
   const smsStats = useMemo(() => {
     const len = message.length
-    // Check if Unicode (contains characters outside standard 7-bit ASCII/GSM)
     const isUnicode = /[^\u0000-\u007F]/.test(message)
     const charLimit = isUnicode ? 70 : 160
     const multiLimit = isUnicode ? 67 : 153
@@ -511,7 +618,7 @@ export default function SmsPage() {
     return { len, parts, isUnicode, charLimit }
   }, [message])
 
-  // Insert merge variable into message textarea
+  // Insert merge tag into message
   function insertMergeTag(tag: string) {
     const textarea = messageTextareaRef.current
     if (!textarea) {
@@ -543,12 +650,12 @@ export default function SmsPage() {
       text: "Dear Parent, please note that classes for {{batch}} will follow a special routine this week. Thank you. - MedhaShiree",
     },
     {
-      label: "General Announcement",
+      label: "General Notice",
       text: "Notice: Academic activities will remain closed on the upcoming public holiday. Regular classes will resume on Sunday. - MedhaShiree",
     },
   ]
 
-  // Render Sample Preview
+  // Sample Preview text
   const sampleMessagePreview = useMemo(() => {
     if (!message) return "Your message preview will appear here..."
     const sample = resolvedRecipients[0] || {
@@ -566,7 +673,7 @@ export default function SmsPage() {
     return res
   }, [message, resolvedRecipients])
 
-  // Execute Bulk Send
+  // Execute Bulk Dispatch
   async function handleExecuteBulkSend() {
     if (resolvedRecipients.length === 0) {
       toast.error("No recipients selected")
@@ -594,7 +701,6 @@ export default function SmsPage() {
       for (let i = 0; i < resolvedRecipients.length; i += batchSize) {
         const chunk = resolvedRecipients.slice(i, i + batchSize)
 
-        // Personalized message for each recipient
         const payloadRecipients = chunk.map((rec) => {
           let customMsg = message
           customMsg = customMsg.replace(/\{\{name\}\}/gi, rec.name || "Student")
@@ -654,7 +760,7 @@ export default function SmsPage() {
               Bulk SMS Management
             </h1>
             <p className="text-xs text-gray-500 mt-1">
-              Send targeted SMS notices, fee reminders, and announcements with custom gateway support
+              Visual SMS Gateway builder and multi-mode student audience targeting
             </p>
           </div>
         </div>
@@ -669,7 +775,7 @@ export default function SmsPage() {
           ) : (
             <button
               onClick={() => setActiveTab("gateway")}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors cursor-pointer"
             >
               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
               Configure Gateway API Key
@@ -733,13 +839,14 @@ export default function SmsPage() {
                 </span>
               </div>
 
-              {/* Target Mode Buttons */}
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {/* Target Mode Navigation */}
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                 {[
                   { id: "all", label: "All Active", icon: Users },
                   { id: "batch", label: "Batch-wise", icon: Layers },
                   { id: "due", label: "Due Fees", icon: AlertTriangle },
-                  { id: "search", label: "Search & Pick", icon: Search },
+                  { id: "custom_picker", label: "Custom Student Picker", icon: Search },
+                  { id: "direct_numbers", label: "Custom Numbers", icon: PhoneCall },
                   { id: "csv", label: "Custom CSV", icon: Upload },
                 ].map((mode) => {
                   const Icon = mode.icon
@@ -756,14 +863,14 @@ export default function SmsPage() {
                       }`}
                     >
                       <Icon className={`w-4 h-4 ${isActive ? "text-indigo-600" : "text-gray-400"}`} />
-                      <span className="text-[11px] leading-tight">{mode.label}</span>
+                      <span className="text-[10px] leading-tight font-bold">{mode.label}</span>
                     </button>
                   )
                 })}
               </div>
 
               {/* Phone Target Selector (Guardian vs Student) */}
-              {targetType !== "csv" && (
+              {targetType !== "csv" && targetType !== "direct_numbers" && (
                 <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/80 flex items-center justify-between gap-3">
                   <span className="text-xs font-bold text-gray-700">Send To:</span>
                   <div className="flex items-center gap-2">
@@ -789,7 +896,7 @@ export default function SmsPage() {
                 </div>
               )}
 
-              {/* SUB-PANEL: All Students */}
+              {/* SUB-PANEL: All Active */}
               {targetType === "all" && (
                 <div className="p-4 bg-indigo-50/40 rounded-xl border border-indigo-100 text-center space-y-1">
                   <p className="text-xs font-bold text-gray-800">Targeting All Active Enrolled Students</p>
@@ -810,7 +917,7 @@ export default function SmsPage() {
                         if (selectedBatchIds.length === batches.length) setSelectedBatchIds([])
                         else setSelectedBatchIds(batches.map((b) => b.id))
                       }}
-                      className="text-[11px] font-bold text-indigo-600 hover:underline"
+                      className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
                     >
                       {selectedBatchIds.length === batches.length ? "Deselect All" : "Select All Batches"}
                     </button>
@@ -856,7 +963,7 @@ export default function SmsPage() {
                     <div className="text-xs text-amber-900">
                       <p className="font-bold">Students with Outstanding Dues ({dues.length})</p>
                       <p className="text-[11px] text-amber-800 mt-0.5">
-                        You can use the tag <code className="px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">{"{{due_amount}}"}</code> in your message to insert each student's exact owed amount!
+                        Use <code className="px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">{"{{due_amount}}"}</code> in your message to automatically insert each student's exact owed amount!
                       </p>
                     </div>
                   </div>
@@ -878,70 +985,121 @@ export default function SmsPage() {
                 </div>
               )}
 
-              {/* SUB-PANEL: Search & Individual Selection */}
-              {targetType === "search" && (
+              {/* SUB-PANEL: CUSTOM STUDENT PICKER (Comprehensive selection) */}
+              {targetType === "custom_picker" && (
                 <div className="space-y-3">
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      value={studentSearchQuery}
-                      onChange={(e) => setStudentSearchQuery(e.target.value)}
-                      placeholder="Search student by name, ID, or phone..."
-                      className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-gray-500 font-medium">
-                      Selected: <strong className="text-indigo-600">{selectedStudentIds.length}</strong> students
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const visibleIds = filteredStudentsForSearch.map((s) => s.id)
-                        const allSelected = visibleIds.every((id) => selectedStudentIds.includes(id))
-                        if (allSelected) {
-                          setSelectedStudentIds(selectedStudentIds.filter((id) => !visibleIds.includes(id)))
-                        } else {
-                          setSelectedStudentIds(Array.from(new Set([...selectedStudentIds, ...visibleIds])))
-                        }
-                      }}
-                      className="text-indigo-600 font-bold hover:underline"
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={pickerSearchQuery}
+                        onChange={(e) => setPickerSearchQuery(e.target.value)}
+                        placeholder="Search student name, ID, or phone..."
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600 shadow-sm"
+                      />
+                    </div>
+                    <select
+                      value={pickerBatchFilter}
+                      onChange={(e) => setPickerBatchFilter(e.target.value)}
+                      className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none focus:border-indigo-600 shadow-sm"
                     >
-                      Select All Filtered
-                    </button>
+                      <option value="all">All Batches</option>
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="max-h-52 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-white">
-                    {filteredStudentsForSearch.map((s) => {
-                      const isSelected = selectedStudentIds.includes(s.id)
+
+                  <div className="flex items-center justify-between text-xs px-1">
+                    <span className="text-gray-500 font-medium">
+                      Showing {filteredStudentsInPicker.length} • Selected:{" "}
+                      <strong className="text-indigo-600 font-bold">{customSelectedStudentIds.length}</strong>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const visibleIds = filteredStudentsInPicker.map((s) => s.id)
+                          setCustomSelectedStudentIds(Array.from(new Set([...customSelectedStudentIds, ...visibleIds])))
+                        }}
+                        className="text-indigo-600 font-bold hover:underline cursor-pointer"
+                      >
+                        Select All Filtered
+                      </button>
+                      <span>•</span>
+                      <button
+                        type="button"
+                        onClick={() => setCustomSelectedStudentIds([])}
+                        className="text-rose-600 font-bold hover:underline cursor-pointer"
+                      >
+                        Clear Selection
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-white shadow-inner">
+                    {filteredStudentsInPicker.map((s) => {
+                      const isSelected = customSelectedStudentIds.includes(s.id)
                       return (
                         <label
                           key={s.id}
                           className={`p-2.5 flex items-center justify-between cursor-pointer transition-colors ${
-                            isSelected ? "bg-indigo-50/60" : "hover:bg-gray-50"
+                            isSelected ? "bg-indigo-50/70" : "hover:bg-gray-50"
                           }`}
                         >
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={(e) => {
-                                if (e.target.checked) setSelectedStudentIds([...selectedStudentIds, s.id])
-                                else setSelectedStudentIds(selectedStudentIds.filter((id) => id !== s.id))
+                                if (e.target.checked) setCustomSelectedStudentIds([...customSelectedStudentIds, s.id])
+                                else setCustomSelectedStudentIds(customSelectedStudentIds.filter((id) => id !== s.id))
                               }}
-                              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
+                              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0"
                             />
-                            <div>
-                              <p className="text-xs font-bold text-gray-900">{s.name}</p>
+                            <div className="truncate">
+                              <p className="text-xs font-bold text-gray-900 truncate">{s.name}</p>
                               <p className="text-[11px] text-gray-500 font-mono">
-                                {s.student_id} • {s.guardian_phone || s.phone || "No phone"}
+                                <span className="font-semibold text-indigo-600">{s.student_id}</span> • G:{" "}
+                                {s.guardian_phone || "N/A"} • S: {s.phone || "N/A"}
                               </p>
                             </div>
                           </div>
                         </label>
                       )
                     })}
+                    {filteredStudentsInPicker.length === 0 && (
+                      <div className="p-6 text-center text-xs text-gray-400">No matching students found.</div>
+                    )}
                   </div>
+                </div>
+              )}
+
+              {/* SUB-PANEL: DIRECT CUSTOM PHONE NUMBERS */}
+              {targetType === "direct_numbers" && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-gray-700">
+                      Paste / Type Custom Phone Numbers:
+                    </label>
+                    <span className="text-xs font-bold text-indigo-600">
+                      {parsedDirectNumbers.length} Valid Numbers
+                    </span>
+                  </div>
+                  <textarea
+                    rows={4}
+                    value={directNumbersText}
+                    onChange={(e) => setDirectNumbersText(e.target.value)}
+                    placeholder="Enter phone numbers separated by comma, space, or newline...&#10;e.g.&#10;01800000000&#10;01711111111&#10;01922222222"
+                    className="w-full p-3 bg-white border-2 border-gray-200 rounded-xl font-mono text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600"
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    Supports Bangladeshi formats: <code className="font-bold">01XXXXXXXXX</code> or{" "}
+                    <code className="font-bold">8801XXXXXXXXX</code>
+                  </p>
                 </div>
               )}
 
@@ -950,20 +1108,14 @@ export default function SmsPage() {
                 <div className="space-y-3">
                   <div className="border-2 border-dashed border-gray-300 hover:border-indigo-400 bg-gray-50/60 hover:bg-indigo-50/30 rounded-2xl p-5 text-center transition-all">
                     <Upload className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-gray-800">
-                      Upload CSV / TXT Contact List
-                    </p>
+                    <p className="text-xs font-bold text-gray-800">Upload CSV / TXT Contact List</p>
                     <p className="text-[11px] text-gray-500 mt-0.5">
-                      File format: Columns for <span className="font-mono font-bold">phone</span> and optional <span className="font-mono font-bold">name</span>
+                      File format: Column for <span className="font-mono font-bold">phone</span> and optional{" "}
+                      <span className="font-mono font-bold">name</span>
                     </p>
                     <label className="mt-3 inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer">
                       Browse File
-                      <input
-                        type="file"
-                        accept=".csv,.txt"
-                        onChange={handleCsvUpload}
-                        className="hidden"
-                      />
+                      <input type="file" accept=".csv,.txt" onChange={handleCsvUpload} className="hidden" />
                     </label>
                   </div>
 
@@ -980,7 +1132,7 @@ export default function SmsPage() {
                           setCsvFileName("")
                           setCsvRecipients([])
                         }}
-                        className="text-rose-600 hover:text-rose-800 font-bold text-[11px]"
+                        className="text-rose-600 hover:text-rose-800 font-bold text-[11px] cursor-pointer"
                       >
                         Remove
                       </button>
@@ -990,7 +1142,7 @@ export default function SmsPage() {
               )}
             </div>
 
-            {/* Recipient Preview Count Summary Card */}
+            {/* Recipient Count Summary Banner */}
             <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-4 text-white shadow-md flex items-center justify-between">
               <div>
                 <p className="text-xs text-indigo-100 font-semibold uppercase tracking-wider">Ready to Deliver</p>
@@ -1000,7 +1152,7 @@ export default function SmsPage() {
               </div>
               <div className="text-right">
                 <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-lg text-xs font-bold inline-block">
-                  Target: {targetPhoneType.toUpperCase()}
+                  {targetType.toUpperCase().replace("_", " ")}
                 </span>
                 <p className="text-[11px] text-indigo-100 mt-1">Est. {resolvedRecipients.length * smsStats.parts} SMS Parts</p>
               </div>
@@ -1133,7 +1285,7 @@ export default function SmsPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: GATEWAY & API SETTINGS (DRAG AND DROP BUILDER) */}
+      {/* TAB 2: GATEWAY & API SETTINGS (VISUAL DRAG & DROP BUILDER) */}
       {/* ========================================================================= */}
       {activeTab === "gateway" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1147,15 +1299,15 @@ export default function SmsPage() {
                   <div>
                     <h2 className="text-base font-black text-gray-900">Custom SMS Gateway API Builder</h2>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Connect any SMS provider (sms.net.bd, Greenweb, SSL Wireless, etc.) with drag & drop token configuration
+                      Visual parameter mapping with drag-and-drop token placement for sms.net.bd and any SMS provider
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Provider 1-Click Presets */}
+              {/* 1-Click Provider Templates */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-2">1-Click Provider Templates:</label>
+                <label className="block text-xs font-bold text-gray-700 mb-2">1-Click Provider Presets:</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <button
                     type="button"
@@ -1188,7 +1340,7 @@ export default function SmsPage() {
                 </div>
               </div>
 
-              {/* 1. API Key Field */}
+              {/* 1. API Key */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
                   1. Provider API Key *
@@ -1205,26 +1357,23 @@ export default function SmsPage() {
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
                   >
                     {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Provided in your SMS account dashboard (e.g. from sms.net.bd / developer settings).
-                </p>
               </div>
 
-              {/* 2. Call Type Selection */}
+              {/* 2. HTTP Call Type Selection */}
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1.5">
                   2. HTTP Call Type / Request Method *
                 </label>
                 <div className="grid grid-cols-3 gap-3">
                   {[
-                    { id: "GET", label: "GET (URL Parameters)", hint: "Standard for sms.net.bd" },
-                    { id: "POST_FORM", label: "POST (Form UrlEncoded)", hint: "Traditional form post" },
-                    { id: "POST_JSON", label: "POST (JSON Body)", hint: "Modern REST API" },
+                    { id: "GET", label: "GET (URL Query)", hint: "Matches sms.net.bd" },
+                    { id: "POST_FORM", label: "POST (Form-urlencoded)", hint: "Standard Form POST" },
+                    { id: "POST_JSON", label: "POST (JSON Body)", hint: "REST API format" },
                   ].map((ct) => (
                     <label
                       key={ct.id}
@@ -1250,30 +1399,56 @@ export default function SmsPage() {
                 </div>
               </div>
 
-              {/* 3. Drag & Drop Tokens */}
-              <div className="p-4 bg-gradient-to-r from-indigo-50 via-purple-50 to-blue-50 rounded-2xl border border-indigo-200/80">
-                <div className="flex items-center justify-between mb-2">
+              {/* 3. Base Endpoint URL */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  3. Base Gateway Endpoint URL *
+                </label>
+                <div className="relative">
+                  <Link2 className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    required
+                    value={gatewayConfig.baseUrl}
+                    onChange={(e) => {
+                      const base = e.target.value
+                      const newTemplate = syncUrlTemplate(base, gatewayConfig.params)
+                      setGatewayConfig({ ...gatewayConfig, baseUrl: base, urlTemplate: newTemplate })
+                    }}
+                    placeholder="https://api.sms.net.bd/sendsms"
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* 4. DRAGGABLE TOKEN TOOLBOX */}
+              <div className="p-4 bg-gradient-to-r from-indigo-50 via-purple-50 to-blue-50 rounded-2xl border-2 border-indigo-200/80 space-y-2">
+                <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-gray-900 flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-indigo-600" />
-                    3. Draggable Variables (Drag into URL or Click to Append):
+                    4. Draggable Variable Tokens (Drag into slots below or click to assign):
                   </span>
-                  <span className="text-[11px] text-indigo-700 font-medium">Drag & drop anywhere into the input below</span>
+                  <span className="text-[11px] text-indigo-700 font-bold hidden sm:inline">
+                    Drag tokens into the destination parameter slots below
+                  </span>
                 </div>
 
                 <div className="flex flex-wrap gap-2.5 pt-1">
                   {[
-                    { token: "{msg}", label: "Message Content", desc: "Encoded SMS text" },
-                    { token: "{to}", label: "Phone Number", desc: "Recipient mobile" },
-                    { token: "{api_key}", label: "API Key", desc: "Your auth token" },
+                    { token: "{msg}", label: "Message Content", desc: "Encoded SMS text", color: "indigo" },
+                    { token: "{to}", label: "Phone Number", desc: "Recipient mobile", color: "purple" },
+                    { token: "{api_key}", label: "API Key", desc: "Your auth token", color: "blue" },
                   ].map((item) => (
                     <div
                       key={item.token}
                       draggable
-                      onDragStart={(e) => handleDragStart(e, item.token)}
-                      onClick={() => insertTokenIntoUrl(item.token)}
-                      className="px-3 py-2 bg-white border-2 border-indigo-400 hover:border-indigo-600 rounded-xl shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-all flex items-center gap-2 group"
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", item.token)
+                        e.dataTransfer.setData("tokenType", item.token)
+                      }}
+                      className="px-3.5 py-2 bg-white border-2 border-indigo-300 hover:border-indigo-600 rounded-xl shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-all flex items-center gap-2 group select-none"
                     >
-                      <span className="font-mono font-black text-xs text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                      <span className="font-mono font-black text-xs text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
                         {item.token}
                       </span>
                       <span className="text-xs font-bold text-gray-800">{item.label}</span>
@@ -1282,58 +1457,131 @@ export default function SmsPage() {
                 </div>
               </div>
 
-              {/* 4. URL Pattern / Endpoint Drop Target */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-gray-700">
-                    4. Gateway URL Template (Drop target) *
+              {/* 5. VISUAL PARAMETER SLOTS (DROP TARGETS) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-gray-900">
+                    5. Parameter Mapping & Drop Targets:
                   </label>
                   <button
                     type="button"
-                    onClick={() =>
-                      setGatewayConfig({
-                        ...gatewayConfig,
-                        urlTemplate: "https://api.sms.net.bd/sendsms?api_key={api_key}&msg={msg}&to={to}",
-                      })
-                    }
-                    className="text-[11px] text-indigo-600 font-bold hover:underline"
+                    onClick={addCustomParam}
+                    className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-lg cursor-pointer"
                   >
-                    Reset to sms.net.bd default
+                    <Plus className="w-3.5 h-3.5" /> Add Custom Parameter
                   </button>
                 </div>
 
-                <div
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={handleDropToken}
-                  className="relative group"
-                >
-                  <input
-                    ref={urlTemplateInputRef}
-                    type="text"
-                    required
-                    value={gatewayConfig.urlTemplate}
-                    onChange={(e) => setGatewayConfig({ ...gatewayConfig, urlTemplate: e.target.value })}
-                    placeholder="https://api.sms.net.bd/sendsms?api_key={api_key}&msg={msg}&to={to}"
-                    className="w-full px-4 py-3 bg-white border-2 border-indigo-300 group-hover:border-indigo-500 rounded-xl font-mono text-xs text-gray-900 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 shadow-sm transition-all"
-                  />
+                <div className="space-y-3">
+                  {gatewayConfig.params.map((param, idx) => {
+                    const isOver = activeDragSlot === param.id
+                    const isAssigned = param.value.startsWith("{") && param.value.endsWith("}")
+
+                    return (
+                      <div
+                        key={param.id}
+                        onDragOver={(e) => {
+                          e.preventDefault()
+                          setActiveDragSlot(param.id)
+                        }}
+                        onDragLeave={() => setActiveDragSlot(null)}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          setActiveDragSlot(null)
+                          const token = e.dataTransfer.getData("text/plain")
+                          if (token) assignTokenToParam(param.id, token)
+                        }}
+                        className={`p-3.5 rounded-2xl border-2 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                          isOver
+                            ? "border-indigo-600 bg-indigo-50 ring-4 ring-indigo-100 scale-[1.01]"
+                            : isAssigned
+                            ? "border-emerald-200 bg-emerald-50/30"
+                            : "border-gray-200 bg-white"
+                        }`}
+                      >
+                        {/* Parameter Key */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-mono font-bold text-gray-400 w-5">#{idx + 1}</span>
+                          <div>
+                            <span className="text-[10px] font-bold text-gray-400 block uppercase">Param Name</span>
+                            <input
+                              type="text"
+                              value={param.key}
+                              onChange={(e) => updateParamKey(param.id, e.target.value)}
+                              className="px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900 focus:outline-none focus:border-indigo-600 w-28"
+                            />
+                          </div>
+                          <span className="text-gray-400 font-bold">=</span>
+                        </div>
+
+                        {/* Drop Target Box */}
+                        <div className="flex-1 flex items-center gap-2">
+                          <div
+                            className={`flex-1 p-2.5 rounded-xl border-2 border-dashed flex items-center justify-between transition-all ${
+                              isOver
+                                ? "border-indigo-600 bg-indigo-100 text-indigo-900 font-black animate-pulse"
+                                : isAssigned
+                                ? "border-emerald-400 bg-white text-emerald-950 font-bold"
+                                : "border-gray-300 bg-gray-50/70 text-gray-400"
+                            }`}
+                          >
+                            <span className="text-xs font-mono">
+                              {isOver ? "📥 Drop Token Here!" : param.value || "Drop token here"}
+                            </span>
+
+                            {isAssigned && (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                                <Check className="w-3 h-3" /> Configured
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Quick assign buttons */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {["{msg}", "{to}", "{api_key}"].map((tk) => (
+                              <button
+                                key={tk}
+                                type="button"
+                                onClick={() => assignTokenToParam(param.id, tk)}
+                                className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
+                                  param.value === tk
+                                    ? "bg-indigo-600 text-white"
+                                    : "bg-gray-100 hover:bg-indigo-50 text-gray-700 border border-gray-200"
+                                }`}
+                                title={`Assign ${tk} to this slot`}
+                              >
+                                {tk}
+                              </button>
+                            ))}
+                            {!param.isStandard && (
+                              <button
+                                type="button"
+                                onClick={() => removeParam(param.id)}
+                                className="p-1 text-gray-400 hover:text-rose-600 p-1.5 rounded-lg"
+                                title="Remove parameter"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Ensure <code className="font-bold text-gray-600">{"{api_key}"}</code>, <code className="font-bold text-gray-600">{"{msg}"}</code>, and <code className="font-bold text-gray-600">{"{to}"}</code> placeholders are positioned where your provider requires them.
-                </p>
               </div>
 
-              {/* Live Assembled URL Preview */}
-              <div className="p-4 bg-slate-900 rounded-xl text-slate-300 font-mono text-xs space-y-1 overflow-x-auto border border-slate-800">
-                <p className="text-[10px] text-slate-500 uppercase tracking-wider font-sans font-bold">
-                  Live Request Sample Preview
+              {/* Assembled Request URL Preview */}
+              <div className="p-4 bg-slate-900 rounded-xl text-slate-300 font-mono text-xs space-y-1.5 border border-slate-800">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-sans font-bold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  Live Assembled Request URL
                 </p>
-                <p className="text-emerald-400 break-all">
-                  {gatewayConfig.callType === "GET"
-                    ? gatewayConfig.urlTemplate
-                        .replace(/\{api_key\}|\{API_KEY\}/g, gatewayConfig.apiKey || "YOUR_API_KEY")
-                        .replace(/\{msg\}|\{MSG\}/g, "Hello%20MedhaShiree")
-                        .replace(/\{to\}|\{TO\}/g, "8801800000000")
-                    : `[${gatewayConfig.callType}] ${gatewayConfig.urlTemplate} (payload: api_key, msg, to)`}
+                <p className="text-emerald-400 break-all text-xs">
+                  {gatewayConfig.urlTemplate
+                    .replace(/\{api_key\}|\{API_KEY\}/g, gatewayConfig.apiKey || "YOUR_API_KEY")
+                    .replace(/\{msg\}|\{MSG\}/g, "Hello%20Student")
+                    .replace(/\{to\}|\{TO\}/g, "8801800000000")}
                 </p>
               </div>
 
@@ -1341,7 +1589,7 @@ export default function SmsPage() {
               <button
                 type="submit"
                 disabled={savingGateway}
-                className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-2 disabled:bg-indigo-400 cursor-pointer"
+                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-2 disabled:bg-indigo-400 cursor-pointer"
               >
                 {savingGateway ? (
                   <>
@@ -1378,14 +1626,14 @@ export default function SmsPage() {
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  {gatewayConfig.urlTemplate.includes("{msg}") || gatewayConfig.urlTemplate.includes("{MSG}") ? (
+                  {gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}") ? (
                     <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                   ) : (
                     <X className="w-4 h-4 text-rose-500 shrink-0" />
                   )}
                   <span
                     className={
-                      gatewayConfig.urlTemplate.includes("{msg}") || gatewayConfig.urlTemplate.includes("{MSG}")
+                      gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}")
                         ? "text-gray-800 font-bold"
                         : "text-gray-400"
                     }
@@ -1395,14 +1643,14 @@ export default function SmsPage() {
                 </div>
 
                 <div className="flex items-center gap-2.5">
-                  {gatewayConfig.urlTemplate.includes("{to}") || gatewayConfig.urlTemplate.includes("{TO}") ? (
+                  {gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}") ? (
                     <Check className="w-4 h-4 text-emerald-600 shrink-0" />
                   ) : (
                     <X className="w-4 h-4 text-rose-500 shrink-0" />
                   )}
                   <span
                     className={
-                      gatewayConfig.urlTemplate.includes("{to}") || gatewayConfig.urlTemplate.includes("{TO}")
+                      gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}")
                         ? "text-gray-800 font-bold"
                         : "text-gray-400"
                     }
@@ -1568,7 +1816,7 @@ export default function SmsPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1602,14 +1850,14 @@ export default function SmsPage() {
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-xs hover:bg-gray-50 transition-colors"
+                className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-xs hover:bg-gray-50 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleExecuteBulkSend}
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" /> Start Dispatch
               </button>
@@ -1625,12 +1873,9 @@ export default function SmsPage() {
             <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mx-auto" />
             <div>
               <h3 className="text-base font-black text-gray-900">Dispatching Messages...</h3>
-              <p className="text-xs text-gray-500 mt-1">
-                Please keep this window open while sending.
-              </p>
+              <p className="text-xs text-gray-500 mt-1">Please keep this window open while sending.</p>
             </div>
 
-            {/* Progress Bar */}
             <div className="space-y-1.5">
               <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
                 <div
