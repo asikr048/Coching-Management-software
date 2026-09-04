@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
-import { CheckCircle, Clock, User, Loader2, LayoutDashboard } from "lucide-react"
+import { CheckCircle, Clock, User, Loader2, LayoutDashboard, GraduationCap, ArrowRight } from "lucide-react"
 
 export default function EnrollButton({ 
   batchId, 
@@ -134,11 +134,16 @@ export default function EnrollButton({
   // not_logged_in or can_enroll
   return (
     <div className="space-y-2">
-      <div className="w-full py-3 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl font-bold text-center text-sm shadow-xs">
-        Admission via Coaching Office
-      </div>
+      <Link
+        href={`/enroll?batchId=${batchId}`}
+        className="group relative w-full py-3.5 px-6 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-center rounded-xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all transform active:scale-[0.99] flex items-center justify-center gap-2.5 text-base"
+      >
+        <GraduationCap className="w-5 h-5 transition-transform group-hover:scale-110" />
+        <span>Enroll Now</span>
+        <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+      </Link>
       <p className="text-xs text-center text-gray-500">
-        Please visit coaching reception or contact admin to register for this batch.
+        Click to complete admission form &amp; online payment
       </p>
     </div>
   )

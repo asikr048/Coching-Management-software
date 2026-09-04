@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import {
   CheckCircle, XCircle, Clock, Loader2, Phone, Hash, FileText,
-  AlertCircle, Filter, Banknote
+  AlertCircle, Filter, Banknote, Search, Copy, Check, X
 } from "lucide-react"
 
 interface Submission {
@@ -53,13 +53,57 @@ export default function ApprovalsClient({
 }: { submissions: Submission[]; canApprove: boolean; staffId: string }) {
   const [submissions, setSubmissions] = useState(initial)
   const [filter, setFilter] = useState<"all" | "pending" | "approved" | "rejected">("pending")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [copiedText, setCopiedText] = useState<string | null>(null)
   const [processing, setProcessing] = useState<string | null>(null)
   const [rejectModal, setRejectModal] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState("")
   const [approveModal, setApproveModal] = useState<Submission | null>(null)
   const supabase = createClient()
 
-  const filtered = filter === "all" ? submissions : submissions.filter(s => s.status === filter)
+  function copyToClipboard(text: string, label: string) {
+    if (!text) return
+    navigator.clipboard.writeText(text)
+    setCopiedText(text)
+    toast.success(`${label} copied!`)
+    setTimeout(() => setCopiedText(null), 2000)
+  }
+
+  const q = searchQuery.trim().toLowerCase()
+  const filtered = submissions.filter(s => {
+    // 1. Status filter
+    if (filter !== "all" && s.status !== filter) return false
+
+    // 2. Search query filter across all requested attributes:
+    // "searched by number , payment number ,id or other"
+    if (!q) return true
+    const studentPhone = s.student?.phone?.toLowerCase() || ""
+    const senderNumber = s.sender_number?.toLowerCase() || ""
+    const studentId = s.student?.student_id?.toLowerCase() || ""
+    const trxId = s.transaction_id?.toLowerCase() || ""
+    const studentName = s.student?.name?.toLowerCase() || ""
+    const studentEmail = s.student?.email?.toLowerCase() || ""
+    const batchName = s.batch?.name?.toLowerCase() || ""
+    const batchSubject = s.batch?.subject?.toLowerCase() || ""
+    const subId = s.id?.toLowerCase() || ""
+    const method = s.payment_method?.toLowerCase() || ""
+    const notes = s.notes?.toLowerCase() || ""
+
+    return (
+      studentPhone.includes(q) ||
+      senderNumber.includes(q) ||
+      studentId.includes(q) ||
+      trxId.includes(q) ||
+      studentName.includes(q) ||
+      studentEmail.includes(q) ||
+      batchName.includes(q) ||
+      batchSubject.includes(q) ||
+      subId.includes(q) ||
+      method.includes(q) ||
+      notes.includes(q)
+    )
+  })
+
   const pendingCount = submissions.filter(s => s.status === "pending").length
 
   async function handleApprove(id: string, sub: Submission) {
@@ -205,63 +249,149 @@ export default function ApprovalsClient({
   }
 
   return (
-    <div>
-      {/* Filter tabs */}
-      <div className="flex items-center gap-2 mb-6">
-        <Filter className="w-4 h-4 text-gray-400" />
-        {(["pending", "approved", "rejected", "all"] as const).map(f => (
-          <button
-            key={f} onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${filter === f ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-          >
-            {f.charAt(0).toUpperCase() + f.slice(1)}
-            {f === "pending" && pendingCount > 0 && (
-              <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-xs">{pendingCount}</span>
+    <div className="space-y-4">
+      {/* Search and Filter Control Bar */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-xs space-y-3">
+        {/* Real-time search across number, payment sender number, ID, TrxID, or name */}
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search by student phone, sender number, student ID (MS-...), TrxID, name, or batch..."
+            className="w-full pl-10 pr-10 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all placeholder-gray-400"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 rounded-md cursor-pointer"
+              title="Clear search"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter tabs & live count */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            <Filter className="w-3.5 h-3.5 text-gray-400 mr-1 flex-shrink-0" />
+            {(["pending", "approved", "rejected", "all"] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${filter === f ? "bg-indigo-600 text-white shadow-xs" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+                {f === "pending" && pendingCount > 0 && (
+                  <span className="ml-1.5 px-1.5 py-0.5 bg-white/20 rounded-full text-[10px]">{pendingCount}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="text-xs text-gray-500 flex items-center gap-2">
+            <span>
+              Showing <strong className="text-gray-900 font-bold">{filtered.length}</strong> of {submissions.length} submissions
+            </span>
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer"
+              >
+                Clear filter
+              </button>
             )}
-          </button>
-        ))}
+          </div>
+        </div>
       </div>
 
       {/* Submissions list */}
       {filtered.length === 0 ? (
-        <div className="text-center py-16 text-gray-400">
-          <Banknote className="w-12 h-12 mx-auto mb-3 opacity-40" />
-          <p className="font-medium">No {filter === "all" ? "" : filter} payment submissions</p>
-          <p className="text-sm mt-1">{filter === "pending" ? "All caught up! No payments waiting for approval." : "Try changing the filter."}</p>
+        <div className="bg-white rounded-2xl border border-gray-200 text-center py-16 px-4 text-gray-400">
+          <Banknote className="w-12 h-12 mx-auto mb-3 opacity-40 text-gray-400" />
+          <p className="font-semibold text-gray-700">No payment submissions found</p>
+          <p className="text-xs mt-1 text-gray-400 max-w-sm mx-auto">
+            {searchQuery
+              ? `No submissions matched "${searchQuery}". Try searching by a different number, ID, or name.`
+              : filter === "pending"
+              ? "All caught up! No payments currently waiting for approval."
+              : "Try switching filters."}
+          </p>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              className="mt-4 px-4 py-2 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-100 transition-colors cursor-pointer"
+            >
+              Reset Search
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">
           {filtered.map(sub => (
-            <div key={sub.id} className={`bg-white rounded-xl border p-5 transition-shadow hover:shadow-md ${sub.status === "pending" ? "border-amber-200 border-l-4 border-l-amber-400" : "border-gray-200"}`}>
+            <div
+              key={sub.id}
+              className={`bg-white rounded-2xl border p-5 transition-shadow hover:shadow-md ${sub.status === "pending" ? "border-amber-200 border-l-4 border-l-amber-400" : "border-gray-200"}`}
+            >
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
                   {/* Header */}
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex flex-wrap items-center gap-3 mb-2">
                     <div className="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-700 font-bold text-sm">
                       {sub.student?.name?.charAt(0)?.toUpperCase() || "?"}
                     </div>
                     <div>
-                      <p className="font-semibold text-gray-800">{sub.student?.name || "Unknown"}</p>
-                      <p className="text-xs text-gray-500 font-mono">{sub.student?.student_id || ""}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-gray-900">{sub.student?.name || "Unknown Student"}</p>
+                        {sub.student?.student_id && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded text-[11px] font-mono font-bold">
+                            {sub.student.student_id}
+                            <button
+                              onClick={() => copyToClipboard(sub.student!.student_id, "Student ID")}
+                              className="hover:text-indigo-900 cursor-pointer p-0.5"
+                              title="Copy Student ID"
+                            >
+                              {copiedText === sub.student.student_id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                      {sub.student?.phone && (
+                        <p className="text-xs text-gray-500 font-mono mt-0.5 flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-gray-400" />
+                          <span>{sub.student.phone}</span>
+                          <button
+                            onClick={() => copyToClipboard(sub.student!.phone!, "Student phone")}
+                            className="hover:text-gray-700 cursor-pointer p-0.5 text-gray-400"
+                            title="Copy student phone"
+                          >
+                            {copiedText === sub.student.phone ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                          </button>
+                        </p>
+                      )}
                     </div>
-                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${statusColors[sub.status]}`}>
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ml-auto sm:ml-0 ${statusColors[sub.status]}`}>
                       {statusIcons[sub.status]} {sub.status.charAt(0).toUpperCase() + sub.status.slice(1)}
                     </span>
                   </div>
 
                   {/* Details grid */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mt-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-gray-100">
                     <div>
                       <p className="text-xs text-gray-400">Batch</p>
-                      <p className="font-medium text-gray-700 truncate">{sub.batch?.name || "—"}</p>
+                      <p className="font-medium text-gray-800 truncate">{sub.batch?.name || "—"}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Amount</p>
+                      <p className="text-xs text-gray-400">Amount Paid</p>
                       <p className="font-bold text-emerald-600">{formatCurrency(sub.amount)}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-400">Due</p>
-                      <p className={`font-semibold ${sub.due_amount > 0 ? "text-red-600" : "text-gray-400"}`}>{formatCurrency(sub.due_amount)}</p>
+                      <p className="text-xs text-gray-400">Due Remaining</p>
+                      <p className={`font-semibold ${sub.due_amount > 0 ? "text-red-600" : "text-gray-400"}`}>
+                        {formatCurrency(sub.due_amount)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-400">Method</p>
@@ -271,18 +401,43 @@ export default function ApprovalsClient({
                     </div>
                   </div>
 
-                  {/* Transaction details */}
-                  <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-gray-500">
+                  {/* Transaction verification details with quick-copy */}
+                  <div className="flex flex-wrap items-center gap-3 mt-3 pt-2 text-xs">
                     {sub.sender_number && (
-                      <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {sub.sender_number}</span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 border border-amber-200 text-amber-900 rounded-lg font-mono font-semibold">
+                        <Phone className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Sender: {sub.sender_number}</span>
+                        <button
+                          onClick={() => copyToClipboard(sub.sender_number!, "Sender number")}
+                          className="p-0.5 text-amber-600 hover:text-amber-800 cursor-pointer"
+                          title="Copy sender number"
+                        >
+                          {copiedText === sub.sender_number ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </span>
                     )}
+
                     {sub.transaction_id && (
-                      <span className="flex items-center gap-1"><Hash className="w-3 h-3" /> TrxID: <strong className="text-gray-700">{sub.transaction_id}</strong></span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-lg font-mono font-semibold">
+                        <Hash className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>TrxID: <strong className="text-indigo-950">{sub.transaction_id}</strong></span>
+                        <button
+                          onClick={() => copyToClipboard(sub.transaction_id!, "Transaction ID")}
+                          className="p-0.5 text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                          title="Copy Transaction ID"
+                        >
+                          {copiedText === sub.transaction_id ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3" />}
+                        </button>
+                      </span>
                     )}
+
                     {sub.notes && (
-                      <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> {sub.notes}</span>
+                      <span className="flex items-center gap-1 text-gray-500">
+                        <FileText className="w-3 h-3" /> {sub.notes}
+                      </span>
                     )}
-                    <span className="text-gray-400">{formatDate(sub.created_at)}</span>
+
+                    <span className="text-gray-400 ml-auto">{formatDate(sub.created_at)}</span>
                   </div>
 
                   {/* Rejection reason */}
@@ -406,13 +561,31 @@ export default function ApprovalsClient({
                 {approveModal.sender_number && (
                   <div className="flex items-center justify-between py-2 border-b border-gray-100">
                     <span className="text-gray-500 flex items-center gap-1"><Phone className="w-3.5 h-3.5" /> Sender No.</span>
-                    <span className="font-mono font-semibold text-gray-800">{approveModal.sender_number}</span>
+                    <div className="flex items-center gap-1.5 font-mono font-semibold text-gray-800">
+                      <span>{approveModal.sender_number}</span>
+                      <button
+                        onClick={() => copyToClipboard(approveModal.sender_number!, "Sender number")}
+                        className="text-gray-400 hover:text-gray-700 cursor-pointer p-0.5"
+                        title="Copy sender number"
+                      >
+                        {copiedText === approveModal.sender_number ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 )}
                 {approveModal.transaction_id && (
                   <div className="flex items-center justify-between py-2 border-b border-gray-100">
                     <span className="text-gray-500 flex items-center gap-1"><Hash className="w-3.5 h-3.5" /> Transaction ID</span>
-                    <span className="font-mono font-bold text-gray-900">{approveModal.transaction_id}</span>
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-gray-900">
+                      <span>{approveModal.transaction_id}</span>
+                      <button
+                        onClick={() => copyToClipboard(approveModal.transaction_id!, "Transaction ID")}
+                        className="text-indigo-500 hover:text-indigo-800 cursor-pointer p-0.5"
+                        title="Copy Transaction ID"
+                      >
+                        {copiedText === approveModal.transaction_id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
                   </div>
                 )}
                 <div className="flex items-center justify-between py-2 border-b border-gray-100">
