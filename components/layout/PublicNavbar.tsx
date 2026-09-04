@@ -49,7 +49,7 @@ export default function PublicNavbar() {
           ) : loaded ? (
             <Link href="/login" className="px-4 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg">Sign In</Link>
           ) : null}
-          <Link href="/#batches" className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Enroll Now</Link>
+          <Link href="/#batches" className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">View Batches</Link>
         </div>
       </div>
     </nav>

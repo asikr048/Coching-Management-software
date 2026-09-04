@@ -239,7 +239,6 @@ export default function HomePage() {
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Available Batches</h2>
               <p className="mt-2 text-gray-500 max-w-lg">Select a batch that fits your schedule. Each batch has limited seats.</p>
             </div>
-            <Link href="/enroll" className="inline-flex items-center gap-2 text-sm font-semibold text-indigo-600 hover:text-indigo-700">View All <ArrowRight className="w-4 h-4" /></Link>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {batches.map(batch => {

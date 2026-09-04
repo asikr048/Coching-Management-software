@@ -181,7 +181,6 @@ export default function LoginPage() {
           <div className="flex items-center justify-center gap-3 pt-2">
             <Link href="/parent-portal" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all">Parent Portal</Link>
             <Link href="/marketplace" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all">Courses</Link>
-            <Link href="/enroll" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all">Enroll Now</Link>
           </div>
         </div>
       </div>

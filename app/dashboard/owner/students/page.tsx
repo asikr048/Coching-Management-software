@@ -54,9 +54,6 @@ export default async function StudentsPage() {
           <p className="text-sm text-gray-500 mt-1">{students?.length || 0} total students</p>
         </div>
         <div className="flex gap-3">
-          <Link href="/enroll" target="_blank" className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors">
-            Public Enroll Form
-          </Link>
           <Link href="/dashboard/owner/students/new" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200">
             + Add Student
           </Link>

@@ -40,12 +40,6 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
               <BookOpen className="w-4 h-4" />
               Browse Courses
             </Link>
-            <Link
-              href="/enroll"
-              className="px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-indigo-600 to-violet-600 rounded-lg hover:from-indigo-700 hover:to-violet-700 transition-colors shadow-sm shadow-indigo-200"
-            >
-              Enroll in Batch
-            </Link>
             <button
               onClick={handleSignOut}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ml-1"

@@ -370,8 +370,8 @@ export default function StudentProfilePage() {
           <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-indigo-600" /> My Batches
           </h2>
-          <Link href="/enroll" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1">
-            Enroll in More <ChevronRight className="w-4 h-4" />
+          <Link href="/#batches" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1">
+            Browse Batches <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
 
@@ -382,11 +382,10 @@ export default function StudentProfilePage() {
             </div>
             <h3 className="text-lg font-bold text-gray-900">No Batches Enrolled Yet</h3>
             <p className="text-gray-500 text-sm max-w-md mx-auto">
-              You are registered with ID <span className="font-semibold text-indigo-600">{profile?.user_id}</span>. Contact the coaching reception or enroll directly into an active batch!
+              You are registered with ID <span className="font-semibold text-indigo-600">{profile?.user_id}</span>. Contact the coaching reception or visit the office to enroll into an active batch!
             </p>
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Link href="/enroll" className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-sm">Enroll Now</Link>
-              <Link href="/#batches" className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 transition-colors">View Available Batches</Link>
+              <Link href="/#batches" className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-sm">View Available Batches</Link>
             </div>
           </div>
         ) : (

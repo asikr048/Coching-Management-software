@@ -133,15 +133,13 @@ export default function EnrollButton({
 
   // not_logged_in or can_enroll
   return (
-    <Link
-      href={
-        status === "not_logged_in"
-          ? "/login"
-          : `/enroll/payment?student_id=${studentDbId}&student_code=${studentCode}&name=${encodeURIComponent(studentName)}&batch=${batchId}`
-      }
-      className="block w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold text-center hover:shadow-lg hover:shadow-indigo-200 transition-all"
-    >
-      {status === "not_logged_in" ? "Sign In to Enroll" : "Enroll in This Batch"}
-    </Link>
+    <div className="space-y-2">
+      <div className="w-full py-3 bg-indigo-50 border border-indigo-200 text-indigo-800 rounded-xl font-bold text-center text-sm shadow-xs">
+        Admission via Coaching Office
+      </div>
+      <p className="text-xs text-center text-gray-500">
+        Please visit coaching reception or contact admin to register for this batch.
+      </p>
+    </div>
   )
 }
