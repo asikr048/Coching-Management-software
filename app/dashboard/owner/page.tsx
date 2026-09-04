@@ -95,7 +95,7 @@ export default async function OwnerDashboard() {
             { href: "/dashboard/owner/exams", label: "Create Exam", icon: "📝", bg: "from-blue-500 to-cyan-500", hover: "hover:shadow-blue-200" },
             { href: "/dashboard/owner/sms", label: "Send Bulk SMS", icon: "📱", bg: "from-orange-500 to-amber-500", hover: "hover:shadow-orange-200" },
             { href: "/dashboard/owner/batches", label: "New Batch", icon: "📚", bg: "from-purple-500 to-fuchsia-500", hover: "hover:shadow-purple-200" },
-            { href: "/dashboard/owner/materials", label: "Issue Book", icon: "📖", bg: "from-rose-500 to-pink-500", hover: "hover:shadow-rose-200" },
+            { href: "/dashboard/owner/materials", label: "Materials", icon: "📦", bg: "from-rose-500 to-pink-500", hover: "hover:shadow-rose-200" },
             { href: "/dashboard/owner/referrals", label: "Referrals", icon: "🤝", bg: "from-sky-500 to-blue-500", hover: "hover:shadow-sky-200" },
             { href: "/dashboard/owner/analytics", label: "Analytics", icon: "📊", bg: "from-violet-500 to-purple-600", hover: "hover:shadow-violet-200" },
           ].map(action => (

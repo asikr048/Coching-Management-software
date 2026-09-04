@@ -1,32 +1,72 @@
 import { createClient } from "@/lib/supabase/server"
-import { formatCurrency } from "@/lib/utils"
-import { Package } from "lucide-react"
+import MaterialsClient from "./MaterialsClient"
 
 export default async function MaterialsPage() {
   const supabase = await createClient()
-  const { data: materials } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
+
+  // 1. Materials
+  let materials: any[] = []
+  try {
+    const { data } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
+    if (data && data.length > 0) materials = data
+  } catch (e) {
+    console.warn("Could not load materials from supabase:", e)
+  }
+
+  // 2. Material issues
+  let issues: any[] = []
+  try {
+    const { data } = await supabase
+      .from("material_issues")
+      .select("*, student:students(id, name, student_id, phone), batch:batches(id, name)")
+      .order("issued_at", { ascending: false })
+    if (data && data.length > 0) issues = data
+  } catch (e) {
+    console.warn("Could not load material_issues from supabase:", e)
+  }
+
+  // 3. Batches
+  let batches: any[] = []
+  try {
+    const { data } = await supabase.from("batches").select("id, name, subject, is_active").order("name")
+    if (data) batches = data
+  } catch (e) {
+    console.warn("Could not load batches from supabase:", e)
+  }
+
+  // 4. Students
+  let students: any[] = []
+  try {
+    const { data } = await supabase
+      .from("students")
+      .select("id, name, student_id, phone, guardian_phone, is_active, enrollments(batch_id, status, batch:batches(name))")
+      .order("name")
+    if (data) students = data
+  } catch (e) {
+    console.warn("Could not load students from supabase:", e)
+  }
+
+  // 5. Current staff
+  const { data: { user } } = await supabase.auth.getUser()
+  let staff: any = null
+  if (user) {
+    const { data: s } = await supabase.from("staff").select("id, name, email, role").eq("auth_user_id", user.id).maybeSingle()
+    if (s) staff = s
+  }
+  const currentStaff = staff || {
+    id: user?.id || "admin-owner",
+    name: user?.user_metadata?.name || "Admin Owner",
+    email: user?.email || "admin@medhashiree.com",
+    role: "owner"
+  }
 
   return (
-    <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-gray-900">Study Materials & Inventory</h2><p className="text-sm text-gray-500 mt-1">Manage books, notes, and worksheets</p></div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {(materials || []).map(m => (
-          <div key={m.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 bg-orange-50 rounded-lg"><Package className="w-5 h-5 text-orange-600" /></div>
-              <div><p className="font-semibold text-gray-800">{m.name}</p><p className="text-xs text-gray-500 capitalize">{m.type} • {m.subject || "General"}</p></div>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600">Stock: <strong>{m.available_stock}</strong>/{m.total_stock}</span>
-              <span className="font-medium text-gray-700">{formatCurrency(m.price)}</span>
-            </div>
-            <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${m.available_stock <= 5 ? "bg-red-500" : "bg-emerald-500"}`} style={{ width: `${(m.available_stock / Math.max(m.total_stock, 1)) * 100}%` }} />
-            </div>
-          </div>
-        ))}
-        {(!materials || materials.length === 0) && <div className="col-span-full text-center py-12 text-gray-400">No materials added yet.</div>}
-      </div>
-    </div>
+    <MaterialsClient 
+      initialMaterials={materials}
+      initialIssues={issues}
+      batches={batches}
+      students={students}
+      currentStaff={currentStaff}
+    />
   )
 }
