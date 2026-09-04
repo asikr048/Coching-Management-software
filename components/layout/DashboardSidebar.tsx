@@ -7,7 +7,8 @@ import {
   GraduationCap, LayoutDashboard, Users, BookOpen, CreditCard,
   BarChart3, UserCheck, MessageSquare, Settings, ChevronLeft,
   ChevronRight, Package, Trophy, Fingerprint, ShoppingBag,
-  DollarSign, GitMerge, Home, FileText, ImageIcon, Shield, ClipboardList
+  DollarSign, GitMerge, Home, FileText, ImageIcon, Shield, ClipboardList,
+  X
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
 
@@ -75,51 +76,131 @@ const roleColors: Record<string, string> = {
   course_teacher: "from-blue-900 to-blue-800",
 }
 
-export default function DashboardSidebar({ role, name }: { role: Role; name: string }) {
+interface Props {
+  role: Role
+  name: string
+  mobileOpen?: boolean
+  onMobileClose?: () => void
+}
+
+export default function DashboardSidebar({ role, name, mobileOpen = false, onMobileClose }: Props) {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const nav = navByRole[role] || ownerNav
   const gradient = roleColors[role] || "from-indigo-900 to-indigo-800"
 
-  return (
-    <aside className={cn("flex flex-col h-full transition-all duration-300 bg-gradient-to-b text-white shadow-xl", gradient, collapsed ? "w-16" : "w-64")}>
+  const sidebarContent = (isMobileView: boolean) => (
+    <>
       <div className="flex items-center justify-between p-4 border-b border-white/10">
-        {!collapsed && (
-          <div className="flex items-center gap-2">
-            <GraduationCap className="w-7 h-7 text-white flex-shrink-0" />
+        <div className="flex items-center gap-2">
+          <GraduationCap className="w-7 h-7 text-white flex-shrink-0" />
+          {(!collapsed || isMobileView) && (
             <span className="font-bold text-base truncate">MedhaShiree</span>
-          </div>
+          )}
+        </div>
+
+        {isMobileView ? (
+          <button
+            onClick={onMobileClose}
+            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/80 hover:text-white"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        ) : (
+          <button
+            onClick={() => setCollapsed(!collapsed)}
+            className="p-1 rounded-lg hover:bg-white/10 transition-colors ml-auto flex-shrink-0"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          </button>
         )}
-        {collapsed && <GraduationCap className="w-7 h-7 text-white mx-auto" />}
-        <button onClick={() => setCollapsed(!collapsed)} className="p-1 rounded-lg hover:bg-white/10 transition-colors ml-auto flex-shrink-0">
-          {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-        </button>
       </div>
-      {!collapsed && (
+
+      {(!collapsed || isMobileView) && (
         <div className="px-4 py-3 border-b border-white/10">
-          <p className="text-xs text-white/50 uppercase tracking-wider">{role === "super_manager" ? "Super Manager" : role === "course_teacher" ? "Course Teacher" : role.charAt(0).toUpperCase() + role.slice(1)}</p>
+          <p className="text-xs text-white/50 uppercase tracking-wider">
+            {role === "super_manager"
+              ? "Super Manager"
+              : role === "course_teacher"
+              ? "Course Teacher"
+              : role.charAt(0).toUpperCase() + role.slice(1)}
+          </p>
           <p className="font-medium text-white truncate text-sm">{name}</p>
         </div>
       )}
+
       <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
         {nav.map(item => {
           const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href)
           return (
-            <Link key={item.href} href={item.href}
-              className={cn("flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm",
-                isActive ? "bg-white/20 text-white font-semibold" : "text-white/70 hover:bg-white/10 hover:text-white")}>
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={() => {
+                if (isMobileView && onMobileClose) onMobileClose()
+              }}
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm",
+                isActive
+                  ? "bg-white/20 text-white font-semibold shadow-sm"
+                  : "text-white/70 hover:bg-white/10 hover:text-white"
+              )}
+            >
               <item.icon className="w-4 h-4 flex-shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {(!collapsed || isMobileView) && <span className="truncate">{item.label}</span>}
             </Link>
           )
         })}
       </nav>
+
       <div className="p-2 border-t border-white/10">
-        <Link href="/" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition-all text-sm">
+        <Link
+          href="/"
+          onClick={() => {
+            if (isMobileView && onMobileClose) onMobileClose()
+          }}
+          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition-all text-sm"
+        >
           <Home className="w-4 h-4 flex-shrink-0" />
-          {!collapsed && <span>Home</span>}
+          {(!collapsed || isMobileView) && <span>Home</span>}
         </Link>
       </div>
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Mobile Drawer Backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-200"
+          onClick={onMobileClose}
+        />
+      )}
+
+      {/* Mobile Drawer (Slide in from Left) */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 w-72 md:hidden flex flex-col h-full bg-gradient-to-b text-white shadow-2xl transition-transform duration-300 ease-in-out",
+          gradient,
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {sidebarContent(true)}
+      </aside>
+
+      {/* Desktop Persistent Sidebar */}
+      <aside
+        className={cn(
+          "hidden md:flex flex-col h-full transition-all duration-300 bg-gradient-to-b text-white shadow-xl flex-shrink-0",
+          gradient,
+          collapsed ? "w-16" : "w-64"
+        )}
+      >
+        {sidebarContent(false)}
+      </aside>
+    </>
   )
 }

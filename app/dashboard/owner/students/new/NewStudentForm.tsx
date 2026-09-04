@@ -612,11 +612,11 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 space-y-3">
             {/* Personal */}
             <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Personal Info</p>
-            <div className="grid grid-cols-3 gap-2.5">
-              <div className="col-span-2"><label className={labelCls}>Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="sm:col-span-2"><label className={labelCls}>Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
               <div><label className={labelCls}>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
             </div>
-            <div className="grid grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
               <div><label className={labelCls}>Email</label><input type="email" value={form.email} onChange={e => update("email", e.target.value)} className={ic} placeholder="Optional" /></div>
               <div><label className={labelCls}>Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={ic}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
               <div><label className={labelCls}>Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => update("date_of_birth", e.target.value)} className={ic} /></div>
@@ -626,7 +626,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
             {/* Guardian */}
             <div className="pt-2 border-t border-gray-100">
               <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Guardian</p>
-              <div className="grid grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                 <div><label className={labelCls}>Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={ic} /></div>
                 <div><label className={labelCls}>Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={ic} placeholder="01..." /></div>
                 <div><label className={labelCls}>Relation</label><select value={form.guardian_relation} onChange={e => update("guardian_relation", e.target.value)} className={ic}><option>Parent</option><option>Father</option><option>Mother</option><option>Uncle</option><option>Other</option></select></div>
@@ -637,7 +637,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
             {/* Account */}
             <div className="pt-2 border-t border-gray-100">
               <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2 flex items-center gap-1"><Lock className="w-3 h-3" /> Login Account</p>
-              <div className="grid grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                 <div><label className={labelCls}>School / College</label><input value={form.school_college} onChange={e => update("school_college", e.target.value)} className={ic} /></div>
                 <div><label className={labelCls}>Referral Name / Code</label><input value={form.referred_by_code} onChange={e => update("referred_by_code", e.target.value)} className={ic} placeholder="Referrer name or code (optional)" /></div>
                 <div><label className={labelCls}>Password *</label><input type="password" required value={form.password} onChange={e => update("password", e.target.value)} className={ic} placeholder="Min 6 chars" minLength={6} /></div>
@@ -653,7 +653,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         {/* Batch selection */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
           <p className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5 text-indigo-500" /> Select Batch *</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {batches.map(b => {
               const isEnrolled = enrolledBatchIds.includes(b.id)
               const sel = form.batch_id === b.id
@@ -720,13 +720,13 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         {/* Payment */}
         {batch && (mode === "new" || selectedStudent) && (
           <div className="bg-gradient-to-r from-white to-indigo-50/30 rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-            <div className="flex items-center gap-3 text-xs mb-3">
-              <CreditCard className="w-4 h-4 text-indigo-500" />
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs mb-3">
+              <CreditCard className="w-4 h-4 text-indigo-500 flex-shrink-0" />
               <span className="text-gray-500">Monthly: <b className="text-gray-700">{formatCurrency(batch.monthly_fee)}</b></span>
               <span className="text-gray-500">Admission: <b className="text-gray-700">{formatCurrency(batch.admission_fee)}</b></span>
-              <span className="ml-auto text-indigo-700 font-extrabold text-sm">Total: {formatCurrency(total)}</span>
+              <span className="sm:ml-auto text-indigo-700 font-extrabold text-sm w-full sm:w-auto text-right">Total: {formatCurrency(total)}</span>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
               <div><label className={labelCls}>Paid (৳)</label><input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${ic} font-semibold`} placeholder="0" min="0" /></div>
               <div><label className={labelCls}>Due</label><div className={`px-3 py-2 rounded-lg text-sm font-bold text-center ${due > 0 ? "bg-red-50 text-red-600 border border-red-200" : "bg-emerald-50 text-emerald-600 border border-emerald-200"}`}>{formatCurrency(due)}</div></div>
               <div><label className={labelCls}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={ic} /></div>
@@ -735,8 +735,8 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         )}
 
         {/* Actions */}
-        <div className="flex gap-3 pt-1">
-          <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors">Cancel</button>
+        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 pt-1">
+          <button type="button" onClick={() => router.back()} className="py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors">Cancel</button>
           <button type="submit" disabled={loading || !form.batch_id || (mode === "existing" && !selectedStudent) || (mode === "new" && form.password !== form.confirmPassword)}
             className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 disabled:opacity-40 flex items-center justify-center gap-2 text-sm shadow-lg shadow-indigo-200 transition-all">
             {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><UserPlus className="w-4 h-4" /> {mode === "new" ? "Create & Enroll" : "Enroll Student"}</>}
@@ -746,8 +746,8 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
       {/* Confirmation & Printable PDF Modal with QR Code */}
       {receipt && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
             {/* Header */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white text-center relative">
               <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
@@ -758,8 +758,8 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
             </div>
 
             {/* Printable preview card */}
-            <div className="p-6 space-y-4">
-              <div ref={receiptRef} className="border border-indigo-100 rounded-2xl p-5 bg-slate-50 space-y-3">
+            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+              <div ref={receiptRef} className="border border-indigo-100 rounded-2xl p-4 sm:p-5 bg-slate-50 space-y-3">
                 <div className="text-center border-b border-dashed border-gray-300 pb-3">
                   <h4 className="font-extrabold text-indigo-900 text-base">MedhaShiree Coaching</h4>
                   <p className="text-[11px] text-gray-500">Official Enrollment & Clearance Receipt</p>
@@ -813,7 +813,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
               </div>
 
               {/* Modal Buttons: Print, Save, New Enrollment */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={handlePrint}
