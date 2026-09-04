@@ -70,6 +70,7 @@ export default function StudentBatchDetailPage() {
         // 1. Fetch student profile and verified enrollments via server API
         let studentData: any = null
         let currentEnrollment: any = null
+        let profileExamResults: any[] = []
 
         try {
           const profileRes = await fetch('/api/student/profile')
@@ -78,6 +79,9 @@ export default function StudentBatchDetailPage() {
             if (profileJson.student) studentData = profileJson.student
             if (profileJson.enrollments) {
               currentEnrollment = profileJson.enrollments.find((e: any) => e.batch_id === batchId || e.batch?.id === batchId)
+            }
+            if (profileJson.examResults) {
+              profileExamResults = profileJson.examResults
             }
           }
         } catch (apiErr) {
@@ -198,16 +202,42 @@ export default function StudentBatchDetailPage() {
           
         if (dueData) setDues(dueData)
         
-        // 6. Get exam results
-        const { data: examData } = await supabase
-          .from('exam_results')
-          .select('*, exam:exams(title, exam_date, total_marks, pass_marks, batch_id)')
-          .eq('student_id', studentId)
-          
-        if (examData) {
-          const batchExams = examData.filter((r: any) => r.exam?.batch_id === batchId)
-          setExamResults(batchExams)
+        // 6. Get exam results (combining server verified results and database query)
+        let mergedExams: any[] = []
+        if (profileExamResults && profileExamResults.length > 0) {
+          mergedExams = profileExamResults.filter((r: any) => r.exam?.batch_id === batchId || !r.exam?.batch_id)
         }
+
+        if (studentId) {
+          try {
+            const { data: examData } = await supabase
+              .from('exam_results')
+              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, subject)')
+              .eq('student_id', studentId)
+
+            if (examData && examData.length > 0) {
+              const batchFromDb = examData.filter((r: any) => r.exam?.batch_id === batchId)
+              const map = new Map<string, any>()
+              mergedExams.forEach(e => map.set(e.id || e.exam_id, e))
+              batchFromDb.forEach(e => map.set(e.id || e.exam_id, e))
+              mergedExams = Array.from(map.values())
+            }
+          } catch (exErr) {
+            console.warn('Exam results query note:', exErr)
+          }
+        }
+
+        // Normalize marks so both obtained_marks and marks_obtained are accurate numbers
+        mergedExams = mergedExams.map((r: any) => {
+          const raw = r.obtained_marks ?? r.marks_obtained
+          const obt = raw != null && raw !== "" ? Number(raw) : 0
+          return {
+            ...r,
+            obtained_marks: obt,
+            marks_obtained: obt,
+          }
+        })
+        setExamResults(mergedExams)
         
         // 7. Get material issues
         const { data: materialData } = await supabase
@@ -705,16 +735,24 @@ export default function StudentBatchDetailPage() {
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {examResults.map((result: any, idx: number) => {
-                      const totalMarks = result.exam?.total_marks || 100
-                      const obtained = result.marks_obtained || 0
-                      const percentage = Math.round((obtained / totalMarks) * 100)
-                      const passMarks = result.exam?.pass_marks || 0
+                      const totalMarks = Number(result.exam?.total_marks) || 100
+                      const rawObtained = result.obtained_marks ?? result.marks_obtained
+                      const obtained = rawObtained != null && rawObtained !== "" ? Number(rawObtained) : 0
+                      const percentage = totalMarks > 0 ? Math.round((obtained / totalMarks) * 100) : 0
+                      const passMarks = Number(result.exam?.pass_marks) || 0
                       const passed = obtained >= passMarks
                       
                       return (
                         <tr key={result.id || idx} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 font-medium text-slate-800">
-                            {result.exam?.title || 'Unknown Exam'}
+                            <div>
+                              <span>{result.exam?.title || 'Unknown Exam'}</span>
+                              {result.exam?.subject && (
+                                <span className="ml-2 text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-medium">
+                                  {result.exam.subject}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-slate-500">
                             {result.exam?.exam_date ? formatDate(result.exam.exam_date) : '-'}
@@ -729,9 +767,14 @@ export default function StudentBatchDetailPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <span className="inline-flex px-2 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                              {result.grade || '-'}
+                            <span className="inline-flex px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                              {result.grade || (passed ? 'Pass' : 'Fail')}
                             </span>
+                            {result.rank && (
+                              <span className="ml-1.5 inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                Rank #{result.rank}
+                              </span>
+                            )}
                           </td>
                         </tr>
                       )

@@ -180,16 +180,62 @@ export async function GET(req: NextRequest) {
         console.warn("Dues query note:", err)
       }
 
-      // 6. Exam results
+      // 6. Exam results (from exam_results and online exam_submissions)
       try {
         const { data: examData } = await admin
           .from("exam_results")
-          .select("*, exam:exams(title, total_marks, pass_marks)")
+          .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id)")
           .in("student_id", studentDbIdArray)
+          .order("created_at", { ascending: false })
         if (examData) examResults = examData
       } catch (err) {
         console.warn("Exam results query note:", err)
       }
+
+      // Check online exam submissions if any
+      try {
+        const { data: subExams } = await admin
+          .from("exam_submissions")
+          .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id)")
+          .in("student_id", studentDbIdArray)
+          .eq("is_submitted", true)
+          .order("submitted_at", { ascending: false })
+
+        if (subExams && subExams.length > 0) {
+          const recordedExamIds = new Set(examResults.map((r: any) => r.exam_id))
+          for (const sub of subExams) {
+            if (!recordedExamIds.has(sub.exam_id)) {
+              const total = Number(sub.exam?.total_marks) || 100
+              const obt = Number(sub.total_obtained) || 0
+              const grade = obt >= total * 0.8 ? "A+" : obt >= total * 0.7 ? "A" : obt >= total * 0.6 ? "B" : obt >= total * 0.5 ? "C" : obt >= total * 0.33 ? "D" : "F"
+              examResults.push({
+                id: `online-${sub.id}`,
+                exam_id: sub.exam_id,
+                student_id: sub.student_id,
+                obtained_marks: obt,
+                marks_obtained: obt,
+                grade: grade,
+                rank: null,
+                exam: sub.exam,
+                created_at: sub.submitted_at || sub.created_at,
+              })
+            }
+          }
+        }
+      } catch (subExamErr) {
+        console.warn("Online exam submissions query note:", subExamErr)
+      }
+
+      // Normalize obtained marks fields across all items
+      examResults = examResults.map((r: any) => {
+        const raw = r.obtained_marks ?? r.marks_obtained
+        const obt = raw != null && raw !== "" ? Number(raw) : 0
+        return {
+          ...r,
+          obtained_marks: obt,
+          marks_obtained: obt,
+        }
+      })
     }
 
     // 7. Course Purchases lookup (by student_id, buyer_email, buyer_phone)

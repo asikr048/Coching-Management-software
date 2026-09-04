@@ -230,9 +230,10 @@ export default function StudentProfilePage() {
   const totalPendingDue = dues.reduce((acc, d) => acc + (Number(d.due_amount || 0) - Number(d.paid_amount || 0)), 0)
   const avgScore = examResults.length > 0
     ? Math.round(examResults.reduce((acc, r) => {
-        const total = r.exam?.total_marks || 100
-        const obtained = r.marks_obtained || r.obtained_marks || 0
-        return acc + (obtained / total) * 100
+        const total = Number(r.exam?.total_marks) || 100
+        const rawObt = r.obtained_marks ?? r.marks_obtained
+        const obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : 0
+        return acc + (total > 0 ? (obtained / total) * 100 : 0)
       }, 0) / examResults.length)
     : 0
 
@@ -547,8 +548,15 @@ export default function StudentProfilePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {enrollments.map((enr, i) => {
                     const b = enr.batch
+                    const targetBatchId = enr.batch_id || b?.id
+                    const batchExamList = examResults.filter((r: any) => r.exam?.batch_id === targetBatchId || r.batch_id === targetBatchId)
+                    const latestExam = batchExamList.length > 0 ? batchExamList[0] : null
+                    const latestTotal = Number(latestExam?.exam?.total_marks) || 100
+                    const latestRaw = latestExam ? (latestExam.obtained_marks ?? latestExam.marks_obtained) : null
+                    const latestObt = latestRaw != null && latestRaw !== "" ? Number(latestRaw) : 0
+
                     return (
-                      <Link key={i} href={`/student/batch/${enr.batch_id || b?.id}`}
+                      <Link key={i} href={`/student/batch/${targetBatchId}`}
                         className="group bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all space-y-3 cursor-pointer">
                         <div className="flex items-start justify-between">
                           <div>
@@ -562,6 +570,25 @@ export default function StudentProfilePage() {
                           {b?.schedule && <p className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> {b.schedule}</p>}
                           {b?.monthly_fee != null && <p className="flex items-center gap-2"><DollarSign className="w-3.5 h-3.5" /> {formatCurrency(b.monthly_fee)}/mo</p>}
                         </div>
+
+                        {batchExamList.length > 0 && (
+                          <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                            <span className="text-violet-700 font-semibold flex items-center gap-1.5 bg-violet-50 px-2 py-1 rounded-lg border border-violet-100">
+                              <Award className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                              <span className="truncate max-w-[120px]">{latestExam?.exam?.title || "Exam"}:</span>
+                              <span className="font-bold text-violet-900">{latestObt}/{latestTotal}</span>
+                              {latestExam?.grade && (
+                                <span className="px-1.5 py-0.2 bg-white rounded text-[10px] font-bold border border-violet-200 text-violet-800">
+                                  {latestExam.grade}
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-[11px] text-gray-400 font-medium">
+                              {batchExamList.length} {batchExamList.length === 1 ? "exam" : "exams"}
+                            </span>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-end text-xs text-indigo-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity pt-1">
                           View Details <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
                         </div>
@@ -783,19 +810,37 @@ export default function StudentProfilePage() {
             {examResults.length > 0 ? (
               <div className="space-y-3">
                 {examResults.map((r: any, i: number) => {
-                  const total = r.exam?.total_marks || 100
-                  const obtained = r.marks_obtained || r.obtained_marks || 0
-                  const pct = Math.round((obtained / total) * 100)
-                  const passed = obtained >= (r.exam?.pass_marks || 0)
+                  const total = Number(r.exam?.total_marks) || 100
+                  const rawObt = r.obtained_marks ?? r.marks_obtained
+                  const obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : 0
+                  const pct = total > 0 ? Math.round((obtained / total) * 100) : 0
+                  const passed = obtained >= (Number(r.exam?.pass_marks) || 0)
                   return (
                     <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
                       <div>
-                        <p className="font-semibold text-gray-900">{r.exam?.title || 'Exam'}</p>
-                        <p className="text-xs text-gray-400 mt-0.5">{r.exam?.exam_date ? formatDate(r.exam.exam_date) : ''}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-semibold text-gray-900">{r.exam?.title || 'Exam'}</p>
+                          {r.exam?.subject && (
+                            <span className="text-[11px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded font-semibold border border-indigo-100">
+                              {r.exam.subject}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
+                          {r.exam?.exam_date && <span>{formatDate(r.exam.exam_date)}</span>}
+                          {r.rank && <span className="text-amber-600 font-semibold">• Rank #{r.rank}</span>}
+                        </div>
                       </div>
                       <div className="text-right">
-                        <p className={`text-xl font-extrabold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>{pct}%</p>
-                        <p className="text-xs text-gray-400">{obtained}/{total}</p>
+                        <div className="flex items-center justify-end gap-2">
+                          <span className={`text-xl font-extrabold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>{pct}%</span>
+                          {r.grade && (
+                            <span className="px-2 py-0.5 text-xs font-bold bg-white border border-gray-200 rounded-md text-gray-800 shadow-xs">
+                              {r.grade}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{obtained} / {total}</p>
                       </div>
                     </div>
                   )
