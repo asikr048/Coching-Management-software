@@ -67,70 +67,106 @@ export default function StudentBatchDetailPage() {
         setLoading(true)
         setError(null)
         
-        // 1. Get current user and student profile
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          router.push('/login')
-          return
-        }
-        
-        // Find user profile first
-        let userProf: any = null
-        const { data: byId } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('auth_user_id', user.id)
-          .maybeSingle()
-        userProf = byId
+        // 1. Fetch student profile and verified enrollments via server API
+        let studentData: any = null
+        let currentEnrollment: any = null
 
-        if (!userProf && user.email) {
-          const { data: byEmail } = await supabase
+        try {
+          const profileRes = await fetch('/api/student/profile')
+          if (profileRes.ok) {
+            const profileJson = await profileRes.json()
+            if (profileJson.student) studentData = profileJson.student
+            if (profileJson.enrollments) {
+              currentEnrollment = profileJson.enrollments.find((e: any) => e.batch_id === batchId || e.batch?.id === batchId)
+            }
+          }
+        } catch (apiErr) {
+          console.warn('Profile API fallback notice:', apiErr)
+        }
+
+        // Fallback to client query if server API didn't yield student
+        if (!studentData) {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (!user) {
+            router.push('/login')
+            return
+          }
+
+          let userProf: any = null
+          const { data: byId } = await supabase
             .from('user_profiles')
             .select('*')
-            .eq('email', user.email)
+            .eq('auth_user_id', user.id)
             .maybeSingle()
-          userProf = byEmail
+          userProf = byId
+
+          if (!userProf && user.email) {
+            const { data: byEmail } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('email', user.email)
+              .maybeSingle()
+            userProf = byEmail
+          }
+
+          const currentProfile = userProf || {
+            user_id: user.user_metadata?.user_id || 'MS-' + user.id.slice(0, 5).toUpperCase(),
+            email: user.email,
+          }
+
+          if (currentProfile.user_id) {
+            const { data: sData } = await supabase
+              .from('students')
+              .select('*')
+              .eq('student_id', currentProfile.user_id)
+              .maybeSingle()
+            if (sData) studentData = sData
+          }
+
+          if (!studentData && currentProfile.email) {
+            const { data: sDataEmail } = await supabase
+              .from('students')
+              .select('*')
+              .ilike('email', currentProfile.email)
+              .maybeSingle()
+            if (sDataEmail) studentData = sDataEmail
+          }
         }
 
-        const currentProfile = userProf || {
-          user_id: user.user_metadata?.user_id || 'MS-' + user.id.slice(0, 5).toUpperCase(),
-          email: user.email,
+        if (studentData) {
+          setStudent(studentData)
         }
 
-        // Find linked student record
-        let studentData: any = null
-        if (currentProfile.email || currentProfile.user_id) {
-          const { data: sData } = await supabase
-            .from('students')
-            .select('*')
-            .or(`email.eq.${currentProfile.email},student_id.eq.${currentProfile.user_id}`)
-            .maybeSingle()
-          studentData = sData
-        }
-           
-        if (!studentData) throw new Error('Student profile not found')
-        setStudent(studentData)
-        const studentId = studentData.id
-        
+        const studentId = studentData?.id || null
+
         // 2. Get batch info
         const { data: batchData, error: batchError } = await supabase
           .from('batches')
           .select('*, teacher:staff(name), room:rooms(name)')
           .eq('id', batchId)
-          .single()
-          
-        if (batchError || !batchData) throw new Error('Batch not found')
-        setBatch(batchData)
-        
+          .maybeSingle()
+
+        if (batchData) {
+          setBatch(batchData)
+        } else if (currentEnrollment?.batch) {
+          setBatch(currentEnrollment.batch)
+        } else {
+          throw new Error('Batch details could not be found.')
+        }
+
         // 3. Get enrollment info
-        const { data: enrollData } = await supabase
-          .from('enrollments')
-          .select('*')
-          .eq('student_id', studentId)
-          .eq('batch_id', batchId)
-          .single()
-          
-        if (enrollData) setEnrollment(enrollData)
+        if (currentEnrollment) {
+          setEnrollment(currentEnrollment)
+        } else if (studentId) {
+          const { data: enrollData } = await supabase
+            .from('enrollments')
+            .select('*')
+            .eq('student_id', studentId)
+            .eq('batch_id', batchId)
+            .maybeSingle()
+
+          if (enrollData) setEnrollment(enrollData)
+        }
         
         // 4. Get attendance
         const { data: attData } = await supabase

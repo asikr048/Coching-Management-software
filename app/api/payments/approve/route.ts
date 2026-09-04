@@ -27,7 +27,52 @@ export async function POST(req: NextRequest) {
     }
 
     if (sub.status === "approved") {
-      return NextResponse.json({ success: true, message: "Payment is already approved." })
+      // Ensure enrollment or course purchase is confirmed in database
+      if (sub.batch_id) {
+        const { data: existingEnr } = await admin
+          .from("enrollments")
+          .select("id, status")
+          .eq("student_id", sub.student_id)
+          .eq("batch_id", sub.batch_id)
+          .maybeSingle()
+
+        if (!existingEnr) {
+          await admin.from("enrollments").upsert({
+            student_id: sub.student_id,
+            batch_id: sub.batch_id,
+            status: "active",
+          }, { onConflict: "student_id,batch_id" })
+        } else if (existingEnr.status !== "active") {
+          await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
+        }
+      } else if (sub.course_id) {
+        const { data: existingCp } = await admin
+          .from("course_purchases")
+          .select("id")
+          .eq("course_id", sub.course_id)
+          .eq("student_id", sub.student_id)
+          .maybeSingle()
+
+        if (!existingCp) {
+          const { data: stInfo } = await admin
+            .from("students")
+            .select("name, phone, email")
+            .eq("id", sub.student_id)
+            .maybeSingle()
+
+          await admin.from("course_purchases").insert({
+            course_id: sub.course_id,
+            student_id: sub.student_id,
+            buyer_name: stInfo?.name || "Student",
+            buyer_phone: stInfo?.phone || sub.sender_number || null,
+            buyer_email: stInfo?.email || null,
+            amount_paid: Number(sub.amount) || 0,
+            payment_method: sub.payment_method || "online",
+            transaction_id: sub.transaction_id || sub.trx_id || null,
+          })
+        }
+      }
+      return NextResponse.json({ success: true, message: "Payment is already approved and access confirmed." })
     }
 
     const nowIso = new Date().toISOString()
@@ -135,14 +180,18 @@ export async function POST(req: NextRequest) {
           await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
         }
       } else {
-        const { error: enrErr } = await admin.from("enrollments").insert({
+        const { error: enrErr } = await admin.from("enrollments").upsert({
           student_id: sub.student_id,
           batch_id: sub.batch_id,
           status: "active",
-          enrolled_at: nowIso,
-        })
+        }, { onConflict: "student_id,batch_id" })
+
         if (enrErr && !enrErr.message.includes("duplicate")) {
-          console.warn("Enrollment insert note:", enrErr.message)
+          console.warn("Enrollment upsert note, trying fallback:", enrErr.message)
+          await admin.from("enrollments").insert({
+            student_id: sub.student_id,
+            batch_id: sub.batch_id,
+          })
         }
       }
 
