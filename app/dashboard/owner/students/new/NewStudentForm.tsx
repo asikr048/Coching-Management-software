@@ -43,11 +43,39 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
   const [paidAmount, setPaidAmount] = useState("")
   const [dueDate, setDueDate] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10); return d.toISOString().split("T")[0] })
   
+  const [enrolledBatchIds, setEnrolledBatchIds] = useState<string[]>([])
+  
   // Post-enrollment receipt modal
   const [receipt, setReceipt] = useState<EnrollmentReceipt | null>(null)
   const receiptRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { checkFinancialAccess().then(({ hasAccess }) => setFinancialAccess(hasAccess)) }, [])
+
+  // When selected student changes, fetch their enrolled batch IDs
+  async function handleSelectStudent(s: StudentOpt | null) {
+    setSelectedStudent(s)
+    setForm(prev => ({ ...prev, batch_id: "" }))
+    if (!s) {
+      setEnrolledBatchIds([])
+      return
+    }
+    setExistingFix({
+      guardian_name: s.guardian_name || "",
+      guardian_phone: s.guardian_phone || "",
+      address: s.address || "",
+      class_level: s.class_level || "",
+      school_college: s.school_college || ""
+    })
+    try {
+      const { data } = await supabase
+        .from("enrollments")
+        .select("batch_id")
+        .eq("student_id", s.id)
+      setEnrolledBatchIds((data || []).map((e: { batch_id: string }) => e.batch_id))
+    } catch {
+      setEnrolledBatchIds([])
+    }
+  }
 
   function update(f: string, v: string) { setForm(prev => ({ ...prev, [f]: v })) }
 
@@ -55,6 +83,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
     setForm({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
     setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
     setSelectedStudent(null)
+    setEnrolledBatchIds([])
     setSearchQuery("")
     setPaidAmount("")
     const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10)
@@ -132,9 +161,28 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
         recordedPassword = form.password
 
-        // Generate unique student ID (MS-XXXXX)
-        const { count } = await supabase.from("students").select("*", { count: "exact", head: true })
-        const seq = (count || 0) + 1
+        // Generate unique student ID (MS-XXXXX) robustly
+        const { data: lastStudents } = await supabase
+          .from("students")
+          .select("student_id")
+          .ilike("student_id", "MS-%")
+          .order("student_id", { ascending: false })
+          .limit(10)
+
+        let maxSeq = 0
+        if (lastStudents && lastStudents.length > 0) {
+          for (const s of lastStudents) {
+            const numPart = parseInt(s.student_id.replace(/^MS-/i, ""), 10)
+            if (!isNaN(numPart) && numPart > maxSeq) {
+              maxSeq = numPart
+            }
+          }
+        }
+        if (maxSeq === 0) {
+          const { count } = await supabase.from("students").select("*", { count: "exact", head: true })
+          maxSeq = count || 0
+        }
+        const seq = maxSeq + 1
         const studentIdStr = `MS-${String(seq).padStart(5, "0")}`
 
         const email = form.email.trim() || `${studentIdStr.toLowerCase()}@medhashiree.local`
@@ -179,9 +227,30 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         guardianPhone = st.guardian_phone || ""
       }
 
+      // Check if student is already enrolled in this batch
+      const { data: existingEnr } = await supabase
+        .from("enrollments")
+        .select("id, status")
+        .eq("student_id", sid)
+        .eq("batch_id", form.batch_id)
+        .maybeSingle()
+
+      if (existingEnr) {
+        toast.error(`Student is already enrolled in ${batch?.name || "this batch"}!`)
+        setLoading(false)
+        return
+      }
+
       // Add enrollment
       const { error: eErr } = await supabase.from("enrollments").insert({ student_id: sid, batch_id: form.batch_id })
-      if (eErr) throw new Error(eErr.message)
+      if (eErr) {
+        if (eErr.code === "23505" || eErr.message.includes("unique constraint") || eErr.message.includes("duplicate key")) {
+          toast.error(`Student is already enrolled in ${batch?.name || "this batch"}!`)
+          setLoading(false)
+          return
+        }
+        throw new Error(eErr.message)
+      }
 
       // Update seats count
       if (batch) await supabase.from("batches").update({ current_seats: batch.current_seats + 1 }).eq("id", form.batch_id)
@@ -203,18 +272,43 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         }
       }
 
-      // Record dues
+      // Record dues (safely upsert or ignore if already existing for this month)
       if (due > 0) {
         const n = new Date()
-        await supabase.from("fee_dues").insert({
-          student_id: sid,
-          batch_id: form.batch_id,
-          due_month: `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`,
-          due_amount: total,
-          paid_amount: paid,
-          due_date: dueDate,
-          status: paid > 0 ? "partial" : "pending"
-        })
+        const dueMonth = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`
+        
+        // Check if a fee_due already exists for this student, batch, and month
+        const { data: existingDue } = await supabase
+          .from("fee_dues")
+          .select("id, due_amount, paid_amount")
+          .eq("student_id", sid)
+          .eq("batch_id", form.batch_id)
+          .eq("due_month", dueMonth)
+          .maybeSingle()
+
+        if (existingDue) {
+          // Update existing due
+          await supabase.from("fee_dues").update({
+            due_amount: Math.max(existingDue.due_amount, total),
+            paid_amount: existingDue.paid_amount + paid,
+            due_date: dueDate,
+            status: (existingDue.paid_amount + paid) >= total ? "paid" : "partial"
+          }).eq("id", existingDue.id)
+        } else {
+          // Insert new due
+          const { error: dueErr } = await supabase.from("fee_dues").insert({
+            student_id: sid,
+            batch_id: form.batch_id,
+            due_month: dueMonth,
+            due_amount: total,
+            paid_amount: paid,
+            due_date: dueDate,
+            status: paid > 0 ? "partial" : "pending"
+          })
+          if (dueErr && !dueErr.message.includes("duplicate") && dueErr.code !== "23505") {
+            console.warn("Could not insert fee due:", dueErr)
+          }
+        }
       }
 
       // Referral handling
@@ -447,7 +541,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
               {filtered.length > 0 && (
                 <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white rounded-xl border border-gray-100 shadow-xl max-h-52 overflow-y-auto">
                   {filtered.map(s => (
-                    <button type="button" key={s.id} onClick={() => { setSelectedStudent(s); setSearchQuery(""); setExistingFix({ guardian_name: s.guardian_name || "", guardian_phone: s.guardian_phone || "", address: s.address || "", class_level: s.class_level || "", school_college: s.school_college || "" }) }}
+                    <button type="button" key={s.id} onClick={() => { handleSelectStudent(s); setSearchQuery("") }}
                       className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-sm border-b border-gray-50 last:border-0 transition-colors">
                       <span className="font-semibold text-gray-800">{s.name}</span>
                       <span className="text-xs text-gray-400 ml-2">{s.student_id}</span>
@@ -466,7 +560,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                 <span className="text-xs text-indigo-500 ml-2">{selectedStudent.student_id}</span>
                 {selectedStudent.phone && <span className="text-xs text-gray-400 ml-2">• {selectedStudent.phone}</span>}
               </div>
-              <button type="button" onClick={() => { setSelectedStudent(null); setSearchQuery("") }} className="text-red-400 hover:text-red-600 text-sm font-bold ml-2 transition-colors">✕</button>
+              <button type="button" onClick={() => handleSelectStudent(null)} className="text-red-400 hover:text-red-600 text-sm font-bold ml-2 transition-colors">✕</button>
             </div>
           )}
         </div>
@@ -543,13 +637,38 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
           <p className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5 text-indigo-500" /> Select Batch *</p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {batches.map(b => {
+              const isEnrolled = enrolledBatchIds.includes(b.id)
               const sel = form.batch_id === b.id, full = b.current_seats >= b.max_seats
+              const disabled = full || isEnrolled
               return (
-                <button type="button" key={b.id} disabled={full} onClick={() => { update("batch_id", sel ? "" : b.id); if (!sel) setPaidAmount("") }}
-                  className={`px-3 py-2.5 rounded-xl border text-left text-xs transition-all ${sel ? "border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-md ring-1 ring-indigo-200" : full ? "border-gray-100 opacity-40" : "border-gray-200 hover:border-indigo-200 hover:shadow-sm"}`}>
+                <button
+                  type="button"
+                  key={b.id}
+                  disabled={disabled}
+                  onClick={() => {
+                    if (isEnrolled) return
+                    update("batch_id", sel ? "" : b.id)
+                    if (!sel) setPaidAmount("")
+                  }}
+                  className={`px-3 py-2.5 rounded-xl border text-left text-xs transition-all relative ${
+                    sel
+                      ? "border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-md ring-1 ring-indigo-200"
+                      : isEnrolled
+                      ? "border-emerald-200 bg-emerald-50/60 opacity-80 cursor-not-allowed"
+                      : full
+                      ? "border-gray-100 opacity-40 cursor-not-allowed"
+                      : "border-gray-200 hover:border-indigo-200 hover:shadow-sm"
+                  }`}>
                   {sel && <Check className="float-right w-4 h-4 text-indigo-600" />}
-                  <p className="font-bold text-gray-800 text-[12px]">{b.name}</p>
-                  <p className="text-gray-400 text-[10px] mt-0.5">{b.current_seats}/{b.max_seats} seats • {formatCurrency(b.monthly_fee)}/mo{b.admission_fee > 0 ? ` +${formatCurrency(b.admission_fee)}` : ""}</p>
+                  {isEnrolled && (
+                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">
+                      ✓ Enrolled
+                    </span>
+                  )}
+                  <p className={`font-bold text-[12px] ${isEnrolled ? "text-emerald-900" : "text-gray-800"}`}>{b.name}</p>
+                  <p className="text-gray-400 text-[10px] mt-0.5">
+                    {isEnrolled ? "Already enrolled in this batch" : `${b.current_seats}/${b.max_seats} seats • ${formatCurrency(b.monthly_fee)}/mo${b.admission_fee > 0 ? ` +${formatCurrency(b.admission_fee)}` : ""}`}
+                  </p>
                 </button>
               )
             })}

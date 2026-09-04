@@ -71,12 +71,21 @@ export default function ApprovalsClient({
       }).eq("id", id)
       if (updateErr) throw updateErr
 
-      // 2. Create enrollment record
-      const { error: enrollErr } = await supabase.from("enrollments").insert({
-        student_id: sub.student_id, batch_id: sub.batch_id, status: "active",
-      }).select().maybeSingle()
-      // Ignore duplicate enrollment error
-      if (enrollErr && !enrollErr.message.includes("duplicate")) throw enrollErr
+      // 2. Create enrollment record if not already enrolled
+      const { data: existingEnr } = await supabase
+        .from("enrollments")
+        .select("id")
+        .eq("student_id", sub.student_id)
+        .eq("batch_id", sub.batch_id)
+        .maybeSingle()
+
+      if (!existingEnr) {
+        const { error: enrollErr } = await supabase.from("enrollments").insert({
+          student_id: sub.student_id, batch_id: sub.batch_id, status: "active",
+        }).select().maybeSingle()
+        // Ignore duplicate enrollment error if race condition occurs
+        if (enrollErr && !enrollErr.message.includes("duplicate") && enrollErr.code !== "23505") throw enrollErr
+      }
 
       // 3. Create payment record
       const receiptNo = `RCP-${Date.now().toString(36).toUpperCase()}`
@@ -89,14 +98,34 @@ export default function ApprovalsClient({
       })
       if (payErr) throw payErr
 
-      // 4. Create fee_due if there's remaining amount
+      // 4. Create fee_due if there's remaining amount (handle duplicate month constraint safely)
       if (sub.due_amount > 0 && sub.due_date) {
-        await supabase.from("fee_dues").insert({
-          student_id: sub.student_id, batch_id: sub.batch_id,
-          due_month: new Date(sub.due_date).toISOString().slice(0, 7),
-          due_amount: sub.due_amount, due_date: sub.due_date,
-          paid_amount: 0, status: "pending",
-        })
+        const dueMonth = new Date(sub.due_date).toISOString().slice(0, 7)
+        const { data: existingDue } = await supabase
+          .from("fee_dues")
+          .select("id, due_amount")
+          .eq("student_id", sub.student_id)
+          .eq("batch_id", sub.batch_id)
+          .eq("due_month", dueMonth)
+          .maybeSingle()
+
+        if (existingDue) {
+          await supabase.from("fee_dues").update({
+            due_amount: Math.max(existingDue.due_amount, sub.due_amount),
+            due_date: sub.due_date,
+            status: "pending"
+          }).eq("id", existingDue.id)
+        } else {
+          const { error: dueErr } = await supabase.from("fee_dues").insert({
+            student_id: sub.student_id, batch_id: sub.batch_id,
+            due_month: dueMonth,
+            due_amount: sub.due_amount, due_date: sub.due_date,
+            paid_amount: 0, status: "pending",
+          })
+          if (dueErr && !dueErr.message.includes("duplicate") && dueErr.code !== "23505") {
+            console.warn("Could not insert fee due:", dueErr)
+          }
+        }
       }
 
       // 5. Increment batch current_seats
