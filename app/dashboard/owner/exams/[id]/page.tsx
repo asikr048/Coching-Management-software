@@ -44,7 +44,10 @@ export default function ExamResultsPage() {
 
   const [exam, setExam] = useState<any>(null)
   const [students, setStudents] = useState<Student[]>([])
-  const [results, setResults] = useState<Record<string, Result>>({})
+  const [savedResults, setSavedResults] = useState<Record<string, Result>>({})
+  const [draftMarks, setDraftMarks] = useState<Record<string, string>>({})
+  const [justSavedIds, setJustSavedIds] = useState<Set<string>>(new Set())
+  const [savingRowStudentId, setSavingRowStudentId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
 
@@ -109,14 +112,18 @@ export default function ExamResultsPage() {
           .eq("exam_id", params.id)
 
         const map: Record<string, Result> = {}
+        const drafts: Record<string, string> = {}
         for (const r of existing || []) {
+          const markStr = String(r.obtained_marks ?? "")
           map[r.student_id] = {
             student_id: r.student_id,
-            obtained_marks: String(r.obtained_marks ?? ""),
+            obtained_marks: markStr,
             grade: r.grade || "",
           }
+          drafts[r.student_id] = markStr
         }
-        setResults(map)
+        setSavedResults(map)
+        setDraftMarks(drafts)
       } catch (err: any) {
         console.error("Error loading exam results:", err)
         toast.error("Failed to load exam data")
@@ -156,9 +163,9 @@ export default function ExamResultsPage() {
     setIsSearchDropdownOpen(false)
     setStudentSearchQuery("")
 
-    // Pre-fill existing mark if already entered
-    const existing = results[student.id]
-    setQuickMarkInput(existing?.obtained_marks || "")
+    // Pre-fill existing mark from draftMarks or savedResults
+    const existing = draftMarks[student.id] ?? savedResults[student.id]?.obtained_marks ?? ""
+    setQuickMarkInput(existing)
 
     // Automatically focus the mark input
     setTimeout(() => {
@@ -204,7 +211,7 @@ export default function ExamResultsPage() {
 
       if (error) throw error
 
-      setResults((prev) => ({
+      setSavedResults((prev) => ({
         ...prev,
         [selectedStudent.id]: {
           student_id: selectedStudent.id,
@@ -212,6 +219,11 @@ export default function ExamResultsPage() {
           grade,
         },
       }))
+      setDraftMarks((prev) => ({
+        ...prev,
+        [selectedStudent.id]: String(numMarks),
+      }))
+      setJustSavedIds((prev) => new Set(prev).add(selectedStudent.id))
 
       toast.success(`✓ ${selectedStudent.name}: ${numMarks}/${exam.total_marks} (${grade}) saved!`)
 
@@ -230,25 +242,23 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Update mark directly in the table
-  function updateTableMark(studentId: string, marks: string) {
-    const numMarks = parseFloat(marks)
-    const grade = !isNaN(numMarks) && exam ? getGrade(numMarks, exam.total_marks) : ""
-    setResults((r) => ({
-      ...r,
-      [studentId]: { student_id: studentId, obtained_marks: marks, grade },
+  // Handle typing mark in table row
+  function handleDraftChange(studentId: string, marks: string) {
+    setDraftMarks((prev) => ({
+      ...prev,
+      [studentId]: marks,
     }))
   }
 
-  // Save an individual row from the table
-  async function saveRowMark(student: Student) {
-    const r = results[student.id]
-    if (!r || r.obtained_marks === "") {
+  // Save an individual row from the table (called on Enter / Form submit / button click)
+  async function saveRowMark(student: Student, rowIndex?: number) {
+    const raw = draftMarks[student.id]?.trim() ?? ""
+    if (raw === "") {
       toast.error("Please enter a mark first")
       return
     }
 
-    const numMarks = parseFloat(r.obtained_marks)
+    const numMarks = parseFloat(raw)
     if (isNaN(numMarks) || numMarks < 0 || (exam && numMarks > exam.total_marks)) {
       toast.error(`Valid mark between 0 and ${exam?.total_marks} required`)
       return
@@ -256,6 +266,7 @@ export default function ExamResultsPage() {
 
     const grade = getGrade(numMarks, exam.total_marks)
 
+    setSavingRowStudentId(student.id)
     try {
       const { error } = await supabase.from("exam_results").upsert(
         {
@@ -267,9 +278,30 @@ export default function ExamResultsPage() {
         { onConflict: "exam_id,student_id" }
       )
       if (error) throw error
-      toast.success(`Saved mark for ${student.name}`)
+
+      setSavedResults((prev) => ({
+        ...prev,
+        [student.id]: {
+          student_id: student.id,
+          obtained_marks: String(numMarks),
+          grade,
+        },
+      }))
+      setJustSavedIds((prev) => new Set(prev).add(student.id))
+      toast.success(`✓ Saved ${numMarks}/${exam.total_marks} for ${student.name} (${grade})`)
+
+      // Automatically focus the next row input if available
+      if (rowIndex !== undefined) {
+        const nextInput = document.getElementById(`mark-input-${rowIndex + 1}`) as HTMLInputElement | null
+        if (nextInput) {
+          nextInput.focus()
+          nextInput.select()
+        }
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to save")
+    } finally {
+      setSavingRowStudentId(null)
     }
   }
 
@@ -284,9 +316,19 @@ export default function ExamResultsPage() {
         .eq("exam_id", exam.id)
         .eq("student_id", studentId)
 
-      setResults((prev) => {
+      setSavedResults((prev) => {
         const next = { ...prev }
         delete next[studentId]
+        return next
+      })
+      setDraftMarks((prev) => {
+        const next = { ...prev }
+        delete next[studentId]
+        return next
+      })
+      setJustSavedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(studentId)
         return next
       })
 
@@ -305,14 +347,22 @@ export default function ExamResultsPage() {
   async function handleSaveAll() {
     setLoading(true)
     try {
-      const items = Object.values(results)
-        .filter((r) => r.obtained_marks !== "")
-        .map((r) => ({
-          exam_id: params.id as string,
-          student_id: r.student_id,
-          obtained_marks: parseFloat(r.obtained_marks),
-          grade: r.grade,
-        }))
+      const items: { exam_id: string; student_id: string; obtained_marks: number; grade: string }[] = []
+
+      for (const s of students) {
+        const raw = draftMarks[s.id]?.trim() ?? savedResults[s.id]?.obtained_marks ?? ""
+        if (raw !== "") {
+          const numMarks = parseFloat(raw)
+          if (!isNaN(numMarks) && numMarks >= 0 && (!exam || numMarks <= exam.total_marks)) {
+            items.push({
+              exam_id: params.id as string,
+              student_id: s.id,
+              obtained_marks: numMarks,
+              grade: getGrade(numMarks, exam.total_marks),
+            })
+          }
+        }
+      }
 
       if (items.length === 0) {
         toast.error("No marks entered")
@@ -329,6 +379,17 @@ export default function ExamResultsPage() {
         .upsert(sorted, { onConflict: "exam_id,student_id" })
 
       if (error) throw error
+
+      const map: Record<string, Result> = {}
+      for (const item of sorted) {
+        map[item.student_id] = {
+          student_id: item.student_id,
+          obtained_marks: String(item.obtained_marks),
+          grade: item.grade,
+        }
+      }
+      setSavedResults(map)
+
       toast.success(`Results and ranks saved for ${items.length} students!`)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to save results")
@@ -340,7 +401,7 @@ export default function ExamResultsPage() {
   // Statistics
   const stats = useMemo(() => {
     const total = students.length
-    const entered = Object.values(results).filter((r) => r.obtained_marks !== "")
+    const entered = Object.values(savedResults).filter((r) => r.obtained_marks !== "")
     const count = entered.length
     const marksArr = entered.map((r) => parseFloat(r.obtained_marks)).filter((n) => !isNaN(n))
     const avg = marksArr.length ? Math.round(marksArr.reduce((a, b) => a + b, 0) / marksArr.length) : 0
@@ -350,7 +411,7 @@ export default function ExamResultsPage() {
     const passRate = marksArr.length ? Math.round((passedCount / marksArr.length) * 100) : 0
 
     return { total, count, avg, highest, passRate, passedCount, failedCount: count - passedCount }
-  }, [students, results, exam])
+  }, [students, savedResults, exam])
 
   // Filtered students for Table
   const tableStudents = useMemo(() => {
@@ -362,19 +423,31 @@ export default function ExamResultsPage() {
         if (!nameMatch && !idMatch) return false
       }
 
-      const r = results[s.id]
-      const hasMarks = r && r.obtained_marks !== ""
-      const numMarks = hasMarks ? parseFloat(r.obtained_marks) : null
-      const passed = numMarks !== null && exam && numMarks >= exam.pass_marks
+      const saved = savedResults[s.id]
+      const hasSaved = Boolean(saved && saved.obtained_marks !== "")
+      const isJustSaved = justSavedIds.has(s.id)
 
-      if (statusFilter === "entered") return hasMarks
-      if (statusFilter === "pending") return !hasMarks
-      if (statusFilter === "passed") return passed === true
-      if (statusFilter === "failed") return hasMarks && passed === false
+      if (statusFilter === "entered") {
+        return hasSaved || isJustSaved
+      }
+      if (statusFilter === "pending") {
+        // KEEP VISIBLE if not saved yet OR if it was just saved in this view
+        // so it NEVER disappears while typing!
+        if (isJustSaved) return true
+        return !hasSaved
+      }
+      if (statusFilter === "passed") {
+        const num = hasSaved ? parseFloat(saved.obtained_marks) : null
+        return num !== null && exam && num >= exam.pass_marks
+      }
+      if (statusFilter === "failed") {
+        const num = hasSaved ? parseFloat(saved.obtained_marks) : null
+        return num !== null && exam && num < exam.pass_marks
+      }
 
       return true
     })
-  }, [students, tableSearchQuery, statusFilter, results, exam])
+  }, [students, tableSearchQuery, statusFilter, savedResults, justSavedIds, exam])
 
   if (fetching) {
     return (
@@ -575,8 +648,11 @@ export default function ExamResultsPage() {
                   </div>
                 ) : (
                   filteredSearchStudents.map((s) => {
-                    const r = results[s.id]
-                    const hasMark = r && r.obtained_marks !== ""
+                    const saved = savedResults[s.id]
+                    const draft = draftMarks[s.id]
+                    const markToShow = draft || saved?.obtained_marks || ""
+                    const hasMark = Boolean(markToShow !== "")
+                    const gradeToShow = saved?.grade || (hasMark && exam ? getGrade(parseFloat(markToShow), exam.total_marks) : "")
                     const isSelected = selectedStudent?.id === s.id
 
                     return (
@@ -603,7 +679,7 @@ export default function ExamResultsPage() {
                         <div className="shrink-0 ml-2 text-right">
                           {hasMark ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <Check className="w-3 h-3" /> {r.obtained_marks}/{exam.total_marks} ({r.grade})
+                              <Check className="w-3 h-3" /> {markToShow}/{exam.total_marks} ({gradeToShow})
                             </span>
                           ) : (
                             <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 text-gray-500">
@@ -653,14 +729,19 @@ export default function ExamResultsPage() {
                   </button>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    handleSaveQuickMark()
+                  }}
+                  className="flex items-center gap-3"
+                >
                   <div className="relative flex-1">
                     <input
                       ref={quickMarkInputRef}
-                      type="number"
-                      min="0"
-                      max={exam.total_marks}
-                      step="any"
+                      type="text"
+                      inputMode="decimal"
+                      enterKeyHint="done"
                       value={quickMarkInput}
                       onChange={(e) => setQuickMarkInput(e.target.value)}
                       onKeyDown={(e) => {
@@ -697,8 +778,7 @@ export default function ExamResultsPage() {
                   )}
 
                   <button
-                    type="button"
-                    onClick={handleSaveQuickMark}
+                    type="submit"
                     disabled={savingQuickMark || !quickMarkInput}
                     className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 transition-all flex items-center gap-1.5 disabled:bg-gray-300 disabled:shadow-none cursor-pointer shrink-0"
                   >
@@ -710,7 +790,7 @@ export default function ExamResultsPage() {
                       </>
                     )}
                   </button>
-                </div>
+                </form>
               </div>
             ) : (
               <div
@@ -795,12 +875,14 @@ export default function ExamResultsPage() {
             </thead>
             <tbody className="divide-y divide-gray-100 text-sm">
               {tableStudents.map((s, idx) => {
-                const r = results[s.id]
-                const marksVal = r?.obtained_marks ?? ""
-                const numMarks = marksVal !== "" ? parseFloat(marksVal) : null
-                const hasEntered = numMarks !== null && !isNaN(numMarks)
-                const passed = hasEntered && numMarks >= exam.pass_marks
+                const saved = savedResults[s.id]
+                const draftVal = draftMarks[s.id] ?? ""
+                const numMarks = draftVal !== "" ? parseFloat(draftVal) : (saved?.obtained_marks ? parseFloat(saved.obtained_marks) : null)
+                const hasEntered = Boolean(saved && saved.obtained_marks !== "")
+                const isJustSaved = justSavedIds.has(s.id)
+                const passed = numMarks !== null && !isNaN(numMarks) && exam && numMarks >= exam.pass_marks
                 const isSelectedInQuick = selectedStudent?.id === s.id
+                const gradeToDisplay = saved?.grade || (numMarks !== null && !isNaN(numMarks) && exam ? getGrade(numMarks, exam.total_marks) : "")
 
                 return (
                   <tr
@@ -808,6 +890,8 @@ export default function ExamResultsPage() {
                     className={`transition-colors ${
                       isSelectedInQuick
                         ? "bg-indigo-50/70"
+                        : isJustSaved
+                        ? "bg-emerald-50/50"
                         : hasEntered
                         ? "hover:bg-emerald-50/30"
                         : "hover:bg-gray-50"
@@ -831,56 +915,74 @@ export default function ExamResultsPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <div className="inline-flex items-center gap-2">
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          saveRowMark(s, idx)
+                        }}
+                        className="inline-flex items-center gap-2"
+                      >
                         <input
-                          type="number"
-                          min="0"
-                          max={exam.total_marks}
-                          step="any"
-                          value={marksVal}
-                          onChange={(e) => updateTableMark(s.id, e.target.value)}
+                          id={`mark-input-${idx}`}
+                          type="text"
+                          inputMode="decimal"
+                          enterKeyHint="next"
+                          value={draftVal}
+                          onChange={(e) => handleDraftChange(s.id, e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault()
-                              saveRowMark(s)
+                              saveRowMark(s, idx)
                             }
                           }}
                           className={`w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all ${
-                            hasEntered
+                            isJustSaved
+                              ? "border-emerald-500 bg-emerald-100/70 text-emerald-950 ring-2 ring-emerald-300"
+                              : hasEntered
                               ? "border-emerald-300 bg-emerald-50/40 text-emerald-950 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200"
                               : "border-gray-200 bg-white text-gray-900 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
                           } focus:outline-none shadow-sm`}
                           placeholder="—"
                         />
                         <button
-                          type="button"
-                          onClick={() => saveRowMark(s)}
-                          title="Save this row"
+                          type="submit"
+                          disabled={savingRowStudentId === s.id}
+                          title="Save mark (Enter ↵ / Return on phone)"
                           className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
                         >
-                          <Save className="w-3.5 h-3.5" />
+                          {savingRowStudentId === s.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                          ) : isJustSaved ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Save className="w-3.5 h-3.5" />
+                          )}
                         </button>
-                      </div>
+                      </form>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {r?.grade ? (
+                      {gradeToDisplay ? (
                         <span
                           className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black ${
-                            r.grade === "A+" || r.grade === "A"
+                            gradeToDisplay === "A+" || gradeToDisplay === "A"
                               ? "bg-emerald-100 text-emerald-800"
-                              : r.grade === "F"
+                              : gradeToDisplay === "F"
                               ? "bg-rose-100 text-rose-800"
                               : "bg-indigo-100 text-indigo-800"
                           }`}
                         >
-                          {r.grade}
+                          {gradeToDisplay}
                         </span>
                       ) : (
                         <span className="text-gray-300 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {hasEntered ? (
+                      {isJustSaved ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 animate-pulse">
+                          <Check className="w-3 h-3" /> Saved ✓
+                        </span>
+                      ) : hasEntered ? (
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             passed
@@ -906,7 +1008,7 @@ export default function ExamResultsPage() {
                         >
                           Quick Edit
                         </button>
-                        {hasEntered && (
+                        {(hasEntered || isJustSaved || draftVal !== "") && (
                           <button
                             type="button"
                             onClick={() => clearStudentMark(s.id, s.name)}
