@@ -380,167 +380,46 @@ function EnrollContent() {
 
     setSubmitting(true)
     try {
-      let stDbId = submittedStudentDbId
-      let stCode = submittedStudentId
+      const res = await fetch("/api/enroll/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          form,
+          batchId: selectedBatch?.id || null,
+          courseId: selectedCourse?.id || null,
+          isCourse,
+          paidAmount: actualPaidAmount,
+          totalAmount,
+          dueAmount,
+          paymentMethod: paymentMethod.toLowerCase(),
+          senderNumber: senderNumber.trim(),
+          transactionId: transactionId.trim().toUpperCase(),
+        }),
+      })
 
-      // 1. Check if student already exists in DB by phone or email
-      if (!stDbId) {
-        if (form.phone.trim()) {
-          const { data: stByPhone } = await supabase
-            .from("students")
-            .select("id, student_id")
-            .eq("phone", form.phone.trim())
-            .maybeSingle()
-          if (stByPhone) {
-            stDbId = stByPhone.id
-            stCode = stByPhone.student_id
-          }
-        }
-        if (!stDbId && form.email.trim()) {
-          const { data: stByEmail } = await supabase
-            .from("students")
-            .select("id, student_id")
-            .eq("email", form.email.trim())
-            .maybeSingle()
-          if (stByEmail) {
-            stDbId = stByEmail.id
-            stCode = stByEmail.student_id
-          }
-        }
+      const data = await res.json()
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to submit payment. Please try again.")
       }
 
-      // 2. If student does not exist, insert new student record
-      if (!stDbId) {
-        const genId = `MS-${String(Math.floor(10000 + Math.random() * 90000))}`
-        const { data: newStudent, error: createErr } = await supabase
-          .from("students")
-          .insert({
-            student_id: genId,
-            name: form.name.trim(),
-            phone: form.phone.trim(),
-            email: form.email.trim() || null,
-            gender: form.gender,
-            date_of_birth: form.date_of_birth || null,
-            guardian_name: form.guardian_name.trim() || null,
-            guardian_phone: form.guardian_phone.trim() || form.phone.trim(),
-            guardian_relation: form.guardian_relation,
-            school_college: form.school_college.trim() || null,
-            class_level: form.class_level.trim() || null,
-            address: form.address.trim() || null,
-            referred_by_code: form.referred_by_code.trim() || null,
-          })
-          .select("id, student_id")
-          .single()
-
-        if (createErr) throw createErr
-        stDbId = newStudent.id
-        stCode = newStudent.student_id
-      } else {
-        // Update existing student details
-        await supabase
-          .from("students")
-          .update({
-            name: form.name.trim(),
-            ...(form.guardian_name.trim() ? { guardian_name: form.guardian_name.trim() } : {}),
-            ...(form.guardian_phone.trim() ? { guardian_phone: form.guardian_phone.trim() } : {}),
-            ...(form.school_college.trim() ? { school_college: form.school_college.trim() } : {}),
-            ...(form.class_level.trim() ? { class_level: form.class_level.trim() } : {}),
-            ...(form.address.trim() ? { address: form.address.trim() } : {}),
-            ...(form.referred_by_code.trim() ? { referred_by_code: form.referred_by_code.trim() } : {}),
-          })
-          .eq("id", stDbId)
-      }
-
-      setSubmittedStudentDbId(stDbId)
-      setSubmittedStudentId(stCode)
+      if (data.studentDbId) setSubmittedStudentDbId(data.studentDbId)
+      if (data.studentId) setSubmittedStudentId(data.studentId)
       setSubmittedPaidAmount(actualPaidAmount)
       setSubmittedDueAmount(dueAmount)
 
-      if (isCourse && selectedCourse) {
-        // Check for already purchased course
-        const { data: activeCp } = await supabase
-          .from("course_purchases")
-          .select("id")
-          .eq("student_id", stDbId)
-          .eq("course_id", selectedCourse.id)
-          .maybeSingle()
+      if (data.alreadyEnrolled) {
+        setAlreadyEnrolled(true)
+        setStep("success")
+        toast.info(data.message || "You are already enrolled!")
+        return
+      }
 
-        if (activeCp) {
-          setAlreadyEnrolled(true)
-          setStep("success")
-          toast.info("You have already purchased this course! View it in your student dashboard.")
-          return
-        }
-
-        // Insert payment submission for course
-        const { error: paySubErr } = await supabase
-          .from("payment_submissions")
-          .insert({
-            student_id: stDbId,
-            course_id: selectedCourse.id,
-            item_type: "course",
-            amount: actualPaidAmount,
-            total_fee: totalAmount,
-            due_amount: dueAmount,
-            payment_method: paymentMethod.toLowerCase(),
-            sender_number: senderNumber.trim(),
-            transaction_id: transactionId.trim().toUpperCase(),
-            status: "pending",
-            notes: `Online Course enrollment for ${selectedCourse.title}. Student: ${form.name} (${form.phone}). Paid: ৳${actualPaidAmount}, Due: ৳${dueAmount}`,
-          })
-
-        if (paySubErr) throw paySubErr
-      } else if (selectedBatch) {
-        // Check for already active enrollment in this batch
-        const { data: activeEnr } = await supabase
-          .from("enrollments")
-          .select("id")
-          .eq("student_id", stDbId)
-          .eq("batch_id", selectedBatch.id)
-          .eq("status", "active")
-          .maybeSingle()
-
-        if (activeEnr) {
-          setAlreadyEnrolled(true)
-          setStep("success")
-          toast.info("You are already enrolled in this batch! Go to your profile to view courses.")
-          return
-        }
-
-        // Check for duplicate pending payment submission for this batch
-        const { data: existingSub } = await supabase
-          .from("payment_submissions")
-          .select("id, transaction_id")
-          .eq("student_id", stDbId)
-          .eq("batch_id", selectedBatch.id)
-          .eq("status", "pending")
-          .maybeSingle()
-
-        if (existingSub) {
-          setExistingPending(true)
-          setStep("success")
-          toast.info("You already have a pending payment submitted for this batch!")
-          return
-        }
-
-        // Insert payment submission for batch
-        const { error: paySubErr } = await supabase
-          .from("payment_submissions")
-          .insert({
-            student_id: stDbId,
-            batch_id: selectedBatch.id,
-            item_type: "batch",
-            amount: actualPaidAmount,
-            total_fee: totalAmount,
-            due_amount: dueAmount,
-            payment_method: paymentMethod.toLowerCase(),
-            sender_number: senderNumber.trim(),
-            transaction_id: transactionId.trim().toUpperCase(),
-            status: "pending",
-            notes: `Batch enrollment for ${selectedBatch.name}. Student: ${form.name} (${form.phone}). Paid: ৳${actualPaidAmount}, Due: ৳${dueAmount}`,
-          })
-
-        if (paySubErr) throw paySubErr
+      if (data.existingPending) {
+        setExistingPending(true)
+        setStep("success")
+        toast.info(data.message || "You already have a pending payment submitted!")
+        return
       }
 
       window.scrollTo({ top: 0, behavior: "smooth" })
