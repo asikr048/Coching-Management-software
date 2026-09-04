@@ -150,7 +150,6 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         }
 
         const { data: st, error: sErr } = await supabase.from("students").insert({
-          auth_user_id: authData.user?.id || null,
           student_id: studentIdStr,
           name: form.name.trim(),
           phone: form.phone.trim() || null,
