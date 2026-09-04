@@ -9,17 +9,96 @@ export interface GatewayConfig {
 }
 
 function normalizeBdPhone(phone: string): string {
+  if (!phone) return ""
   let cleaned = phone.replace(/[^0-9]/g, "")
-  if (cleaned.startsWith("880")) {
+
+  // In Bangladesh, all numbers begin with 01 (11 digits)
+  // For SMS gateway APIs (sms.net.bd, AlphaNet, etc.), the number must be 88 + 01 + rest (13 digits: 8801XXXXXXXXX)
+  if (cleaned.startsWith("8801") && cleaned.length === 13) {
     return cleaned
   }
-  if (cleaned.startsWith("01")) {
+  if (cleaned.startsWith("01") && cleaned.length === 11) {
     return "88" + cleaned
   }
   if (cleaned.startsWith("1") && cleaned.length === 10) {
     return "880" + cleaned
   }
+  if (cleaned.startsWith("8801")) {
+    return cleaned.slice(0, 13)
+  }
+  if (cleaned.startsWith("01")) {
+    return "88" + cleaned
+  }
   return cleaned
+}
+
+function parseGatewayResponse(resOk: boolean, status: number, text: string): { success: boolean; data: any; errorMessage: string | null } {
+  let responseData: any = null
+  try {
+    responseData = JSON.parse(text)
+  } catch {
+    responseData = text
+  }
+
+  if (!resOk) {
+    return {
+      success: false,
+      data: responseData,
+      errorMessage: `HTTP ${status}: ${typeof responseData === "object" ? JSON.stringify(responseData) : text}`,
+    }
+  }
+
+  // Parse JSON response formats:
+  // sms.net.bd returns: { error: 0, msg: "Request was successful", data: {...} }
+  // On error it returns: { error: 401, msg: "Invalid API Key" } or { error: 402, msg: "Insufficient Balance" }
+  if (responseData && typeof responseData === "object") {
+    if ("error" in responseData) {
+      const errVal = responseData.error
+      if (errVal === 0 || errVal === "0" || errVal === false || errVal === null) {
+        return { success: true, data: responseData, errorMessage: null }
+      } else {
+        const msg = responseData.msg || responseData.message || responseData.error_message || `Gateway error code ${errVal}`
+        return { success: false, data: responseData, errorMessage: msg }
+      }
+    }
+
+    if ("status" in responseData) {
+      const s = String(responseData.status).toLowerCase()
+      if (s === "success" || s === "true" || s === "ok" || s === "200" || s === "sent") {
+        return { success: true, data: responseData, errorMessage: null }
+      } else {
+        const msg = responseData.msg || responseData.message || responseData.error || `Status: ${responseData.status}`
+        return { success: false, data: responseData, errorMessage: msg }
+      }
+    }
+
+    if ("code" in responseData) {
+      const codeVal = responseData.code
+      if (codeVal === 200 || codeVal === 0 || codeVal === "200" || codeVal === "0") {
+        return { success: true, data: responseData, errorMessage: null }
+      } else {
+        const msg = responseData.message || responseData.msg || `Gateway response code ${codeVal}`
+        return { success: false, data: responseData, errorMessage: msg }
+      }
+    }
+
+    // Generic JSON with HTTP 200
+    return { success: true, data: responseData, errorMessage: null }
+  }
+
+  // Raw text response (e.g. Greenweb or custom text)
+  if (typeof text === "string") {
+    const lower = text.toLowerCase()
+    if (lower.includes("success") || lower.includes("ok") || lower.includes("sent")) {
+      return { success: true, data: text, errorMessage: null }
+    }
+    if (lower.includes("invalid") || lower.includes("failed") || lower.includes("err_") || lower.includes("denied")) {
+      return { success: false, data: text, errorMessage: text }
+    }
+    return { success: true, data: text, errorMessage: null }
+  }
+
+  return { success: true, data: responseData, errorMessage: null }
 }
 
 export async function POST(req: NextRequest) {
@@ -100,8 +179,12 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Filter out invalid items
-    items = items.filter((it) => it.phone && it.phone.trim().length >= 8 && it.message.trim().length > 0)
+    // Filter out invalid items (must have valid phone number)
+    items = items.filter((it) => {
+      if (!it.phone || !it.message || !it.message.trim()) return false
+      const clean = it.phone.replace(/[^0-9]/g, "")
+      return clean.length >= 10
+    })
 
     if (items.length === 0) {
       return NextResponse.json({ error: "No valid recipient phone numbers or messages provided" }, { status: 400 })
@@ -112,11 +195,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Dispatch messages
     for (const task of items) {
-      const normalizedPhone = normalizeBdPhone(task.phone)
-      const rawPhoneWithout88 = normalizedPhone.startsWith("88") ? normalizedPhone.substring(2) : normalizedPhone
-
-      // Choose phone format matching template expectation (if template has 88 or standard)
-      const phoneToUse = config.urlTemplate.includes("880") ? normalizedPhone : normalizedPhone
+      const phoneToUse = normalizeBdPhone(task.phone)
 
       let success = false
       let responseData: any = null
@@ -127,28 +206,15 @@ export async function POST(req: NextRequest) {
           let targetUrl = config.urlTemplate
           targetUrl = targetUrl.replace(/\{api_key\}|\{API_KEY\}|\{YOUR_API_KEY\}/g, encodeURIComponent(config.apiKey))
           targetUrl = targetUrl.replace(/\{msg\}|\{MSG\}|\{YOUR_MSG\}|\{message\}/g, encodeURIComponent(task.message))
-          targetUrl = targetUrl.replace(/\{to\}|\{TO\}|\{YOUR_TO\}|\{number\}|\{phone\}|\{msisdn\}/g, encodeURIComponent(phoneToUse))
+          // Replace {to} token or any template sample phone number
+          targetUrl = targetUrl.replace(/\{to\}|\{TO\}|\{YOUR_TO\}|\{number\}|\{phone\}|\{msisdn\}|8801800000000/g, encodeURIComponent(phoneToUse))
 
           const res = await fetch(targetUrl, { method: "GET" })
           const text = await res.text()
-          try {
-            responseData = JSON.parse(text)
-          } catch {
-            responseData = text
-          }
-
-          if (res.ok) {
-            // Check for common BD SMS gateway error indicators
-            if (typeof text === "string" && (text.includes("error") || text.includes("INVALID") || text.includes("FAILED"))) {
-              success = false
-              errorMessage = text
-            } else {
-              success = true
-            }
-          } else {
-            success = false
-            errorMessage = `HTTP ${res.status}: ${text}`
-          }
+          const parsed = parseGatewayResponse(res.ok, res.status, text)
+          success = parsed.success
+          responseData = parsed.data
+          errorMessage = parsed.errorMessage
         } else if (config.callType === "POST_FORM") {
           // POST with form urlencoded body
           const baseUrl = config.urlTemplate.split("?")[0]
@@ -164,13 +230,10 @@ export async function POST(req: NextRequest) {
             body: formData.toString(),
           })
           const text = await res.text()
-          try {
-            responseData = JSON.parse(text)
-          } catch {
-            responseData = text
-          }
-          success = res.ok
-          if (!res.ok) errorMessage = text
+          const parsed = parseGatewayResponse(res.ok, res.status, text)
+          success = parsed.success
+          responseData = parsed.data
+          errorMessage = parsed.errorMessage
         } else if (config.callType === "POST_JSON") {
           // POST with JSON body
           const baseUrl = config.urlTemplate.split("?")[0]
@@ -185,13 +248,10 @@ export async function POST(req: NextRequest) {
             }),
           })
           const text = await res.text()
-          try {
-            responseData = JSON.parse(text)
-          } catch {
-            responseData = text
-          }
-          success = res.ok
-          if (!res.ok) errorMessage = text
+          const parsed = parseGatewayResponse(res.ok, res.status, text)
+          success = parsed.success
+          responseData = parsed.data
+          errorMessage = parsed.errorMessage
         }
       } catch (sendErr: any) {
         success = false

@@ -744,11 +744,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         })
     }
 
-    // Deduplicate by clean phone
+    // Deduplicate and filter out invalid short numbers
     const seen = new Set<string>()
     return list.filter((item) => {
       const clean = item.phone.replace(/[^0-9]/g, "")
-      if (!clean || seen.has(clean)) return false
+      // Valid Bangladeshi numbers have at least 10 or 11 digits (e.g. 01XXXXXXXXX)
+      if (!clean || clean.length < 10 || seen.has(clean)) return false
       seen.add(clean)
       return true
     })
@@ -846,6 +847,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
     const batchSize = 10
     let totalSuccess = 0
     let totalFailed = 0
+    let lastError = ""
 
     try {
       for (let i = 0; i < resolvedRecipients.length; i += batchSize) {
@@ -880,6 +882,14 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         if (data.sentCount) totalSuccess += data.sentCount
         if (data.failedCount) totalFailed += data.failedCount
 
+        if (data.results && Array.isArray(data.results)) {
+          const failItem = data.results.find((r: any) => !r.success)
+          if (failItem?.error) lastError = failItem.error
+        }
+        if (!res.ok && data.error) {
+          lastError = data.error
+        }
+
         setSendProgress({
           current: Math.min(i + batchSize, resolvedRecipients.length),
           total: resolvedRecipients.length,
@@ -888,7 +898,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         })
       }
 
-      toast.success(`Finished! Sent ${totalSuccess} SMS successfully (${totalFailed} failed)`)
+      if (totalSuccess > 0 && totalFailed === 0) {
+        toast.success(`✓ Successfully sent ${totalSuccess} SMS!`)
+      } else if (totalSuccess > 0 && totalFailed > 0) {
+        toast.warning(`Sent ${totalSuccess} SMS, ${totalFailed} failed. (${lastError || "Gateway error"})`)
+      } else {
+        toast.error(`SMS send failed: ${lastError || "Gateway returned an error"}`)
+      }
       refreshLogs()
     } catch (err: any) {
       console.error("Bulk send error:", err)

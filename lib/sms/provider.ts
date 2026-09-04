@@ -65,8 +65,42 @@ class DynamicGatewayProvider implements SmsProvider {
 
   async send(to: string, message: string) {
     try {
-      let normalized = to.replace(/[^0-9]/g, "")
-      if (normalized.startsWith("01")) normalized = "88" + normalized
+      let cleaned = to.replace(/[^0-9]/g, "")
+      let normalized = cleaned
+      if (cleaned.startsWith("8801") && cleaned.length === 13) {
+        normalized = cleaned
+      } else if (cleaned.startsWith("01") && cleaned.length === 11) {
+        normalized = "88" + cleaned
+      } else if (cleaned.startsWith("1") && cleaned.length === 10) {
+        normalized = "880" + cleaned
+      } else if (cleaned.startsWith("01")) {
+        normalized = "88" + cleaned
+      }
+
+      function isGatewaySuccess(ok: boolean, text: string): { isSuccess: boolean; err?: string } {
+        if (!ok) return { isSuccess: false, err: text }
+        try {
+          const json = JSON.parse(text)
+          if ("error" in json) {
+            const isZero = json.error === 0 || json.error === "0" || json.error === false || json.error === null
+            return { isSuccess: isZero, err: isZero ? undefined : (json.msg || json.message || JSON.stringify(json)) }
+          }
+          if ("status" in json) {
+            const s = String(json.status).toLowerCase()
+            const isStatusOk = s === "success" || s === "true" || s === "ok" || s === "200" || s === "sent"
+            return { isSuccess: isStatusOk, err: isStatusOk ? undefined : (json.msg || json.message || JSON.stringify(json)) }
+          }
+        } catch {
+          const lower = text.toLowerCase()
+          if (lower.includes("success") || lower.includes("ok") || lower.includes("sent")) {
+            return { isSuccess: true }
+          }
+          if (lower.includes("invalid") || lower.includes("failed") || lower.includes("insufficient")) {
+            return { isSuccess: false, err: text }
+          }
+        }
+        return { isSuccess: true }
+      }
 
       if (this.config.callType === "POST_JSON") {
         const baseUrl = this.config.urlTemplate.split("?")[0]
@@ -76,7 +110,8 @@ class DynamicGatewayProvider implements SmsProvider {
           body: JSON.stringify({ api_key: this.config.apiKey, msg: message, to: normalized, sender_id: this.config.senderId }),
         })
         const text = await res.text()
-        return { success: res.ok, error: res.ok ? undefined : text }
+        const check = isGatewaySuccess(res.ok, text)
+        return { success: check.isSuccess, error: check.err }
       } else if (this.config.callType === "POST_FORM") {
         const baseUrl = this.config.urlTemplate.split("?")[0]
         const form = new URLSearchParams()
@@ -90,17 +125,18 @@ class DynamicGatewayProvider implements SmsProvider {
           body: form.toString(),
         })
         const text = await res.text()
-        return { success: res.ok, error: res.ok ? undefined : text }
+        const check = isGatewaySuccess(res.ok, text)
+        return { success: check.isSuccess, error: check.err }
       } else {
         // GET (default)
         let url = this.config.urlTemplate
         url = url.replace(/\{api_key\}|\{API_KEY\}|\{YOUR_API_KEY\}/g, encodeURIComponent(this.config.apiKey))
         url = url.replace(/\{msg\}|\{MSG\}|\{YOUR_MSG\}|\{message\}/g, encodeURIComponent(message))
-        url = url.replace(/\{to\}|\{TO\}|\{YOUR_TO\}|\{number\}|\{phone\}|\{msisdn\}/g, encodeURIComponent(normalized))
+        url = url.replace(/\{to\}|\{TO\}|\{YOUR_TO\}|\{number\}|\{phone\}|\{msisdn\}|8801800000000/g, encodeURIComponent(normalized))
         const res = await fetch(url, { method: "GET" })
         const text = await res.text()
-        const isOk = res.ok && !text.includes("error") && !text.includes("FAILED")
-        return { success: isOk, error: isOk ? undefined : text }
+        const check = isGatewaySuccess(res.ok, text)
+        return { success: check.isSuccess, error: check.err }
       }
     } catch (e: any) {
       return { success: false, error: e?.message || String(e) }
