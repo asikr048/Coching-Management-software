@@ -16,7 +16,7 @@ export default async function PaymentApprovalsPage() {
 
   const { data: submissions } = await supabase
     .from("payment_submissions")
-    .select("*, student:students(name, student_id, phone, email), batch:batches(name, subject)")
+    .select("*, student:students(name, student_id, phone, email), batch:batches(name, subject), course:courses(title, category)")
     .order("created_at", { ascending: false })
 
   return (

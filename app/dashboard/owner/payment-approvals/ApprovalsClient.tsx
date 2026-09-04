@@ -11,7 +11,9 @@ import {
 interface Submission {
   id: string
   student_id: string
-  batch_id: string
+  batch_id?: string | null
+  course_id?: string | null
+  item_type?: string | null
   amount: number
   total_fee: number
   due_amount: number
@@ -27,6 +29,7 @@ interface Submission {
   created_at: string
   student?: { name: string; student_id: string; phone: string | null; email: string | null }
   batch?: { name: string; subject: string | null }
+  course?: { title: string; category?: string | null }
 }
 
 const methodLabels: Record<string, string> = { bkash: "bKash", nagad: "Nagad", rocket: "Rocket", upay: "Upay", offline: "Offline" }
@@ -109,38 +112,74 @@ export default function ApprovalsClient({
   async function handleApprove(id: string, sub: Submission) {
     setProcessing(id)
     try {
+      const isCourse = !!sub.course_id || sub.item_type === "course"
+
       // 1. Update submission status
       const { error: updateErr } = await supabase.from("payment_submissions").update({
         status: "approved", approved_by: staffId, approved_at: new Date().toISOString(),
       }).eq("id", id)
       if (updateErr) throw updateErr
 
-      // 2. Create enrollment record if not already enrolled
-      const { data: existingEnr } = await supabase
-        .from("enrollments")
-        .select("id")
-        .eq("student_id", sub.student_id)
-        .eq("batch_id", sub.batch_id)
-        .maybeSingle()
+      if (isCourse && sub.course_id) {
+        // 2a. Insert course purchase record
+        const { error: coursePurErr } = await supabase.from("course_purchases").insert({
+          course_id: sub.course_id,
+          student_id: sub.student_id,
+          buyer_name: sub.student?.name || "Student",
+          buyer_phone: sub.student?.phone || sub.sender_number || null,
+          buyer_email: sub.student?.email || null,
+          amount_paid: sub.amount,
+          payment_method: sub.payment_method,
+          transaction_id: sub.transaction_id || null,
+        })
+        if (coursePurErr && !coursePurErr.message.includes("duplicate")) {
+          console.warn("Course purchase insert warning:", coursePurErr)
+        }
 
-      if (!existingEnr) {
-        const { error: enrollErr } = await supabase.from("enrollments").insert({
-          student_id: sub.student_id, batch_id: sub.batch_id, status: "active",
-        }).select().maybeSingle()
-        // Ignore duplicate enrollment error if race condition occurs
-        if (enrollErr && !enrollErr.message.includes("duplicate") && enrollErr.code !== "23505") throw enrollErr
+        // Increment course total_sales
+        try {
+          const { data: cData } = await supabase.from("courses").select("total_sales").eq("id", sub.course_id).single()
+          if (cData) {
+            await supabase.from("courses").update({ total_sales: (cData.total_sales || 0) + 1 }).eq("id", sub.course_id)
+          }
+        } catch { /* ignore sales counter error */ }
+
+        // Create payment record for course
+        const receiptNo = `RCP-C-${Date.now().toString(36).toUpperCase()}`
+        await supabase.from("payments").insert({
+          student_id: sub.student_id,
+          amount: sub.amount, total_paid: sub.amount, discount: 0, late_fee: 0,
+          payment_method: sub.payment_method, transaction_id: sub.transaction_id || null,
+          payment_for: "course", receipt_number: receiptNo,
+          notes: `Course: ${sub.course?.title || "Online Course"}. Sender: ${sub.sender_number || "—"}`,
+        })
+      } else if (sub.batch_id) {
+        // 2b. Create batch enrollment record if not already enrolled
+        const { data: existingEnr } = await supabase
+          .from("enrollments")
+          .select("id")
+          .eq("student_id", sub.student_id)
+          .eq("batch_id", sub.batch_id)
+          .maybeSingle()
+
+        if (!existingEnr) {
+          const { error: enrollErr } = await supabase.from("enrollments").insert({
+            student_id: sub.student_id, batch_id: sub.batch_id, status: "active",
+          }).select().maybeSingle()
+          if (enrollErr && !enrollErr.message.includes("duplicate") && enrollErr.code !== "23505") throw enrollErr
+        }
+
+        // Create payment record
+        const receiptNo = `RCP-${Date.now().toString(36).toUpperCase()}`
+        const { error: payErr } = await supabase.from("payments").insert({
+          student_id: sub.student_id, batch_id: sub.batch_id,
+          amount: sub.amount, total_paid: sub.amount, discount: 0, late_fee: 0,
+          payment_method: sub.payment_method, transaction_id: sub.transaction_id || null,
+          payment_for: "enrollment", receipt_number: receiptNo,
+          notes: sub.sender_number ? `Sender: ${sub.sender_number}` : null,
+        })
+        if (payErr) throw payErr
       }
-
-      // 3. Create payment record
-      const receiptNo = `RCP-${Date.now().toString(36).toUpperCase()}`
-      const { error: payErr } = await supabase.from("payments").insert({
-        student_id: sub.student_id, batch_id: sub.batch_id,
-        amount: sub.amount, total_paid: sub.amount, discount: 0, late_fee: 0,
-        payment_method: sub.payment_method, transaction_id: sub.transaction_id || null,
-        payment_for: "enrollment", receipt_number: receiptNo,
-        notes: sub.sender_number ? `Sender: ${sub.sender_number}` : null,
-      })
-      if (payErr) throw payErr
 
       // 4. Create fee_due if there's remaining amount (handle duplicate month constraint safely)
       if (sub.due_amount > 0 && sub.due_date) {
@@ -380,8 +419,17 @@ export default function ApprovalsClient({
                   {/* Details grid */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-gray-100">
                     <div>
-                      <p className="text-xs text-gray-400">Batch</p>
-                      <p className="font-medium text-gray-800 truncate">{sub.batch?.name || "—"}</p>
+                      <p className="text-xs text-gray-400">{sub.course?.title || sub.course_id ? "Course" : "Batch"}</p>
+                      <p className="font-medium text-gray-800 truncate">
+                        {sub.course?.title ? (
+                          <span className="text-purple-700 font-semibold flex items-center gap-1">
+                            <span className="text-xs px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">Course</span>
+                            {sub.course.title}
+                          </span>
+                        ) : (
+                          sub.batch?.name || "—"
+                        )}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-400">Amount Paid</p>

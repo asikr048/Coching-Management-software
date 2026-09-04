@@ -5,7 +5,8 @@ import { toast } from "sonner"
 import { 
   Plus, X, Loader2, CreditCard, Printer, Search, ShieldAlert, 
   AlertCircle, Check, DollarSign, Calendar, Edit2, Download, 
-  User, RefreshCw, CheckCircle2, ArrowRight, Eye, ChevronDown, Clock, History
+  User, RefreshCw, CheckCircle2, ArrowRight, Eye, ChevronDown, Clock, History,
+  Smartphone, Settings, Save
 } from "lucide-react"
 import { formatCurrency, formatDateTime, formatDate } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
@@ -119,6 +120,122 @@ export default function PaymentsClient({
     payment_for: "monthly", 
     payment_month: "" 
   })
+
+  // Payment Gateway Numbers (Owner Configurable)
+  const [showGatewayModal, setShowGatewayModal] = useState(false)
+  const [savingGateways, setSavingGateways] = useState(false)
+  const [gatewayNumbers, setGatewayNumbers] = useState({
+    bkash: "01302201431",
+    bkash_type: "Send Money (Personal)",
+    nagad: "01302201431",
+    nagad_type: "Send Money (Personal)",
+    rocket: "01302201431",
+    rocket_type: "Send Money (Personal)",
+    upay: "01302201431",
+    upay_type: "Send Money (Personal)",
+  })
+
+  // Load gateway numbers on mount
+  useEffect(() => {
+    async function loadGatewayNumbers() {
+      try {
+        const { data: settings } = await supabase
+          .from("site_settings")
+          .select("key, value")
+          .in("key", [
+            "payment_number_bkash", "payment_number_nagad", "payment_number_rocket", "payment_number_upay",
+            "payment_type_bkash", "payment_type_nagad", "payment_type_rocket", "payment_type_upay"
+          ])
+
+        if (settings && settings.length > 0) {
+          const map: Record<string, string> = {}
+          settings.forEach(s => { map[s.key] = s.value })
+          setGatewayNumbers(prev => ({
+            bkash: map["payment_number_bkash"] || prev.bkash,
+            bkash_type: map["payment_type_bkash"] || prev.bkash_type,
+            nagad: map["payment_number_nagad"] || prev.nagad,
+            nagad_type: map["payment_type_nagad"] || prev.nagad_type,
+            rocket: map["payment_number_rocket"] || prev.rocket,
+            rocket_type: map["payment_type_rocket"] || prev.rocket_type,
+            upay: map["payment_number_upay"] || prev.upay,
+            upay_type: map["payment_type_upay"] || prev.upay_type,
+          }))
+        }
+
+        const { data: accounts } = await supabase
+          .from("payment_accounts")
+          .select("method, account_number, account_name")
+          .eq("is_active", true)
+
+        if (accounts && accounts.length > 0) {
+          accounts.forEach(acc => {
+            const m = acc.method?.toLowerCase()
+            if (m === "bkash" && acc.account_number) {
+              setGatewayNumbers(prev => ({ ...prev, bkash: acc.account_number, bkash_type: acc.account_name || prev.bkash_type }))
+            } else if (m === "nagad" && acc.account_number) {
+              setGatewayNumbers(prev => ({ ...prev, nagad: acc.account_number, nagad_type: acc.account_name || prev.nagad_type }))
+            } else if (m === "rocket" && acc.account_number) {
+              setGatewayNumbers(prev => ({ ...prev, rocket: acc.account_number, rocket_type: acc.account_name || prev.rocket_type }))
+            } else if (m === "upay" && acc.account_number) {
+              setGatewayNumbers(prev => ({ ...prev, upay: acc.account_number, upay_type: acc.account_name || prev.upay_type }))
+            }
+          })
+        }
+      } catch (err) {
+        console.warn("Could not load gateway numbers:", err)
+      }
+    }
+    loadGatewayNumbers()
+  }, [])
+
+  async function handleSaveGatewayNumbers(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingGateways(true)
+    try {
+      // 1. Save to site_settings
+      const settingsEntries = [
+        { key: "payment_number_bkash", value: gatewayNumbers.bkash },
+        { key: "payment_type_bkash", value: gatewayNumbers.bkash_type },
+        { key: "payment_number_nagad", value: gatewayNumbers.nagad },
+        { key: "payment_type_nagad", value: gatewayNumbers.nagad_type },
+        { key: "payment_number_rocket", value: gatewayNumbers.rocket },
+        { key: "payment_type_rocket", value: gatewayNumbers.rocket_type },
+        { key: "payment_number_upay", value: gatewayNumbers.upay },
+        { key: "payment_type_upay", value: gatewayNumbers.upay_type },
+      ]
+      for (const entry of settingsEntries) {
+        await supabase.from("site_settings").upsert(entry, { onConflict: "key" })
+      }
+
+      // 2. Save/upsert to payment_accounts
+      const accountsList = [
+        { method: "bkash", account_number: gatewayNumbers.bkash, account_name: gatewayNumbers.bkash_type, is_active: true },
+        { method: "nagad", account_number: gatewayNumbers.nagad, account_name: gatewayNumbers.nagad_type, is_active: true },
+        { method: "rocket", account_number: gatewayNumbers.rocket, account_name: gatewayNumbers.rocket_type, is_active: true },
+        { method: "upay", account_number: gatewayNumbers.upay, account_name: gatewayNumbers.upay_type, is_active: true },
+      ]
+      for (const acc of accountsList) {
+        const { data: existing } = await supabase.from("payment_accounts").select("id").eq("method", acc.method).maybeSingle()
+        if (existing) {
+          await supabase.from("payment_accounts").update({
+            account_number: acc.account_number,
+            account_name: acc.account_name,
+            is_active: true,
+          }).eq("id", existing.id)
+        } else {
+          await supabase.from("payment_accounts").insert(acc)
+        }
+      }
+
+      toast.success("Payment numbers updated successfully! Student payment form will reflect these immediately.")
+      setShowGatewayModal(false)
+    } catch (err: unknown) {
+      console.error("Save gateway numbers error:", err)
+      toast.error(err instanceof Error ? err.message : "Failed to save gateway numbers")
+    } finally {
+      setSavingGateways(false)
+    }
+  }
 
   function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })) }
 
@@ -573,8 +690,16 @@ export default function PaymentsClient({
 
         <button 
           type="button"
+          onClick={() => setShowGatewayModal(true)} 
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-sm font-bold shadow-md shadow-purple-100 hover:shadow-lg transition-all whitespace-nowrap cursor-pointer"
+        >
+          <Smartphone className="w-4 h-4" /> Payment Numbers (bKash/Nagad/Rocket)
+        </button>
+
+        <button 
+          type="button"
           onClick={openRecordModal} 
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-sm font-bold shadow-md shadow-emerald-100 hover:shadow-lg transition-all whitespace-nowrap"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-sm font-bold shadow-md shadow-emerald-100 hover:shadow-lg transition-all whitespace-nowrap cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Record Payment
         </button>
@@ -1223,6 +1348,195 @@ export default function PaymentsClient({
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Gateway Numbers Modal (Owner Configurable) */}
+      {showGatewayModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95">
+            <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 p-6 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
+                  <Smartphone className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">Payment Gateway Numbers</h3>
+                  <p className="text-xs text-purple-100">Shown to students on batch &amp; course checkout pages</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGatewayModal(false)}
+                className="p-1.5 hover:bg-white/20 rounded-xl transition-colors text-white cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveGatewayNumbers} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              {/* bKash */}
+              <div className="p-4 rounded-2xl border border-pink-200 bg-pink-50/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-pink-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-pink-500"></span>
+                    bKash Number &amp; Account
+                  </span>
+                  <span className="text-[10px] font-semibold text-pink-600 bg-pink-100/80 px-2 py-0.5 rounded-md">Dial *247#</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Number *</label>
+                    <input
+                      type="text"
+                      required
+                      value={gatewayNumbers.bkash}
+                      onChange={e => setGatewayNumbers(prev => ({ ...prev, bkash: e.target.value }))}
+                      placeholder="01XXXXXXXXX"
+                      className="w-full px-3 py-2 text-sm font-mono border border-pink-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Type</label>
+                    <input
+                      type="text"
+                      value={gatewayNumbers.bkash_type}
+                      onChange={e => setGatewayNumbers(prev => ({ ...prev, bkash_type: e.target.value }))}
+                      placeholder="e.g. Send Money (Personal)"
+                      className="w-full px-3 py-2 text-xs border border-pink-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 text-gray-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Nagad */}
+              <div className="p-4 rounded-2xl border border-orange-200 bg-orange-50/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-orange-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                    Nagad Number &amp; Account
+                  </span>
+                  <span className="text-[10px] font-semibold text-orange-600 bg-orange-100/80 px-2 py-0.5 rounded-md">Dial *167#</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Number *</label>
+                    <input
+                      type="text"
+                      required
+                      value={gatewayNumbers.nagad}
+                      onChange={e => setGatewayNumbers(prev => ({ ...prev, nagad: e.target.value }))}
+                      placeholder="01XXXXXXXXX"
+                      className="w-full px-3 py-2 text-sm font-mono border border-orange-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Type</label>
+                    <input
+                      type="text"
+                      value={gatewayNumbers.nagad_type}
+                      onChange={e => setGatewayNumbers(prev => ({ ...prev, nagad_type: e.target.value }))}
+                      placeholder="e.g. Send Money (Personal)"
+                      className="w-full px-3 py-2 text-xs border border-orange-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Rocket */}
+              <div className="p-4 rounded-2xl border border-purple-200 bg-purple-50/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                    Rocket Number &amp; Account
+                  </span>
+                  <span className="text-[10px] font-semibold text-purple-600 bg-purple-100/80 px-2 py-0.5 rounded-md">Dial *322#</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Number *</label>
+                    <input
+                      type="text"
+                      required
+                      value={gatewayNumbers.rocket}
+                      onChange={e => setGatewayNumbers(prev => ({ ...prev, rocket: e.target.value }))}
+                      placeholder="01XXXXXXXXX"
+                      className="w-full px-3 py-2 text-sm font-mono border border-purple-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Type</label>
+                    <input
+                      type="text"
+                      value={gatewayNumbers.rocket_type}
+                      onChange={e => setGatewayNumbers(prev => ({ ...prev, rocket_type: e.target.value }))}
+                      placeholder="e.g. Send Money (Personal)"
+                      className="w-full px-3 py-2 text-xs border border-purple-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Upay */}
+              <div className="p-4 rounded-2xl border border-teal-200 bg-teal-50/30 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-teal-500"></span>
+                    Upay Number &amp; Account
+                  </span>
+                  <span className="text-[10px] font-semibold text-teal-600 bg-teal-100/80 px-2 py-0.5 rounded-md">Dial *268#</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Number *</label>
+                    <input
+                      type="text"
+                      required
+                      value={gatewayNumbers.upay}
+                      onChange={e => setGatewayNumbers(prev => ({ ...prev, upay: e.target.value }))}
+                      placeholder="01XXXXXXXXX"
+                      className="w-full px-3 py-2 text-sm font-mono border border-teal-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Type</label>
+                    <input
+                      type="text"
+                      value={gatewayNumbers.upay_type}
+                      onChange={e => setGatewayNumbers(prev => ({ ...prev, upay_type: e.target.value }))}
+                      placeholder="e.g. Send Money (Personal)"
+                      className="w-full px-3 py-2 text-xs border border-teal-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowGatewayModal(false)}
+                  className="flex-1 py-3 border border-gray-200 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-sm cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingGateways}
+                  className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-md shadow-purple-200 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  {savingGateways ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Saving...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" /> Save Payment Numbers
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

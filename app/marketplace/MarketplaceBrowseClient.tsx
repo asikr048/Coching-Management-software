@@ -547,13 +547,22 @@ export default function MarketplaceBrowseClient({
                       <span className="text-xs text-gray-500">Full Access</span>
                     </div>
 
-                    <button
-                      onClick={() => setSelectedCourse(course)}
-                      className="w-full py-2.5 px-4 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-purple-200"
-                    >
-                      <BookOpen className="w-4 h-4" />
-                      View Course Details
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setSelectedCourse(course)}
+                        className="flex-1 py-2.5 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <BookOpen className="w-3.5 h-3.5" />
+                        Details
+                      </button>
+                      <Link
+                        href={`/enroll?courseId=${course.id}`}
+                        className="flex-1 py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-md shadow-purple-200"
+                      >
+                        <span>Enroll Now</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -649,26 +658,27 @@ export default function MarketplaceBrowseClient({
               <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 text-xs text-indigo-900 space-y-1">
                 <p className="font-bold flex items-center gap-1.5">
                   <CheckCircle2 className="w-4 h-4 text-indigo-600" />
-                  How to Enroll in Online Course:
+                  Direct Online Enrollment:
                 </p>
                 <p className="text-indigo-700">
-                  Please contact the coaching office or helpline with your Student ID to activate access to this course on your portal account.
+                  You can enroll and pay directly online via bKash, Nagad, Rocket, or Upay. Instant confirmation!
                 </p>
               </div>
 
               <div className="flex items-center gap-3 pt-2">
                 <button
                   onClick={() => setSelectedCourse(null)}
-                  className="flex-1 py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-semibold transition-colors"
+                  className="py-3 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-semibold transition-colors"
                 >
                   Close
                 </button>
-                <a
-                  href={`tel:${contactPhone}`}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white rounded-xl text-sm font-semibold text-center transition-all shadow-md shadow-indigo-200"
+                <Link
+                  href={`/enroll?courseId=${selectedCourse.id}`}
+                  className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-sm font-bold text-center transition-all shadow-md shadow-purple-300 flex items-center justify-center gap-2"
                 >
-                  Contact to Enroll
-                </a>
+                  <span>Enroll / Buy Course Now</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
               </div>
             </div>
           </div>
