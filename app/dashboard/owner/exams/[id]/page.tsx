@@ -20,6 +20,9 @@ import {
   TrendingUp,
   Award,
   Users,
+  Lock,
+  Eye,
+  EyeOff,
 } from "lucide-react"
 import { getGrade } from "@/lib/utils"
 
@@ -58,6 +61,10 @@ export default function ExamResultsPage() {
   const [quickMarkInput, setQuickMarkInput] = useState("")
   const [savingQuickMark, setSavingQuickMark] = useState(false)
 
+  // Batch Results Visibility (Default: true - all students see everyone's marks)
+  const [showAllResults, setShowAllResults] = useState<boolean>(true)
+  const [updatingVisibility, setUpdatingVisibility] = useState(false)
+
   // Table Filter & Search State
   const [tableSearchQuery, setTableSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "entered" | "pending" | "passed" | "failed">("all")
@@ -82,6 +89,8 @@ export default function ExamResultsPage() {
 
         if (exErr) throw exErr
         setExam(ex)
+        const isPublic = ex?.show_all_results !== false && !ex?.result_note?.includes("[SHOW_ALL_RESULTS:false]")
+        setShowAllResults(isPublic)
 
         if (ex?.batch_id) {
           const { data: enrollments } = await supabase
@@ -343,6 +352,40 @@ export default function ExamResultsPage() {
     }
   }
 
+  // Toggle Batch Leaderboard / Marks Visibility for all students
+  async function handleToggleShowAllResults(nextVal: boolean) {
+    setShowAllResults(nextVal)
+    setUpdatingVisibility(true)
+    try {
+      const res = await fetch(`/api/exams/${params.id}/results`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ show_all_results: nextVal }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Failed to update visibility")
+      }
+
+      setExam((prev: any) => ({
+        ...prev,
+        show_all_results: nextVal,
+      }))
+
+      if (nextVal) {
+        toast.success("✓ All students in this batch can now see everyone's marks & merit list")
+      } else {
+        toast.success("✓ Private Mode: Each student will only see their own marks in their profile")
+      }
+    } catch (err: any) {
+      console.error("Failed to toggle visibility:", err)
+      setShowAllResults(!nextVal)
+      toast.error(err.message || "Failed to update visibility setting")
+    } finally {
+      setUpdatingVisibility(false)
+    }
+  }
+
   // Save all results & calculate rank
   async function handleSaveAll() {
     setLoading(true)
@@ -531,6 +574,74 @@ export default function ExamResultsPage() {
               </>
             )}
           </button>
+        </div>
+      </div>
+
+      {/* Batch Marks Visibility Option Card */}
+      <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+        showAllResults 
+          ? "bg-gradient-to-r from-emerald-50 via-teal-50/40 to-white border-emerald-200 shadow-sm" 
+          : "bg-gradient-to-r from-amber-50 via-orange-50/40 to-white border-amber-200 shadow-sm"
+      }`}>
+        <div className="flex items-start gap-3.5">
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
+            showAllResults ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"
+          }`}>
+            {showAllResults ? <Users className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h2 className="text-sm sm:text-base font-bold text-gray-900">
+                Batch Marks Visibility & Merit List
+              </h2>
+              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+                showAllResults 
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-300" 
+                  : "bg-amber-100 text-amber-800 border-amber-300"
+              }`}>
+                {showAllResults ? "Public to Batch (Default)" : "Private (Own Marks Only)"}
+              </span>
+            </div>
+            <p className="text-xs text-gray-600 mt-1 max-w-2xl leading-relaxed">
+              {showAllResults ? (
+                <>
+                  <strong className="font-semibold text-emerald-800">Default:</strong> All enrolled students in this batch can view everyone&apos;s scores, percentages, and the batch merit list.
+                </>
+              ) : (
+                <>
+                  <strong className="font-semibold text-amber-800">Deselected:</strong> Each student will <strong className="underline">only see their own marks</strong> privately on their profile. Other students&apos; marks and numbers are hidden.
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 shrink-0 self-start sm:self-auto pl-14 sm:pl-0">
+          <label className="relative inline-flex items-center cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showAllResults}
+              disabled={updatingVisibility}
+              onChange={(e) => handleToggleShowAllResults(e.target.checked)}
+              className="sr-only peer"
+            />
+            <div className="w-12 h-6.5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-emerald-600"></div>
+            <span className="ml-3 text-xs font-bold text-gray-800 min-w-[140px]">
+              {updatingVisibility ? (
+                <span className="flex items-center gap-1.5 text-gray-500">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" /> Saving setting...
+                </span>
+              ) : showAllResults ? (
+                <span className="text-emerald-700 flex items-center gap-1">
+                  <Eye className="w-3.5 h-3.5" /> All Marks Visible
+                </span>
+              ) : (
+                <span className="text-amber-700 flex items-center gap-1">
+                  <EyeOff className="w-3.5 h-3.5" /> Private Only
+                </span>
+              )}
+            </span>
+          </label>
         </div>
       </div>
 

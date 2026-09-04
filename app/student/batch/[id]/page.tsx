@@ -29,7 +29,12 @@ import {
   X,
   Check,
   Copy,
-  DollarSign
+  DollarSign,
+  Trophy,
+  Users,
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 
 export default function StudentBatchDetailPage() {
@@ -58,6 +63,35 @@ export default function StudentBatchDetailPage() {
   const [submittingPayment, setSubmittingPayment] = useState(false)
   const [paymentAccounts, setPaymentAccounts] = useState<any[]>([])
   const [copied, setCopied] = useState<string | null>(null)
+
+  // Batch Leaderboard Modal state
+  const [selectedLeaderboardExam, setSelectedLeaderboardExam] = useState<any | null>(null)
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false)
+  const [leaderboardResults, setLeaderboardResults] = useState<any[]>([])
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null)
+
+  async function handleOpenLeaderboard(exam: any) {
+    setSelectedLeaderboardExam(exam)
+    setLeaderboardLoading(true)
+    setLeaderboardError(null)
+    setLeaderboardResults([])
+    try {
+      const examId = exam?.id || exam?.exam_id
+      const res = await fetch(`/api/exams/${examId}/results`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to load leaderboard")
+
+      if (!json.can_view_all) {
+        toast.info("This exam is set to Private. Only your own marks are visible.")
+      }
+      setLeaderboardResults(json.results || [])
+    } catch (err: any) {
+      console.error("Leaderboard load error:", err)
+      setLeaderboardError(err.message || "Failed to load results")
+    } finally {
+      setLeaderboardLoading(false)
+    }
+  }
   
   const supabase = createClient()
   
@@ -714,11 +748,14 @@ export default function StudentBatchDetailPage() {
         {/* EXAM RESULTS TAB */}
         {activeTab === 'exams' && (
           <div>
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                 <GraduationCap className="h-5 w-5 text-indigo-500" />
-                Exam Results
+                Exam Results & Batch Merit List
               </h3>
+              <p className="text-xs text-slate-500">
+                Click <strong className="font-semibold text-indigo-600">Batch Merit List</strong> to view class ranks
+              </p>
             </div>
             
             {examResults.length > 0 ? (
@@ -728,9 +765,10 @@ export default function StudentBatchDetailPage() {
                     <tr>
                       <th className="px-6 py-4 font-medium">Exam Name</th>
                       <th className="px-6 py-4 font-medium">Date</th>
-                      <th className="px-6 py-4 font-medium">Marks</th>
+                      <th className="px-6 py-4 font-medium">My Marks</th>
                       <th className="px-6 py-4 font-medium">%</th>
                       <th className="px-6 py-4 font-medium">Grade</th>
+                      <th className="px-6 py-4 font-medium text-right">Batch Results</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -742,6 +780,9 @@ export default function StudentBatchDetailPage() {
                       const passMarks = Number(result.exam?.pass_marks) || 0
                       const passed = obtained >= passMarks
                       
+                      // Check if results are public to batch or private
+                      const isPublic = result.exam?.show_all_results !== false && !result.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')
+
                       return (
                         <tr key={result.id || idx} className="hover:bg-slate-50/50 transition-colors">
                           <td className="px-6 py-4 font-medium text-slate-800">
@@ -773,6 +814,25 @@ export default function StudentBatchDetailPage() {
                             {result.rank && (
                               <span className="ml-1.5 inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                                 Rank #{result.rank}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-right whitespace-nowrap">
+                            {isPublic ? (
+                              <button
+                                onClick={() => handleOpenLeaderboard(result.exam || { id: result.exam_id, title: result.exam?.title, total_marks: totalMarks, pass_marks: passMarks, subject: result.exam?.subject })}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition-colors border border-indigo-200/80 shadow-xs cursor-pointer active:scale-95"
+                              >
+                                <Users className="w-3.5 h-3.5 text-indigo-600" />
+                                Batch Merit List
+                              </button>
+                            ) : (
+                              <span 
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 font-semibold rounded-xl text-xs border border-amber-200/80"
+                                title="Exam marks are kept private. Only your own score is visible."
+                              >
+                                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                Private (Only You)
                               </span>
                             )}
                           </td>
@@ -994,6 +1054,135 @@ export default function StudentBatchDetailPage() {
                 Submit Payment
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Batch Merit List / Leaderboard Modal */}
+    {selectedLeaderboardExam && (
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setSelectedLeaderboardExam(null)}>
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-slate-50/80">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-amber-500" />
+                  {selectedLeaderboardExam.title || "Batch Merit List"}
+                </h2>
+                {selectedLeaderboardExam.subject && (
+                  <span className="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-0.5 rounded-full font-bold border border-indigo-200/60">
+                    {selectedLeaderboardExam.subject}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Batch: {batch?.name || "Class"} • Total Marks: {selectedLeaderboardExam.total_marks || 100} • Pass Marks: {selectedLeaderboardExam.pass_marks || 33}
+              </p>
+            </div>
+            <button onClick={() => setSelectedLeaderboardExam(null)} className="p-2 hover:bg-gray-200/60 rounded-xl transition-colors">
+              <X className="w-5 h-5 text-gray-500" />
+            </button>
+          </div>
+
+          <div className="p-5 overflow-y-auto flex-1">
+            {leaderboardLoading ? (
+              <div className="py-16 flex flex-col items-center justify-center gap-3 text-gray-400">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+                <p className="text-sm font-medium text-gray-500">Loading batch merit list...</p>
+              </div>
+            ) : leaderboardError ? (
+              <div className="py-12 text-center text-rose-500 space-y-2">
+                <AlertCircle className="w-10 h-10 mx-auto" />
+                <p className="font-semibold">{leaderboardError}</p>
+              </div>
+            ) : leaderboardResults.length > 0 ? (
+              <div className="overflow-x-auto border border-gray-200 rounded-2xl">
+                <table className="w-full text-left text-sm text-gray-600">
+                  <thead className="bg-gray-50 text-xs uppercase text-gray-500 border-b border-gray-200">
+                    <tr>
+                      <th className="px-4 py-3 font-semibold text-center w-16">Rank</th>
+                      <th className="px-4 py-3 font-semibold">Student</th>
+                      <th className="px-4 py-3 font-semibold">Student ID</th>
+                      <th className="px-4 py-3 font-semibold">Marks</th>
+                      <th className="px-4 py-3 font-semibold">%</th>
+                      <th className="px-4 py-3 font-semibold">Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {leaderboardResults.map((r: any, idx: number) => {
+                      const rankNum = r.rank || idx + 1
+                      const isMe = r.is_current_student || (student && r.student_id === student.id)
+                      const obt = Number(r.obtained_marks) || 0
+                      const total = Number(selectedLeaderboardExam?.total_marks) || 100
+                      const pct = total > 0 ? Math.round((obt / total) * 100) : 0
+                      const passM = Number(selectedLeaderboardExam?.pass_marks) || 0
+                      const passed = obt >= passM
+
+                      return (
+                        <tr 
+                          key={r.id || idx} 
+                          className={`transition-colors ${
+                            isMe 
+                              ? "bg-indigo-50/80 font-medium text-indigo-950 border-l-4 border-indigo-600" 
+                              : "hover:bg-gray-50/60"
+                          }`}
+                        >
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            {rankNum === 1 ? (
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-800 font-black text-xs border border-amber-300 shadow-xs">
+                                🥇 1
+                              </span>
+                            ) : rankNum === 2 ? (
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-200 text-slate-800 font-black text-xs border border-slate-300">
+                                🥈 2
+                              </span>
+                            ) : rankNum === 3 ? (
+                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-50 text-amber-900 font-black text-xs border border-amber-200">
+                                🥉 3
+                              </span>
+                            ) : (
+                              <span className="font-bold text-gray-500 text-xs">#{rankNum}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-gray-900">{r.student?.name || "Student"}</span>
+                              {isMe && (
+                                <span className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-extrabold rounded-full">
+                                  YOU
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                            {r.student?.student_id || "-"}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-gray-900">
+                            {obt} <span className="text-gray-400 font-normal">/ {total}</span>
+                          </td>
+                          <td className="px-4 py-3 font-semibold">
+                            <span className={passed ? "text-emerald-600" : "text-rose-600"}>
+                              {pct}%
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-white border border-gray-200 text-gray-800 shadow-xs">
+                              {r.grade || (passed ? "Pass" : "Fail")}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-12 text-center text-gray-500">
+                <Users className="w-12 h-12 mx-auto text-gray-300 mb-3" />
+                <p className="font-medium">No results recorded for this exam yet.</p>
+              </div>
+            )}
           </div>
         </div>
       </div>

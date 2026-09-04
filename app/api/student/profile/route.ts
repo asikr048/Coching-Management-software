@@ -182,28 +182,50 @@ export async function GET(req: NextRequest) {
 
       // 6. Exam results (from exam_results and online exam_submissions)
       try {
-        const { data: examData } = await admin
+        const { data: examData, error: exSelectErr } = await admin
           .from("exam_results")
-          .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id)")
+          .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, show_all_results, result_note)")
           .in("student_id", studentDbIdArray)
           .order("created_at", { ascending: false })
-        if (examData) examResults = examData
+
+        if (exSelectErr) {
+          // Fallback if column show_all_results is not yet migrated
+          const { data: fbData } = await admin
+            .from("exam_results")
+            .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, result_note)")
+            .in("student_id", studentDbIdArray)
+            .order("created_at", { ascending: false })
+          if (fbData) examResults = fbData
+        } else if (examData) {
+          examResults = examData
+        }
       } catch (err) {
         console.warn("Exam results query note:", err)
       }
 
       // Check online exam submissions if any
       try {
-        const { data: subExams } = await admin
+        const { data: subExams, error: subErr } = await admin
           .from("exam_submissions")
-          .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id)")
+          .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, show_all_results, result_note)")
           .in("student_id", studentDbIdArray)
           .eq("is_submitted", true)
           .order("submitted_at", { ascending: false })
 
-        if (subExams && subExams.length > 0) {
+        let activeSubExams = subExams
+        if (subErr) {
+          const { data: fbSubExams } = await admin
+            .from("exam_submissions")
+            .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, result_note)")
+            .in("student_id", studentDbIdArray)
+            .eq("is_submitted", true)
+            .order("submitted_at", { ascending: false })
+          activeSubExams = fbSubExams
+        }
+
+        if (activeSubExams && activeSubExams.length > 0) {
           const recordedExamIds = new Set(examResults.map((r: any) => r.exam_id))
-          for (const sub of subExams) {
+          for (const sub of activeSubExams) {
             if (!recordedExamIds.has(sub.exam_id)) {
               const total = Number(sub.exam?.total_marks) || 100
               const obt = Number(sub.total_obtained) || 0

@@ -7,7 +7,7 @@ import {
   User, Mail, Phone, BookOpen, 
   Clock, CheckCircle, AlertCircle, Award, DollarSign, 
   ChevronRight, MapPin, Copy, ShieldCheck, Lock, Save, Loader2, Eye, EyeOff, Pencil,
-  X, Hash, Send, CheckCircle2, GraduationCap, Video, PlayCircle, Sparkles
+  X, Hash, Send, CheckCircle2, GraduationCap, Video, PlayCircle, Sparkles, Users
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -815,32 +815,53 @@ export default function StudentProfilePage() {
                   const obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : 0
                   const pct = total > 0 ? Math.round((obtained / total) * 100) : 0
                   const passed = obtained >= (Number(r.exam?.pass_marks) || 0)
+                  const isPublic = r.exam?.show_all_results !== false && !r.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')
+
                   return (
-                    <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100">
+                    <div key={i} className="p-4 bg-gray-50 rounded-xl border border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="font-semibold text-gray-900">{r.exam?.title || 'Exam'}</p>
                           {r.exam?.subject && (
                             <span className="text-[11px] text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded font-semibold border border-indigo-100">
                               {r.exam.subject}
                             </span>
                           )}
-                        </div>
-                        <div className="flex items-center gap-2 text-xs text-gray-400 mt-1">
-                          {r.exam?.exam_date && <span>{formatDate(r.exam.exam_date)}</span>}
-                          {r.rank && <span className="text-amber-600 font-semibold">• Rank #{r.rank}</span>}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <span className={`text-xl font-extrabold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>{pct}%</span>
-                          {r.grade && (
-                            <span className="px-2 py-0.5 text-xs font-bold bg-white border border-gray-200 rounded-md text-gray-800 shadow-xs">
-                              {r.grade}
+                          {isPublic ? (
+                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              Batch Merit List Public
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              Private (Only You)
                             </span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">{obtained} / {total}</p>
+                        <div className="flex items-center gap-2 text-xs text-gray-400 mt-1 flex-wrap">
+                          {r.exam?.exam_date && <span>{formatDate(r.exam.exam_date)}</span>}
+                          {r.rank && <span className="text-amber-600 font-semibold">• Rank #{r.rank}</span>}
+                          {r.exam?.batch_id && (
+                            <Link
+                              href={`/student/batch/${r.exam.batch_id}`}
+                              className="text-indigo-600 hover:text-indigo-700 font-semibold inline-flex items-center gap-0.5 hover:underline"
+                            >
+                              Go to Batch Page →
+                            </Link>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between sm:justify-end gap-3 self-end sm:self-center">
+                        <div className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <span className={`text-xl font-extrabold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>{pct}%</span>
+                            {r.grade && (
+                              <span className="px-2 py-0.5 text-xs font-bold bg-white border border-gray-200 rounded-md text-gray-800 shadow-xs">
+                                {r.grade}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 mt-0.5">{obtained} / {total}</p>
+                        </div>
                       </div>
                     </div>
                   )

@@ -1,0 +1,258 @@
+import { NextRequest, NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
+// Helper to check if exam results are public to the entire batch
+export function isExamPublic(exam: any): boolean {
+  if (!exam) return true
+  if (exam.show_all_results === false) return false
+  if (typeof exam.result_note === "string" && exam.result_note.includes("[SHOW_ALL_RESULTS:false]")) {
+    return false
+  }
+  if (typeof exam.instructions === "string" && exam.instructions.includes("[SHOW_ALL_RESULTS:false]")) {
+    return false
+  }
+  return true
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+  try {
+    const resolvedParams = await params
+    const examId = resolvedParams.id
+    if (!examId) {
+      return NextResponse.json({ error: "Exam ID is required" }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const admin = createAdminClient()
+
+    // 1. Fetch exam details
+    const { data: exam, error: examErr } = await admin
+      .from("exams")
+      .select("*, batch:batches(id, name)")
+      .eq("id", examId)
+      .maybeSingle()
+
+    if (examErr || !exam) {
+      return NextResponse.json({ error: "Exam not found" }, { status: 404 })
+    }
+
+    // 2. Determine user role / permissions
+    let isStaffOrAdmin = false
+    const { data: profile } = await admin
+      .from("user_profiles")
+      .select("*")
+      .eq("auth_user_id", user.id)
+      .maybeSingle()
+
+    if (
+      profile?.role === "owner" ||
+      profile?.role === "admin" ||
+      profile?.role === "manager" ||
+      profile?.role === "teacher" ||
+      user.user_metadata?.role === "owner" ||
+      user.user_metadata?.role === "admin" ||
+      user.user_metadata?.role === "manager" ||
+      user.user_metadata?.role === "teacher"
+    ) {
+      isStaffOrAdmin = true
+    }
+
+    const showAllToStudents = isExamPublic(exam)
+
+    // 3. Find current student ID if student
+    let currentStudentId: string | null = null
+    if (!isStaffOrAdmin) {
+      // Find matching student by auth_user_id, student_id code, or email
+      const { data: sAuth } = await admin
+        .from("students")
+        .select("id")
+        .eq("auth_user_id", user.id)
+        .maybeSingle()
+      if (sAuth) currentStudentId = sAuth.id
+
+      if (!currentStudentId && profile?.user_id) {
+        const { data: sCode } = await admin
+          .from("students")
+          .select("id")
+          .eq("student_id", profile.user_id)
+          .maybeSingle()
+        if (sCode) currentStudentId = sCode.id
+      }
+
+      if (!currentStudentId && user.email) {
+        const { data: sEmail } = await admin
+          .from("students")
+          .select("id")
+          .ilike("email", user.email)
+          .maybeSingle()
+        if (sEmail) currentStudentId = sEmail.id
+      }
+    }
+
+    // 4. Fetch results
+    if (isStaffOrAdmin || showAllToStudents) {
+      // Public mode or Admin view: return all students' results with ranking
+      const { data: allResults, error: resErr } = await admin
+        .from("exam_results")
+        .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, phone)")
+        .eq("exam_id", examId)
+
+      if (resErr) {
+        return NextResponse.json({ error: resErr.message }, { status: 500 })
+      }
+
+      // Sort and calculate rank if needed
+      const sorted = [...(allResults || [])].sort((a: any, b: any) => {
+        const marksA = Number(a.obtained_marks) || 0
+        const marksB = Number(b.obtained_marks) || 0
+        return marksB - marksA
+      })
+
+      const ranked = sorted.map((item: any, idx: number) => ({
+        ...item,
+        rank: item.rank || idx + 1,
+        is_current_student: currentStudentId ? item.student_id === currentStudentId : false,
+      }))
+
+      return NextResponse.json({
+        success: true,
+        exam: {
+          ...exam,
+          show_all_results: showAllToStudents,
+        },
+        results: ranked,
+        can_view_all: true,
+        is_private: false,
+        current_student_id: currentStudentId,
+      })
+    } else {
+      // Private mode for students: Return ONLY current student's score
+      if (!currentStudentId) {
+        return NextResponse.json({
+          success: true,
+          exam: {
+            ...exam,
+            show_all_results: false,
+          },
+          results: [],
+          can_view_all: false,
+          is_private: true,
+          current_student_id: null,
+          message: "No student record linked to this account",
+        })
+      }
+
+      const { data: ownResult } = await admin
+        .from("exam_results")
+        .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, phone)")
+        .eq("exam_id", examId)
+        .eq("student_id", currentStudentId)
+        .maybeSingle()
+
+      return NextResponse.json({
+        success: true,
+        exam: {
+          ...exam,
+          show_all_results: false,
+        },
+        results: ownResult ? [{ ...ownResult, is_current_student: true }] : [],
+        can_view_all: false,
+        is_private: true,
+        current_student_id: currentStudentId,
+        message: "Private results: Only visible to you",
+      })
+    }
+  } catch (err: any) {
+    console.error("Exam results API error:", err)
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+  try {
+    const resolvedParams = await params
+    const examId = resolvedParams.id
+    const body = await req.json()
+    const { show_all_results } = body
+
+    if (typeof show_all_results !== "boolean") {
+      return NextResponse.json({ error: "show_all_results boolean required" }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const admin = createAdminClient()
+
+    // 1. Fetch current exam to get result_note
+    const { data: currentExam } = await admin
+      .from("exams")
+      .select("result_note, show_all_results")
+      .eq("id", examId)
+      .maybeSingle()
+
+    let updatedNote = currentExam?.result_note || ""
+    // Clean out previous tags
+    updatedNote = updatedNote
+      .replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "")
+      .trim()
+    // Append the new state tag for permanent fallback resilience
+    updatedNote = (updatedNote ? updatedNote + " " : "") + `[SHOW_ALL_RESULTS:${show_all_results}]`
+
+    // 2. Update with column + fallback tag
+    try {
+      const { error } = await admin
+        .from("exams")
+        .update({
+          show_all_results: show_all_results,
+          result_note: updatedNote,
+        })
+        .eq("id", examId)
+
+      if (error) {
+        console.warn("Direct show_all_results column update warning, falling back to note:", error)
+        // Fallback update without column
+        await admin
+          .from("exams")
+          .update({ result_note: updatedNote })
+          .eq("id", examId)
+      }
+    } catch (dbErr) {
+      console.warn("Database update fallback caught:", dbErr)
+      await admin
+        .from("exams")
+        .update({ result_note: updatedNote })
+        .eq("id", examId)
+    }
+
+    return NextResponse.json({
+      success: true,
+      show_all_results: show_all_results,
+      message: show_all_results
+        ? "Batch merit list is now visible to all students."
+        : "Exam marks set to private. Students will only see their own marks.",
+    })
+  } catch (err: any) {
+    console.error("Update exam visibility error:", err)
+    return NextResponse.json({ error: err.message || "Failed to update" }, { status: 500 })
+  }
+}

@@ -60,6 +60,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
     exam_date: "", 
     duration_minutes: "60",
     show_results_immediately: true,
+    show_all_results: true,
     result_note: ""
   })
   function update(f: string, v: string | boolean) { setForm(x => ({ ...x, [f]: v })) }
@@ -170,14 +171,25 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
         time_limit_minutes: examMode === "online" ? parseInt(form.duration_minutes) : null,
         duration_minutes: examMode === "offline" ? parseInt(form.duration_minutes) : null,
         show_results_immediately: form.show_results_immediately,
-        result_note: form.result_note,
+        show_all_results: form.show_all_results,
+        result_note: (form.result_note ? form.result_note + " " : "") + `[SHOW_ALL_RESULTS:${form.show_all_results}]`,
         is_published: false
       }
 
-      const { data: newExam, error: examErr } = await supabase.from("exams")
+      let newExam: any = null
+      const { data: inserted, error: examErr } = await supabase.from("exams")
         .insert(examData).select("*, batch:batches(name)").single()
       
-      if (examErr) throw examErr
+      if (examErr) {
+        // If column show_all_results doesn't exist yet, retry without that specific column
+        const { show_all_results: _omitted, ...fallbackData } = examData
+        const { data: fbExam, error: fbErr } = await supabase.from("exams")
+          .insert(fallbackData).select("*, batch:batches(name)").single()
+        if (fbErr) throw fbErr
+        newExam = fbExam
+      } else {
+        newExam = inserted
+      }
 
       if (examMode === "online" && questions.length > 0) {
         const qInserts = questions.map((q, i) => ({
@@ -200,7 +212,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
       
       // Reset
       setQuestions([])
-      setForm({ title: "", batch_id: "", exam_type: "written", subject: "", total_marks: "100", pass_marks: "33", exam_date: "", duration_minutes: "60", show_results_immediately: true, result_note: "" })
+      setForm({ title: "", batch_id: "", exam_type: "written", subject: "", total_marks: "100", pass_marks: "33", exam_date: "", duration_minutes: "60", show_results_immediately: true, show_all_results: true, result_note: "" })
     } catch (err: any) { 
       toast.error(err.message || "Failed") 
     } finally { 
@@ -335,6 +347,24 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                       </label>
                     </div>
                   )}
+
+                  {/* Batch Marks Visibility Option */}
+                  <div className="col-span-1 md:col-span-2 bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-100">
+                    <label className="flex items-start gap-3 text-sm text-gray-900 cursor-pointer select-none">
+                      <input 
+                        type="checkbox" 
+                        checked={form.show_all_results} 
+                        onChange={e => update("show_all_results", e.target.checked)} 
+                        className="w-4 h-4 mt-0.5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer" 
+                      />
+                      <div>
+                        <span className="font-semibold text-gray-900">Show marks & merit list to all students in batch (Default)</span>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          When checked, all students in this batch can view everyone&apos;s marks. If deselected, each student will only see their own marks privately.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
 
                 {/* Question Builder */}
