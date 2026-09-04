@@ -5,12 +5,12 @@ export default async function NewStudentPage() {
   const supabase = await createClient()
   const [batchesRes, studentsRes] = await Promise.all([
     supabase.from("batches").select("id, name, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee").eq("is_active", true),
-    supabase.from("students").select("id, name, student_id, phone, email, guardian_name, guardian_phone").eq("is_active", true),
+    supabase.from("students").select("id, name, student_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college").eq("is_active", true),
   ])
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="mb-6">
+      <div className="mb-5">
         <h2 className="text-2xl font-bold text-gray-900">Enroll Student</h2>
         <p className="text-sm text-gray-500 mt-1">Select existing student or create new account, then enroll in a batch.</p>
       </div>
