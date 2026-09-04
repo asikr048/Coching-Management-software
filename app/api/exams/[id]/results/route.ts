@@ -114,18 +114,37 @@ export async function GET(
         return NextResponse.json({ error: resErr.message }, { status: 500 })
       }
 
-      // Sort and calculate rank if needed
+      // Sort strictly by obtained_marks descending (highest to lowest)
       const sorted = [...(allResults || [])].sort((a: any, b: any) => {
         const marksA = Number(a.obtained_marks) || 0
         const marksB = Number(b.obtained_marks) || 0
         return marksB - marksA
       })
 
-      const ranked = sorted.map((item: any, idx: number) => ({
-        ...item,
-        rank: item.rank || idx + 1,
-        is_current_student: currentStudentId ? item.student_id === currentStudentId : false,
-      }))
+      // Calculate ranks strictly from highest to lowest marks (handling ties)
+      let currentRank = 1
+      const ranked = sorted.map((item: any, idx: number) => {
+        if (idx > 0) {
+          const prevMarks = Number(sorted[idx - 1].obtained_marks) || 0
+          const curMarks = Number(item.obtained_marks) || 0
+          if (curMarks < prevMarks) {
+            currentRank = idx + 1
+          }
+        }
+        return {
+          ...item,
+          rank: currentRank,
+          is_current_student: currentStudentId ? item.student_id === currentStudentId : false,
+        }
+      })
+
+      // Auto-heal: If any student had an outdated rank in the database, update it in background
+      for (const item of ranked) {
+        const originalRank = allResults?.find((r: any) => r.id === item.id)?.rank
+        if (item.id && item.rank !== originalRank) {
+          admin.from("exam_results").update({ rank: item.rank }).eq("id", item.id).then(() => {})
+        }
+      }
 
       return NextResponse.json({
         success: true,
@@ -139,7 +158,7 @@ export async function GET(
         current_student_id: currentStudentId,
       })
     } else {
-      // Private mode for students: Return ONLY current student's score
+      // Private mode for students: Return ONLY current student's score, but calculate TRUE rank
       if (!currentStudentId) {
         return NextResponse.json({
           success: true,
@@ -155,6 +174,30 @@ export async function GET(
         })
       }
 
+      // Fetch all results to accurately calculate rank from highest to lowest
+      const { data: allExamResults } = await admin
+        .from("exam_results")
+        .select("id, student_id, obtained_marks")
+        .eq("exam_id", examId)
+
+      const sortedAll = [...(allExamResults || [])].sort((a: any, b: any) => {
+        const marksA = Number(a.obtained_marks) || 0
+        const marksB = Number(b.obtained_marks) || 0
+        return marksB - marksA
+      })
+
+      let computedRank = 1
+      for (let i = 0; i < sortedAll.length; i++) {
+        if (i > 0) {
+          const prev = Number(sortedAll[i - 1].obtained_marks) || 0
+          const cur = Number(sortedAll[i].obtained_marks) || 0
+          if (cur < prev) computedRank = i + 1
+        }
+        if (sortedAll[i].student_id === currentStudentId) {
+          break
+        }
+      }
+
       const { data: ownResult } = await admin
         .from("exam_results")
         .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, phone)")
@@ -162,13 +205,17 @@ export async function GET(
         .eq("student_id", currentStudentId)
         .maybeSingle()
 
+      if (ownResult && ownResult.rank !== computedRank) {
+        admin.from("exam_results").update({ rank: computedRank }).eq("id", ownResult.id).then(() => {})
+      }
+
       return NextResponse.json({
         success: true,
         exam: {
           ...exam,
           show_all_results: false,
         },
-        results: ownResult ? [{ ...ownResult, is_current_student: true }] : [],
+        results: ownResult ? [{ ...ownResult, rank: computedRank, is_current_student: true }] : [],
         can_view_all: false,
         is_private: true,
         current_student_id: currentStudentId,

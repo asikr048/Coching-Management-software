@@ -258,6 +258,51 @@ export async function GET(req: NextRequest) {
           marks_obtained: obt,
         }
       })
+
+      // Dynamically calculate accurate rank from highest to lowest for each exam
+      if (examResults.length > 0) {
+        const examIds = Array.from(new Set(examResults.map((r: any) => r.exam_id).filter(Boolean)))
+        if (examIds.length > 0) {
+          try {
+            const { data: allExamMarks } = await admin
+              .from("exam_results")
+              .select("id, exam_id, student_id, obtained_marks")
+              .in("exam_id", examIds)
+
+            if (allExamMarks && allExamMarks.length > 0) {
+              const examToRankMap = new Map<string, Map<string, number>>()
+              for (const eid of examIds) {
+                const marksForExam = allExamMarks
+                  .filter((m: any) => m.exam_id === eid)
+                  .sort((a: any, b: any) => (Number(b.obtained_marks) || 0) - (Number(a.obtained_marks) || 0))
+                
+                const studentRank = new Map<string, number>()
+                let curRank = 1
+                marksForExam.forEach((item: any, idx: number) => {
+                  if (idx > 0) {
+                    const prev = Number(marksForExam[idx - 1].obtained_marks) || 0
+                    const cur = Number(item.obtained_marks) || 0
+                    if (cur < prev) curRank = idx + 1
+                  }
+                  studentRank.set(item.student_id, curRank)
+                })
+                examToRankMap.set(eid, studentRank)
+              }
+
+              examResults = examResults.map((r: any) => {
+                const rMap = examToRankMap.get(r.exam_id)
+                const computed = rMap ? rMap.get(r.student_id) : null
+                return {
+                  ...r,
+                  rank: computed !== undefined && computed !== null ? computed : r.rank,
+                }
+              })
+            }
+          } catch (rankErr) {
+            console.warn("Rank computation error in profile route:", rankErr)
+          }
+        }
+      }
     }
 
     // 7. Course Purchases lookup (by student_id, buyer_email, buyer_phone)

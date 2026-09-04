@@ -183,6 +183,41 @@ export default function ExamResultsPage() {
     }, 50)
   }
 
+  // Recalculate ranks strictly by marks descending (highest to lowest) and sync to DB
+  async function syncAllRanks(currentMarksMap: Record<string, string>) {
+    if (!exam) return
+    try {
+      const items = students
+        .map((s) => {
+          const raw = currentMarksMap[s.id]?.trim() ?? savedResults[s.id]?.obtained_marks ?? ""
+          const m = parseFloat(raw)
+          return { student_id: s.id, marks: m }
+        })
+        .filter((x) => !isNaN(x.marks) && x.marks >= 0 && (!exam || x.marks <= exam.total_marks))
+        .sort((a, b) => b.marks - a.marks)
+
+      let curR = 1
+      const updates = items.map((item, i) => {
+        if (i > 0 && item.marks < items[i - 1].marks) {
+          curR = i + 1
+        }
+        return {
+          exam_id: exam.id,
+          student_id: item.student_id,
+          obtained_marks: item.marks,
+          grade: getGrade(item.marks, exam.total_marks),
+          rank: curR,
+        }
+      })
+
+      if (updates.length > 0) {
+        await supabase.from("exam_results").upsert(updates, { onConflict: "exam_id,student_id" })
+      }
+    } catch (e) {
+      console.warn("Rank auto-sync note:", e)
+    }
+  }
+
   // Save quick mark
   async function handleSaveQuickMark() {
     if (!selectedStudent || !exam) return
@@ -233,6 +268,9 @@ export default function ExamResultsPage() {
         [selectedStudent.id]: String(numMarks),
       }))
       setJustSavedIds((prev) => new Set(prev).add(selectedStudent.id))
+
+      // Auto-sync ranks strictly highest to lowest
+      syncAllRanks({ ...draftMarks, [selectedStudent.id]: String(numMarks) })
 
       toast.success(`✓ ${selectedStudent.name}: ${numMarks}/${exam.total_marks} (${grade}) saved!`)
 
@@ -297,6 +335,10 @@ export default function ExamResultsPage() {
         },
       }))
       setJustSavedIds((prev) => new Set(prev).add(student.id))
+
+      // Auto-sync ranks strictly highest to lowest
+      syncAllRanks({ ...draftMarks, [student.id]: String(numMarks) })
+
       toast.success(`✓ Saved ${numMarks}/${exam.total_marks} for ${student.name} (${grade})`)
 
       // Automatically focus the next row input if available
@@ -413,8 +455,12 @@ export default function ExamResultsPage() {
       }
 
       const sorted = [...items].sort((a, b) => b.obtained_marks - a.obtained_marks)
+      let curR = 1
       sorted.forEach((item, i) => {
-        ;(item as any).rank = i + 1
+        if (i > 0 && item.obtained_marks < sorted[i - 1].obtained_marks) {
+          curR = i + 1
+        }
+        ;(item as any).rank = curR
       })
 
       const { error } = await supabase

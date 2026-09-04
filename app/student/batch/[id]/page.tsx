@@ -84,7 +84,17 @@ export default function StudentBatchDetailPage() {
       if (!json.can_view_all) {
         toast.info("This exam is set to Private. Only your own marks are visible.")
       }
-      setLeaderboardResults(json.results || [])
+      const resultsList = json.results || []
+      setLeaderboardResults(resultsList)
+
+      // Find current student's true rank from the results and update the main table
+      const myRes = resultsList.find((r: any) => r.is_current_student || (student && r.student_id === student.id))
+      if (myRes && myRes.rank) {
+        setExamResults(prev => prev.map(e => {
+          const match = e.id === myRes.id || e.exam_id === examId || e.exam?.id === examId
+          return match ? { ...e, rank: myRes.rank } : e
+        }))
+      }
     } catch (err: any) {
       console.error("Leaderboard load error:", err)
       setLeaderboardError(err.message || "Failed to load results")
@@ -1110,70 +1120,84 @@ export default function StudentBatchDetailPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {leaderboardResults.map((r: any, idx: number) => {
-                      const rankNum = r.rank || idx + 1
-                      const isMe = r.is_current_student || (student && r.student_id === student.id)
-                      const obt = Number(r.obtained_marks) || 0
-                      const total = Number(selectedLeaderboardExam?.total_marks) || 100
-                      const pct = total > 0 ? Math.round((obt / total) * 100) : 0
-                      const passM = Number(selectedLeaderboardExam?.pass_marks) || 0
-                      const passed = obt >= passM
+                    {(() => {
+                      const sorted = [...leaderboardResults].sort((a: any, b: any) => {
+                        const marksA = Number(a.obtained_marks) || 0
+                        const marksB = Number(b.obtained_marks) || 0
+                        return marksB - marksA
+                      })
 
-                      return (
-                        <tr 
-                          key={r.id || idx} 
-                          className={`transition-colors ${
-                            isMe 
-                              ? "bg-indigo-50/80 font-medium text-indigo-950 border-l-4 border-indigo-600" 
-                              : "hover:bg-gray-50/60"
-                          }`}
-                        >
-                          <td className="px-4 py-3 text-center whitespace-nowrap">
-                            {rankNum === 1 ? (
-                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-800 font-black text-xs border border-amber-300 shadow-xs">
-                                🥇 1
-                              </span>
-                            ) : rankNum === 2 ? (
-                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-200 text-slate-800 font-black text-xs border border-slate-300">
-                                🥈 2
-                              </span>
-                            ) : rankNum === 3 ? (
-                              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-50 text-amber-900 font-black text-xs border border-amber-200">
-                                🥉 3
-                              </span>
-                            ) : (
-                              <span className="font-bold text-gray-500 text-xs">#{rankNum}</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-gray-900">{r.student?.name || "Student"}</span>
-                              {isMe && (
-                                <span className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-extrabold rounded-full">
-                                  YOU
+                      let currentRank = 1
+                      return sorted.map((r: any, idx: number) => {
+                        if (idx > 0) {
+                          const prev = Number(sorted[idx - 1].obtained_marks) || 0
+                          const cur = Number(r.obtained_marks) || 0
+                          if (cur < prev) currentRank = idx + 1
+                        }
+                        const rankNum = currentRank
+                        const isMe = r.is_current_student || (student && r.student_id === student.id)
+                        const obt = Number(r.obtained_marks) || 0
+                        const total = Number(selectedLeaderboardExam?.total_marks) || 100
+                        const pct = total > 0 ? Math.round((obt / total) * 100) : 0
+                        const passM = Number(selectedLeaderboardExam?.pass_marks) || 0
+                        const passed = obt >= passM
+
+                        return (
+                          <tr 
+                            key={r.id || idx} 
+                            className={`transition-colors ${
+                              isMe 
+                                ? "bg-indigo-50/80 font-medium text-indigo-950 border-l-4 border-indigo-600" 
+                                : "hover:bg-gray-50/60"
+                            }`}
+                          >
+                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                              {rankNum === 1 ? (
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-800 font-black text-xs border border-amber-300 shadow-xs">
+                                  🥇 1
                                 </span>
+                              ) : rankNum === 2 ? (
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-200 text-slate-800 font-black text-xs border border-slate-300">
+                                  🥈 2
+                                </span>
+                              ) : rankNum === 3 ? (
+                                <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-50 text-amber-900 font-black text-xs border border-amber-200">
+                                  🥉 3
+                                </span>
+                              ) : (
+                                <span className="font-bold text-gray-500 text-xs">#{rankNum}</span>
                               )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs text-gray-500">
-                            {r.student?.student_id || "-"}
-                          </td>
-                          <td className="px-4 py-3 font-bold text-gray-900">
-                            {obt} <span className="text-gray-400 font-normal">/ {total}</span>
-                          </td>
-                          <td className="px-4 py-3 font-semibold">
-                            <span className={passed ? "text-emerald-600" : "text-rose-600"}>
-                              {pct}%
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-white border border-gray-200 text-gray-800 shadow-xs">
-                              {r.grade || (passed ? "Pass" : "Fail")}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-gray-900">{r.student?.name || "Student"}</span>
+                                {isMe && (
+                                  <span className="px-2 py-0.5 bg-indigo-600 text-white text-[10px] font-extrabold rounded-full">
+                                    YOU
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 font-mono text-xs text-gray-500">
+                              {r.student?.student_id || "-"}
+                            </td>
+                            <td className="px-4 py-3 font-bold text-gray-900">
+                              {obt} <span className="text-gray-400 font-normal">/ {total}</span>
+                            </td>
+                            <td className="px-4 py-3 font-semibold">
+                              <span className={passed ? "text-emerald-600" : "text-rose-600"}>
+                                {pct}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-white border border-gray-200 text-gray-800 shadow-xs">
+                                {r.grade || (passed ? "Pass" : "Fail")}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    })()}
                   </tbody>
                 </table>
               </div>
