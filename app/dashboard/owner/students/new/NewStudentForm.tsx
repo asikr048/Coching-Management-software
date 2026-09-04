@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, AlertCircle, Printer, Download } from "lucide-react"
+import { Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, AlertCircle, Printer, Download, RefreshCw } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 
@@ -14,6 +14,7 @@ interface EnrollmentReceipt {
   receipt_number: string
   student_name: string
   student_id: string
+  password?: string
   student_phone?: string
   student_email?: string
   guardian_name?: string
@@ -26,6 +27,7 @@ interface EnrollmentReceipt {
   due_amount: number
   due_date?: string
   payment_method: string
+  qr_data: string
 }
 
 export default function NewStudentForm({ batches, students }: { batches: Batch[]; students: StudentOpt[] }) {
@@ -48,6 +50,17 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
   useEffect(() => { checkFinancialAccess().then(({ hasAccess }) => setFinancialAccess(hasAccess)) }, [])
 
   function update(f: string, v: string) { setForm(prev => ({ ...prev, [f]: v })) }
+
+  function resetForm() {
+    setForm({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
+    setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
+    setSelectedStudent(null)
+    setSearchQuery("")
+    setPaidAmount("")
+    const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10)
+    setDueDate(d.toISOString().split("T")[0])
+    setReceipt(null)
+  }
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return []
@@ -91,6 +104,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
       let studentEmail = ""
       let guardianName = ""
       let guardianPhone = ""
+      let recordedPassword = ""
 
       if (mode === "existing") {
         if (!selectedStudent) { toast.error("Select a student"); setLoading(false); return }
@@ -116,6 +130,8 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         if (!form.password || form.password.length < 6) { toast.error("Password min 6 chars"); setLoading(false); return }
         if (form.password !== form.confirmPassword) { toast.error("Passwords don't match"); setLoading(false); return }
 
+        recordedPassword = form.password
+
         // Generate unique student ID (MS-XXXXX)
         const { count } = await supabase.from("students").select("*", { count: "exact", head: true })
         const seq = (count || 0) + 1
@@ -123,30 +139,21 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
         const email = form.email.trim() || `${studentIdStr.toLowerCase()}@medhashiree.local`
 
-        const { data: authData, error: aErr } = await supabase.auth.signUp({
-          email,
-          password: form.password,
-          options: {
-            data: {
-              full_name: form.name.trim(),
-              user_id: studentIdStr,
-              phone: form.phone.trim() || null
-            }
-          }
-        })
-        if (aErr) throw new Error(aErr.message)
-
-        // Ensure user profile entry is created so login and portal link reliably
-        try {
-          await supabase.from("user_profiles").upsert({
-            user_id: studentIdStr,
-            email: email,
-            name: form.name.trim(),
-            phone: form.phone.trim() || null,
-            auth_user_id: authData.user?.id || null,
+        // Call backend API to create student account without logging out the owner/admin!
+        const res = await fetch("/api/student/create-account", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password: form.password,
+            fullName: form.name.trim(),
+            studentId: studentIdStr,
+            phone: form.phone.trim() || null
           })
-        } catch (upErr) {
-          console.error("user_profiles upsert notice:", upErr)
+        })
+        const authResult = await res.json()
+        if (!res.ok) {
+          throw new Error(authResult.error || "Failed to create login account")
         }
 
         const { data: st, error: sErr } = await supabase.from("students").insert({
@@ -221,11 +228,13 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
       toast.success(`Enrolled successfully! ID: ${dispId}`)
 
-      // Display receipt & print options immediately
+      // Display receipt modal with print & save options, staying on this page
+      const qrData = `Student ID: ${dispId} | Name: ${studentName} | Batch: ${batch?.name || ''} | Fee: ${total} | Paid: ${paid}`
       setReceipt({
         receipt_number: receiptNum,
         student_name: studentName,
         student_id: dispId,
+        password: recordedPassword || undefined,
         student_phone: studentPhone,
         student_email: studentEmail,
         guardian_name: guardianName,
@@ -238,6 +247,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         due_amount: due,
         due_date: due > 0 ? dueDate : undefined,
         payment_method: "Cash / Counter",
+        qr_data: qrData
       })
 
     } catch (err: any) {
@@ -248,31 +258,35 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
     }
   }
 
+  // Print function
   function handlePrint() {
     if (!receipt) return
-    const win = window.open("", "_blank", "width=600,height=750")
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(receipt.qr_data)}`
+    const win = window.open("", "_blank", "width=650,height=800")
     if (!win) return
-    win.document.write(`<html><head><title>Admission & Enrollment Document - ${receipt.student_id}</title><style>
-      body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 30px; max-width: 500px; margin: 0 auto; color: #1e293b; }
-      .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 18px; }
+    win.document.write(`<html><head><title>Admission Document - ${receipt.student_id}</title><style>
+      body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 25px; max-width: 520px; margin: 0 auto; color: #1e293b; background: #fff; }
+      .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 15px; position: relative; }
       .header h1 { margin: 0; font-size: 22px; color: #4338ca; text-transform: uppercase; letter-spacing: 1px; }
       .header p { margin: 3px 0; font-size: 12px; color: #64748b; }
       .badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 3px 10px; border-radius: 9999px; font-weight: bold; font-size: 11px; margin-top: 5px; }
-      .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #4f46e5; margin: 15px 0 6px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 3px; }
+      .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #4f46e5; margin: 14px 0 6px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 3px; }
       .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
       .label { color: #64748b; }
       .value { font-weight: 600; color: #0f172a; text-align: right; }
-      .summary-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 15px; }
+      .summary-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 10px; }
       .total-row { display: flex; justify-content: space-between; font-size: 15px; font-weight: bold; padding: 6px 0; }
       .due-text { color: #dc2626; }
       .paid-text { color: #16a34a; }
-      .footer { text-align: center; margin-top: 25px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 12px; }
-      @media print { body { padding: 15px; } }
+      .cred-box { background: #eef2ff; border: 1.5px solid #c7d2fe; border-radius: 8px; padding: 8px 12px; margin: 12px 0; }
+      .qr-container { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px dashed #cbd5e1; margin-top: 12px; }
+      .footer { text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+      @media print { body { padding: 10px; } }
     </style></head><body>
       <div class="header">
         <h1>MedhaShiree Coaching</h1>
-        <p>Enrollment & Fee Confirmation Receipt</p>
-        <span class="badge">Official Copy</span>
+        <p>Enrollment & Fee Confirmation Slip</p>
+        <span class="badge">Official Admission Copy</span>
       </div>
       
       <div class="section-title">Student Information</div>
@@ -282,9 +296,16 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
       ${receipt.guardian_name ? `<div class="row"><span class="label">Guardian:</span><span class="value">${receipt.guardian_name}</span></div>` : ''}
       ${receipt.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${receipt.guardian_phone}</span></div>` : ''}
 
-      <div class="section-title">Enrolled Batch & Program</div>
+      ${receipt.password ? `
+      <div class="cred-box">
+        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Student Portal Login ID:</span><span class="value">${receipt.student_id}</span></div>
+        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Account Password:</span><span class="value font-mono" style="color: #4338ca;">${receipt.password}</span></div>
+      </div>
+      ` : ''}
+
+      <div class="section-title">Enrolled Program</div>
       <div class="row"><span class="label">Batch:</span><span class="value">${receipt.batch_name}</span></div>
-      <div class="row"><span class="label">Subject/Level:</span><span class="value">${receipt.subject}</span></div>
+      <div class="row"><span class="label">Subject/Class:</span><span class="value">${receipt.subject}</span></div>
       <div class="row"><span class="label">Enrollment Date:</span><span class="value">${receipt.date}</span></div>
 
       <div class="section-title">Payment Breakdown</div>
@@ -296,13 +317,112 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         <div class="row" style="margin-top: 5px; font-size: 11px; color: #64748b;"><span class="label">Receipt Ref:</span><span>${receipt.receipt_number}</span></div>
       </div>
 
+      <div class="qr-container">
+        <div>
+          <p style="margin: 0; font-size: 11px; font-weight: bold; color: #334155;">Verification QR Code</p>
+          <p style="margin: 3px 0 0; font-size: 10px; color: #64748b;">Scan to verify student admission status</p>
+        </div>
+        <img src="${qrUrl}" width="80" height="80" alt="Student QR Code" style="border-radius: 6px; border: 1px solid #cbd5e1;" />
+      </div>
+
       <div class="footer">
-        <p>Keep this document for attendance verification & office clearance.</p>
-        <p>MedhaShiree — Nurturing Excellence in Education</p>
+        <p>Please keep this document safe for institutional records.</p>
+        <p>MedhaShiree — Empowering Modern Education</p>
       </div>
     </body></html>`)
     win.document.close()
-    win.print()
+    win.focus()
+    setTimeout(() => { win.print() }, 300)
+  }
+
+  // Save / Download PDF function using jsPDF
+  async function handleSavePDF() {
+    if (!receipt) return
+    try {
+      const { jsPDF } = await import("jspdf")
+      const doc = new jsPDF({ unit: "mm", format: [105, 148] }) // A6 size receipt
+
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(14)
+      doc.setTextColor(67, 56, 202)
+      doc.text("MedhaShiree Coaching", 52.5, 12, { align: "center" })
+
+      doc.setFont("helvetica", "normal")
+      doc.setFontSize(8)
+      doc.setTextColor(100, 116, 139)
+      doc.text("Enrollment & Fee Confirmation Slip", 52.5, 17, { align: "center" })
+      doc.line(10, 20, 95, 20)
+
+      let y = 26
+      doc.setFontSize(9)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(15, 23, 42)
+      doc.text("Student ID: " + receipt.student_id, 10, y)
+      y += 5
+      doc.setFont("helvetica", "normal")
+      doc.text("Name: " + receipt.student_name, 10, y)
+      y += 5
+      if (receipt.student_phone) {
+        doc.text("Phone: " + receipt.student_phone, 10, y)
+        y += 5
+      }
+      if (receipt.guardian_phone) {
+        doc.text("Guardian Phone: " + receipt.guardian_phone, 10, y)
+        y += 5
+      }
+
+      if (receipt.password) {
+        doc.setFillColor(238, 242, 255)
+        doc.roundedRect(10, y, 85, 10, 2, 2, "F")
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(67, 56, 202)
+        doc.text("Login ID: " + receipt.student_id + "  |  Password: " + receipt.password, 13, y + 6)
+        doc.setTextColor(15, 23, 42)
+        y += 14
+      }
+
+      doc.setFont("helvetica", "bold")
+      doc.text("Batch: " + receipt.batch_name, 10, y)
+      y += 5
+      doc.setFont("helvetica", "normal")
+      doc.text("Date: " + receipt.date, 10, y)
+      y += 6
+
+      doc.setFillColor(248, 250, 252)
+      doc.roundedRect(10, y, 85, 22, 2, 2, "F")
+      doc.text("Total Fee: ৳" + receipt.total_fee.toLocaleString("en-BD"), 13, y + 6)
+      doc.setTextColor(22, 163, 74)
+      doc.text("Paid: ৳" + receipt.paid_amount.toLocaleString("en-BD"), 13, y + 11)
+      doc.setTextColor(receipt.due_amount > 0 ? 220 : 22, receipt.due_amount > 0 ? 38 : 163, receipt.due_amount > 0 ? 38 : 74)
+      doc.setFont("helvetica", "bold")
+      doc.text("Due: ৳" + receipt.due_amount.toLocaleString("en-BD"), 13, y + 17)
+      if (receipt.due_date) {
+        doc.setFontSize(7)
+        doc.setTextColor(180, 83, 9)
+        doc.text("Due Date: " + receipt.due_date, 55, y + 17)
+      }
+
+      y += 26
+      // Add QR code image
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(receipt.qr_data)}`
+      const img = new Image()
+      img.crossOrigin = "anonymous"
+      img.src = qrUrl
+      await new Promise(resolve => {
+        img.onload = () => {
+          try {
+            doc.addImage(img, "PNG", 37.5, y, 30, 30)
+          } catch {}
+          resolve(true)
+        }
+        img.onerror = () => resolve(true)
+      })
+
+      doc.save(`Enrollment_${receipt.student_id}.pdf`)
+      toast.success("PDF document downloaded!")
+    } catch (e: any) {
+      toast.error("Could not generate PDF: " + (e?.message || "Please use print option"))
+    }
   }
 
   const ic = "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-shadow"
@@ -463,7 +583,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         </div>
       </form>
 
-      {/* Confirmation & Printable PDF Modal */}
+      {/* Confirmation & Printable PDF Modal with QR Code */}
       {receipt && (
         <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -472,8 +592,8 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
               <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
                 <Check className="w-6 h-6 text-white" />
               </div>
-              <h3 className="text-xl font-bold">Enrollment Successful!</h3>
-              <p className="text-xs text-indigo-100 mt-1">Information added to database & receipt generated</p>
+              <h3 className="text-xl font-bold">Enrollment Confirmed!</h3>
+              <p className="text-xs text-indigo-100 mt-1">Ready to print, download PDF, or start next enrollment</p>
             </div>
 
             {/* Printable preview card */}
@@ -482,7 +602,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                 <div className="text-center border-b border-dashed border-gray-300 pb-3">
                   <h4 className="font-extrabold text-indigo-900 text-base">MedhaShiree Coaching</h4>
                   <p className="text-[11px] text-gray-500">Official Enrollment & Clearance Receipt</p>
-                  <span className="inline-block bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1">
+                  <span className="inline-block bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full mt-1">
                     ID: {receipt.student_id}
                   </span>
                 </div>
@@ -494,6 +614,14 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                   <div className="flex justify-between"><span className="text-gray-500">Batch Enrolled:</span><span className="font-semibold text-indigo-700">{receipt.batch_name}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Date:</span><span className="text-gray-700">{receipt.date}</span></div>
                 </div>
+
+                {/* Account credentials box */}
+                {receipt.password && (
+                  <div className="bg-indigo-50/80 border border-indigo-100 rounded-xl p-2.5 text-xs space-y-1">
+                    <div className="flex justify-between"><span className="text-indigo-600 font-medium">Login User ID:</span><span className="font-bold text-indigo-900">{receipt.student_id}</span></div>
+                    <div className="flex justify-between"><span className="text-indigo-600 font-medium">Password:</span><span className="font-mono font-bold text-indigo-900">{receipt.password}</span></div>
+                  </div>
+                )}
 
                 <div className="border-t border-dashed border-gray-300 pt-3 space-y-1 text-xs">
                   <div className="flex justify-between"><span className="text-gray-500">Total Program Fee:</span><span className="font-semibold">{formatCurrency(receipt.total_fee)}</span></div>
@@ -508,26 +636,43 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                     </div>
                   )}
                 </div>
+
+                {/* QR Code section */}
+                <div className="pt-2 border-t border-dashed border-gray-300 flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] font-bold text-gray-700">Verification QR</p>
+                    <p className="text-[10px] text-gray-400">Scan for student credentials</p>
+                  </div>
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(receipt.qr_data)}`}
+                    alt="QR Verification"
+                    className="w-16 h-16 border border-gray-200 rounded-lg p-0.5 bg-white"
+                  />
+                </div>
               </div>
 
-              {/* Modal Buttons */}
-              <div className="flex gap-3 pt-2">
+              {/* Modal Buttons: Print, Save, New Enrollment */}
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2 text-sm shadow-md shadow-indigo-100 transition-all">
-                  <Printer className="w-4 h-4" /> Print / Save PDF
+                  className="py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2 text-sm shadow-md shadow-indigo-100 transition-all">
+                  <Printer className="w-4 h-4" /> Print Receipt
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setReceipt(null)
-                    router.push("/dashboard/owner/students")
-                  }}
-                  className="px-5 py-3 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 text-sm">
-                  Close & View Students
+                  onClick={handleSavePDF}
+                  className="py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 flex items-center justify-center gap-2 text-sm shadow-md shadow-emerald-100 transition-all">
+                  <Download className="w-4 h-4" /> Save PDF
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={resetForm}
+                className="w-full py-2.5 border border-indigo-200 text-indigo-700 rounded-xl font-semibold hover:bg-indigo-50 text-sm flex items-center justify-center gap-2 transition-colors">
+                <RefreshCw className="w-4 h-4" /> Enroll Another Student
+              </button>
             </div>
           </div>
         </div>
