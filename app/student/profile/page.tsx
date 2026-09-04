@@ -370,7 +370,7 @@ export default function StudentProfilePage() {
           <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-indigo-600" /> My Batches
           </h2>
-          <Link href="/#batches" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1">
+          <Link href="/marketplace" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1">
             Browse Batches <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
@@ -385,7 +385,7 @@ export default function StudentProfilePage() {
               You are registered with ID <span className="font-semibold text-indigo-600">{profile?.user_id}</span>. Contact the coaching reception or visit the office to enroll into an active batch!
             </p>
             <div className="flex items-center justify-center gap-3 pt-2">
-              <Link href="/#batches" className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-sm">View Available Batches</Link>
+              <Link href="/marketplace" className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-sm">View Available Batches</Link>
             </div>
           </div>
         ) : (

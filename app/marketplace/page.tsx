@@ -1,33 +1,51 @@
 import { createClient } from "@/lib/supabase/server"
-import { formatCurrency } from "@/lib/utils"
-import { GraduationCap, Star, ShoppingBag, BookOpen } from "lucide-react"
-import Link from "next/link"
 import PublicNavbar from "@/components/layout/PublicNavbar"
+import MarketplaceBrowseClient from "./MarketplaceBrowseClient"
+
+export const metadata = {
+  title: "Browse Batches & Courses | MedhaShiree",
+  description: "Explore all active coaching classroom batches and online courses with expert faculty.",
+}
 
 export default async function PublicMarketplace() {
   const supabase = await createClient()
-  const { data: courses } = await supabase.from("courses").select("*, teacher:staff(name)").eq("status", "published").order("total_sales", { ascending: false })
+
+  const [batchesRes, coursesRes, settingsRes] = await Promise.all([
+    supabase
+      .from("batches")
+      .select("id, name, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee, schedule_days, schedule_time, description, teacher:staff(name, subject)")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("courses")
+      .select("id, title, description, price, discount_price, status, total_sales, rating, rating_count, teacher:staff(name, subject)")
+      .eq("status", "published")
+      .order("total_sales", { ascending: false }),
+    supabase
+      .from("site_settings")
+      .select("key, value")
+      .in("key", ["contact_phone", "contact_whatsapp", "contact_number"]),
+  ])
+
+  const settingsMap = (settingsRes.data || []).reduce((acc: Record<string, string>, item) => {
+    acc[item.key] = item.value
+    return acc
+  }, {})
+
+  const contactPhone = settingsMap["contact_phone"] || settingsMap["contact_number"] || "01302201431"
+  const contactWhatsApp = settingsMap["contact_whatsapp"] || contactPhone
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       <PublicNavbar />
-      <div className="max-w-6xl mx-auto py-8 px-4">
-        <div className="text-center mb-8"><h1 className="text-3xl font-bold text-gray-900">Course Marketplace</h1><p className="text-gray-500 mt-1">Learn from the best teachers</p></div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {(courses || []).map(c => (
-            <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
-              <div className="h-40 bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center"><BookOpen className="w-12 h-12 text-white/40" /></div>
-              <div className="p-5">
-                <p className="font-bold text-gray-900">{c.title}</p>
-                <p className="text-sm text-gray-500 mt-1 line-clamp-2">{c.description || "No description"}</p>
-                <div className="flex items-center gap-2 mt-3"><Star className="w-4 h-4 text-yellow-400 fill-yellow-400" /><span className="text-sm">{c.rating || 0}</span><span className="text-xs text-gray-400">({c.rating_count} reviews)</span></div>
-                <div className="flex items-center justify-between mt-4"><div><p className="text-xs text-gray-500">by {c.teacher?.name}</p><p className="text-xs text-gray-400">{c.total_sales} enrolled</p></div><p className="text-xl font-bold text-indigo-600">{formatCurrency(c.price)}</p></div>
-              </div>
-            </div>
-          ))}
-          {(!courses || courses.length === 0) && <div className="col-span-full text-center py-16 text-gray-400">No courses available yet.</div>}
-        </div>
-      </div>
+      <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <MarketplaceBrowseClient
+          batches={batchesRes.data || []}
+          courses={coursesRes.data || []}
+          contactPhone={contactPhone}
+          contactWhatsApp={contactWhatsApp}
+        />
+      </main>
     </div>
   )
 }
