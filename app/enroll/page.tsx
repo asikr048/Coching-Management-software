@@ -9,7 +9,7 @@ import Link from "next/link"
 import {
   GraduationCap, Loader2, CheckCircle, ArrowRight, ArrowLeft,
   Copy, Check, User, Phone, Mail, Calendar, BookOpen, MapPin,
-  Users, Lock, Clock, Sparkles, Video
+  Users, Lock, Clock, Sparkles, Video, AlertCircle
 } from "lucide-react"
 
 interface Batch {
@@ -91,6 +91,7 @@ function EnrollContent() {
   // Payment Form State
   const [paymentMethod, setPaymentMethod] = useState<string>("bkash")
   const [senderNumber, setSenderNumber] = useState<string>("")
+  const [paidAmountInput, setPaidAmountInput] = useState<string>("")
   const [transactionId, setTransactionId] = useState<string>("")
 
   // Submission Results
@@ -98,6 +99,8 @@ function EnrollContent() {
   const [submittedStudentDbId, setSubmittedStudentDbId] = useState<string>("")
   const [existingPending, setExistingPending] = useState(false)
   const [alreadyEnrolled, setAlreadyEnrolled] = useState(false)
+  const [submittedPaidAmount, setSubmittedPaidAmount] = useState<number>(0)
+  const [submittedDueAmount, setSubmittedDueAmount] = useState<number>(0)
 
   // Copy helpers
   const [copiedPhone, setCopiedPhone] = useState(false)
@@ -300,6 +303,10 @@ function EnrollContent() {
   const coursePrice = selectedCourse ? Number(selectedCourse.price || 0) : 0
   const totalAmount = isCourse ? coursePrice : batchTotal
 
+  // Numeric amount paying and calculated due amount
+  const actualPaidAmount = paidAmountInput !== "" ? Math.max(0, Number(paidAmountInput) || 0) : totalAmount
+  const dueAmount = Math.max(0, totalAmount - actualPaidAmount)
+
   // Validate and advance from Step 1 to Step 2
   function handleProceedToPayment(e: React.FormEvent) {
     e.preventDefault()
@@ -341,6 +348,11 @@ function EnrollContent() {
       setSenderNumber(form.phone.trim())
     }
 
+    // Default paid amount to total amount
+    if (paidAmountInput === "") {
+      setPaidAmountInput(String(totalAmount))
+    }
+
     window.scrollTo({ top: 0, behavior: "smooth" })
     setStep("payment")
   }
@@ -355,6 +367,10 @@ function EnrollContent() {
     }
     if (!senderNumber.trim() || senderNumber.trim().length < 11) {
       toast.error("Please enter your 11-digit sender phone number (01XXXXXXXXX)")
+      return
+    }
+    if (actualPaidAmount <= 0) {
+      toast.error("Payment amount must be greater than ৳0")
       return
     }
     if (!transactionId.trim() || transactionId.trim().length < 4) {
@@ -437,6 +453,8 @@ function EnrollContent() {
 
       setSubmittedStudentDbId(stDbId)
       setSubmittedStudentId(stCode)
+      setSubmittedPaidAmount(actualPaidAmount)
+      setSubmittedDueAmount(dueAmount)
 
       if (isCourse && selectedCourse) {
         // Check for already purchased course
@@ -461,14 +479,14 @@ function EnrollContent() {
             student_id: stDbId,
             course_id: selectedCourse.id,
             item_type: "course",
-            amount: totalAmount,
+            amount: actualPaidAmount,
             total_fee: totalAmount,
-            due_amount: 0,
+            due_amount: dueAmount,
             payment_method: paymentMethod.toLowerCase(),
             sender_number: senderNumber.trim(),
             transaction_id: transactionId.trim().toUpperCase(),
             status: "pending",
-            notes: `Online Course enrollment for ${selectedCourse.title}. Student: ${form.name} (${form.phone}).`,
+            notes: `Online Course enrollment for ${selectedCourse.title}. Student: ${form.name} (${form.phone}). Paid: ৳${actualPaidAmount}, Due: ৳${dueAmount}`,
           })
 
         if (paySubErr) throw paySubErr
@@ -512,14 +530,14 @@ function EnrollContent() {
             student_id: stDbId,
             batch_id: selectedBatch.id,
             item_type: "batch",
-            amount: totalAmount,
+            amount: actualPaidAmount,
             total_fee: totalAmount,
-            due_amount: 0,
+            due_amount: dueAmount,
             payment_method: paymentMethod.toLowerCase(),
             sender_number: senderNumber.trim(),
             transaction_id: transactionId.trim().toUpperCase(),
             status: "pending",
-            notes: `Batch enrollment for ${selectedBatch.name}. Student: ${form.name} (${form.phone}).`,
+            notes: `Batch enrollment for ${selectedBatch.name}. Student: ${form.name} (${form.phone}). Paid: ৳${actualPaidAmount}, Due: ৳${dueAmount}`,
           })
 
         if (paySubErr) throw paySubErr
@@ -545,9 +563,9 @@ function EnrollContent() {
   }
 
   function handleCopyAmount() {
-    navigator.clipboard.writeText(String(totalAmount))
+    navigator.clipboard.writeText(String(actualPaidAmount))
     setCopiedAmount(true)
-    toast.success("Amount copied!")
+    toast.success("Paying amount copied!")
     setTimeout(() => setCopiedAmount(false), 2000)
   }
 
@@ -641,9 +659,19 @@ function EnrollContent() {
                 <span className="font-semibold text-cyan-300">{itemName}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
-                <span className="text-gray-400">Total Amount</span>
-                <span className="font-bold text-emerald-400">{formatCurrency(totalAmount)}</span>
+                <span className="text-gray-400">Total Program Fee</span>
+                <span className="font-bold text-gray-200">{formatCurrency(totalAmount)}</span>
               </div>
+              <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
+                <span className="text-gray-400">Amount Paid Now</span>
+                <span className="font-extrabold text-emerald-400">{formatCurrency(submittedPaidAmount || actualPaidAmount)}</span>
+              </div>
+              {(submittedDueAmount > 0 || dueAmount > 0) && (
+                <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
+                  <span className="text-amber-400 font-semibold">Remaining Due</span>
+                  <span className="font-bold text-amber-400">{formatCurrency(submittedDueAmount || dueAmount)}</span>
+                </div>
+              )}
               {paymentMethod && (
                 <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
                   <span className="text-gray-400">Payment Method</span>
@@ -764,12 +792,24 @@ function EnrollContent() {
                 </div>
               </div>
 
-              {/* Total Amount Box */}
-              <div className="bg-[#0e1728] border border-[#1a2b47] rounded-2xl p-6 flex items-center justify-between shadow-xl">
-                <span className="text-gray-300 font-medium text-sm md:text-base">Total Amount</span>
-                <span className="text-3xl md:text-4xl font-black text-[#00ffff] tracking-tight drop-shadow-[0_0_12px_rgba(0,255,255,0.4)]">
-                  ৳{totalAmount}
-                </span>
+              {/* Total Amount Box with Due summary */}
+              <div className="bg-[#0e1728] border border-[#1a2b47] rounded-2xl p-6 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-300 font-medium text-sm md:text-base">Total Amount</span>
+                  <span className="text-3xl md:text-4xl font-black text-[#00ffff] tracking-tight drop-shadow-[0_0_12px_rgba(0,255,255,0.4)]">
+                    ৳{totalAmount}
+                  </span>
+                </div>
+                {dueAmount > 0 && (
+                  <div className="flex items-center justify-between pt-2 border-t border-[#182842] text-xs">
+                    <span className="text-amber-300/90 font-medium flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> Remaining Due After This Payment:
+                    </span>
+                    <span className="font-extrabold text-amber-400 font-mono text-sm">
+                      ৳{dueAmount}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* PAY VIA row (Clickable Badges to switch active number) */}
@@ -876,9 +916,9 @@ function EnrollContent() {
 
                   <div className="flex items-center gap-3 flex-wrap">
                     <span className="text-base flex-shrink-0">💰</span>
-                    <span className="text-gray-300">Enter exact amount:</span>
+                    <span className="text-gray-300">Enter sending amount:</span>
                     <span className="px-3 py-0.5 rounded-lg bg-[#00ffff]/15 text-[#00ffff] font-mono font-bold text-sm border border-[#00ffff]/30">
-                      {totalAmount}
+                      {actualPaidAmount}
                     </span>
                     <span className="text-gray-400">BDT</span>
                     <button
@@ -917,7 +957,7 @@ function EnrollContent() {
 
             {/* RIGHT COLUMN: Payment Details Form */}
             <div className="lg:col-span-5">
-              <form onSubmit={handleSubmitPayment} className="bg-[#0e1728] border border-[#1a2b47] rounded-2xl p-6 md:p-8 space-y-6 shadow-2xl">
+              <form onSubmit={handleSubmitPayment} className="bg-[#0e1728] border border-[#1a2b47] rounded-2xl p-6 md:p-8 space-y-5 shadow-2xl">
                 
                 <div>
                   <h3 className="text-xs font-bold text-[#00ffff] uppercase tracking-wider">
@@ -941,6 +981,50 @@ function EnrollContent() {
                     <option value="rocket" className="bg-[#0e1728] text-white">Rocket ({gateways.rocket?.number})</option>
                     <option value="upay" className="bg-[#0e1728] text-white">Upay ({gateways.upay?.number})</option>
                   </select>
+                </div>
+
+                {/* PAYMENT AMOUNT INPUT & DYNAMIC DUE AMOUNT DISPLAY */}
+                <div className="bg-[#111a2e] border border-[#1c2c4a] rounded-xl p-4 space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                        Payment Amount (BDT) <span className="text-cyan-400">*</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setPaidAmountInput(String(totalAmount))}
+                        className="text-[11px] text-cyan-400 hover:text-cyan-300 underline font-medium cursor-pointer"
+                      >
+                        Pay Full (৳{totalAmount})
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 font-bold text-sm">৳</span>
+                      <input
+                        type="number"
+                        min="1"
+                        max={totalAmount}
+                        required
+                        value={paidAmountInput}
+                        onChange={e => setPaidAmountInput(e.target.value)}
+                        placeholder={String(totalAmount)}
+                        className="w-full pl-8 pr-4 py-3 bg-[#142036] border border-[#223354] rounded-xl text-white text-base font-bold font-mono focus:outline-none focus:border-[#00ffff] focus:ring-1 focus:ring-[#00ffff] transition-all placeholder-gray-500"
+                      />
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      Enter the amount you sent via {paymentMethod.toUpperCase()} (Total fee: ৳{totalAmount})
+                    </p>
+                  </div>
+
+                  {/* Due Amount Live Display */}
+                  <div className="flex items-center justify-between pt-2 border-t border-[#182842] text-xs">
+                    <span className="text-gray-300 font-medium">Due Amount Remaining:</span>
+                    <span className={`font-mono font-extrabold text-sm px-2 py-0.5 rounded ${
+                      dueAmount > 0 ? "bg-amber-500/20 text-amber-300 border border-amber-500/30" : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+                    }`}>
+                      {dueAmount > 0 ? `৳${dueAmount} (Due)` : "৳0 (Full Paid)"}
+                    </span>
+                  </div>
                 </div>
 
                 {/* Sender Number */}
@@ -976,7 +1060,7 @@ function EnrollContent() {
                 </div>
 
                 {/* Security Guarantee Box */}
-                <div className="bg-[#091b2e]/80 border border-[#11395f] rounded-xl p-4 flex items-start gap-3">
+                <div className="bg-[#091b2e]/80 border border-[#11395f] rounded-xl p-3.5 flex items-start gap-3">
                   <Lock className="w-4 h-4 text-cyan-400 flex-shrink-0 mt-0.5" />
                   <p className="text-xs text-sky-200/90 leading-relaxed">
                     Your payment info is submitted securely. An admin will verify your transaction and grant access within 24 hours.
@@ -996,7 +1080,7 @@ function EnrollContent() {
                     </>
                   ) : (
                     <>
-                      Submit Payment ✓
+                      Submit Payment (৳{actualPaidAmount}) ✓
                     </>
                   )}
                 </button>
