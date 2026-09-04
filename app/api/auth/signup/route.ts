@@ -34,7 +34,9 @@ export async function POST(req: NextRequest) {
     if (existingProfile) {
       return NextResponse.json(
         {
-          error: "An account with this email already exists. Please sign in instead.",
+          error: `This email (${cleanEmail}) is already registered. Please sign in instead.`,
+          email: cleanEmail,
+          alreadyExists: true,
           existingUserId: existingProfile.user_id,
         },
         { status: 409 }
@@ -52,7 +54,9 @@ export async function POST(req: NextRequest) {
     if (existingStudent) {
       return NextResponse.json(
         {
-          error: "An account with this email already exists. Please sign in instead.",
+          error: `This email (${cleanEmail}) is already registered. Please sign in instead.`,
+          email: cleanEmail,
+          alreadyExists: true,
           existingUserId: existingStudent.student_id,
         },
         { status: 409 }
@@ -69,7 +73,11 @@ export async function POST(req: NextRequest) {
 
     if (existingStaff) {
       return NextResponse.json(
-        { error: "An account with this email already exists. Please sign in instead." },
+        {
+          error: `This email (${cleanEmail}) is already registered as a staff account. Please sign in instead.`,
+          email: cleanEmail,
+          alreadyExists: true,
+        },
         { status: 409 }
       )
     }
@@ -81,8 +89,14 @@ export async function POST(req: NextRequest) {
         (u) => u.email?.toLowerCase() === cleanEmail
       )
       if (matchingAuthUser) {
+        const foundUserId = matchingAuthUser.user_metadata?.user_id || null
         return NextResponse.json(
-          { error: "An account with this email already exists. Please sign in instead." },
+          {
+            error: `This email (${cleanEmail}) is already registered. Please sign in instead.`,
+            email: cleanEmail,
+            alreadyExists: true,
+            existingUserId: foundUserId,
+          },
           { status: 409 }
         )
       }
@@ -149,7 +163,11 @@ export async function POST(req: NextRequest) {
       const msg = authError.message.toLowerCase()
       if (msg.includes("already registered") || msg.includes("already exists") || msg.includes("unique")) {
         return NextResponse.json(
-          { error: "An account with this email already exists. Please sign in instead." },
+          {
+            error: `This email (${cleanEmail}) is already registered. Please sign in instead.`,
+            email: cleanEmail,
+            alreadyExists: true,
+          },
           { status: 409 }
         )
       }

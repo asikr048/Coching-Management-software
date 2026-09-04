@@ -9,6 +9,8 @@ export default function SignupPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [emailAlreadyExists, setEmailAlreadyExists] = useState(false)
+  const [existingEmail, setExistingEmail] = useState("")
+  const [existingUserId, setExistingUserId] = useState("")
   const [generatedId, setGeneratedId] = useState("")
   const [registeredEmail, setRegisteredEmail] = useState("")
   const [copied, setCopied] = useState(false)
@@ -17,6 +19,8 @@ export default function SignupPage() {
     setForm(f => ({ ...f, [field]: value }))
     if (field === "email" || field === "confirmEmail") {
       setEmailAlreadyExists(false)
+      setExistingEmail("")
+      setExistingUserId("")
       setError("")
     }
   }
@@ -67,11 +71,14 @@ export default function SignupPage() {
         const errMsg = String(data.error || "Registration failed")
         if (
           res.status === 409 ||
+          data.alreadyExists ||
           errMsg.toLowerCase().includes("already exists") ||
           errMsg.toLowerCase().includes("already registered")
         ) {
           setEmailAlreadyExists(true)
-          setError("An account with this email already exists. Please sign in instead.")
+          setExistingEmail(data.email || cleanEmail)
+          setExistingUserId(data.existingUserId || "")
+          setError(errMsg || `This email (${cleanEmail}) is already registered. Please sign in instead.`)
           return
         }
         throw new Error(errMsg)
@@ -80,7 +87,13 @@ export default function SignupPage() {
       setGeneratedId(data.userId)
       setRegisteredEmail(data.email)
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Registration failed")
+      console.error("Signup error:", err)
+      const rawMsg = err instanceof Error ? err.message : "Registration failed"
+      if (rawMsg.toLowerCase().includes("failed to fetch")) {
+        setError("Network connection issue. Please verify your internet connection and try again.")
+      } else {
+        setError(rawMsg)
+      }
     } finally {
       setLoading(false)
     }
@@ -210,19 +223,52 @@ export default function SignupPage() {
           </div>
 
           {error && (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-2.5">
-              <div className="flex items-start gap-2.5 text-red-700 text-sm">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
-                <span>{error}</span>
+            <div className={`p-4 rounded-2xl border shadow-xs space-y-3 ${
+              emailAlreadyExists ? "bg-amber-50 border-amber-300" : "bg-red-50 border-red-200"
+            }`}>
+              <div className={`flex items-start gap-2.5 text-sm ${
+                emailAlreadyExists ? "text-amber-900" : "text-red-700"
+              }`}>
+                <AlertCircle className={`w-5 h-5 flex-shrink-0 mt-0.5 ${
+                  emailAlreadyExists ? "text-amber-600" : "text-red-600"
+                }`} />
+                <div className="space-y-1 flex-1">
+                  <p className="font-bold">
+                    {emailAlreadyExists ? "Email Already Registered" : "Registration Notice"}
+                  </p>
+                  <p className="text-xs leading-relaxed">
+                    {error}
+                  </p>
+                  {emailAlreadyExists && existingUserId && (
+                    <p className="text-xs font-semibold pt-1">
+                      Your registered Student ID:{" "}
+                      <span className="font-mono font-bold px-2 py-0.5 bg-amber-200/70 rounded text-amber-950">
+                        {existingUserId}
+                      </span>
+                    </p>
+                  )}
+                </div>
               </div>
+
               {emailAlreadyExists && (
-                <div className="pt-2 border-t border-red-200">
+                <div className="pt-2 border-t border-amber-200/80 flex flex-col sm:flex-row gap-2">
                   <Link
-                    href={`/login?email=${encodeURIComponent(form.email.trim())}`}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                    href={`/login?email=${encodeURIComponent((existingEmail || form.email).trim())}&id=${encodeURIComponent(existingUserId || "")}`}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
                   >
-                    <LogIn className="w-3.5 h-3.5" /> Sign in with this Email
+                    <LogIn className="w-3.5 h-3.5" /> Sign in with {(existingEmail || form.email).trim()} &rarr;
                   </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm(f => ({ ...f, email: "", confirmEmail: "" }))
+                      setEmailAlreadyExists(false)
+                      setError("")
+                    }}
+                    className="px-3 py-2 bg-white hover:bg-amber-100/50 text-amber-900 rounded-xl text-xs font-semibold border border-amber-300/80 transition-colors"
+                  >
+                    Change Email
+                  </button>
                 </div>
               )}
             </div>

@@ -4,14 +4,14 @@ import { NextResponse, type NextRequest } from "next/server"
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
-  // Always pass through static assets and auth routes untouched
-  const bypassRoutes = ["/auth/callback", "/auth/confirm", "/_next", "/favicon.ico"]
+  // Always pass through API routes, static assets, and auth routes untouched
+  const bypassRoutes = ["/api", "/auth/callback", "/auth/confirm", "/auth/", "/_next", "/favicon.ico"]
   if (bypassRoutes.some(r => pathname.startsWith(r))) {
     return NextResponse.next()
   }
 
   // Public routes - no auth needed
-  const publicRoutes = ["/login", "/signup", "/auth", "/enroll", "/marketplace", "/parent-portal", "/batch", "/"]
+  const publicRoutes = ["/login", "/signup", "/auth", "/enroll", "/marketplace", "/parent-portal", "/batch", "/courses", "/"]
   const isPublic = publicRoutes.some(r => pathname === r || (r !== "/" && pathname.startsWith(r)))
   if (isPublic) return NextResponse.next()
 
@@ -86,5 +86,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)"],
 }

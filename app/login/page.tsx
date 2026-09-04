@@ -172,6 +172,12 @@ function LoginFormContent() {
       }
 
       const role = staff?.role
+      const redirectParam = searchParams.get("redirect")
+      if (redirectParam && redirectParam.startsWith("/")) {
+        window.location.href = redirectParam
+        return
+      }
+
       if (role === "owner" || role === "super_manager" || role === "manager") {
         window.location.href = "/dashboard/owner"
       } else if (role === "receptionist") {
