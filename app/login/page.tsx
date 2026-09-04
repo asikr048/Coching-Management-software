@@ -1,11 +1,12 @@
 "use client"
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { GraduationCap, Eye, EyeOff, Loader2, Lock, Users, TrendingUp, Star, ArrowRight, UserPlus, BookOpen, IdCard } from "lucide-react"
+import { GraduationCap, Eye, EyeOff, Loader2, Lock, Users, TrendingUp, Star, ArrowRight, UserPlus, BookOpen, IdCard, AlertCircle } from "lucide-react"
 import Link from "next/link"
 
-export default function LoginPage() {
+function LoginFormContent() {
+  const searchParams = useSearchParams()
   const [userId, setUserId] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -15,69 +16,297 @@ export default function LoginPage() {
   const router = useRouter()
   const supabase = createClient()
 
+  useEffect(() => {
+    const emailParam = searchParams.get("email")
+    const idParam = searchParams.get("id")
+    if (emailParam) {
+      setUserId(emailParam)
+    } else if (idParam) {
+      setUserId(idParam)
+    }
+  }, [searchParams])
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError("")
+
+    const rawInput = userId.trim()
+    if (!rawInput) {
+      setError("Please enter your User ID or Email")
+      setLoading(false)
+      return
+    }
+    if (!password) {
+      setError("Please enter your password")
+      setLoading(false)
+      return
+    }
+
     try {
-      let email = userId.trim()
+      let candidateEmails: string[] = []
 
-      // If input looks like an ID (e.g. MS-10234), look up the email
-      if (!email.includes("@")) {
-        const { data: profile } = await supabase
-          .from("user_profiles")
-          .select("email")
-          .eq("user_id", email.toUpperCase())
-          .maybeSingle()
-        if (!profile) {
-          setError("User ID not found. Please check your ID or use your email.")
-          setLoading(false)
-          return
-        }
-        email = profile.email
-      }
-
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-      if (authError) throw authError
-
-      const user = authData.user
-      if (user) {
-        // Auto-link staff record if auth_user_id is not set
-        let { data: staff } = await supabase
-          .from("staff")
-          .select("id, role, auth_user_id")
-          .eq("auth_user_id", user.id)
-          .maybeSingle()
-
-        if (!staff && user.email) {
-          const { data: staffByEmail } = await supabase
-            .from("staff")
-            .select("id, role, auth_user_id")
-            .eq("email", user.email)
-            .maybeSingle()
-          if (staffByEmail) {
-            await supabase.from("staff").update({ auth_user_id: user.id }).eq("id", staffByEmail.id)
-            staff = staffByEmail
+      // 1. Try to resolve identity via backend API
+      try {
+        const resolveRes = await fetch("/api/auth/resolve-identity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: rawInput }),
+        })
+        if (resolveRes.ok) {
+          const resolveData = await resolveRes.json()
+          if (Array.isArray(resolveData.candidateEmails) && resolveData.candidateEmails.length > 0) {
+            candidateEmails = resolveData.candidateEmails
           }
         }
+      } catch {
+        // Fall back to client-side resolution if network fails
+      }
 
-        const r = staff?.role
-        if (r === "owner" || r === "super_manager" || r === "manager") window.location.href = "/dashboard/owner"
-        else if (r === "receptionist") window.location.href = "/dashboard/reception"
-        else if (r === "teacher") window.location.href = "/dashboard/teacher"
-        else if (r === "accountant") window.location.href = "/dashboard/accountant"
-        else window.location.href = "/student/profile"
+      // 2. Client-side fallback if candidateEmails is empty
+      if (candidateEmails.length === 0) {
+        if (rawInput.includes("@")) {
+          candidateEmails.push(rawInput.toLowerCase())
+        } else {
+          const cleanId = rawInput.toUpperCase().startsWith("MS-")
+            ? rawInput.toUpperCase()
+            : `MS-${rawInput.toUpperCase()}`
+
+          const { data: profile } = await supabase
+            .from("user_profiles")
+            .select("email")
+            .ilike("user_id", cleanId)
+            .maybeSingle()
+
+          if (profile?.email) {
+            candidateEmails.push(profile.email.toLowerCase())
+          }
+
+          const { data: student } = await supabase
+            .from("students")
+            .select("email")
+            .ilike("student_id", cleanId)
+            .maybeSingle()
+
+          if (student?.email && !candidateEmails.includes(student.email.toLowerCase())) {
+            candidateEmails.push(student.email.toLowerCase())
+          }
+
+          const synthetic = `${cleanId.toLowerCase()}@medhashiree.local`
+          if (!candidateEmails.includes(synthetic)) {
+            candidateEmails.push(synthetic)
+          }
+        }
+      }
+
+      // 3. Attempt signInWithPassword across candidate emails
+      let authUser = null
+      let lastAuthError: Error | null = null
+
+      for (const email of candidateEmails) {
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+
+        if (!authError && authData.user) {
+          authUser = authData.user
+          break
+        }
+
+        if (authError) {
+          lastAuthError = authError
+          // If unconfirmed, resolve-identity already triggered confirmation; retry this email once
+          if (authError.message.toLowerCase().includes("email not confirmed")) {
+            try {
+              await fetch("/api/auth/resolve-identity", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ identifier: email }),
+              })
+              const retry = await supabase.auth.signInWithPassword({ email, password })
+              if (!retry.error && retry.data.user) {
+                authUser = retry.data.user
+                break
+              }
+            } catch {}
+          }
+        }
+      }
+
+      if (!authUser) {
+        if (lastAuthError) {
+          const msg = lastAuthError.message.toLowerCase()
+          if (msg.includes("invalid login credentials") || msg.includes("invalid password")) {
+            setError("Incorrect password or login details. Please check your credentials.")
+          } else if (msg.includes("email not confirmed")) {
+            setError("Your account email is being verified. Please try again.")
+          } else {
+            setError(lastAuthError.message)
+          }
+        } else {
+          setError("No account found with this ID or Email. Please check your input or sign up.")
+        }
+        setLoading(false)
+        return
+      }
+
+      // 4. Successful login: auto-link staff record if applicable and redirect
+      let { data: staff } = await supabase
+        .from("staff")
+        .select("id, role, auth_user_id")
+        .eq("auth_user_id", authUser.id)
+        .maybeSingle()
+
+      if (!staff && authUser.email) {
+        const { data: staffByEmail } = await supabase
+          .from("staff")
+          .select("id, role, auth_user_id")
+          .ilike("email", authUser.email)
+          .maybeSingle()
+
+        if (staffByEmail) {
+          await supabase.from("staff").update({ auth_user_id: authUser.id }).eq("id", staffByEmail.id)
+          staff = staffByEmail
+        }
+      }
+
+      const role = staff?.role
+      if (role === "owner" || role === "super_manager" || role === "manager") {
+        window.location.href = "/dashboard/owner"
+      } else if (role === "receptionist") {
+        window.location.href = "/dashboard/reception"
+      } else if (role === "teacher") {
+        window.location.href = "/dashboard/teacher"
+      } else if (role === "accountant") {
+        window.location.href = "/dashboard/accountant"
+      } else {
+        window.location.href = "/student/profile"
       }
     } catch (err: unknown) {
+      console.error("Login error:", err)
       setError(err instanceof Error ? err.message : "Login failed. Please try again.")
-    } finally {
       setLoading(false)
     }
   }
 
+  return (
+    <div className="w-full max-w-[420px] space-y-8">
+      <div className="lg:hidden text-center mb-4">
+        <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl mb-3">
+          <GraduationCap className="w-6 h-6 text-white" />
+        </div>
+        <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiree</span></h1>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
+          <p className="text-gray-500 text-sm mt-1">Sign in with your Email or Student ID</p>
+        </div>
+        <Link
+          href="/signup"
+          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-semibold hover:bg-indigo-100 transition-colors"
+        >
+          <UserPlus className="w-4 h-4" /> Sign Up
+        </Link>
+      </div>
+
+      {error && (
+        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start gap-2.5">
+          <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <form onSubmit={handleLogin} className="space-y-5">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">User ID or Email</label>
+          <div className="relative">
+            <IdCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              value={userId}
+              onChange={e => setUserId(e.target.value)}
+              required
+              className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-shadow focus:shadow-md"
+              placeholder="MS-10001 or your@email.com"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+          <div className="relative">
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type={showPassword ? "text" : "password"}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-shadow focus:shadow-md"
+              placeholder="Enter your password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={e => setRemember(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            <span className="text-sm text-gray-600">Remember me</span>
+          </label>
+          <button type="button" className="text-sm text-indigo-600 font-medium hover:text-indigo-700">
+            Forgot password?
+          </button>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 disabled:opacity-60 text-white font-semibold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 text-sm"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" /> Signing in...
+            </>
+          ) : (
+            <>
+              Sign In <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </button>
+      </form>
+
+      <div className="flex items-center justify-center gap-3 pt-2">
+        <Link
+          href="/parent-portal"
+          className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all"
+        >
+          Parent Portal
+        </Link>
+        <Link
+          href="/marketplace"
+          className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all"
+        >
+          Courses
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+export default function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* LEFT — Branding Panel */}
@@ -89,7 +318,9 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/10"><GraduationCap className="w-6 h-6 text-white" /></div>
+            <div className="w-11 h-11 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/10">
+              <GraduationCap className="w-6 h-6 text-white" />
+            </div>
             <span className="text-2xl font-bold text-white tracking-tight">Medha<span className="text-indigo-300">Shiree</span></span>
           </div>
 
@@ -98,7 +329,10 @@ export default function LoginPage() {
             <p className="text-indigo-200/80 text-lg leading-relaxed">Manage batches, track attendance, handle fees, and monitor student progress — all from one powerful platform.</p>
 
             <div className="bg-white/[0.08] backdrop-blur-xl border border-white/[0.12] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center gap-3"><div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" /><span className="text-white/60 text-sm font-medium">Platform Statistics</span></div>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                <span className="text-white/60 text-sm font-medium">Platform Statistics</span>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 {[
                   { label: "Attendance Rate", value: "99.4%", icon: TrendingUp, color: "text-emerald-400" },
@@ -107,15 +341,24 @@ export default function LoginPage() {
                   { label: "Pass Rate", value: "95%", icon: Star, color: "text-amber-400" },
                 ].map((s, i) => (
                   <div key={i} className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-white/[0.08] rounded-lg flex items-center justify-center"><s.icon className={`w-4 h-4 ${s.color}`} /></div>
-                    <div><p className="text-white font-bold text-sm">{s.value}</p><p className="text-white/40 text-xs">{s.label}</p></div>
+                    <div className="w-9 h-9 bg-white/[0.08] rounded-lg flex items-center justify-center">
+                      <s.icon className={`w-4 h-4 ${s.color}`} />
+                    </div>
+                    <div>
+                      <p className="text-white font-bold text-sm">{s.value}</p>
+                      <p className="text-white/40 text-xs">{s.label}</p>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
             <div className="bg-white/[0.05] backdrop-blur border border-white/[0.08] rounded-xl p-5">
-              <div className="flex gap-0.5 mb-2">{[0,1,2,3,4].map(i => <Star key={i} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />)}</div>
+              <div className="flex gap-0.5 mb-2">
+                {[0, 1, 2, 3, 4].map(i => (
+                  <Star key={i} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                ))}
+              </div>
               <p className="text-white/70 text-sm italic leading-relaxed">&ldquo;MedhaShiree transformed how we manage our coaching center. Attendance, fees, and results — everything is automated now.&rdquo;</p>
               <p className="text-white/40 text-xs mt-3">&mdash; Coaching Center Director, Rajshahi</p>
             </div>
@@ -127,62 +370,9 @@ export default function LoginPage() {
 
       {/* RIGHT — Auth Form */}
       <div className="flex-1 flex items-center justify-center bg-slate-50 p-6 sm:p-8 lg:p-12">
-        <div className="w-full max-w-[420px] space-y-8">
-          <div className="lg:hidden text-center mb-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl mb-3"><GraduationCap className="w-6 h-6 text-white" /></div>
-            <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiree</span></h1>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <div><h2 className="text-2xl font-bold text-gray-900">Welcome back</h2><p className="text-gray-500 text-sm mt-1">Enter your ID and password to sign in</p></div>
-            <Link href="/signup" className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-semibold hover:bg-indigo-100 transition-colors"><UserPlus className="w-4 h-4" /> Sign Up</Link>
-          </div>
-
-          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>}
-
-          <form onSubmit={handleLogin} className="space-y-5">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">User ID or Email</label>
-              <div className="relative">
-                <IdCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input value={userId} onChange={e => setUserId(e.target.value)} required
-                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-shadow focus:shadow-md"
-                  placeholder="MS-10001 or your@email.com" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type={showPassword ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} required
-                  className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-shadow focus:shadow-md"
-                  placeholder="Enter your password" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                <span className="text-sm text-gray-600">Remember me</span>
-              </label>
-              <button type="button" className="text-sm text-indigo-600 font-medium hover:text-indigo-700">Forgot password?</button>
-            </div>
-
-            <button type="submit" disabled={loading}
-              className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 disabled:opacity-60 text-white font-semibold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 text-sm">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing in...</> : <>Sign In <ArrowRight className="w-4 h-4" /></>}
-            </button>
-          </form>
-
-
-          <div className="flex items-center justify-center gap-3 pt-2">
-            <Link href="/parent-portal" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all">Parent Portal</Link>
-            <Link href="/marketplace" className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all">Courses</Link>
-          </div>
-        </div>
+        <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>}>
+          <LoginFormContent />
+        </Suspense>
       </div>
     </div>
   )

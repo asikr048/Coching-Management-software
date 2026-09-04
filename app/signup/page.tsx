@@ -1,7 +1,6 @@
 "use client"
 import { useState } from "react"
-import { createClient } from "@/lib/supabase/client"
-import { GraduationCap, Eye, EyeOff, Loader2, Mail, Lock, User, Phone, Users, TrendingUp, Star, ArrowRight, BookOpen, Copy, CheckCircle } from "lucide-react"
+import { GraduationCap, Eye, EyeOff, Loader2, Mail, Lock, User, Phone, ArrowRight, Copy, CheckCircle, AlertCircle, LogIn } from "lucide-react"
 import Link from "next/link"
 
 export default function SignupPage() {
@@ -9,58 +8,71 @@ export default function SignupPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [emailAlreadyExists, setEmailAlreadyExists] = useState(false)
   const [generatedId, setGeneratedId] = useState("")
+  const [registeredEmail, setRegisteredEmail] = useState("")
   const [copied, setCopied] = useState(false)
-  const supabase = createClient()
 
-  function update(field: string, value: string) { setForm(f => ({ ...f, [field]: value })) }
+  function update(field: string, value: string) {
+    setForm(f => ({ ...f, [field]: value }))
+    if (field === "email" || field === "confirmEmail") {
+      setEmailAlreadyExists(false)
+      setError("")
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError("")
+    setEmailAlreadyExists(false)
 
-    if (form.email !== form.confirmEmail) { setError("Emails do not match"); return }
-    if (form.password !== form.confirmPassword) { setError("Passwords do not match"); return }
-    if (form.password.length < 6) { setError("Password must be at least 6 characters"); return }
+    const cleanEmail = form.email.trim().toLowerCase()
+    const cleanConfirmEmail = form.confirmEmail.trim().toLowerCase()
+
+    if (cleanEmail !== cleanConfirmEmail) {
+      setError("Emails do not match")
+      return
+    }
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+    if (form.password.length < 6) {
+      setError("Password must be at least 6 characters")
+      return
+    }
 
     setLoading(true)
     try {
-      // Generate unique ID locally (MS-10001 to MS-99999)
-      const userId = "MS-" + (10001 + Math.floor(Math.random() * 89999))
-
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-        options: { data: { full_name: form.name, user_id: userId, phone: form.phone } }
-      })
-      if (authError) throw authError
-
-      // Try to save to user_profiles
-      await supabase.from("user_profiles").insert({
-        user_id: userId,
-        email: form.email,
-        name: form.name,
-        phone: form.phone || null,
-        auth_user_id: authData.user?.id || null,
+      const res = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: cleanEmail,
+          phone: form.phone.trim(),
+          password: form.password,
+        }),
       })
 
-      // Also create student entry in students table
-      try {
-        await supabase.from("students").insert({
-          student_id: userId,
-          name: form.name,
-          email: form.email,
-          phone: form.phone || null,
-          guardian_phone: form.phone || "N/A",
-          is_active: true,
-        })
-      } catch {}
+      const data = await res.json()
 
-      setGeneratedId(userId)
+      if (!res.ok) {
+        if (res.status === 409 || data.error?.toLowerCase().includes("already exists") || data.error?.toLowerCase().includes("already registered")) {
+          setEmailAlreadyExists(true)
+          setError("An account with this email already exists. Please sign in instead.")
+          return
+        }
+        throw new Error(data.error || "Registration failed")
+      }
+
+      setGeneratedId(data.userId)
+      setRegisteredEmail(data.email)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Registration failed")
-    } finally { setLoading(false) }
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function copyId() {
@@ -74,30 +86,52 @@ export default function SignupPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="max-w-md w-full text-center space-y-6">
-          <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto">
+          <div className="w-16 h-16 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
             <CheckCircle className="w-8 h-8 text-emerald-600" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900">Account Created!</h2>
-          <p className="text-gray-500">Your unique login ID has been generated. Save it carefully!</p>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Account Created Successfully!</h2>
+            <p className="text-gray-500 text-sm mt-1">Your student account has been registered and verified.</p>
+          </div>
 
-          <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 space-y-3">
-            <p className="text-sm font-medium text-indigo-600">Your Login ID</p>
-            <div className="flex items-center justify-center gap-3">
-              <p className="text-4xl font-extrabold text-indigo-700 tracking-wider">{generatedId}</p>
-              <button onClick={copyId} className="p-2 bg-white rounded-lg border border-indigo-200 hover:bg-indigo-100 transition-colors">
-                {copied ? <CheckCircle className="w-5 h-5 text-emerald-600" /> : <Copy className="w-5 h-5 text-indigo-600" />}
-              </button>
+          <div className="bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 space-y-4 text-left">
+            <div>
+              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">Your Student ID</p>
+              <div className="flex items-center justify-between mt-1">
+                <p className="text-3xl font-extrabold text-indigo-700 tracking-wider">{generatedId}</p>
+                <button
+                  onClick={copyId}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-white rounded-lg border border-indigo-200 hover:bg-indigo-100 transition-colors text-xs font-medium text-indigo-700"
+                >
+                  {copied ? <><CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> Copied</> : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+                </button>
+              </div>
             </div>
-            <p className="text-xs text-indigo-500">Use this ID along with your password to log in</p>
+
+            <div className="pt-3 border-t border-indigo-200/60">
+              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider">Registered Email</p>
+              <p className="text-sm font-medium text-gray-800 mt-0.5">{registeredEmail}</p>
+            </div>
+
+            <div className="pt-3 border-t border-indigo-200/60">
+              <p className="text-xs text-indigo-700 font-medium">
+                💡 You can now sign in using either your <strong>Student ID ({generatedId})</strong> or your <strong>Email ({registeredEmail})</strong>.
+              </p>
+            </div>
           </div>
 
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left">
-            <p className="text-sm font-semibold text-amber-800">⚠️ Important</p>
-            <p className="text-sm text-amber-700 mt-1">Save your ID <span className="font-bold">{generatedId}</span> somewhere safe. You will need it every time you log in.</p>
+            <p className="text-sm font-semibold text-amber-800">⚠️ Please Note</p>
+            <p className="text-sm text-amber-700 mt-1">
+              Save your Student ID <span className="font-bold">{generatedId}</span>. You can use it along with your password whenever you log in.
+            </p>
           </div>
 
-          <Link href="/login" className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:opacity-95 shadow-lg shadow-indigo-200 transition-all">
-            Go to Login <ArrowRight className="w-4 h-4" />
+          <Link
+            href={`/login?email=${encodeURIComponent(registeredEmail)}`}
+            className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl font-semibold hover:opacity-95 shadow-lg shadow-indigo-200 transition-all"
+          >
+            Proceed to Sign In <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>
@@ -113,16 +147,25 @@ export default function SignupPage() {
         <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] bg-violet-500/20 rounded-full blur-[80px]" />
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/10"><GraduationCap className="w-6 h-6 text-white" /></div>
-            <span className="text-2xl font-bold text-white">Medha<span className="text-indigo-300">Shiree</span></span>
+            <div className="w-11 h-11 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/10">
+              <GraduationCap className="w-6 h-6 text-white" />
+            </div>
+            <span className="text-2xl font-bold text-white tracking-tight">Medha<span className="text-indigo-300">Shiree</span></span>
           </div>
           <div className="space-y-8 max-w-md">
             <h2 className="text-4xl font-extrabold text-white leading-tight">Join the Future of Coaching Management</h2>
-            <p className="text-indigo-200/80 text-lg">Create your account and get a unique ID for instant access.</p>
+            <p className="text-indigo-200/80 text-lg">Create your student account and get a unique ID for instant, seamless access.</p>
             <div className="bg-white/[0.08] backdrop-blur-xl border border-white/[0.12] rounded-2xl p-6 space-y-4">
-              <div className="flex items-center gap-3"><div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" /><span className="text-white/60 text-sm font-medium">How it works</span></div>
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                <span className="text-white/60 text-sm font-medium">How it works</span>
+              </div>
               <div className="space-y-3">
-                {["Fill in your details below", "You will get a unique ID (e.g. MS-10245)", "Use your ID + password to log in anytime"].map((s, i) => (
+                {[
+                  "Fill in your details below with your valid email",
+                  "You will instantly receive a unique Student ID (e.g. MS-10001)",
+                  "Sign in anytime using either your Email or Student ID"
+                ].map((s, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <div className="w-7 h-7 bg-white/10 rounded-lg flex items-center justify-center text-white text-xs font-bold">{i + 1}</div>
                     <p className="text-white/70 text-sm">{s}</p>
@@ -139,58 +182,170 @@ export default function SignupPage() {
       <div className="flex-1 flex items-center justify-center bg-slate-50 p-6 sm:p-8 lg:p-12">
         <div className="w-full max-w-[420px] space-y-6">
           <div className="lg:hidden text-center mb-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl mb-3"><GraduationCap className="w-6 h-6 text-white" /></div>
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl mb-3">
+              <GraduationCap className="w-6 h-6 text-white" />
+            </div>
             <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiree</span></h1>
           </div>
 
           <div className="flex items-center justify-between">
-            <div><h2 className="text-2xl font-bold text-gray-900">Create Account</h2><p className="text-gray-500 text-sm mt-1">Fill in your details to get your ID</p></div>
-            <Link href="/login" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700">Sign In &rarr;</Link>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Create Account</h2>
+              <p className="text-gray-500 text-sm mt-1">Fill in your details to get your student ID</p>
+            </div>
+            <Link href="/login" className="text-sm font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1">
+              Sign In &rarr;
+            </Link>
           </div>
 
-          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">{error}</div>}
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-2.5">
+              <div className="flex items-start gap-2.5 text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
+                <span>{error}</span>
+              </div>
+              {emailAlreadyExists && (
+                <div className="pt-2 border-t border-red-200">
+                  <Link
+                    href={`/login?email=${encodeURIComponent(form.email.trim())}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                  >
+                    <LogIn className="w-3.5 h-3.5" /> Sign in with this Email
+                  </Link>
+                </div>
+              )}
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">Full Name</label>
-              <div className="relative"><User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input required value={form.name} onChange={e => update("name", e.target.value)} className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder="Enter your full name" /></div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-              <div className="relative"><Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="email" required value={form.email} onChange={e => update("email", e.target.value)} className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder="your@email.com" /></div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Email</label>
-              <div className="relative"><Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type="email" required value={form.confirmEmail} onChange={e => update("confirmEmail", e.target.value)} className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm ${form.confirmEmail && form.email !== form.confirmEmail ? "border-red-300" : "border-slate-200/80"}`} placeholder="Confirm your email" /></div>
-              {form.confirmEmail && form.email !== form.confirmEmail && <p className="text-xs text-red-500 mt-1">Emails do not match</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone Number</label>
-              <div className="relative"><Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input value={form.phone} onChange={e => update("phone", e.target.value)} className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder="01XXXXXXXXX" /></div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-              <div className="relative"><Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type={showPassword ? "text" : "password"} required value={form.password} onChange={e => update("password", e.target.value)} minLength={6} className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm" placeholder="Minimum 6 characters" />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">{showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</button></div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
-              <div className="relative"><Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input type={showPassword ? "text" : "password"} required value={form.confirmPassword} onChange={e => update("confirmPassword", e.target.value)} className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm ${form.confirmPassword && form.password !== form.confirmPassword ? "border-red-300" : "border-slate-200/80"}`} placeholder="Re-enter your password" /></div>
-              {form.confirmPassword && form.password !== form.confirmPassword && <p className="text-xs text-red-500 mt-1">Passwords do not match</p>}
+              <div className="relative">
+                <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  required
+                  value={form.name}
+                  onChange={e => update("name", e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  placeholder="Enter your full name"
+                />
+              </div>
             </div>
 
-            <button type="submit" disabled={loading} className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 disabled:opacity-60 text-white font-semibold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 text-sm">
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Creating account...</> : <>Create Account <ArrowRight className="w-4 h-4" /></>}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="email"
+                  required
+                  value={form.email}
+                  onChange={e => update("email", e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  placeholder="your@email.com"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Email</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="email"
+                  required
+                  value={form.confirmEmail}
+                  onChange={e => update("confirmEmail", e.target.value)}
+                  className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm ${
+                    form.confirmEmail && form.email !== form.confirmEmail ? "border-red-300" : "border-slate-200/80"
+                  }`}
+                  placeholder="Confirm your email"
+                />
+              </div>
+              {form.confirmEmail && form.email !== form.confirmEmail && (
+                <p className="text-xs text-red-500 mt-1">Emails do not match</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone Number (Optional)</label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  value={form.phone}
+                  onChange={e => update("phone", e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  placeholder="01XXXXXXXXX"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={form.password}
+                  onChange={e => update("password", e.target.value)}
+                  minLength={6}
+                  className="w-full pl-10 pr-12 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                  placeholder="Minimum 6 characters"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  required
+                  value={form.confirmPassword}
+                  onChange={e => update("confirmPassword", e.target.value)}
+                  className={`w-full pl-10 pr-4 py-3 bg-white border rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm ${
+                    form.confirmPassword && form.password !== form.confirmPassword ? "border-red-300" : "border-slate-200/80"
+                  }`}
+                  placeholder="Re-enter your password"
+                />
+              </div>
+              {form.confirmPassword && form.password !== form.confirmPassword && (
+                <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 disabled:opacity-60 text-white font-semibold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> Creating account...
+                </>
+              ) : (
+                <>
+                  Create Account <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 
-          <p className="text-center text-sm text-gray-500">Already have an account? <Link href="/login" className="text-indigo-600 font-semibold hover:text-indigo-700">Sign In</Link></p>
+          <p className="text-center text-sm text-gray-500">
+            Already have an account?{" "}
+            <Link href="/login" className="text-indigo-600 font-semibold hover:text-indigo-700">
+              Sign In
+            </Link>
+          </p>
         </div>
       </div>
     </div>
