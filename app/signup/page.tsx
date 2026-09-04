@@ -55,15 +55,26 @@ export default function SignupPage() {
         }),
       })
 
-      const data = await res.json()
+      const rawText = await res.text()
+      let data: any = {}
+      try {
+        data = rawText ? JSON.parse(rawText) : {}
+      } catch {
+        data = { error: rawText || "Server returned an empty or invalid response" }
+      }
 
       if (!res.ok) {
-        if (res.status === 409 || data.error?.toLowerCase().includes("already exists") || data.error?.toLowerCase().includes("already registered")) {
+        const errMsg = String(data.error || "Registration failed")
+        if (
+          res.status === 409 ||
+          errMsg.toLowerCase().includes("already exists") ||
+          errMsg.toLowerCase().includes("already registered")
+        ) {
           setEmailAlreadyExists(true)
           setError("An account with this email already exists. Please sign in instead.")
           return
         }
-        throw new Error(data.error || "Registration failed")
+        throw new Error(errMsg)
       }
 
       setGeneratedId(data.userId)
