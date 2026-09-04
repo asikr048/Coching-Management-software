@@ -91,13 +91,34 @@ export default function StudentProfilePage() {
 
         // 2. Fetch linked student record
         let studentRecord = null
-        if (currentProfile.email || currentProfile.user_id) {
+        // First try by auth_user_id directly
+        const { data: sByAuth } = await supabase
+          .from("students")
+          .select("*")
+          .eq("auth_user_id", user.id)
+          .maybeSingle()
+        
+        if (sByAuth) {
+          studentRecord = sByAuth
+        } else if (currentProfile.email || currentProfile.user_id) {
           const { data: sData } = await supabase
             .from("students")
             .select("*")
             .or(`email.eq.${currentProfile.email},student_id.eq.${currentProfile.user_id}`)
             .maybeSingle()
           studentRecord = sData
+        }
+
+        // Keep profile name and ID in sync with the canonical student record if found
+        if (studentRecord) {
+          setProfile({
+            user_id: studentRecord.student_id,
+            name: studentRecord.name,
+            email: studentRecord.email || user.email,
+            phone: studentRecord.phone || "",
+          })
+          setEditName(studentRecord.name || "")
+          setEditPhone(studentRecord.phone || "")
         }
         setStudentData(studentRecord)
 
