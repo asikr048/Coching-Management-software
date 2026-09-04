@@ -235,5 +235,31 @@ ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS result_note TEXT;
 -- 11. EXTEND STAFF TABLE (Financial access column)
 ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS has_financial_access BOOLEAN DEFAULT FALSE;
 
+-- 12. STUDENT DELETION REQUESTS (Two-Person Approval & 24h Delay Deletion)
+CREATE TABLE IF NOT EXISTS public.student_deletion_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+  student_names JSONB NOT NULL DEFAULT '[]'::jsonb,
+  reason TEXT NOT NULL,
+  requested_by TEXT NOT NULL,
+  requested_by_name TEXT,
+  approver_1 TEXT,
+  approver_1_name TEXT,
+  approved_at_1 TIMESTAMPTZ,
+  approver_2 TEXT,
+  approver_2_name TEXT,
+  approved_at_2 TIMESTAMPTZ,
+  status TEXT NOT NULL DEFAULT 'pending',
+  scheduled_delete_at TIMESTAMPTZ,
+  executed_at TIMESTAMPTZ,
+  cancelled_at TIMESTAMPTZ,
+  cancelled_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.student_deletion_requests ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public full access deletion requests" ON public.student_deletion_requests;
+CREATE POLICY "Public full access deletion requests" ON public.student_deletion_requests FOR ALL USING (true);
+
 -- Notify completion
 SELECT 'All missing tables, columns, and policies created successfully!' AS result;

@@ -23,6 +23,29 @@ export default async function StudentsPage() {
     .from("exam_results")
     .select("student_id, obtained_marks, exams(total_marks)")
 
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: staff } = user
+    ? await supabase.from("staff").select("id, name, email, role").eq("auth_user_id", user.id).maybeSingle()
+    : { data: null }
+
+  let initialDeletionRequests: any[] = []
+  try {
+    const { data: requests } = await supabase
+      .from("student_deletion_requests")
+      .select("*")
+      .order("created_at", { ascending: false })
+    if (requests) initialDeletionRequests = requests
+  } catch (e) {
+    // Falls back gracefully to localStorage in client
+  }
+
+  const currentStaff = staff || {
+    id: user?.id || "admin-owner",
+    name: user?.user_metadata?.name || "Admin Owner",
+    email: user?.email || "admin@medhashiree.com",
+    role: "owner" as const,
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -44,6 +67,8 @@ export default async function StudentsPage() {
         batches={batches || []}
         dueData={feeDues || []}
         examData={examResults as any || []}
+        currentStaff={currentStaff}
+        initialDeletionRequests={initialDeletionRequests}
       />
     </div>
   )

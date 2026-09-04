@@ -313,6 +313,40 @@ export default function SmsPage() {
     loadAll()
   }, [supabase])
 
+  // Check if navigating from Students page with pre-selected students
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem("sms_selected_student_ids")
+      const searchParams = new URLSearchParams(window.location.search)
+      const targetParam = searchParams.get("target")
+
+      let idsToSelect: string[] = []
+      if (stored) {
+        try {
+          idsToSelect = JSON.parse(stored)
+        } catch {
+          idsToSelect = stored.split(",").filter(Boolean)
+        }
+        sessionStorage.removeItem("sms_selected_student_ids")
+      } else if (searchParams.get("student_ids")) {
+        idsToSelect = (searchParams.get("student_ids") || "").split(",").filter(Boolean)
+      }
+
+      if (idsToSelect.length > 0 || targetParam === "custom_picker") {
+        setActiveTab("compose")
+        setTargetType("custom_picker")
+        if (idsToSelect.length > 0) {
+          setCustomSelectedStudentIds(idsToSelect)
+          toast.success(`✓ Loaded ${idsToSelect.length} selected students from Students page!`, {
+            description: "Review recipients and type your message below to send.",
+          })
+        }
+      }
+    } catch (e) {
+      console.warn("Could not parse transferred sms student ids:", e)
+    }
+  }, [])
+
   // Update a parameter key
   function updateParamKey(id: string, newKey: string) {
     const updated = gatewayConfig.params.map((p) => (p.id === id ? { ...p, key: newKey } : p))
