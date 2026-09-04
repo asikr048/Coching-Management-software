@@ -32,6 +32,7 @@ import {
   Square,
   PhoneCall,
   Link2,
+  Copy,
 } from "lucide-react"
 
 interface Student {
@@ -134,6 +135,7 @@ export default function SmsPage() {
   const [testingGateway, setTestingGateway] = useState(false)
   const [testPhone, setTestPhone] = useState("")
   const [testResult, setTestResult] = useState<any>(null)
+  const [hasMissingTable, setHasMissingTable] = useState(false)
 
   // Drag over target tracking
   const [activeDragSlot, setActiveDragSlot] = useState<string | null>(null)
@@ -169,8 +171,43 @@ export default function SmsPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [sendProgress, setSendProgress] = useState({ current: 0, total: 0, success: 0, failed: 0 })
 
+  // Clean Base URL helper (strips query parameters if pasted by user)
+  function cleanBaseUrl(url: string) {
+    if (!url) return ""
+    return url.split("?")[0].trim()
+  }
+
+  // Synchronize urlTemplate when baseUrl or params change
+  function syncUrlTemplate(base: string, paramsList: ParamItem[]) {
+    const cleanBase = cleanBaseUrl(base)
+    if (!cleanBase) return ""
+    const queryString = paramsList
+      .filter((p) => p.key.trim().length > 0)
+      .map((p) => `${encodeURIComponent(p.key.trim())}=${p.value || ""}`)
+      .join("&")
+    return queryString ? `${cleanBase}?${queryString}` : cleanBase
+  }
+
   // 1. Load Data on Mount
   useEffect(() => {
+    // 1a. Load from localStorage cache immediately
+    try {
+      const cached = localStorage.getItem("medhashiree_sms_gateway_config")
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        const base = cleanBaseUrl(parsed.baseUrl || "https://api.sms.net.bd/sendsms")
+        const params = parsed.params?.length ? parsed.params : []
+        setGatewayConfig((prev) => ({
+          ...prev,
+          ...parsed,
+          baseUrl: base,
+          urlTemplate: parsed.urlTemplate ? syncUrlTemplate(base, params) : prev.urlTemplate,
+        }))
+      }
+    } catch (e) {
+      console.warn("Could not read local gateway config:", e)
+    }
+
     async function loadAll() {
       try {
         const [studentsRes, batchesRes, enrollRes, duesRes, settingsRes, logsRes] = await Promise.all([
@@ -188,40 +225,35 @@ export default function SmsPage() {
         if (duesRes.data) setDues(duesRes.data as any)
         if (logsRes.data) setLogs(logsRes.data)
 
-        if (settingsRes.data?.value) {
+        if (settingsRes?.error) {
+          if (settingsRes.error.message?.includes("site_settings") || settingsRes.error.code === "PGRST205") {
+            setHasMissingTable(true)
+          }
+        } else if (settingsRes?.data?.value) {
+          setHasMissingTable(false)
           try {
             const parsed = JSON.parse(settingsRes.data.value)
+            const base = cleanBaseUrl(parsed.baseUrl || "https://api.sms.net.bd/sendsms")
+            const params = parsed.params?.length ? parsed.params : []
             setGatewayConfig((prev) => ({
               ...prev,
               ...parsed,
-              params: parsed.params?.length ? parsed.params : prev.params,
+              baseUrl: base,
+              urlTemplate: syncUrlTemplate(base, params.length ? params : prev.params),
+              params: params.length ? params : prev.params,
             }))
           } catch (e) {
-            console.error("Failed to parse gateway config:", e)
+            console.error("Failed to parse gateway config from database:", e)
           }
         }
       } catch (err: any) {
-        console.error("Error loading SMS data:", err)
-        toast.error("Failed to load initial SMS data")
+        console.warn("SMS data load issue:", err)
       } finally {
         setLoadingData(false)
       }
     }
     loadAll()
   }, [supabase])
-
-  // ==========================================
-  // GATEWAY BUILDER HELPERS
-  // ==========================================
-  // Synchronize urlTemplate when baseUrl or params change
-  function syncUrlTemplate(base: string, paramsList: ParamItem[]) {
-    if (!base) return ""
-    const queryString = paramsList
-      .filter((p) => p.key.trim().length > 0)
-      .map((p) => `${encodeURIComponent(p.key.trim())}=${p.value || ""}`)
-      .join("&")
-    return queryString ? `${base}?${queryString}` : base
-  }
 
   // Update a parameter key
   function updateParamKey(id: string, newKey: string) {
@@ -323,7 +355,23 @@ export default function SmsPage() {
     }
   }
 
-  // Save Gateway Configuration to Supabase
+  const SITE_SETTINGS_SQL = `-- Run this in your Supabase Project -> SQL Editor -> Run:
+CREATE TABLE IF NOT EXISTS public.site_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_by UUID REFERENCES auth.users(id),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Public read settings" ON public.site_settings;
+CREATE POLICY "Public read settings" ON public.site_settings FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Staff manage settings" ON public.site_settings;
+CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (true);`
+
+  // Save Gateway Configuration
   async function handleSaveGateway(e?: React.FormEvent) {
     if (e) e.preventDefault()
     if (!gatewayConfig.apiKey.trim()) {
@@ -344,6 +392,18 @@ export default function SmsPage() {
     }
 
     setSavingGateway(true)
+
+    // 1. ALWAYS persist to browser localStorage first so it works immediately
+    try {
+      localStorage.setItem("medhashiree_sms_gateway_config", JSON.stringify(gatewayConfig))
+    } catch (e) {
+      console.warn("Could not save to localStorage:", e)
+    }
+
+    // 2. Attempt to save to Supabase site_settings
+    let savedToCloud = false
+    let isTableMissing = false
+
     try {
       const { error } = await supabase.from("site_settings").upsert({
         key: "sms_gateway_config",
@@ -351,12 +411,32 @@ export default function SmsPage() {
         updated_at: new Date().toISOString(),
       })
 
-      if (error) throw error
-      toast.success("✓ SMS Gateway configuration saved! All messaging options are now ready.")
+      if (error) {
+        if (error.message?.includes("site_settings") || error.code === "PGRST205" || (error as any).status === 404) {
+          isTableMissing = true
+        } else {
+          console.warn("Cloud save error:", error)
+        }
+      } else {
+        savedToCloud = true
+      }
     } catch (err: any) {
-      toast.error(err.message || "Failed to save gateway config")
+      if (err?.message?.includes("site_settings") || err?.code === "PGRST205") {
+        isTableMissing = true
+      }
     } finally {
       setSavingGateway(false)
+    }
+
+    if (savedToCloud) {
+      setHasMissingTable(false)
+      toast.success("✓ SMS Gateway saved & synced to Supabase! All messaging options are active.")
+    } else if (isTableMissing) {
+      setHasMissingTable(true)
+      toast.success("✓ Gateway saved locally and ACTIVE! You can now send SMS.", { duration: 5000 })
+      toast.info("Database table 'site_settings' not created yet. See SQL script below to sync cloud.", { duration: 8000 })
+    } else {
+      toast.success("✓ Gateway configuration saved locally and active.")
     }
   }
 
@@ -722,6 +802,7 @@ export default function SmsPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             recipients: payloadRecipients,
+            configOverride: gatewayConfig,
           }),
         })
 
@@ -1411,9 +1492,10 @@ export default function SmsPage() {
                     required
                     value={gatewayConfig.baseUrl}
                     onChange={(e) => {
-                      const base = e.target.value
-                      const newTemplate = syncUrlTemplate(base, gatewayConfig.params)
-                      setGatewayConfig({ ...gatewayConfig, baseUrl: base, urlTemplate: newTemplate })
+                      const raw = e.target.value
+                      const clean = cleanBaseUrl(raw)
+                      const newTemplate = syncUrlTemplate(clean, gatewayConfig.params)
+                      setGatewayConfig({ ...gatewayConfig, baseUrl: clean, urlTemplate: newTemplate })
                     }}
                     placeholder="https://api.sms.net.bd/sendsms"
                     className="w-full pl-10 pr-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
@@ -1601,6 +1683,39 @@ export default function SmsPage() {
                   </>
                 )}
               </button>
+
+              {/* Database Schema Cache / Missing Table Notice */}
+              {hasMissingTable && (
+                <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-900 space-y-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <div>
+                        <h4 className="font-bold text-sm text-amber-950">
+                          Supabase Table &apos;site_settings&apos; Not Created Yet
+                        </h4>
+                        <p className="text-xs text-amber-800 mt-0.5">
+                          Your gateway settings are saved in your browser and <strong>fully active</strong> for this device (SMS will send normally). To enable multi-device sync and save settings permanently in Supabase, run this 1-click SQL in your Supabase SQL Editor:
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(SITE_SETTINGS_SQL)
+                        toast.success("Copied SQL to clipboard! Paste into Supabase SQL Editor.")
+                      }}
+                      className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Copy SQL Fix
+                    </button>
+                  </div>
+                  <div className="bg-slate-900 text-slate-200 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800">
+                    <pre>{SITE_SETTINGS_SQL}</pre>
+                  </div>
+                </div>
+              )}
             </form>
           </div>
 

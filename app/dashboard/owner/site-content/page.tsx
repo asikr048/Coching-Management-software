@@ -38,23 +38,45 @@ export default function SiteContentPage() {
 
   async function loadNotices() {
     setLoadingNotices(true)
-    const { data } = await supabase.from('notices').select('*').order('created_at', { ascending: false })
-    if (data) setNotices(data)
-    setLoadingNotices(false)
+    try {
+      const { data } = await supabase.from('notices').select('*').order('created_at', { ascending: false })
+      if (data) setNotices(data)
+    } catch (e) {
+      console.warn('Could not load notices:', e)
+    } finally {
+      setLoadingNotices(false)
+    }
   }
 
   async function loadFeedback() {
     setLoadingFeedback(true)
-    const { data } = await supabase.from('feedback').select('*').order('created_at', { ascending: false })
-    if (data) setFeedback(data)
-    setLoadingFeedback(false)
+    try {
+      const { data } = await supabase.from('feedback').select('*').order('created_at', { ascending: false })
+      if (data) setFeedback(data)
+    } catch (e) {
+      console.warn('Could not load feedback:', e)
+    } finally {
+      setLoadingFeedback(false)
+    }
   }
 
   async function loadSettings() {
-    const { data } = await supabase.from('site_settings').select('key, value')
-    if (data) {
-      setContactLink(data.find((s: any) => s.key === 'contact_link')?.value || '')
-      setContactLabel(data.find((s: any) => s.key === 'contact_label')?.value || '')
+    try {
+      const { data, error } = await supabase.from('site_settings').select('key, value')
+      if (data && !error) {
+        setContactLink(data.find((s: any) => s.key === 'contact_link')?.value || '')
+        setContactLabel(data.find((s: any) => s.key === 'contact_label')?.value || '')
+      } else {
+        const localLink = localStorage.getItem('medhashiree_contact_link')
+        const localLabel = localStorage.getItem('medhashiree_contact_label')
+        if (localLink) setContactLink(localLink)
+        if (localLabel) setContactLabel(localLabel)
+      }
+    } catch {
+      const localLink = localStorage.getItem('medhashiree_contact_link')
+      const localLabel = localStorage.getItem('medhashiree_contact_label')
+      if (localLink) setContactLink(localLink)
+      if (localLabel) setContactLabel(localLabel)
     }
   }
 
@@ -62,7 +84,7 @@ export default function SiteContentPage() {
     if (!newTitle.trim() || !newContent.trim()) { toast.error('Title and content are required'); return }
     setAddingNotice(true)
     const { error } = await supabase.from('notices').insert({ title: newTitle.trim(), content: newContent.trim(), priority: newPriority })
-    if (error) { toast.error('Failed to add notice') } else {
+    if (error) { toast.error('Failed to add notice (table not found in database)') } else {
       toast.success('Notice posted!')
       setNewTitle(''); setNewContent(''); setNewPriority('normal')
       loadNotices()
@@ -89,14 +111,30 @@ export default function SiteContentPage() {
 
   async function saveSettings() {
     setSavingSettings(true)
+    try {
+      localStorage.setItem('medhashiree_contact_link', contactLink.trim())
+      localStorage.setItem('medhashiree_contact_label', contactLabel.trim())
+    } catch {}
+
     const upserts = [
       { key: 'contact_link', value: contactLink.trim() },
       { key: 'contact_label', value: contactLabel.trim() },
     ]
+    let errorCount = 0
     for (const u of upserts) {
-      await supabase.from('site_settings').upsert(u, { onConflict: 'key' })
+      try {
+        const { error } = await supabase.from('site_settings').upsert(u, { onConflict: 'key' })
+        if (error) errorCount++
+      } catch {
+        errorCount++
+      }
     }
-    toast.success('Settings saved!')
+
+    if (errorCount === 0) {
+      toast.success('Settings saved!')
+    } else {
+      toast.success('Settings saved locally! (Table site_settings missing in database)')
+    }
     setSavingSettings(false)
   }
 

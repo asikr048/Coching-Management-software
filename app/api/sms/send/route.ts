@@ -45,22 +45,26 @@ export async function POST(req: NextRequest) {
       senderId: "",
     }
 
-    if (configOverride && configOverride.urlTemplate) {
+    if (configOverride && (configOverride.apiKey || configOverride.urlTemplate)) {
       config = { ...config, ...configOverride }
     } else {
-      const { data: settingRow } = await admin
-        .from("site_settings")
-        .select("value")
-        .eq("key", "sms_gateway_config")
-        .maybeSingle()
+      try {
+        const { data: settingRow } = await admin
+          .from("site_settings")
+          .select("value")
+          .eq("key", "sms_gateway_config")
+          .maybeSingle()
 
-      if (settingRow?.value) {
-        try {
-          const parsed = JSON.parse(settingRow.value)
-          config = { ...config, ...parsed }
-        } catch (e) {
-          console.error("Failed to parse sms_gateway_config JSON:", e)
+        if (settingRow?.value) {
+          try {
+            const parsed = JSON.parse(settingRow.value)
+            config = { ...config, ...parsed }
+          } catch (e) {
+            console.error("Failed to parse sms_gateway_config JSON:", e)
+          }
         }
+      } catch (e) {
+        console.warn("Could not load gateway config from site_settings:", e)
       }
     }
 
@@ -215,7 +219,11 @@ export async function POST(req: NextRequest) {
 
     // 4. Batch insert into sms_queue for audit/logs
     if (queueRows.length > 0) {
-      await admin.from("sms_queue").insert(queueRows)
+      try {
+        await admin.from("sms_queue").insert(queueRows)
+      } catch (logErr) {
+        console.warn("Could not insert into sms_queue:", logErr)
+      }
     }
 
     const sentSuccessCount = results.filter((r) => r.success).length
