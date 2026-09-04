@@ -9,7 +9,8 @@ import Link from "next/link"
 import {
   GraduationCap, Loader2, CheckCircle, ArrowRight, ArrowLeft,
   Copy, Check, User, Phone, Mail, Calendar, BookOpen, MapPin,
-  Users, Lock, Clock, Sparkles, Video, AlertCircle
+  Users, Lock, Clock, Sparkles, Video, AlertCircle,
+  Eye, EyeOff, LogIn, UserCheck, KeyRound
 } from "lucide-react"
 
 interface Batch {
@@ -86,7 +87,19 @@ function EnrollContent() {
     guardian_phone: "",
     guardian_relation: "Parent",
     referred_by_code: "",
+    password: "",
+    confirmPassword: "",
   })
+
+  // User Authentication State
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [authMode, setAuthMode] = useState<"create" | "login">("create")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loginIdentifier, setLoginIdentifier] = useState("")
+  const [loginPassword, setLoginPassword] = useState("")
+  const [isLoggingIn, setIsLoggingIn] = useState(false)
+  const [accountCreated, setAccountCreated] = useState(false)
 
   // Payment Form State
   const [paymentMethod, setPaymentMethod] = useState<string>("bkash")
@@ -110,6 +123,167 @@ function EnrollContent() {
   // Update admission form fields
   function updateForm(field: string, val: string) {
     setForm(prev => ({ ...prev, [field]: val }))
+  }
+
+  // Helper to load student profile for an authenticated user
+  async function loadStudentInfo(user: any) {
+    if (!user) return
+    setCurrentUser(user)
+    if (user.email) {
+      updateForm("email", user.email)
+    }
+
+    try {
+      const { data: student } = await supabase
+        .from("students")
+        .select("*")
+        .or(`email.eq.${user.email || ""},student_id.eq.${user.user_metadata?.user_id || ""}`)
+        .maybeSingle()
+
+      if (student) {
+        setForm(prev => ({
+          ...prev,
+          name: student.name || prev.name,
+          phone: student.phone || prev.phone,
+          email: student.email || prev.email,
+          gender: student.gender || prev.gender,
+          date_of_birth: student.date_of_birth || prev.date_of_birth,
+          class_level: student.class_level || prev.class_level,
+          school_college: student.school_college || prev.school_college,
+          address: student.address || prev.address,
+          guardian_name: student.guardian_name || prev.guardian_name,
+          guardian_phone: student.guardian_phone || prev.guardian_phone,
+          guardian_relation: student.guardian_relation || prev.guardian_relation,
+          referred_by_code: student.referred_by_code || prev.referred_by_code,
+        }))
+        if (student.student_id) setSubmittedStudentId(student.student_id)
+        if (student.id) setSubmittedStudentDbId(student.id)
+
+        // Check if already enrolled / pending
+        if (enrollType === "batch" && (batchIdParam || selectedBatchId)) {
+          const targetBatch = batchIdParam || selectedBatchId
+          const { data: enr } = await supabase
+            .from("enrollments")
+            .select("id")
+            .eq("student_id", student.id)
+            .eq("batch_id", targetBatch)
+            .eq("status", "active")
+            .maybeSingle()
+          if (enr) setAlreadyEnrolled(true)
+
+          const { data: pend } = await supabase
+            .from("payment_submissions")
+            .select("id")
+            .eq("student_id", student.id)
+            .eq("batch_id", targetBatch)
+            .eq("status", "pending")
+            .maybeSingle()
+          if (pend) setExistingPending(true)
+        } else if (courseIdParam || selectedCourseId) {
+          const targetCourse = courseIdParam || selectedCourseId
+          const { data: cp } = await supabase
+            .from("course_purchases")
+            .select("id")
+            .eq("student_id", student.id)
+            .eq("course_id", targetCourse)
+            .maybeSingle()
+          if (cp) setAlreadyEnrolled(true)
+        }
+      } else {
+        // Fallback from auth metadata
+        if (user.user_metadata?.full_name) {
+          updateForm("name", user.user_metadata.full_name)
+        }
+        if (user.user_metadata?.phone) {
+          updateForm("phone", user.user_metadata.phone)
+        }
+        if (user.user_metadata?.user_id) {
+          setSubmittedStudentId(user.user_metadata.user_id)
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load student profile for user:", e)
+    }
+  }
+
+  // Quick inline login for users with an existing account
+  async function handleQuickLogin(e?: React.FormEvent) {
+    if (e) e.preventDefault()
+    const rawInput = loginIdentifier.trim()
+    if (!rawInput) {
+      toast.error("Please enter your Student ID or Email")
+      return
+    }
+    if (!loginPassword) {
+      toast.error("Please enter your password")
+      return
+    }
+
+    setIsLoggingIn(true)
+    try {
+      let candidateEmails: string[] = []
+      try {
+        const resolveRes = await fetch("/api/auth/resolve-identity", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ identifier: rawInput }),
+        })
+        if (resolveRes.ok) {
+          const resolveData = await resolveRes.json()
+          if (Array.isArray(resolveData.candidateEmails) && resolveData.candidateEmails.length > 0) {
+            candidateEmails = resolveData.candidateEmails
+          }
+        }
+      } catch {}
+
+      if (candidateEmails.length === 0) {
+        if (rawInput.includes("@")) {
+          candidateEmails.push(rawInput.toLowerCase())
+        } else {
+          const cleanId = rawInput.toUpperCase().startsWith("MS-")
+            ? rawInput.toUpperCase()
+            : `MS-${rawInput.toUpperCase()}`
+          candidateEmails.push(`${cleanId.toLowerCase()}@medhashiree.local`)
+        }
+      }
+
+      let authedUser: any = null
+      let lastErrMsg = ""
+
+      for (const email of candidateEmails) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password: loginPassword,
+        })
+        if (!error && data.user) {
+          authedUser = data.user
+          break
+        }
+        if (error) {
+          lastErrMsg = error.message
+        }
+      }
+
+      if (!authedUser) {
+        toast.error(lastErrMsg || "Invalid credentials. Please verify and try again.")
+        return
+      }
+
+      toast.success("Signed in successfully! Your student details have been loaded.")
+      await loadStudentInfo(authedUser)
+    } catch (err: any) {
+      toast.error(err?.message || "Sign in failed. Please try again.")
+    } finally {
+      setIsLoggingIn(false)
+    }
+  }
+
+  // Sign out helper
+  async function handleSignOut() {
+    await supabase.auth.signOut()
+    setCurrentUser(null)
+    setAuthMode("create")
+    toast.info("Signed out. You can create an account or sign in below.")
   }
 
   // Active target number based on selected payment method
@@ -214,70 +388,7 @@ function EnrollContent() {
         // 4. Check if user is logged in — auto-fill student info
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
-          if (user.email) {
-            updateForm("email", user.email)
-          }
-          const { data: student } = await supabase
-            .from("students")
-            .select("*")
-            .or(`email.eq.${user.email || ""},auth_user_id.eq.${user.id}`)
-            .maybeSingle()
-
-          if (student) {
-            setForm(prev => ({
-              ...prev,
-              name: student.name || prev.name,
-              phone: student.phone || prev.phone,
-              email: student.email || prev.email,
-              gender: student.gender || prev.gender,
-              date_of_birth: student.date_of_birth || prev.date_of_birth,
-              class_level: student.class_level || prev.class_level,
-              school_college: student.school_college || prev.school_college,
-              address: student.address || prev.address,
-              guardian_name: student.guardian_name || prev.guardian_name,
-              guardian_phone: student.guardian_phone || prev.guardian_phone,
-              guardian_relation: student.guardian_relation || prev.guardian_relation,
-              referred_by_code: student.referred_by_code || prev.referred_by_code,
-            }))
-            setSubmittedStudentId(student.student_id)
-            setSubmittedStudentDbId(student.id)
-
-            // Check if already enrolled / pending for this batch
-            if (enrollType === "batch") {
-              const targetBatch = batchIdParam || (batchList && batchList[0]?.id)
-              if (targetBatch) {
-                const { data: enr } = await supabase
-                  .from("enrollments")
-                  .select("id")
-                  .eq("student_id", student.id)
-                  .eq("batch_id", targetBatch)
-                  .eq("status", "active")
-                  .maybeSingle()
-                if (enr) setAlreadyEnrolled(true)
-
-                const { data: pend } = await supabase
-                  .from("payment_submissions")
-                  .select("id")
-                  .eq("student_id", student.id)
-                  .eq("batch_id", targetBatch)
-                  .eq("status", "pending")
-                  .maybeSingle()
-                if (pend) setExistingPending(true)
-              }
-            } else {
-              // Course check
-              const targetCourse = courseIdParam || (courseList && courseList[0]?.id)
-              if (targetCourse) {
-                const { data: cp } = await supabase
-                  .from("course_purchases")
-                  .select("id")
-                  .eq("student_id", student.id)
-                  .eq("course_id", targetCourse)
-                  .maybeSingle()
-                if (cp) setAlreadyEnrolled(true)
-              }
-            }
-          }
+          await loadStudentInfo(user)
         }
       } catch (err) {
         console.error("Error loading initial data:", err)
@@ -343,6 +454,22 @@ function EnrollContent() {
       }
     }
 
+    // Account validation for unauthenticated users
+    if (!currentUser) {
+      if (authMode === "login") {
+        toast.error("Please click 'Sign In & Auto-fill Details' or switch to 'Create Account'")
+        return
+      }
+      if (!form.password || form.password.length < 6) {
+        toast.error("Please enter a password with at least 6 characters for your new account")
+        return
+      }
+      if (form.password !== form.confirmPassword) {
+        toast.error("Passwords do not match. Please re-enter to confirm.")
+        return
+      }
+    }
+
     // Default sender number to student's phone for convenience
     if (!senderNumber && form.phone.trim()) {
       setSenderNumber(form.phone.trim())
@@ -394,10 +521,21 @@ function EnrollContent() {
           paymentMethod: paymentMethod.toLowerCase(),
           senderNumber: senderNumber.trim(),
           transactionId: transactionId.trim().toUpperCase(),
+          authUserId: currentUser?.id || null,
+          password: form.password || null,
         }),
       })
 
-      const data = await res.json()
+      const rawText = await res.text()
+      let data: any = {}
+      try {
+        data = rawText ? JSON.parse(rawText) : {}
+      } catch (parseErr) {
+        console.error("Non-JSON API response from /api/enroll/submit:", rawText)
+        throw new Error(
+          `Server returned unexpected response (${res.status}): ${rawText ? rawText.slice(0, 150) : "Empty response"}`
+        )
+      }
 
       if (!res.ok || data.error) {
         throw new Error(data.error || "Failed to submit payment. Please try again.")
@@ -405,6 +543,7 @@ function EnrollContent() {
 
       if (data.studentDbId) setSubmittedStudentDbId(data.studentDbId)
       if (data.studentId) setSubmittedStudentId(data.studentId)
+      if (data.accountCreated) setAccountCreated(true)
       setSubmittedPaidAmount(actualPaidAmount)
       setSubmittedDueAmount(dueAmount)
 
@@ -523,7 +662,11 @@ function EnrollContent() {
                     {copiedStudentId ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-gray-300" />}
                   </button>
                 </div>
-                <p className="text-[11px] text-gray-400 mt-2">Save this ID for logging in and accessing coaching updates.</p>
+                <p className="text-[11px] text-gray-400 mt-2">
+                  {accountCreated || form.password
+                    ? "🎉 Your account is created! Use this Student ID and your password to sign in."
+                    : "Save this ID for logging in and accessing coaching updates."}
+                </p>
               </div>
             )}
 
@@ -574,10 +717,10 @@ function EnrollContent() {
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 justify-center max-w-md mx-auto">
               <Link
-                href="/student/profile"
+                href={accountCreated || form.password ? "/login" : "/student/profile"}
                 className="flex-1 py-3 px-5 bg-gradient-to-r from-indigo-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-indigo-500/20 text-center"
               >
-                Go to My Profile
+                {accountCreated || form.password ? "Sign In to Student Portal" : "Go to My Profile"}
               </Link>
               <Link
                 href="/"
@@ -1144,6 +1287,223 @@ function EnrollContent() {
               </div>
             ) : null}
           </div>
+
+          {/* ========================================================= */}
+          {/* ACCOUNT AUTHENTICATION / SIGN IN / CREATE ACCOUNT SECTION */}
+          {/* ========================================================= */}
+          {currentUser ? (
+            /* Logged in indicator */
+            <div className="bg-gradient-to-r from-emerald-50 via-teal-50/60 to-emerald-50 border border-emerald-200/80 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 bg-emerald-500 rounded-xl flex items-center justify-center text-white shadow-md shadow-emerald-500/20 flex-shrink-0">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">Signed in as</span>
+                    {submittedStudentId && (
+                      <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-200/70 text-emerald-900 font-bold font-mono">
+                        {submittedStudentId}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-base font-bold text-gray-900 mt-0.5">
+                    {currentUser.user_metadata?.full_name || form.name || currentUser.email}
+                  </p>
+                  <p className="text-xs text-gray-500 font-mono">
+                    {currentUser.email}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleSignOut}
+                className="text-xs text-gray-600 hover:text-red-600 font-semibold px-3.5 py-2 rounded-xl border border-gray-200 hover:border-red-200 bg-white hover:bg-red-50/50 transition-all cursor-pointer flex-shrink-0"
+              >
+                Switch Account / Sign Out
+              </button>
+            </div>
+          ) : (
+            /* Unauthenticated: Selection between Create Account and Log In */
+            <div className="bg-white rounded-2xl border border-indigo-100 shadow-sm overflow-hidden">
+              <div className="p-5 bg-gradient-to-r from-indigo-50/80 via-purple-50/60 to-indigo-50/80 border-b border-indigo-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <KeyRound className="w-4 h-4 text-indigo-600" />
+                    <h3 className="text-base font-bold text-gray-900">Student Account</h3>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Log into an existing account or create a new one for instant student dashboard access
+                  </p>
+                </div>
+
+                {/* Account Mode Switcher Tabs */}
+                <div className="flex p-1 bg-gray-100 rounded-xl border border-gray-200/80 self-stretch sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("create")}
+                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      authMode === "create"
+                        ? "bg-white text-indigo-700 shadow-xs"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    Create Account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("login")}
+                    className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      authMode === "login"
+                        ? "bg-white text-indigo-700 shadow-xs"
+                        : "text-gray-600 hover:text-gray-900"
+                    }`}
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    Log In
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab: Already Have Account -> Inline Log In */}
+              {authMode === "login" ? (
+                <div className="p-6 bg-gray-50/50 space-y-4">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-amber-900">
+                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <span>
+                      Enter your Student ID (e.g. <strong>MS-10001</strong>) or Email and password to verify your account and automatically fill your details.
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>Student ID or Email <span className="text-red-500">*</span></label>
+                      <input
+                        type="text"
+                        value={loginIdentifier}
+                        onChange={e => setLoginIdentifier(e.target.value)}
+                        placeholder="e.g. MS-10001 or student@example.com"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Password <span className="text-red-500">*</span></label>
+                      <div className="relative">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={loginPassword}
+                          onChange={e => setLoginPassword(e.target.value)}
+                          placeholder="Enter your account password"
+                          className={`${inputClass} pr-10`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+                    <Link
+                      href={`/login?redirect=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname + window.location.search : "/enroll")}`}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium hover:underline"
+                    >
+                      Go to full Login page →
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleQuickLogin}
+                      disabled={isLoggingIn}
+                      className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      {isLoggingIn ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Verifying...
+                        </>
+                      ) : (
+                        <>
+                          <LogIn className="w-4 h-4" />
+                          Sign In &amp; Auto-fill Details
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Tab: Create Account -> Password & Confirm Password */
+                <div className="p-6 space-y-4">
+                  <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3.5 flex items-start gap-2.5 text-xs text-indigo-900 leading-relaxed">
+                    <Sparkles className="w-4 h-4 text-indigo-600 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold">Create account for class &amp; portal access:</p>
+                      <p className="text-gray-600 mt-0.5">
+                        Set a password below. After submitting payment, your Student ID will be generated and you will use this password to log in.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>
+                        Create Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={form.password}
+                          onChange={e => updateForm("password", e.target.value)}
+                          placeholder="Minimum 6 characters"
+                          minLength={6}
+                          className={`${inputClass} pl-10 pr-10`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-1">Must be at least 6 characters</p>
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>
+                        Confirm Password <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type={showConfirmPassword ? "text" : "password"}
+                          value={form.confirmPassword}
+                          onChange={e => updateForm("confirmPassword", e.target.value)}
+                          placeholder="Re-enter your password"
+                          minLength={6}
+                          className={`${inputClass} pl-10 pr-10`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 cursor-pointer"
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      {form.password && form.confirmPassword && form.password !== form.confirmPassword && (
+                        <p className="text-[11px] text-red-500 mt-1">Passwords do not match</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Student Personal Information */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
