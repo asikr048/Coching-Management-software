@@ -42,7 +42,9 @@ interface Student {
   phone: string | null
   guardian_phone: string | null
   guardian_name: string | null
+  is_active?: boolean | null
   batch_id?: string | null
+  enrollments?: Array<{ batch_id: string; status?: string }>
 }
 
 interface Batch {
@@ -210,41 +212,97 @@ export default function SmsPage() {
 
     async function loadAll() {
       try {
-        const [studentsRes, batchesRes, enrollRes, duesRes, settingsRes, logsRes] = await Promise.all([
-          supabase.from("students").select("id, name, student_id, phone, guardian_phone, guardian_name, batch_id").eq("is_active", true),
-          supabase.from("batches").select("id, name, current_seats, subject"),
-          supabase.from("enrollments").select("student_id, batch_id, status").eq("status", "active"),
-          supabase.from("fee_dues").select("id, student_id, due_amount, due_month, status, student:students(id, name, student_id, phone, guardian_phone)").eq("status", "pending"),
-          supabase.from("site_settings").select("value").eq("key", "sms_gateway_config").maybeSingle(),
-          supabase.from("sms_queue").select("*").order("created_at", { ascending: false }).limit(40),
-        ])
-
-        if (studentsRes.data) setStudents(studentsRes.data)
+        // 1. Batches
+        const batchesRes = await supabase.from("batches").select("id, name, current_seats, subject")
         if (batchesRes.data) setBatches(batchesRes.data)
-        if (enrollRes.data) setEnrollments(enrollRes.data)
-        if (duesRes.data) setDues(duesRes.data as any)
-        if (logsRes.data) setLogs(logsRes.data)
 
-        if (settingsRes?.error) {
-          if (settingsRes.error.message?.includes("site_settings") || settingsRes.error.code === "PGRST205") {
-            setHasMissingTable(true)
+        // 2. Enrollments (with student info joined)
+        let loadedEnrollments: any[] = []
+        try {
+          const enrollRes = await supabase
+            .from("enrollments")
+            .select("student_id, batch_id, status, student:students(id, name, student_id, phone, guardian_phone, guardian_name, is_active)")
+          if (enrollRes.data) loadedEnrollments = enrollRes.data
+        } catch {
+          const fallbackEnroll = await supabase.from("enrollments").select("student_id, batch_id, status")
+          if (fallbackEnroll.data) loadedEnrollments = fallbackEnroll.data
+        }
+
+        // 3. Students (without non-existent batch_id column)
+        let loadedStudents: Student[] = []
+        try {
+          const studentsRes = await supabase
+            .from("students")
+            .select("id, name, student_id, phone, guardian_phone, guardian_name, is_active")
+          if (studentsRes.data) {
+            loadedStudents = studentsRes.data.filter((s: any) => s.is_active !== false)
           }
-        } else if (settingsRes?.data?.value) {
-          setHasMissingTable(false)
-          try {
-            const parsed = JSON.parse(settingsRes.data.value)
-            const base = cleanBaseUrl(parsed.baseUrl || "https://api.sms.net.bd/sendsms")
-            const params = parsed.params?.length ? parsed.params : []
-            setGatewayConfig((prev) => ({
-              ...prev,
-              ...parsed,
-              baseUrl: base,
-              urlTemplate: syncUrlTemplate(base, params.length ? params : prev.params),
-              params: params.length ? params : prev.params,
-            }))
-          } catch (e) {
-            console.error("Failed to parse gateway config from database:", e)
+        } catch (err) {
+          console.warn("Students table query issue:", err)
+        }
+
+        // Cross-merge students from enrollments if missing from students query
+        loadedEnrollments.forEach((en: any) => {
+          if (en.student && !loadedStudents.some((s) => s.id === en.student.id)) {
+            if (en.student.is_active !== false) {
+              loadedStudents.push(en.student)
+            }
           }
+        })
+
+        setStudents(loadedStudents)
+        setEnrollments(loadedEnrollments)
+
+        // 4. Fee Dues
+        try {
+          const duesRes = await supabase
+            .from("fee_dues")
+            .select("id, student_id, due_amount, due_month, status, student:students(id, name, student_id, phone, guardian_phone)")
+            .eq("status", "pending")
+          if (duesRes.data) setDues(duesRes.data as any)
+        } catch (e) {
+          console.warn("Fee dues query issue:", e)
+        }
+
+        // 5. Site Settings (SMS Gateway)
+        try {
+          const settingsRes = await supabase
+            .from("site_settings")
+            .select("value")
+            .eq("key", "sms_gateway_config")
+            .maybeSingle()
+
+          if (settingsRes?.error) {
+            if (settingsRes.error.message?.includes("site_settings") || settingsRes.error.code === "PGRST205") {
+              setHasMissingTable(true)
+            }
+          } else if (settingsRes?.data?.value) {
+            setHasMissingTable(false)
+            try {
+              const parsed = JSON.parse(settingsRes.data.value)
+              const base = cleanBaseUrl(parsed.baseUrl || "https://api.sms.net.bd/sendsms")
+              const params = parsed.params?.length ? parsed.params : []
+              setGatewayConfig((prev) => ({
+                ...prev,
+                ...parsed,
+                baseUrl: base,
+                urlTemplate: syncUrlTemplate(base, params.length ? params : prev.params),
+                params: params.length ? params : prev.params,
+              }))
+            } catch (e) {
+              console.error("Failed to parse gateway config from database:", e)
+            }
+          }
+        } catch (e) {
+          console.warn("Site settings query issue:", e)
+        }
+
+        // 6. SMS Queue logs
+        try {
+          const logsRes = await supabase.from("sms_queue").select("*").order("created_at", { ascending: false }).limit(40)
+          if (logsRes.data) setLogs(logsRes.data)
+        } catch (e) {
+          console.warn("SMS queue query issue:", e)
         }
       } catch (err: any) {
         console.warn("SMS data load issue:", err)
@@ -636,8 +694,20 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         enrollments.filter((e) => selectedBatchIds.includes(e.batch_id)).map((e) => e.student_id)
       )
       students.filter((s) => enrolledStudentIds.has(s.id)).forEach((s) => {
-        const batchObj = batches.find((b) => selectedBatchIds.includes(b.id))
+        const batchId = enrollments.find((e) => e.student_id === s.id && selectedBatchIds.includes(e.batch_id))?.batch_id
+        const batchObj = batches.find((b) => b.id === batchId)
         addStudentPhones(s, undefined, batchObj?.name)
+      })
+
+      // Also ensure students loaded directly inside enrollments are included
+      enrollments.forEach((e) => {
+        if (selectedBatchIds.includes(e.batch_id) && e.student) {
+          const alreadyAdded = list.some((item) => item.studentId === e.student?.student_id)
+          if (!alreadyAdded) {
+            const batchObj = batches.find((b) => b.id === e.batch_id)
+            addStudentPhones(e.student, undefined, batchObj?.name)
+          }
+        }
       })
     } else if (targetType === "due") {
       dues.forEach((d) => {
