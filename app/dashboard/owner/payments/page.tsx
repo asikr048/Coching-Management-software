@@ -11,13 +11,75 @@ export default async function PaymentsPage() {
   const supabase = await createClient()
   const admin = createAdminClient()
 
-  const [paymentsRes, studentsRes, batchesRes, duesRes, pendingRes] = await Promise.all([
+  const [paymentsRes, studentsRes, batchesRes, duesRes, pendingRes, enrollmentsRes] = await Promise.all([
     supabase.from("payments").select("*, student:students(name, student_id, phone, email, guardian_phone), batch:batches(name)").order("paid_at", { ascending: false }).limit(100),
     supabase.from("students").select("id, name, student_id, phone, email, guardian_phone").eq("is_active", true),
-    supabase.from("batches").select("id, name, monthly_fee").eq("is_active", true),
+    supabase.from("batches").select("id, name, monthly_fee, admission_fee").eq("is_active", true),
     supabase.from("fee_dues").select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(name)").in("status", ["pending", "partial"]),
     admin.from("payment_submissions").select("id", { count: "exact", head: true }).eq("status", "pending"),
+    supabase.from("enrollments").select("id, student_id, batch_id, created_at").eq("status", "active"),
   ])
+
+  let duesList = duesRes.data || []
+  const paymentsList = paymentsRes.data || []
+  const batchesList = batchesRes.data || []
+  const enrollmentsList = enrollmentsRes.data || []
+
+  // Auto-heal: Ensure enrolled students with partial or missing payments have fee_dues recorded
+  try {
+    const batchMap = new Map(batchesList.map(b => [b.id, b]))
+    const targetDueDate = (() => {
+      const d = new Date()
+      d.setMonth(d.getMonth() + 1)
+      d.setDate(10)
+      return d.toISOString().split("T")[0]
+    })()
+    const nowMonth = new Date().toISOString().slice(0, 7)
+
+    for (const enr of enrollmentsList) {
+      const bObj = batchMap.get(enr.batch_id)
+      if (!bObj) continue
+
+      const bMonthly = Number(bObj.monthly_fee) || 0
+      const bAdmission = Number(bObj.admission_fee) || 0
+      const totalFee = bMonthly + bAdmission || bMonthly
+
+      if (totalFee <= 0) continue
+
+      // Check if student already has an active fee_due for this batch
+      const hasDue = duesList.some(d => d.student_id === enr.student_id && d.batch_id === enr.batch_id)
+      if (!hasDue) {
+        // Calculate total payments made for this student & batch
+        const totalPaid = paymentsList
+          .filter(p => p.student_id === enr.student_id && p.batch_id === enr.batch_id)
+          .reduce((sum, p) => sum + (Number(p.total_paid) || Number(p.amount) || 0), 0)
+
+        // If unpaid or partially paid, create the missing fee_due record
+        if (totalPaid < totalFee) {
+          const dueMonth = enr.created_at ? new Date(enr.created_at).toISOString().slice(0, 7) : nowMonth
+          const { data: newDue, error: insertErr } = await admin
+            .from("fee_dues")
+            .insert({
+              student_id: enr.student_id,
+              batch_id: enr.batch_id,
+              due_month: dueMonth,
+              due_amount: totalFee,
+              paid_amount: totalPaid,
+              due_date: targetDueDate,
+              status: totalPaid > 0 ? "partial" : "pending",
+            })
+            .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(name)")
+            .maybeSingle()
+
+          if (!insertErr && newDue) {
+            duesList.push(newDue)
+          }
+        }
+      }
+    }
+  } catch (healErr) {
+    console.warn("Dues auto-heal note on payments page:", healErr)
+  }
 
   const pendingCount = pendingRes.count || 0
 
@@ -65,7 +127,7 @@ export default async function PaymentsPage() {
         </div>
       )}
 
-      <PaymentsClient payments={paymentsRes.data || []} students={studentsRes.data || []} batches={batchesRes.data || []} dues={duesRes.data || []} />
+      <PaymentsClient payments={paymentsRes.data || []} students={studentsRes.data || []} batches={batchesRes.data || []} dues={duesList} />
     </div>
   )
 }

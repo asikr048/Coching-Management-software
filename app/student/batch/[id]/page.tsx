@@ -60,6 +60,8 @@ export default function StudentBatchDetailPage() {
   const [payMethod, setPayMethod] = useState('bkash')
   const [senderNumber, setSenderNumber] = useState('')
   const [transactionId, setTransactionId] = useState('')
+  const [referralName, setReferralName] = useState('')
+  const [referralReason, setReferralReason] = useState('')
   const [submittingPayment, setSubmittingPayment] = useState(false)
   const [paymentAccounts, setPaymentAccounts] = useState<any[]>([])
   const [copied, setCopied] = useState<string | null>(null)
@@ -321,13 +323,19 @@ export default function StudentBatchDetailPage() {
   }
 
   async function handlePayDue() {
-    if (!senderNumber.trim()) { toast.error('Enter your bKash/Nagad number'); return }
-    if (!transactionId.trim()) { toast.error('Enter the transaction ID'); return }
+    if (payMethod === 'referral') {
+      if (!referralName.trim()) { toast.error('Enter the Referral Student Name or ID'); return }
+      if (!referralReason.trim()) { toast.error('Enter the reason for referral adjustment'); return }
+    } else {
+      if (!senderNumber.trim()) { toast.error('Enter your bKash/Nagad number'); return }
+      if (!transactionId.trim()) { toast.error('Enter the transaction ID'); return }
+    }
     if (!payingDue || !student || !batch) return
 
     setSubmittingPayment(true)
     try {
       const amountDue = payingDue.due_amount - (payingDue.paid_amount || 0)
+      const isRef = payMethod === 'referral'
       const { error } = await supabase.from('payment_submissions').insert({
         student_id: student.id,
         batch_id: batchId,
@@ -336,17 +344,21 @@ export default function StudentBatchDetailPage() {
         total_fee: amountDue,
         due_amount: 0,
         payment_method: payMethod,
-        sender_number: senderNumber.trim(),
-        transaction_id: transactionId.trim(),
+        sender_number: isRef ? referralName.trim() : senderNumber.trim(),
+        transaction_id: isRef ? `REF-${Date.now().toString(36).toUpperCase()}` : transactionId.trim(),
         status: 'pending',
-        notes: `Due payment for ${payingDue.due_month}`,
+        notes: isRef 
+          ? `Referral: ${referralName.trim()} | Reason: ${referralReason.trim()}`
+          : `Due payment for ${payingDue.due_month}`,
       })
       if (error) throw error
 
-      toast.success('Payment submitted! Admin will verify and update your dues.')
+      toast.success(isRef ? 'Referral payment request submitted for admin approval!' : 'Payment submitted! Admin will verify and update your dues.')
       setPayingDue(null)
       setSenderNumber('')
       setTransactionId('')
+      setReferralName('')
+      setReferralReason('')
     } catch (err: any) {
       toast.error(err?.message || 'Failed to submit payment')
     } finally {
@@ -729,8 +741,31 @@ export default function StudentBatchDetailPage() {
                         <td className="px-6 py-4 font-semibold text-slate-900">
                           {formatCurrency(payment.amount)}
                         </td>
-                        <td className="px-6 py-4 capitalize">
-                          {payment.payment_method || '-'}
+                        <td className="px-6 py-4">
+                          {(() => {
+                            const isRef = payment.payment_method?.toLowerCase() === 'referral' || (payment.notes && payment.notes.toLowerCase().includes('referral'))
+                            const matchRef = payment.notes?.match(/Referral:\s*([^|]+)/i)
+                            const matchReason = payment.notes?.match(/Reason:\s*(.+)/i)
+                            return isRef ? (
+                              <div className="space-y-0.5">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700 uppercase border border-purple-200">
+                                  Referral
+                                </span>
+                                {matchRef && (
+                                  <p className="text-xs font-semibold text-purple-900">
+                                    Ref: {matchRef[1].trim()}
+                                  </p>
+                                )}
+                                {matchReason && (
+                                  <p className="text-[11px] text-purple-700 italic">
+                                    {matchReason[1].trim()}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="capitalize">{payment.payment_method || '-'}</span>
+                            )
+                          })()}
                         </td>
                         <td className="px-6 py-4 text-slate-500 font-mono text-xs">
                           {payment.receipt_number || '-'}
@@ -966,18 +1001,19 @@ export default function StudentBatchDetailPage() {
             {/* Payment Method Selection */}
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Payment Method</label>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { id: 'bkash', label: 'bKash', color: 'bg-pink-500' },
-                  { id: 'nagad', label: 'Nagad', color: 'bg-orange-500' },
-                  { id: 'rocket', label: 'Rocket', color: 'bg-purple-600' },
+                  { id: 'bkash', label: 'bKash' },
+                  { id: 'nagad', label: 'Nagad' },
+                  { id: 'rocket', label: 'Rocket' },
+                  { id: 'referral', label: 'Referral' },
                 ].map(m => (
                   <button
                     key={m.id}
                     onClick={() => setPayMethod(m.id)}
-                    className={`py-2.5 px-3 rounded-xl text-sm font-semibold border-2 transition-all ${
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold border-2 transition-all ${
                       payMethod === m.id
-                        ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-xs'
                         : 'border-slate-200 text-slate-600 hover:border-slate-300'
                     }`}
                   >
@@ -987,65 +1023,96 @@ export default function StudentBatchDetailPage() {
               </div>
             </div>
 
-            {/* Coaching Account Number */}
-            {(() => {
-              const account = paymentAccounts.find((a: any) =>
-                a.method?.toLowerCase() === payMethod || a.type?.toLowerCase() === payMethod
-              )
-              const accountNumber = account?.number || account?.account_number || null
-              return accountNumber ? (
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Send to this {payMethod} number</p>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xl font-mono font-bold text-slate-900 tracking-wider">{accountNumber}</p>
-                    <button
-                      onClick={() => copyNumber(accountNumber)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-                    >
-                      {copied === accountNumber ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-                      {copied === accountNumber ? 'Copied!' : 'Copy'}
-                    </button>
+            {payMethod === 'referral' ? (
+              <div className="space-y-3.5 bg-purple-50/80 p-4 rounded-2xl border border-purple-200 animate-in fade-in duration-150">
+                <div>
+                  <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1.5">
+                    Referral Student Name / ID / Phone *
+                  </label>
+                  <input
+                    value={referralName}
+                    onChange={e => setReferralName(e.target.value)}
+                    placeholder="e.g. Tanvir Ahmed (MS-10023)"
+                    className="w-full px-3.5 py-2.5 border border-purple-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-purple-900 font-medium"
+                  />
+                  <p className="text-[11px] text-purple-600 mt-1">Mention the name or Student ID of the student who referred you or whom you referred.</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1.5">
+                    Reason for Referral Adjustment *
+                  </label>
+                  <input
+                    value={referralReason}
+                    onChange={e => setReferralReason(e.target.value)}
+                    placeholder="e.g. Referral bonus / admission discount reward"
+                    className="w-full px-3.5 py-2.5 border border-purple-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-purple-900"
+                  />
+                  <p className="text-[11px] text-purple-600 mt-1">Admin will verify the referral details and approve your due payment.</p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Coaching Account Number */}
+                {(() => {
+                  const account = paymentAccounts.find((a: any) =>
+                    a.method?.toLowerCase() === payMethod || a.type?.toLowerCase() === payMethod
+                  )
+                  const accountNumber = account?.number || account?.account_number || null
+                  return accountNumber ? (
+                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Send to this {payMethod} number</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xl font-mono font-bold text-slate-900 tracking-wider">{accountNumber}</p>
+                        <button
+                          onClick={() => copyNumber(accountNumber)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                          {copied === accountNumber ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                          {copied === accountNumber ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                      {account?.account_name && <p className="text-xs text-slate-400 mt-1">Account: {account.account_name}</p>}
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
+                      <p className="text-sm text-amber-700 flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                        Contact admin for the {payMethod} payment number.
+                      </p>
+                    </div>
+                  )
+                })()}
+
+                {/* Sender Number */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Your {payMethod} Number</label>
+                  <div className="relative">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      value={senderNumber}
+                      onChange={e => setSenderNumber(e.target.value)}
+                      placeholder="01XXXXXXXXX"
+                      className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
                   </div>
-                  {account?.account_name && <p className="text-xs text-slate-400 mt-1">Account: {account.account_name}</p>}
                 </div>
-              ) : (
-                <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200">
-                  <p className="text-sm text-amber-700 flex items-center gap-2">
-                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                    Contact admin for the {payMethod} payment number.
-                  </p>
+
+                {/* Transaction ID */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Transaction ID</label>
+                  <div className="relative">
+                    <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                    <input
+                      value={transactionId}
+                      onChange={e => setTransactionId(e.target.value)}
+                      placeholder="e.g. 8A2BF9KL3P"
+                      className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1">Enter the TrxID from your {payMethod} confirmation SMS.</p>
                 </div>
-              )
-            })()}
-
-            {/* Sender Number */}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Your {payMethod} Number</label>
-              <div className="relative">
-                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  value={senderNumber}
-                  onChange={e => setSenderNumber(e.target.value)}
-                  placeholder="01XXXXXXXXX"
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-
-            {/* Transaction ID */}
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Transaction ID</label>
-              <div className="relative">
-                <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  value={transactionId}
-                  onChange={e => setTransactionId(e.target.value)}
-                  placeholder="e.g. 8A2BF9KL3P"
-                  className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                />
-              </div>
-              <p className="text-xs text-slate-400 mt-1">Enter the TrxID from your {payMethod} confirmation SMS.</p>
-            </div>
+              </>
+            )}
 
             {/* Submit */}
             <div className="flex gap-3 pt-2">

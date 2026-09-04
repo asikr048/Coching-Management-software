@@ -153,6 +153,13 @@ export async function POST(req: NextRequest) {
       }
 
       const receiptNo = `RCP-D-${Date.now().toString(36).toUpperCase()}`
+      let duePayNotes = `Due payment. Sender: ${cleanSender || "—"}`
+      if (sub.payment_method === "referral" || (sub.notes && sub.notes.toLowerCase().includes("referral"))) {
+        duePayNotes = sub.notes || (cleanSender ? `Referral: ${cleanSender}` : "Referral due payment")
+      } else if (sub.notes) {
+        duePayNotes = sub.notes
+      }
+
       await admin.from("payments").insert({
         student_id: sub.student_id,
         batch_id: sub.batch_id || null,
@@ -164,7 +171,7 @@ export async function POST(req: NextRequest) {
         transaction_id: cleanTrx,
         payment_for: "monthly_fee",
         receipt_number: receiptNo,
-        notes: `Due payment. Sender: ${cleanSender || "—"}`,
+        notes: duePayNotes,
       })
     } else if (sub.batch_id) {
       // 3c. Batch Enrollment
@@ -195,8 +202,49 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Payment record
+      // Fetch batch fee details
+      let batchMonthlyFee = 0
+      let batchAdmissionFee = 0
+      let batchTotalFee = 0
+      try {
+        const { data: bData } = await admin
+          .from("batches")
+          .select("id, name, monthly_fee, admission_fee, current_seats")
+          .eq("id", sub.batch_id)
+          .maybeSingle()
+
+        if (bData) {
+          batchMonthlyFee = Number(bData.monthly_fee) || 0
+          batchAdmissionFee = Number(bData.admission_fee) || 0
+          batchTotalFee = batchMonthlyFee + batchAdmissionFee
+          await admin.from("batches").update({ current_seats: (bData.current_seats || 0) + 1 }).eq("id", sub.batch_id)
+        }
+      } catch (err) {
+        console.warn("Batch lookup note:", err)
+      }
+
+      // Calculate effective remaining due amount
+      let effectiveDue = dueAmountNum
+      if (effectiveDue <= 0) {
+        const match = sub.notes?.match(/Due:\s*৳?\s*([0-9]+(?:\.[0-9]+)?)/i)
+        if (match && Number(match[1]) > 0) {
+          effectiveDue = Number(match[1])
+        } else if (totalFeeNum > amountNum) {
+          effectiveDue = totalFeeNum - amountNum
+        } else if (batchTotalFee > amountNum) {
+          effectiveDue = batchTotalFee - amountNum
+        }
+      }
+
+      // Payment record notes (preserve referral details and sender)
       const receiptNo = `RCP-${Date.now().toString(36).toUpperCase()}`
+      let paymentNotes: string | null = cleanSender ? `Sender: ${cleanSender}` : null
+      if (sub.payment_method === "referral" || (sub.notes && sub.notes.toLowerCase().includes("referral"))) {
+        paymentNotes = sub.notes || (cleanSender ? `Referral: ${cleanSender}` : "Referral payment")
+      } else if (sub.notes) {
+        paymentNotes = sub.notes
+      }
+
       await admin.from("payments").insert({
         student_id: sub.student_id,
         batch_id: sub.batch_id,
@@ -208,50 +256,53 @@ export async function POST(req: NextRequest) {
         transaction_id: cleanTrx,
         payment_for: "enrollment",
         receipt_number: receiptNo,
-        notes: cleanSender ? `Sender: ${cleanSender}` : null,
+        notes: paymentNotes,
       })
 
       // Handle remaining due if any
-      if (dueAmountNum > 0) {
+      if (effectiveDue > 0) {
+        const targetDueDate = sub.due_date || (() => {
+          const d = new Date()
+          d.setMonth(d.getMonth() + 1)
+          d.setDate(10)
+          return d.toISOString().split("T")[0]
+        })()
         const dueMonth = sub.due_date ? new Date(sub.due_date).toISOString().slice(0, 7) : nowIso.slice(0, 7)
+        const expectedTotal = Math.max(totalFeeNum, batchTotalFee, amountNum + effectiveDue)
+
         const { data: existingDue } = await admin
           .from("fee_dues")
-          .select("id, due_amount")
+          .select("id, due_amount, paid_amount")
           .eq("student_id", sub.student_id)
           .eq("batch_id", sub.batch_id)
           .eq("due_month", dueMonth)
           .maybeSingle()
 
         if (existingDue) {
+          const newPaid = (Number(existingDue.paid_amount) || 0) + amountNum
+          const totalOwed = Math.max(Number(existingDue.due_amount), expectedTotal)
+          const isFull = newPaid >= totalOwed
           await admin.from("fee_dues").update({
-            due_amount: Math.max(Number(existingDue.due_amount), dueAmountNum),
-            due_date: sub.due_date || null,
-            status: "pending"
+            due_amount: totalOwed,
+            paid_amount: newPaid,
+            due_date: targetDueDate,
+            status: isFull ? "paid" : (newPaid > 0 ? "partial" : "pending")
           }).eq("id", existingDue.id)
         } else {
+          const isFull = amountNum >= expectedTotal
           const { error: dueErr } = await admin.from("fee_dues").insert({
             student_id: sub.student_id,
             batch_id: sub.batch_id,
             due_month: dueMonth,
-            due_amount: dueAmountNum,
-            due_date: sub.due_date || null,
-            paid_amount: 0,
-            status: "pending",
+            due_amount: expectedTotal,
+            paid_amount: amountNum,
+            due_date: targetDueDate,
+            status: isFull ? "paid" : (amountNum > 0 ? "partial" : "pending"),
           })
           if (dueErr && !dueErr.message.includes("duplicate")) {
             console.warn("Fee due insert note:", dueErr.message)
           }
         }
-      }
-
-      // Increment batch current_seats
-      try {
-        const { data: bData } = await admin.from("batches").select("current_seats").eq("id", sub.batch_id).maybeSingle()
-        if (bData) {
-          await admin.from("batches").update({ current_seats: (bData.current_seats || 0) + 1 }).eq("id", sub.batch_id)
-        }
-      } catch (err) {
-        console.warn("Batch seats increment error:", err)
       }
 
       // Process referral commission

@@ -46,6 +46,8 @@ export default function StudentProfilePage() {
   const [payMethod, setPayMethod] = useState('bkash')
   const [senderNumber, setSenderNumber] = useState('')
   const [transactionId, setTransactionId] = useState('')
+  const [referralName, setReferralName] = useState('')
+  const [referralReason, setReferralReason] = useState('')
   const [submittingPayment, setSubmittingPayment] = useState(false)
   const [paymentAccounts, setPaymentAccounts] = useState<any[]>([])
   const [copiedNum, setCopiedNum] = useState<string | null>(null)
@@ -179,12 +181,18 @@ export default function StudentProfilePage() {
   }
 
   async function handlePayDue() {
-    if (!senderNumber.trim()) { toast.error('Enter your bKash/Nagad number'); return }
-    if (!transactionId.trim()) { toast.error('Enter the transaction ID'); return }
+    if (payMethod === 'referral') {
+      if (!referralName.trim()) { toast.error('Enter referral student name or ID'); return }
+      if (!referralReason.trim()) { toast.error('Enter reason for referral payment'); return }
+    } else {
+      if (!senderNumber.trim()) { toast.error('Enter your bKash/Nagad number'); return }
+      if (!transactionId.trim()) { toast.error('Enter the transaction ID'); return }
+    }
     if (!payingDue || !studentData) return
     setSubmittingPayment(true)
     try {
       const amountDue = payingDue.due_amount - (payingDue.paid_amount || 0)
+      const isRef = payMethod === 'referral'
       const { error } = await supabase.from('payment_submissions').insert({
         student_id: studentData.id,
         batch_id: payingDue.batch_id,
@@ -193,16 +201,20 @@ export default function StudentProfilePage() {
         total_fee: amountDue,
         due_amount: 0,
         payment_method: payMethod,
-        sender_number: senderNumber.trim(),
-        transaction_id: transactionId.trim(),
+        sender_number: isRef ? referralName.trim() : senderNumber.trim(),
+        transaction_id: isRef ? `REF-${Date.now().toString(36).toUpperCase()}` : transactionId.trim(),
         status: 'pending',
-        notes: `Due payment for ${payingDue.due_month}`,
+        notes: isRef 
+          ? `Referral: ${referralName.trim()} | Reason: ${referralReason.trim()} (Due for ${payingDue.due_month || 'Fee'})`
+          : `Due payment for ${payingDue.due_month}`,
       })
       if (error) throw error
-      toast.success('Payment submitted! Admin will verify and update your dues.')
+      toast.success(isRef ? 'Referral payment submitted! Admin will verify and approve.' : 'Payment submitted! Admin will verify and update your dues.')
       setPayingDue(null)
       setSenderNumber('')
       setTransactionId('')
+      setReferralName('')
+      setReferralReason('')
     } catch (err: any) {
       toast.error(err?.message || 'Failed to submit payment')
     } finally {
@@ -780,7 +792,7 @@ export default function StudentProfilePage() {
                   <p className="text-sm text-rose-600 font-bold mt-0.5">{formatCurrency(due.due_amount - (due.paid_amount || 0))} due</p>
                 </div>
                 <button
-                  onClick={() => { setPayingDue(due); setActiveModal(null); setPayMethod('bkash'); setSenderNumber(''); setTransactionId('') }}
+                  onClick={() => { setPayingDue(due); setActiveModal(null); setPayMethod('bkash'); setSenderNumber(''); setTransactionId(''); setReferralName(''); setReferralReason('') }}
                   className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
                 >
                   Pay Now
@@ -895,40 +907,90 @@ export default function StudentProfilePage() {
           <div className="p-6 space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Payment Method</label>
-              <div className="grid grid-cols-3 gap-2">
-                {['bkash', 'nagad', 'rocket'].map(m => (
-                  <button key={m} onClick={() => setPayMethod(m)} className={`py-2.5 px-3 rounded-xl text-sm font-semibold border-2 transition-all capitalize ${payMethod === m ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'}`}>{m}</button>
+              <div className="grid grid-cols-4 gap-2">
+                {['bkash', 'nagad', 'rocket', 'referral'].map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setPayMethod(m)}
+                    className={`py-2 px-1.5 rounded-xl text-xs font-bold border-2 transition-all capitalize ${
+                      payMethod === m
+                        ? m === 'referral'
+                          ? 'border-purple-600 bg-purple-50 text-purple-700'
+                          : 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                        : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    {m === 'referral' ? '🎁 Referral' : m}
+                  </button>
                 ))}
               </div>
             </div>
-            {(() => {
-              const account = paymentAccounts.find((a: any) => a.method?.toLowerCase() === payMethod || a.type?.toLowerCase() === payMethod)
-              const num = account?.number || account?.account_number || null
-              return num ? (
-                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Send to this {payMethod} number</p>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xl font-mono font-bold text-slate-900">{num}</p>
-                    <button onClick={() => copyNumber(num)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">
-                      {copiedNum === num ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-                      {copiedNum === num ? 'Copied!' : 'Copy'}
-                    </button>
+
+            {payMethod === 'referral' ? (
+              <div className="space-y-3">
+                <div className="bg-purple-50 rounded-2xl p-3.5 border border-purple-200">
+                  <p className="text-xs font-bold text-purple-900 flex items-center gap-1.5">
+                    <Users className="w-4 h-4 text-purple-600" /> Pay Due via Referral / Waiver
+                  </p>
+                  <p className="text-xs text-purple-700 mt-1 leading-relaxed">
+                    Mention the student name or ID who referred you, and the reason. Admin will verify before approving your payment.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Referral Student Name / ID *</label>
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-purple-500" />
+                    <input
+                      value={referralName}
+                      onChange={e => setReferralName(e.target.value)}
+                      placeholder="e.g. SF (MS-98420) or Referrer Name"
+                      className="w-full pl-10 pr-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50/20"
+                    />
                   </div>
                 </div>
-              ) : (
-                <div className="bg-amber-50 rounded-2xl p-3 border border-amber-200">
-                  <p className="text-sm text-amber-700 flex items-center gap-2"><AlertCircle className="h-4 w-4 flex-shrink-0" /> Contact admin for the {payMethod} payment number.</p>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1">Reason / Note *</label>
+                  <input
+                    value={referralReason}
+                    onChange={e => setReferralReason(e.target.value)}
+                    placeholder="e.g. Friend referral discount / mutual admission"
+                    className="w-full px-4 py-2.5 border border-purple-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50/20"
+                  />
                 </div>
-              )
-            })()}
-            <div className="relative">
-              <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input value={senderNumber} onChange={e => setSenderNumber(e.target.value)} placeholder={`Your ${payMethod} number`} className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
-            <div className="relative">
-              <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="Transaction ID (TrxID)" className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            </div>
+              </div>
+            ) : (
+              <>
+                {(() => {
+                  const account = paymentAccounts.find((a: any) => a.method?.toLowerCase() === payMethod || a.type?.toLowerCase() === payMethod)
+                  const num = account?.number || account?.account_number || null
+                  return num ? (
+                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Send to this {payMethod} number</p>
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xl font-mono font-bold text-slate-900">{num}</p>
+                        <button onClick={() => copyNumber(num)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                          {copiedNum === num ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                          {copiedNum === num ? 'Copied!' : 'Copy'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-amber-50 rounded-2xl p-3 border border-amber-200">
+                      <p className="text-sm text-amber-700 flex items-center gap-2"><AlertCircle className="h-4 w-4 flex-shrink-0" /> Contact admin for the {payMethod} payment number.</p>
+                    </div>
+                  )
+                })()}
+                <div className="relative">
+                  <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input value={senderNumber} onChange={e => setSenderNumber(e.target.value)} placeholder={`Your ${payMethod} number`} className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+                <div className="relative">
+                  <Hash className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input value={transactionId} onChange={e => setTransactionId(e.target.value)} placeholder="Transaction ID (TrxID)" className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                </div>
+              </>
+            )}
             <div className="flex gap-3 pt-1">
               <button onClick={() => setPayingDue(null)} className="flex-1 py-3 border border-slate-200 text-slate-600 font-semibold rounded-xl hover:bg-slate-50 text-sm">Cancel</button>
               <button onClick={handlePayDue} disabled={submittingPayment} className="flex-1 py-3 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 text-sm disabled:opacity-50 flex items-center justify-center gap-2">

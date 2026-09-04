@@ -50,6 +50,7 @@ interface PaymentRow {
   receipt_number: string; 
   paid_at: string; 
   student_id?: string;
+  notes?: string;
   student?: { name: string; student_id: string; phone?: string; email?: string; guardian_phone?: string }; 
   batch?: { name: string };
 }
@@ -70,6 +71,18 @@ interface PrintableReceipt {
   payment_month?: string
   paid_at: string
   qr_data: string
+  referral_name?: string
+  referral_reason?: string
+}
+
+export function parseReferralNotes(notes?: string | null): { referral_name?: string; referral_reason?: string } {
+  if (!notes) return {}
+  const matchName = notes.match(/Referral:\s*([^|]+)/i)
+  const matchReason = notes.match(/Reason:\s*(.+)/i)
+  return {
+    referral_name: matchName ? matchName[1].trim() : undefined,
+    referral_reason: matchReason ? matchReason[1].trim() : undefined,
+  }
 }
 
 export default function PaymentsClient({ 
@@ -118,7 +131,9 @@ export default function PaymentsClient({
     discount: "0", 
     payment_method: "cash", 
     payment_for: "monthly", 
-    payment_month: "" 
+    payment_month: "",
+    referral_name: "",
+    referral_reason: "",
   })
 
   // Payment Gateway Numbers (Owner Configurable)
@@ -309,7 +324,9 @@ export default function PaymentsClient({
       amount: String(outstanding), 
       discount: "0",
       payment_for: "monthly", 
-      payment_month: d.due_month 
+      payment_month: d.due_month,
+      referral_name: "",
+      referral_reason: "",
     }))
   }
 
@@ -321,7 +338,9 @@ export default function PaymentsClient({
       discount: "0", 
       payment_method: "cash", 
       payment_for: "monthly", 
-      payment_month: "" 
+      payment_month: "",
+      referral_name: "",
+      referral_reason: "",
     })
     setModalSelectedStudent(selectedStudent || null)
     setModalSearchQuery("")
@@ -389,6 +408,17 @@ export default function PaymentsClient({
       return
     }
 
+    if (form.payment_method === "referral") {
+      if (!form.referral_name.trim()) {
+        toast.error("Please enter the Referral Student Name or ID")
+        return
+      }
+      if (!form.referral_reason.trim()) {
+        toast.error("Please enter the reason for the referral payment")
+        return
+      }
+    }
+
     setLoading(true)
     try {
       const disc = parseFloat(form.discount || "0")
@@ -399,6 +429,11 @@ export default function PaymentsClient({
       // Receipt number
       const receiptNo = `RCP-${now.getFullYear()}-${Date.now().toString().slice(-6)}`
 
+      let paymentNotes: string | null = null
+      if (form.payment_method === "referral") {
+        paymentNotes = `Referral: ${form.referral_name.trim()} | Reason: ${form.referral_reason.trim()}`
+      }
+
       const { data, error } = await supabase.from("payments").insert({
         student_id: stId,
         batch_id: form.batch_id || null,
@@ -408,20 +443,55 @@ export default function PaymentsClient({
         payment_method: form.payment_method,
         payment_for: form.payment_for,
         payment_month: month,
-        receipt_number: receiptNo
+        receipt_number: receiptNo,
+        notes: paymentNotes,
       }).select("*, student:students(name, student_id, phone, email, guardian_phone), batch:batches(name)").single()
 
       if (error) throw error
 
-      // Update fee_due if paying a specific due
+      // Update or create fee_due if paying a due or partial payment
       if (payingDue) {
         const newPaid = (payingDue.paid_amount || 0) + total
         const newStatus = newPaid >= payingDue.due_amount ? "paid" : "partial"
         await supabase.from("fee_dues").update({ paid_amount: newPaid, status: newStatus }).eq("id", payingDue.id)
         setDues(prev => prev.map(d => d.id === payingDue.id ? { ...d, paid_amount: newPaid, status: newStatus } : d).filter(d => d.status !== "paid"))
-      } else if (form.batch_id && form.payment_for === "monthly") {
-        await supabase.from("fee_dues").update({ paid_amount: total, status: total >= amt ? "paid" : "partial" })
-          .eq("student_id", stId).eq("batch_id", form.batch_id).eq("due_month", month)
+      } else if (form.batch_id) {
+        const b = batches.find(x => x.id === form.batch_id)
+        const bFee = b ? Number(b.monthly_fee) || 0 : 0
+        const { data: existingDue } = await supabase
+          .from("fee_dues")
+          .select("id, due_amount, paid_amount")
+          .eq("student_id", stId)
+          .eq("batch_id", form.batch_id)
+          .eq("due_month", month)
+          .maybeSingle()
+
+        if (existingDue) {
+          const newPaid = (Number(existingDue.paid_amount) || 0) + total
+          const newStatus = newPaid >= Number(existingDue.due_amount) ? "paid" : "partial"
+          await supabase.from("fee_dues").update({ paid_amount: newPaid, status: newStatus }).eq("id", existingDue.id)
+          setDues(prev => prev.map(d => d.id === existingDue.id ? { ...d, paid_amount: newPaid, status: newStatus } : d).filter(d => d.status !== "paid"))
+        } else if (bFee > total) {
+          const targetDueDate = (() => {
+            const d = new Date()
+            d.setMonth(d.getMonth() + 1)
+            d.setDate(10)
+            return d.toISOString().split("T")[0]
+          })()
+          const { data: newDue } = await supabase.from("fee_dues").insert({
+            student_id: stId,
+            batch_id: form.batch_id,
+            due_month: month,
+            due_amount: bFee,
+            paid_amount: total,
+            due_date: targetDueDate,
+            status: total > 0 ? "partial" : "pending"
+          }).select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(name)").maybeSingle()
+
+          if (newDue) {
+            setDues(prev => [...prev, newDue])
+          }
+        }
       }
 
       setPayments([data, ...payments])
@@ -447,7 +517,9 @@ export default function PaymentsClient({
         payment_for: form.payment_for,
         payment_month: month,
         paid_at: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }),
-        qr_data: qrData
+        qr_data: qrData,
+        referral_name: form.payment_method === "referral" ? form.referral_name.trim() : undefined,
+        referral_reason: form.payment_method === "referral" ? form.referral_reason.trim() : undefined,
       })
 
       toast.success(`Payment of ${formatCurrency(total)} recorded! Receipt: ${data.receipt_number}`)
@@ -461,6 +533,7 @@ export default function PaymentsClient({
   // Print existing payment receipt from history table
   function printExistingReceipt(p: PaymentRow) {
     const qrData = `Receipt: ${p.receipt_number} | Student: ${p.student?.name} (${p.student?.student_id}) | Amount: ৳${p.total_paid} | Date: ${formatDate(p.paid_at)}`
+    const refInfo = parseReferralNotes(p.notes)
     setReceiptModal({
       receipt_number: p.receipt_number,
       student_name: p.student?.name || "Student",
@@ -475,7 +548,9 @@ export default function PaymentsClient({
       payment_for: p.payment_for,
       payment_month: p.payment_month,
       paid_at: formatDateTime(p.paid_at),
-      qr_data: qrData
+      qr_data: qrData,
+      referral_name: refInfo.referral_name,
+      referral_reason: refInfo.referral_reason,
     })
   }
 
@@ -498,26 +573,27 @@ export default function PaymentsClient({
       .summary-box { background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 8px; padding: 12px; margin-top: 10px; }
       .total-row { display: flex; justify-content: space-between; font-size: 16px; font-weight: bold; padding: 6px 0; color: #047857; }
       .qr-container { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px dashed #cbd5e1; margin-top: 15px; }
-      .footer { text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-      @media print { body { padding: 10px; } }
+      .footer { text-align: center; margin-top: 15px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
     </style></head><body>
       <div class="header">
         <h1>MedhaShiree Coaching</h1>
         <p>Official Fee Payment Receipt</p>
-        <span class="badge">Receipt #: ${receiptModal.receipt_number}</span>
+        <span class="badge">${receiptModal.receipt_number}</span>
       </div>
-      
-      <div class="section-title">Student Information</div>
-      <div class="row"><span class="label">Student Name:</span><span class="value">${receiptModal.student_name}</span></div>
-      <div class="row"><span class="label">Student ID:</span><span class="value">${receiptModal.student_id}</span></div>
-      ${receiptModal.student_phone ? `<div class="row"><span class="label">Student Phone:</span><span class="value">${receiptModal.student_phone}</span></div>` : ''}
-      ${receiptModal.guardian_phone ? `<div class="row"><span class="label">Guardian Contact:</span><span class="value">${receiptModal.guardian_phone}</span></div>` : ''}
 
-      <div class="section-title">Payment Information</div>
-      <div class="row"><span class="label">Program / Batch:</span><span class="value">${receiptModal.batch_name}</span></div>
+      <div class="section-title">Student Details</div>
+      <div class="row"><span class="label">Student Name:</span><span class="value">${receiptModal.student_name}</span></div>
+      <div class="row"><span class="label">Student ID:</span><span class="value" style="font-family: monospace;">${receiptModal.student_id}</span></div>
+      ${receiptModal.student_phone ? `<div class="row"><span class="label">Phone:</span><span class="value">${receiptModal.student_phone}</span></div>` : ''}
+      ${receiptModal.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${receiptModal.guardian_phone}</span></div>` : ''}
+
+      <div class="section-title">Payment Info</div>
+      <div class="row"><span class="label">Batch / Program:</span><span class="value">${receiptModal.batch_name}</span></div>
       <div class="row"><span class="label">Payment Type:</span><span class="value" style="text-transform: capitalize;">${receiptModal.payment_for} Fee</span></div>
       ${receiptModal.payment_month ? `<div class="row"><span class="label">Month:</span><span class="value">${receiptModal.payment_month}</span></div>` : ''}
       <div class="row"><span class="label">Payment Method:</span><span class="value">${receiptModal.payment_method}</span></div>
+      ${receiptModal.referral_name ? `<div class="row"><span class="label">Referral By:</span><span class="value" style="color: #7e22ce; font-weight: bold;">${receiptModal.referral_name}</span></div>` : ''}
+      ${receiptModal.referral_reason ? `<div class="row"><span class="label">Referral Reason:</span><span class="value" style="color: #6b21a8; font-style: italic;">${receiptModal.referral_reason}</span></div>` : ''}
       <div class="row"><span class="label">Payment Date:</span><span class="value">${receiptModal.paid_at}</span></div>
 
       <div class="summary-box">
@@ -585,7 +661,22 @@ export default function PaymentsClient({
       doc.text("Payment For: " + receiptModal.payment_for.toUpperCase() + (receiptModal.payment_month ? ` (${receiptModal.payment_month})` : ""), 10, y)
       y += 5
       doc.text("Method: " + receiptModal.payment_method + "  |  Date: " + receiptModal.paid_at, 10, y)
-      y += 7
+      y += 5
+
+      if (receiptModal.referral_name) {
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(126, 34, 206)
+        doc.text("Referral By: " + receiptModal.referral_name, 10, y)
+        y += 4
+        if (receiptModal.referral_reason) {
+          doc.setFont("helvetica", "italic")
+          doc.text("Reason: " + receiptModal.referral_reason, 10, y)
+          y += 4
+        }
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(15, 23, 42)
+      }
+      y += 2
 
       doc.setFillColor(240, 253, 244)
       doc.roundedRect(10, y, 85, 20, 2, 2, "F")
@@ -860,6 +951,7 @@ export default function PaymentsClient({
                       <option value="nagad">Nagad</option>
                       <option value="card">Card</option>
                       <option value="bank">Bank Transfer</option>
+                      <option value="referral">Referral (রেফারেল)</option>
                     </select>
                   </div>
                   <div className="flex items-end">
@@ -874,6 +966,37 @@ export default function PaymentsClient({
                     </button>
                   </div>
                 </div>
+
+                {form.payment_method === "referral" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-purple-50/80 rounded-2xl border border-purple-200 animate-in fade-in duration-150">
+                    <div>
+                      <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                        Referral Name / Student ID *
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="e.g. Tanvir Ahmed (MS-10023)"
+                        value={form.referral_name} 
+                        onChange={e => update("referral_name", e.target.value)} 
+                        className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-medium text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                        Reason for Referral Payment *
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="e.g. Referral reward / discount / bonus adjustment"
+                        value={form.referral_reason} 
+                        onChange={e => update("referral_reason", e.target.value)} 
+                        className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-medium text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -914,9 +1037,31 @@ export default function PaymentsClient({
                             {p.discount > 0 && <span className="text-[10px] text-gray-400 block font-normal">disc: {formatCurrency(p.discount)}</span>}
                           </td>
                           <td className="px-3.5 py-2.5">
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 uppercase border border-blue-100">
-                              {p.payment_method}
-                            </span>
+                            {(() => {
+                              const isRef = p.payment_method?.toLowerCase() === "referral" || (p.notes && p.notes.toLowerCase().includes("referral"))
+                              const refInfo = parseReferralNotes(p.notes)
+                              return isRef ? (
+                                <div className="space-y-0.5">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 uppercase border border-purple-200 inline-block">
+                                    Referral
+                                  </span>
+                                  {refInfo.referral_name && (
+                                    <p className="text-[10px] font-bold text-purple-900 leading-tight">
+                                      Ref: {refInfo.referral_name}
+                                    </p>
+                                  )}
+                                  {refInfo.referral_reason && (
+                                    <p className="text-[9px] text-purple-700 italic leading-tight">
+                                      {refInfo.referral_reason}
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 uppercase border border-blue-100">
+                                  {p.payment_method}
+                                </span>
+                              )
+                            })()}
                           </td>
                           <td className="px-3.5 py-2.5 capitalize text-gray-600">{p.payment_for}</td>
                           <td className="px-3.5 py-2.5 text-gray-500">{formatDateTime(p.paid_at)}</td>
@@ -980,9 +1125,31 @@ export default function PaymentsClient({
                       {p.discount > 0 && <span className="text-xs text-gray-400 block font-normal">disc: {formatCurrency(p.discount)}</span>}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100 uppercase">
-                        {p.payment_method}
-                      </span>
+                      {(() => {
+                        const isRef = p.payment_method?.toLowerCase() === "referral" || (p.notes && p.notes.toLowerCase().includes("referral"))
+                        const refInfo = parseReferralNotes(p.notes)
+                        return isRef ? (
+                          <div className="space-y-0.5">
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase inline-block">
+                              Referral
+                            </span>
+                            {refInfo.referral_name && (
+                              <p className="text-xs font-bold text-purple-900">
+                                By: {refInfo.referral_name}
+                              </p>
+                            )}
+                            {refInfo.referral_reason && (
+                              <p className="text-[11px] text-purple-700 italic">
+                                Reason: {refInfo.referral_reason}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100 uppercase">
+                            {p.payment_method}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-600 capitalize">{p.payment_for}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">{formatDateTime(p.paid_at)}</td>
@@ -1147,6 +1314,7 @@ export default function PaymentsClient({
                     <option value="nagad">Nagad</option>
                     <option value="card">Card POS</option>
                     <option value="bank">Bank Transfer</option>
+                    <option value="referral">Referral Adjustment (রেফারেল)</option>
                   </select>
                 </div>
                 <div>
@@ -1164,6 +1332,37 @@ export default function PaymentsClient({
                   </select>
                 </div>
               </div>
+
+              {form.payment_method === "referral" && (
+                <div className="p-3.5 bg-purple-50/90 rounded-2xl border border-purple-200 space-y-3 animate-in fade-in duration-150">
+                  <div>
+                    <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                      Referral Student Name / ID *
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Tanvir Ahmed (MS-10023)"
+                      value={form.referral_name} 
+                      onChange={e => update("referral_name", e.target.value)} 
+                      className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-medium text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                      Reason for Referral Payment *
+                    </label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="e.g. Referral reward / discount for student enrollment"
+                      value={form.referral_reason} 
+                      onChange={e => update("referral_reason", e.target.value)} 
+                      className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-medium text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex gap-3 pt-2">
@@ -1293,6 +1492,18 @@ export default function PaymentsClient({
                   <div className="flex justify-between"><span className="text-gray-500">Program / Batch:</span><span className="font-semibold text-emerald-800">{receiptModal.batch_name}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Payment For:</span><span className="text-gray-700 capitalize">{receiptModal.payment_for} Fee</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Method:</span><span className="font-medium text-gray-700">{receiptModal.payment_method}</span></div>
+                  {receiptModal.referral_name && (
+                    <div className="flex justify-between text-purple-800 font-semibold bg-purple-50 px-2 py-1 rounded-lg">
+                      <span className="text-purple-600">Referral Name:</span>
+                      <span>{receiptModal.referral_name}</span>
+                    </div>
+                  )}
+                  {receiptModal.referral_reason && (
+                    <div className="flex justify-between text-purple-800 text-[11px] bg-purple-50 px-2 py-1 rounded-lg">
+                      <span className="text-purple-600">Reason:</span>
+                      <span className="italic">{receiptModal.referral_reason}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between"><span className="text-gray-500">Date:</span><span className="text-gray-700">{receiptModal.paid_at}</span></div>
                 </div>
 

@@ -168,7 +168,7 @@ export async function GET(req: NextRequest) {
         console.warn("Attendance query note:", err)
       }
 
-      // 5. Dues
+      // 5. Dues (with auto-heal for active batch enrollments with partial/unpaid fees)
       try {
         const { data: dueData } = await admin
           .from("fee_dues")
@@ -176,8 +176,58 @@ export async function GET(req: NextRequest) {
           .in("student_id", studentDbIdArray)
           .in("status", ["pending", "partial"])
         if (dueData) dues = dueData
+
+        // Auto-heal missing dues for active enrollments
+        if (enrollments && enrollments.length > 0) {
+          const targetDueDate = (() => {
+            const d = new Date()
+            d.setMonth(d.getMonth() + 1)
+            d.setDate(10)
+            return d.toISOString().split("T")[0]
+          })()
+          const nowMonth = new Date().toISOString().slice(0, 7)
+
+          for (const enr of enrollments) {
+            const b = enr.batch
+            if (!b) continue
+            const feeTotal = (Number(b.monthly_fee) || 0) + (Number(b.admission_fee) || 0) || Number(b.monthly_fee) || 0
+            if (feeTotal <= 0) continue
+
+            const hasDue = dues.some(d => d.batch_id === enr.batch_id)
+            if (!hasDue) {
+              const { data: payList } = await admin
+                .from("payments")
+                .select("amount, total_paid")
+                .in("student_id", studentDbIdArray)
+                .eq("batch_id", enr.batch_id)
+
+              const paidTotal = (payList || []).reduce((sum: number, p: any) => sum + (Number(p.total_paid) || Number(p.amount) || 0), 0)
+              if (paidTotal < feeTotal) {
+                const dueMonth = enr.created_at ? new Date(enr.created_at).toISOString().slice(0, 7) : nowMonth
+                const targetStudentDbId = enr.student_id || studentDbIdArray[0]
+                const { data: newDue, error: insertDueErr } = await admin
+                  .from("fee_dues")
+                  .insert({
+                    student_id: targetStudentDbId,
+                    batch_id: enr.batch_id,
+                    due_month: dueMonth,
+                    due_amount: feeTotal,
+                    paid_amount: paidTotal,
+                    due_date: targetDueDate,
+                    status: paidTotal > 0 ? "partial" : "pending",
+                  })
+                  .select("*, batch:batches(name)")
+                  .maybeSingle()
+
+                if (!insertDueErr && newDue) {
+                  dues.push(newDue)
+                }
+              }
+            }
+          }
+        }
       } catch (err) {
-        console.warn("Dues query note:", err)
+        console.warn("Dues query/auto-heal note:", err)
       }
 
       // 6. Exam results (from exam_results and online exam_submissions)

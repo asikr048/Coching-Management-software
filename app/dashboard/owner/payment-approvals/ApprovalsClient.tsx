@@ -65,6 +65,7 @@ const methodLabels: Record<string, string> = {
   upay: "Upay",
   offline: "Offline",
   cash: "Cash",
+  referral: "Referral",
 }
 
 const methodColors: Record<string, string> = {
@@ -74,6 +75,7 @@ const methodColors: Record<string, string> = {
   upay: "bg-blue-50 text-blue-700 border-blue-200",
   offline: "bg-gray-100 text-gray-700 border-gray-200",
   cash: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  referral: "bg-purple-100 text-purple-800 border-purple-300 font-bold",
 }
 
 const statusColors: Record<string, string> = {
@@ -86,6 +88,19 @@ const statusIcons: Record<string, React.ReactNode> = {
   pending: <Clock className="w-3.5 h-3.5 text-amber-600" />,
   approved: <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />,
   rejected: <XCircle className="w-3.5 h-3.5 text-red-600" />,
+}
+
+function parseReferralNotes(notes?: string | null) {
+  if (!notes) return null
+  const refMatch = notes.match(/Referral:\s*([^|]+)/i)
+  const reasonMatch = notes.match(/Reason:\s*([^)]+)/i)
+  if (refMatch) {
+    return {
+      name: refMatch[1].trim(),
+      reason: reasonMatch ? reasonMatch[1].trim() : null,
+    }
+  }
+  return null
 }
 
 export default function ApprovalsClient({
@@ -119,6 +134,7 @@ export default function ApprovalsClient({
   }
 
   function copyFullSummary(sub: Submission) {
+    const refInfo = parseReferralNotes(sub.notes)
     const summary = [
       `--- Payment Submission Details ---`,
       `Student: ${sub.student?.name || "Unknown"} (ID: ${sub.student?.student_id || "—"})`,
@@ -127,11 +143,13 @@ export default function ApprovalsClient({
       `Amount Paid: ৳${sub.amount}`,
       `Remaining Due: ৳${sub.due_amount}`,
       `Method: ${methodLabels[sub.payment_method] || sub.payment_method}`,
-      `Sender Number: ${sub.sender_number || "—"}`,
+      sub.payment_method === "referral" || refInfo ? `Referrer: ${refInfo?.name || sub.sender_number || "—"}` : null,
+      refInfo?.reason ? `Referral Reason: ${refInfo.reason}` : null,
+      sub.payment_method !== "referral" ? `Sender Number: ${sub.sender_number || "—"}` : null,
       `TrxID: ${sub.transaction_id || "—"}`,
       `Status: ${sub.status.toUpperCase()}`,
       `Date: ${formatDate(sub.created_at)}`,
-    ].join("\n")
+    ].filter(Boolean).join("\n")
 
     navigator.clipboard.writeText(summary)
     toast.success("Complete payment summary copied to clipboard!")
@@ -507,6 +525,7 @@ export default function ApprovalsClient({
               <option value="rocket">Rocket</option>
               <option value="upay">Upay</option>
               <option value="offline">Offline / Cash</option>
+              <option value="referral">Referral / Waiver</option>
             </select>
 
             {/* Item Type Filter */}
@@ -726,15 +745,26 @@ export default function ApprovalsClient({
 
                     {/* Sender Number, TrxID & Quick Copy Chips */}
                     <div className="flex flex-wrap items-center gap-2.5 mt-3 pt-2 text-xs">
-                      {/* Sender Phone */}
+                      {/* Sender Phone or Referrer Student */}
                       {sub.sender_number && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50/80 border border-amber-200 text-amber-900 rounded-lg font-mono font-semibold">
-                          <Phone className="w-3.5 h-3.5 text-amber-600" />
-                          <span>Sender: <strong>{sub.sender_number}</strong></span>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono font-semibold border ${
+                          sub.payment_method === "referral"
+                            ? "bg-purple-50 border-purple-200 text-purple-900"
+                            : "bg-amber-50/80 border-amber-200 text-amber-900"
+                        }`}>
+                          {sub.payment_method === "referral" ? (
+                            <User className="w-3.5 h-3.5 text-purple-600" />
+                          ) : (
+                            <Phone className="w-3.5 h-3.5 text-amber-600" />
+                          )}
+                          <span>
+                            {sub.payment_method === "referral" ? "Referrer: " : "Sender: "}
+                            <strong>{sub.sender_number}</strong>
+                          </span>
                           <button
-                            onClick={() => copyToClipboard(sub.sender_number!, "Sender number")}
-                            className="p-0.5 text-amber-600 hover:text-amber-800 cursor-pointer"
-                            title="Copy sender number"
+                            onClick={() => copyToClipboard(sub.sender_number!, sub.payment_method === "referral" ? "Referrer info" : "Sender number")}
+                            className={`p-0.5 cursor-pointer ${sub.payment_method === "referral" ? "text-purple-600 hover:text-purple-800" : "text-amber-600 hover:text-amber-800"}`}
+                            title={sub.payment_method === "referral" ? "Copy Referrer" : "Copy sender number"}
                           >
                             {copiedText === sub.sender_number ? (
                               <Check className="w-3 h-3 text-emerald-600" />
@@ -744,6 +774,18 @@ export default function ApprovalsClient({
                           </button>
                         </span>
                       )}
+
+                      {/* Referral Reason Chip if applicable */}
+                      {(() => {
+                        const ref = parseReferralNotes(sub.notes)
+                        if (!ref?.reason) return null
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-200 text-purple-900 rounded-lg text-xs font-medium">
+                            <FileText className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
+                            <span>Reason: <strong>{ref.reason}</strong></span>
+                          </span>
+                        )
+                      })()}
 
                       {/* TrxID */}
                       {sub.transaction_id && (
@@ -924,12 +966,38 @@ export default function ApprovalsClient({
 
                 {approveModal.sender_number && (
                   <div className="flex items-center justify-between py-1.5">
-                    <span className="text-gray-500">Sender Number</span>
-                    <span className="font-mono font-bold text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                    <span className="text-gray-500">
+                      {approveModal.payment_method === "referral" ? "Referrer Student / ID" : "Sender Number"}
+                    </span>
+                    <span className={`font-mono font-bold px-2 py-0.5 rounded border ${
+                      approveModal.payment_method === "referral"
+                        ? "text-purple-900 bg-purple-50 border-purple-200"
+                        : "text-amber-900 bg-amber-50 border-amber-200"
+                    }`}>
                       {approveModal.sender_number}
                     </span>
                   </div>
                 )}
+
+                {(() => {
+                  const ref = parseReferralNotes(approveModal.notes)
+                  if (!ref) return null
+                  return (
+                    <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-xl text-xs space-y-1 my-1">
+                      <p className="font-bold text-purple-900 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-purple-600" /> Referral / Waiver Details
+                      </p>
+                      <p className="text-purple-800">
+                        Referrer: <strong className="font-mono">{ref.name}</strong>
+                      </p>
+                      {ref.reason && (
+                        <p className="text-purple-700">
+                          Reason: <span>{ref.reason}</span>
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {approveModal.transaction_id && (
                   <div className="flex items-center justify-between py-1.5">
@@ -1103,10 +1171,14 @@ export default function ApprovalsClient({
               <div className="space-y-2 divide-y divide-gray-100">
                 <div className="flex justify-between py-1.5">
                   <span className="text-gray-500">Method</span>
-                  <span className="font-bold text-gray-900">{methodLabels[detailModal.payment_method] || detailModal.payment_method}</span>
+                  <span className={`inline-flex px-2 py-0.5 rounded-md font-bold text-xs border ${methodColors[detailModal.payment_method] || "bg-gray-100 text-gray-700"}`}>
+                    {methodLabels[detailModal.payment_method] || detailModal.payment_method}
+                  </span>
                 </div>
                 <div className="flex justify-between py-1.5">
-                  <span className="text-gray-500">Sender Number</span>
+                  <span className="text-gray-500">
+                    {detailModal.payment_method === "referral" ? "Referrer Student / ID" : "Sender Number"}
+                  </span>
                   <span className="font-mono font-bold text-gray-900">{detailModal.sender_number || "—"}</span>
                 </div>
                 <div className="flex justify-between py-1.5">
@@ -1139,6 +1211,26 @@ export default function ApprovalsClient({
                     <p className="text-gray-800 bg-gray-50 p-2 rounded-lg">{detailModal.notes}</p>
                   </div>
                 )}
+
+                {(() => {
+                  const ref = parseReferralNotes(detailModal.notes)
+                  if (!ref && detailModal.payment_method !== "referral") return null
+                  return (
+                    <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl space-y-1.5 mt-2">
+                      <p className="font-bold text-purple-900 flex items-center gap-1.5 text-xs">
+                        <User className="w-3.5 h-3.5 text-purple-600" /> Referral / Waiver Details
+                      </p>
+                      <p className="text-purple-800 text-xs">
+                        Referrer: <strong className="font-mono">{ref?.name || detailModal.sender_number || "—"}</strong>
+                      </p>
+                      {ref?.reason && (
+                        <p className="text-purple-700 text-xs">
+                          Reason: <span>{ref.reason}</span>
+                        </p>
+                      )}
+                    </div>
+                  )
+                })()}
               </div>
 
               {/* Copy Full summary button */}
