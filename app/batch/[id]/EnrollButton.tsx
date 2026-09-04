@@ -4,7 +4,15 @@ import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { CheckCircle, Clock, User, Loader2, LayoutDashboard } from "lucide-react"
 
-export default function EnrollButton({ batchId, isFull }: { batchId: string; isFull: boolean }) {
+export default function EnrollButton({ 
+  batchId, 
+  isFull,
+  batchStatus = "ongoing" 
+}: { 
+  batchId: string; 
+  isFull: boolean;
+  batchStatus?: string;
+}) {
   const supabase = createClient()
   const [status, setStatus] = useState<"loading" | "not_logged_in" | "is_staff" | "enrolled" | "pending" | "can_enroll">("loading")
   const [staffRole, setStaffRole] = useState("")
@@ -57,6 +65,18 @@ export default function EnrollButton({ batchId, isFull }: { batchId: string; isF
   if (status === "loading") return (
     <div className="w-full py-3.5 bg-gray-100 text-gray-400 rounded-xl font-semibold text-center flex items-center justify-center gap-2">
       <Loader2 className="w-4 h-4 animate-spin" /> Checking...
+    </div>
+  )
+
+  if (batchStatus === "admission_closed") return (
+    <div className="w-full py-3.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-xl font-bold text-center text-sm">
+      Admission Closed for this Batch
+    </div>
+  )
+
+  if (batchStatus === "finished") return (
+    <div className="w-full py-3.5 bg-gray-100 border border-gray-200 text-gray-600 rounded-xl font-bold text-center text-sm">
+      Batch Program Finished
     </div>
   )
 

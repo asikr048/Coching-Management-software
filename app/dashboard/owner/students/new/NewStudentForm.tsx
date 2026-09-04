@@ -7,7 +7,7 @@ import { Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAle
 import { formatCurrency } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 
-interface Batch { id: string; name: string; subject?: string; class_level?: string; max_seats: number; current_seats: number; monthly_fee: number; admission_fee: number }
+interface Batch { id: string; name: string; subject?: string; class_level?: string; max_seats: number; current_seats: number; monthly_fee: number; admission_fee: number; status?: string }
 interface StudentOpt { id: string; name: string; student_id: string; phone?: string; email?: string; guardian_name?: string; guardian_phone?: string; address?: string; class_level?: string; school_college?: string }
 
 interface EnrollmentReceipt {
@@ -638,15 +638,19 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {batches.map(b => {
               const isEnrolled = enrolledBatchIds.includes(b.id)
-              const sel = form.batch_id === b.id, full = b.current_seats >= b.max_seats
-              const disabled = full || isEnrolled
+              const sel = form.batch_id === b.id
+              const full = b.current_seats >= b.max_seats
+              const isClosed = b.status === "admission_closed"
+              const isFinished = b.status === "finished"
+              const disabled = full || isEnrolled || isClosed || isFinished
+
               return (
                 <button
                   type="button"
                   key={b.id}
                   disabled={disabled}
                   onClick={() => {
-                    if (isEnrolled) return
+                    if (disabled) return
                     update("batch_id", sel ? "" : b.id)
                     if (!sel) setPaidAmount("")
                   }}
@@ -655,6 +659,10 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                       ? "border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-md ring-1 ring-indigo-200"
                       : isEnrolled
                       ? "border-emerald-200 bg-emerald-50/60 opacity-80 cursor-not-allowed"
+                      : isClosed
+                      ? "border-amber-200 bg-amber-50/50 opacity-70 cursor-not-allowed"
+                      : isFinished
+                      ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
                       : full
                       ? "border-gray-100 opacity-40 cursor-not-allowed"
                       : "border-gray-200 hover:border-indigo-200 hover:shadow-sm"
@@ -665,9 +673,25 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                       ✓ Enrolled
                     </span>
                   )}
-                  <p className={`font-bold text-[12px] ${isEnrolled ? "text-emerald-900" : "text-gray-800"}`}>{b.name}</p>
+                  {!isEnrolled && isClosed && (
+                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                      Closed
+                    </span>
+                  )}
+                  {!isEnrolled && isFinished && (
+                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-gray-100 text-gray-700 border border-gray-300">
+                      Finished
+                    </span>
+                  )}
+                  <p className={`font-bold text-[12px] ${isEnrolled ? "text-emerald-900" : isClosed ? "text-amber-900" : "text-gray-800"}`}>{b.name}</p>
                   <p className="text-gray-400 text-[10px] mt-0.5">
-                    {isEnrolled ? "Already enrolled in this batch" : `${b.current_seats}/${b.max_seats} seats • ${formatCurrency(b.monthly_fee)}/mo${b.admission_fee > 0 ? ` +${formatCurrency(b.admission_fee)}` : ""}`}
+                    {isEnrolled
+                      ? "Already enrolled in this batch"
+                      : isClosed
+                      ? "Admission closed"
+                      : isFinished
+                      ? "Program completed"
+                      : `${b.current_seats}/${b.max_seats} seats • ${formatCurrency(b.monthly_fee)}/mo${b.admission_fee > 0 ? ` +${formatCurrency(b.admission_fee)}` : ""}`}
                   </p>
                 </button>
               )
