@@ -217,6 +217,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
           address: form.address.trim() || null,
           school_college: form.school_college.trim() || null,
           class_level: form.class_level.trim() || null,
+          referred_by_code: form.referred_by_code.trim() || null,
         }).select().single()
         if (sErr) throw new Error(sErr.message)
         sid = st.id; dispId = st.student_id
@@ -313,10 +314,27 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
       // Referral handling
       if (form.referred_by_code.trim()) {
-        const { data: r } = await supabase.from("students").select("id").eq("referral_code", form.referred_by_code.trim()).maybeSingle()
+        const refText = form.referred_by_code.trim()
+        const { data: r } = await supabase
+          .from("students")
+          .select("id, name, student_id")
+          .or(`referral_code.eq.${refText},student_id.eq.${refText},phone.eq.${refText},name.ilike.${refText}`)
+          .maybeSingle()
+
+        const commAmt = Math.round(total * 0.1)
         if (r) {
-          await supabase.from("referrals").insert({ referrer_id: r.id, referee_id: sid, commission_rate: 10 })
-          await supabase.from("students").update({ referred_by_student_id: r.id }).eq("id", sid)
+          await supabase.from("referrals").insert({
+            referrer_id: r.id,
+            referee_id: sid,
+            commission_rate: 10,
+            commission_amount: commAmt,
+            status: "pending",
+            notes: `Referred by ${r.name} (${r.student_id}) during enrollment`
+          })
+          await supabase.from("students").update({
+            referred_by_student_id: r.id,
+            referred_by_code: refText
+          }).eq("id", sid)
         }
       }
 
@@ -621,7 +639,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
               <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2 flex items-center gap-1"><Lock className="w-3 h-3" /> Login Account</p>
               <div className="grid grid-cols-4 gap-2.5">
                 <div><label className={labelCls}>School / College</label><input value={form.school_college} onChange={e => update("school_college", e.target.value)} className={ic} /></div>
-                <div><label className={labelCls}>Referral Code</label><input value={form.referred_by_code} onChange={e => update("referred_by_code", e.target.value)} className={ic} placeholder="Optional" /></div>
+                <div><label className={labelCls}>Referral Name / Code</label><input value={form.referred_by_code} onChange={e => update("referred_by_code", e.target.value)} className={ic} placeholder="Referrer name or code (optional)" /></div>
                 <div><label className={labelCls}>Password *</label><input type="password" required value={form.password} onChange={e => update("password", e.target.value)} className={ic} placeholder="Min 6 chars" minLength={6} /></div>
                 <div><label className={labelCls}>Confirm Password *</label><input type="password" required value={form.confirmPassword} onChange={e => update("confirmPassword", e.target.value)} className={`${ic} ${form.confirmPassword && form.password !== form.confirmPassword ? "border-red-300 focus:ring-red-400" : ""}`} placeholder="Re-enter" />
                   {form.confirmPassword && form.password !== form.confirmPassword && <p className="text-[10px] text-red-500 mt-0.5">Passwords don&apos;t match</p>}

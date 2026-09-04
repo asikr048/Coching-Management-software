@@ -235,8 +235,8 @@ export default function PublicEnrollPage() {
                 </select>
               </div>
               <div>
-                <label className={labelClass}>Referral Code</label>
-                <input value={form.referred_by_code} onChange={e => update("referred_by_code", e.target.value)} className={inputClass} placeholder="If referred by someone" />
+                <label className={labelClass}>Referral Name / Code</label>
+                <input value={form.referred_by_code} onChange={e => update("referred_by_code", e.target.value)} className={inputClass} placeholder="Referrer name or code (optional)" />
               </div>
             </div>
           </div>

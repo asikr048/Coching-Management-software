@@ -136,6 +136,50 @@ export default function ApprovalsClient({
         }
       } catch { /* ignore seat increment errors */ }
 
+      // 6. Record or link referral if referee student had referral name/code
+      try {
+        const { data: stData } = await supabase
+          .from("students")
+          .select("id, referred_by_code, referred_by_student_id")
+          .eq("id", sub.student_id)
+          .maybeSingle()
+
+        if (stData?.referred_by_student_id || stData?.referred_by_code) {
+          let refId = stData.referred_by_student_id
+          if (!refId && stData.referred_by_code) {
+            const code = stData.referred_by_code.trim()
+            const { data: matched } = await supabase
+              .from("students")
+              .select("id")
+              .or(`referral_code.eq.${code},student_id.eq.${code},phone.eq.${code},name.ilike.${code}`)
+              .maybeSingle()
+            if (matched) refId = matched.id
+          }
+
+          if (refId) {
+            const { data: existingRef } = await supabase
+              .from("referrals")
+              .select("id")
+              .eq("referee_id", sub.student_id)
+              .maybeSingle()
+
+            if (!existingRef) {
+              const commAmt = Math.round(Number(sub.total_fee || sub.amount || 0) * 0.1)
+              await supabase.from("referrals").insert({
+                referrer_id: refId,
+                referee_id: sub.student_id,
+                commission_rate: 10,
+                commission_amount: commAmt,
+                status: "pending",
+                notes: `Auto-recorded on payment approval`
+              })
+            }
+          }
+        }
+      } catch (refErr) {
+        console.warn("Referral processing error:", refErr)
+      }
+
       setSubmissions(prev => prev.map(s => s.id === id ? { ...s, status: "approved", approved_by: staffId, approved_at: new Date().toISOString() } : s))
       toast.success("Payment approved! Student enrolled successfully.")
     } catch (err: unknown) {
