@@ -23,6 +23,7 @@ import {
   Lock,
   Eye,
   EyeOff,
+  MessageSquare,
 } from "lucide-react"
 import { getGrade } from "@/lib/utils"
 
@@ -31,6 +32,7 @@ interface Student {
   name: string
   student_id: string
   phone?: string | null
+  guardian_phone?: string | null
 }
 
 interface Result {
@@ -95,7 +97,7 @@ export default function ExamResultsPage() {
         if (ex?.batch_id) {
           const { data: enrollments } = await supabase
             .from("enrollments")
-            .select("student:students(id, name, student_id, phone)")
+            .select("student:students(id, name, student_id, phone, guardian_phone)")
             .eq("batch_id", ex.batch_id)
             .eq("status", "active")
 
@@ -108,7 +110,7 @@ export default function ExamResultsPage() {
         } else {
           const { data: allStudents } = await supabase
             .from("students")
-            .select("id, name, student_id, phone")
+            .select("id, name, student_id, phone, guardian_phone")
             .eq("status", "active")
             .order("name", { ascending: true })
 
@@ -605,6 +607,12 @@ export default function ExamResultsPage() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          <Link
+            href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-purple-700 hover:to-indigo-700 active:scale-[0.98] shadow-md shadow-purple-100 transition-all cursor-pointer"
+          >
+            <MessageSquare className="w-4 h-4" /> Send Result SMS
+          </Link>
           <button
             onClick={handleSaveAll}
             disabled={loading}
