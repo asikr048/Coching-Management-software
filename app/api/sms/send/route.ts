@@ -105,9 +105,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const {
-      recipients, // Array of { phone: string; message?: string; name?: string; studentId?: string } or string[]
-      message, // Global message fallback
+      recipients, // Array<{ phone, message, name?, studentId? }> | string (single phone)
+      message, // Global message if recipients array only has phones
       configOverride, // Optional testing config
+      branchId, // Optional branch ID to use branch-specific SMS gateway
     } = body
 
     if (!recipients || (!Array.isArray(recipients) && typeof recipients !== "string")) {
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // 1. Fetch Gateway Config from site_settings or configOverride
+    // 1. Fetch Gateway Config from branch, site_settings or configOverride
     let config: GatewayConfig = {
       apiKey: "",
       callType: "GET",
@@ -124,9 +125,34 @@ export async function POST(req: NextRequest) {
       senderId: "",
     }
 
+    let branchFound = false
+    if (branchId && branchId !== "all") {
+      try {
+        const { data: branchRow } = await admin
+          .from("branches")
+          .select("sms_gateway_config, name")
+          .eq("id", branchId)
+          .maybeSingle()
+
+        if (branchRow?.sms_gateway_config?.api_key) {
+          const bConf = branchRow.sms_gateway_config
+          config.apiKey = bConf.api_key
+          if (bConf.sender_id) config.senderId = bConf.sender_id
+          if (bConf.api_url) {
+            config.urlTemplate = bConf.api_url.includes("{api_key}")
+              ? bConf.api_url
+              : `${bConf.api_url}?api_key={api_key}&msg={msg}&to={to}`
+          }
+          branchFound = true
+        }
+      } catch (bErr) {
+        console.warn("Could not load branch-specific SMS config:", bErr)
+      }
+    }
+
     if (configOverride && (configOverride.apiKey || configOverride.urlTemplate)) {
       config = { ...config, ...configOverride }
-    } else {
+    } else if (!branchFound) {
       try {
         const { data: settingRow } = await admin
           .from("site_settings")
@@ -149,7 +175,7 @@ export async function POST(req: NextRequest) {
 
     if (!config.apiKey) {
       return NextResponse.json(
-        { error: "SMS Gateway API Key is not configured. Please set it in Gateway Settings." },
+        { error: "SMS Gateway API Key is not configured. Please set it in Branch or Gateway Settings." },
         { status: 400 }
       )
     }

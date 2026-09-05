@@ -5,8 +5,10 @@ import { toast } from "sonner"
 import {
   Plus, Trash2, Image, Loader2, X, Eye, EyeOff, Pencil, Sparkles,
   Phone, Mail, MapPin, MessageSquare, Save, Sliders, Info, ExternalLink,
-  Globe
+  Globe, Bell, Trophy, BookOpen, Award, Tag, Calendar, User, CheckCircle2,
+  Landmark, ArrowUpRight
 } from "lucide-react"
+import type { Branch, Blog, Achievement, Notice } from "@/lib/supabase/types"
 
 interface Slide {
   id: string
@@ -16,24 +18,87 @@ interface Slide {
   link_url: string
   sort_order: number
   is_active: boolean
+  branch_id?: string | null
 }
 
 interface SliderClientProps {
   slides: Slide[]
   initialSettings?: Record<string, string>
+  initialBlogs?: any[]
+  initialAchievements?: any[]
+  initialNotices?: any[]
+  branches: Branch[]
 }
 
-export default function SliderClient({ slides: initial, initialSettings = {} }: SliderClientProps) {
-  const [activeTab, setActiveTab] = useState<'slider' | 'contact'>('slider')
-  const [slides, setSlides] = useState<Slide[]>(initial)
-  const [showForm, setShowForm] = useState(false)
-  const [editSlide, setEditSlide] = useState<Slide | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({ title: "", subtitle: "", image_url: "", link_url: "" })
-  const [editForm, setEditForm] = useState({ title: "", subtitle: "", image_url: "", link_url: "" })
-  const [fixingSpelling, setFixingSpelling] = useState(false)
+export default function SliderClient({
+  slides: initialSlides,
+  initialSettings = {},
+  initialBlogs = [],
+  initialAchievements = [],
+  initialNotices = [],
+  branches,
+}: SliderClientProps) {
+  const [activeTab, setActiveTab] = useState<'slider' | 'notices' | 'achievements' | 'blogs' | 'contact'>('slider')
+  const supabase = createClient()
 
-  // Homepage & Contact info state
+  // --- SLIDER STATE ---
+  const [slides, setSlides] = useState<Slide[]>(initialSlides)
+  const [showSlideForm, setShowSlideForm] = useState(false)
+  const [editSlide, setEditSlide] = useState<Slide | null>(null)
+  const [slideLoading, setSlideLoading] = useState(false)
+  const [slideForm, setSlideForm] = useState({
+    title: "",
+    subtitle: "",
+    image_url: "",
+    link_url: "",
+    branch_id: "",
+  })
+
+  // --- NOTICES STATE ---
+  const [notices, setNotices] = useState<any[]>(initialNotices)
+  const [showNoticeModal, setShowNoticeModal] = useState(false)
+  const [editNotice, setEditNotice] = useState<any | null>(null)
+  const [noticeLoading, setNoticeLoading] = useState(false)
+  const [noticeForm, setNoticeForm] = useState({
+    title: "",
+    content: "",
+    branch_id: "",
+    is_active: true,
+  })
+
+  // --- ACHIEVEMENTS STATE ---
+  const [achievements, setAchievements] = useState<any[]>(initialAchievements)
+  const [showAchModal, setShowAchModal] = useState(false)
+  const [editAch, setEditAch] = useState<any | null>(null)
+  const [achLoading, setAchLoading] = useState(false)
+  const [achForm, setAchForm] = useState({
+    student_name: "",
+    title: "",
+    description: "",
+    photo_url: "",
+    exam_year: "2025",
+    branch_id: "",
+    is_active: true,
+  })
+
+  // --- BLOGS STATE ---
+  const [blogs, setBlogs] = useState<any[]>(initialBlogs)
+  const [showBlogModal, setShowBlogModal] = useState(false)
+  const [editBlog, setEditBlog] = useState<any | null>(null)
+  const [blogLoading, setBlogLoading] = useState(false)
+  const [blogForm, setBlogForm] = useState({
+    title: "",
+    slug: "",
+    excerpt: "",
+    content: "",
+    author_name: "MedhaShiree Editorial Team",
+    cover_image: "",
+    tags: "পরীক্ষার প্রস্তুতি, মোটিভেশন",
+    branch_id: "",
+    is_published: true,
+  })
+
+  // --- CONTACT / BRANDING STATE ---
   const [contactPhone, setContactPhone] = useState(initialSettings['contact_phone'] || '01302201431')
   const [contactEmail, setContactEmail] = useState(initialSettings['contact_email'] || 'info@medhashiree.com')
   const [contactAddress, setContactAddress] = useState(initialSettings['contact_address'] || 'Rajshahi, Bangladesh')
@@ -45,471 +110,1056 @@ export default function SliderClient({ slides: initial, initialSettings = {} }: 
   )
   const [savingContact, setSavingContact] = useState(false)
 
-  const supabase = createClient()
-
-  // Load any localStorage fallbacks if not present in initialSettings
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const lPhone = localStorage.getItem('medhashiree_contact_phone')
-      const lEmail = localStorage.getItem('medhashiree_contact_email')
-      const lAddress = localStorage.getItem('medhashiree_contact_address')
-      const lLink = localStorage.getItem('medhashiree_contact_link')
-      const lLabel = localStorage.getItem('medhashiree_contact_label')
-      const lAbout = localStorage.getItem('medhashiree_footer_about')
-
-      if (!initialSettings['contact_phone'] && lPhone) setContactPhone(lPhone)
-      if (!initialSettings['contact_email'] && lEmail) setContactEmail(lEmail)
-      if (!initialSettings['contact_address'] && lAddress) setContactAddress(lAddress)
-      if (!initialSettings['contact_link'] && lLink) setContactLink(lLink)
-      if (!initialSettings['contact_label'] && lLabel) setContactLabel(lLabel)
-      if (!initialSettings['footer_about'] && lAbout) setFooterAbout(lAbout)
+  // ----------------------------------------------------
+  // SLIDER ACTIONS
+  // ----------------------------------------------------
+  async function handleSlideSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!slideForm.image_url) {
+      toast.error("Image URL is required")
+      return
     }
-  }, [initialSettings])
-
-  const slidesWithOldSpelling = slides.filter(s =>
-    (/medha[\s\-_]*sh?ir[ei]+/i.test(s.title) && !s.title.includes("MedhaShiree")) ||
-    (s.subtitle && /medha[\s\-_]*sh?ir[ei]+/i.test(s.subtitle) && !s.subtitle.includes("MedhaShiree"))
-  )
-
-  async function fixAllOldSpellings() {
-    setFixingSpelling(true)
+    setSlideLoading(true)
     try {
-      let updatedCount = 0
-      const newSlides = [...slides]
-      for (let i = 0; i < newSlides.length; i++) {
-        const s = newSlides[i]
-        const newTitle = s.title ? s.title.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree") : s.title
-        const newSub = s.subtitle ? s.subtitle.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree") : s.subtitle
-        if (newTitle !== s.title || newSub !== s.subtitle) {
-          const { error } = await supabase.from("slider_images").update({
-            title: newTitle,
-            subtitle: newSub,
-          }).eq("id", s.id)
-          if (error) throw error
-          newSlides[i] = { ...s, title: newTitle, subtitle: newSub || "" }
-          updatedCount++
-        }
+      if (editSlide) {
+        const { error } = await supabase.from("slider_images").update({
+          title: slideForm.title,
+          subtitle: slideForm.subtitle,
+          image_url: slideForm.image_url,
+          link_url: slideForm.link_url,
+          branch_id: slideForm.branch_id || null,
+        }).eq("id", editSlide.id)
+        if (error) throw error
+        setSlides(prev => prev.map(s => s.id === editSlide.id ? { ...s, ...slideForm, branch_id: slideForm.branch_id || null } : s))
+        toast.success("Slide updated successfully")
+      } else {
+        const nextOrder = slides.length > 0 ? Math.max(...slides.map(s => s.sort_order)) + 1 : 1
+        const { data, error } = await supabase.from("slider_images").insert([{
+          ...slideForm,
+          branch_id: slideForm.branch_id || null,
+          sort_order: nextOrder,
+          is_active: true,
+        }]).select().single()
+        if (error) throw error
+        setSlides(prev => [...prev, data])
+        toast.success("Slide added successfully")
       }
-      setSlides(newSlides)
-      toast.success(`Updated ${updatedCount} slide(s) to "MedhaShiree" in database!`)
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update database")
-    } finally {
-      setFixingSpelling(false)
-    }
-  }
-
-  async function addSlide(e: React.FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      const sanitizedTitle = form.title.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree")
-      const sanitizedSubtitle = form.subtitle ? form.subtitle.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree") : null
-      const { data, error } = await supabase.from("slider_images").insert({
-        title: sanitizedTitle, subtitle: sanitizedSubtitle,
-        image_url: form.image_url, link_url: form.link_url || null,
-        sort_order: slides.length,
-      }).select().single()
-      if (error) throw error
-      setSlides([...slides, data])
-      setForm({ title: "", subtitle: "", image_url: "", link_url: "" })
-      setShowForm(false)
-      toast.success("Slide added!")
-    } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Failed") }
-    finally { setLoading(false) }
-  }
-
-  async function updateSlide(e: React.FormEvent) {
-    e.preventDefault()
-    if (!editSlide) return
-    setLoading(true)
-    try {
-      const sanitizedTitle = editForm.title.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree")
-      const sanitizedSubtitle = editForm.subtitle ? editForm.subtitle.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree") : null
-      const { error } = await supabase.from("slider_images").update({
-        title: sanitizedTitle,
-        subtitle: sanitizedSubtitle,
-        image_url: editForm.image_url,
-        link_url: editForm.link_url || null,
-      }).eq("id", editSlide.id)
-      if (error) throw error
-      setSlides(slides.map(s => s.id === editSlide.id ? { ...s, ...editForm, title: sanitizedTitle, subtitle: sanitizedSubtitle || "" } : s))
+      setShowSlideForm(false)
       setEditSlide(null)
-      toast.success("Slide updated!")
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update slide")
+      setSlideForm({ title: "", subtitle: "", image_url: "", link_url: "", branch_id: "" })
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save slide")
     } finally {
-      setLoading(false)
+      setSlideLoading(false)
     }
   }
 
-  async function deleteSlide(id: string) {
-    if (!confirm("Delete this slide?")) return
-    await supabase.from("slider_images").delete().eq("id", id)
-    setSlides(slides.filter(s => s.id !== id))
-    toast.success("Slide deleted")
-  }
-
-  async function toggleActive(id: string, current: boolean) {
-    await supabase.from("slider_images").update({ is_active: !current }).eq("id", id)
-    setSlides(slides.map(s => s.id === id ? { ...s, is_active: !current } : s))
-    toast.success(!current ? "Slide activated" : "Slide hidden")
-  }
-
-  async function saveContactSettings(e: React.FormEvent) {
-    e.preventDefault()
-    setSavingContact(true)
-
+  async function handleDeleteSlide(id: string) {
+    if (!confirm("Are you sure you want to delete this slide?")) return
     try {
-      localStorage.setItem('medhashiree_contact_phone', contactPhone.trim())
-      localStorage.setItem('medhashiree_contact_email', contactEmail.trim())
-      localStorage.setItem('medhashiree_contact_address', contactAddress.trim())
-      localStorage.setItem('medhashiree_contact_link', contactLink.trim())
-      localStorage.setItem('medhashiree_contact_label', contactLabel.trim())
-      localStorage.setItem('medhashiree_footer_about', footerAbout.trim())
-    } catch {}
-
-    const updates = [
-      { key: 'contact_phone', value: contactPhone.trim() },
-      { key: 'contact_email', value: contactEmail.trim() },
-      { key: 'contact_address', value: contactAddress.trim() },
-      { key: 'contact_link', value: contactLink.trim() },
-      { key: 'contact_label', value: contactLabel.trim() },
-      { key: 'footer_about', value: footerAbout.trim() },
-    ]
-
-    let errorCount = 0
-    for (const u of updates) {
-      try {
-        const { error } = await supabase.from('site_settings').upsert(u, { onConflict: 'key' })
-        if (error) errorCount++
-      } catch {
-        errorCount++
-      }
+      const { error } = await supabase.from("slider_images").delete().eq("id", id)
+      if (error) throw error
+      setSlides(prev => prev.filter(s => s.id !== id))
+      toast.success("Slide deleted")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete slide")
     }
-
-    if (errorCount === 0) {
-      toast.success("Contact & homepage information saved successfully!")
-    } else {
-      toast.success("Settings saved locally! (site_settings table will sync)")
-    }
-    setSavingContact(false)
   }
 
-  const inputClass = "w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+  async function handleToggleSlideActive(id: string, current: boolean) {
+    try {
+      const { error } = await supabase.from("slider_images").update({ is_active: !current }).eq("id", id)
+      if (error) throw error
+      setSlides(prev => prev.map(s => s.id === id ? { ...s, is_active: !current } : s))
+    } catch (err: any) {
+      toast.error(err.message || "Failed to toggle slide")
+    }
+  }
+
+  // ----------------------------------------------------
+  // NOTICE ACTIONS (For Notice Book)
+  // ----------------------------------------------------
+  function openCreateNotice() {
+    setEditNotice(null)
+    setNoticeForm({ title: "", content: "", branch_id: "", is_active: true })
+    setShowNoticeModal(true)
+  }
+
+  function openEditNotice(n: any) {
+    setEditNotice(n)
+    setNoticeForm({
+      title: n.title || "",
+      content: n.content || "",
+      branch_id: n.branch_id || "",
+      is_active: n.is_active ?? true,
+    })
+    setShowNoticeModal(true)
+  }
+
+  async function handleNoticeSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!noticeForm.title.trim()) {
+      toast.error("Notice title is required")
+      return
+    }
+    setNoticeLoading(true)
+    try {
+      const payload = {
+        title: noticeForm.title.trim(),
+        content: noticeForm.content.trim(),
+        branch_id: noticeForm.branch_id || null,
+        is_active: noticeForm.is_active,
+      }
+      if (editNotice) {
+        const { error } = await supabase.from("notices").update(payload).eq("id", editNotice.id)
+        if (error) throw error
+        setNotices(prev => prev.map(n => n.id === editNotice.id ? { ...n, ...payload } : n))
+        toast.success("Notice updated")
+      } else {
+        const { data, error } = await supabase.from("notices").insert([payload]).select().single()
+        if (error) throw error
+        setNotices(prev => [data, ...prev])
+        toast.success("Notice published to Notice Book")
+      }
+      setShowNoticeModal(false)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save notice")
+    } finally {
+      setNoticeLoading(false)
+    }
+  }
+
+  async function handleDeleteNotice(id: string) {
+    if (!confirm("Are you sure you want to delete this notice?")) return
+    try {
+      const { error } = await supabase.from("notices").delete().eq("id", id)
+      if (error) throw error
+      setNotices(prev => prev.filter(n => n.id !== id))
+      toast.success("Notice deleted")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete notice")
+    }
+  }
+
+  // ----------------------------------------------------
+  // ACHIEVEMENTS ACTIONS
+  // ----------------------------------------------------
+  function openCreateAch() {
+    setEditAch(null)
+    setAchForm({
+      student_name: "",
+      title: "",
+      description: "",
+      photo_url: "",
+      exam_year: "2025",
+      branch_id: "",
+      is_active: true,
+    })
+    setShowAchModal(true)
+  }
+
+  function openEditAch(a: any) {
+    setEditAch(a)
+    setAchForm({
+      student_name: a.student_name || "",
+      title: a.title || "",
+      description: a.description || "",
+      photo_url: a.photo_url || "",
+      exam_year: a.exam_year || "2025",
+      branch_id: a.branch_id || "",
+      is_active: a.is_active ?? true,
+    })
+    setShowAchModal(true)
+  }
+
+  async function handleAchSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!achForm.student_name.trim() || !achForm.title.trim()) {
+      toast.error("Student name and title are required")
+      return
+    }
+    setAchLoading(true)
+    try {
+      const payload = {
+        student_name: achForm.student_name.trim(),
+        title: achForm.title.trim(),
+        description: achForm.description.trim(),
+        photo_url: achForm.photo_url.trim() || null,
+        exam_year: achForm.exam_year.trim() || null,
+        branch_id: achForm.branch_id || null,
+        is_active: achForm.is_active,
+      }
+      if (editAch) {
+        const { error } = await supabase.from("achievements").update(payload).eq("id", editAch.id)
+        if (error) throw error
+        setAchievements(prev => prev.map(a => a.id === editAch.id ? { ...a, ...payload } : a))
+        toast.success("Achievement updated")
+      } else {
+        const { data, error } = await supabase.from("achievements").insert([payload]).select().single()
+        if (error) throw error
+        setAchievements(prev => [data, ...prev])
+        toast.success("Achievement added")
+      }
+      setShowAchModal(false)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save achievement")
+    } finally {
+      setAchLoading(false)
+    }
+  }
+
+  async function handleDeleteAch(id: string) {
+    if (!confirm("Are you sure you want to delete this achievement?")) return
+    try {
+      const { error } = await supabase.from("achievements").delete().eq("id", id)
+      if (error) throw error
+      setAchievements(prev => prev.filter(a => a.id !== id))
+      toast.success("Achievement deleted")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete achievement")
+    }
+  }
+
+  // ----------------------------------------------------
+  // BLOG ACTIONS
+  // ----------------------------------------------------
+  function openCreateBlog() {
+    setEditBlog(null)
+    setBlogForm({
+      title: "",
+      slug: "",
+      excerpt: "",
+      content: "",
+      author_name: "MedhaShiree Editorial Team",
+      cover_image: "",
+      tags: "পড়াশোনা, এইচএসসি প্রস্তুতি",
+      branch_id: "",
+      is_published: true,
+    })
+    setShowBlogModal(true)
+  }
+
+  function openEditBlog(b: any) {
+    setEditBlog(b)
+    setBlogForm({
+      title: b.title || "",
+      slug: b.slug || "",
+      excerpt: b.excerpt || "",
+      content: b.content || "",
+      author_name: b.author_name || "MedhaShiree Editorial Team",
+      cover_image: b.cover_image || "",
+      tags: Array.isArray(b.tags) ? b.tags.join(", ") : (b.tags || ""),
+      branch_id: b.branch_id || "",
+      is_published: b.is_published ?? true,
+    })
+    setShowBlogModal(true)
+  }
+
+  async function handleBlogSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!blogForm.title.trim()) {
+      toast.error("Blog title is required")
+      return
+    }
+    setBlogLoading(true)
+    try {
+      const slug = blogForm.slug.trim() || blogForm.title.trim().toLowerCase().replace(/[^a-z0-9\u0980-\u09FF]+/g, "-") + "-" + Date.now()
+      const tagsArray = blogForm.tags.split(",").map(t => t.trim()).filter(Boolean)
+      const payload = {
+        title: blogForm.title.trim(),
+        slug,
+        excerpt: blogForm.excerpt.trim() || null,
+        content: blogForm.content.trim(),
+        author_name: blogForm.author_name.trim() || null,
+        cover_image: blogForm.cover_image.trim() || null,
+        tags: tagsArray,
+        branch_id: blogForm.branch_id || null,
+        is_published: blogForm.is_published,
+        published_at: new Date().toISOString(),
+      }
+      if (editBlog) {
+        const { error } = await supabase.from("blogs").update(payload).eq("id", editBlog.id)
+        if (error) throw error
+        setBlogs(prev => prev.map(b => b.id === editBlog.id ? { ...b, ...payload } : b))
+        toast.success("Blog updated")
+      } else {
+        const { data, error } = await supabase.from("blogs").insert([payload]).select().single()
+        if (error) throw error
+        setBlogs(prev => [data, ...prev])
+        toast.success("Blog post published")
+      }
+      setShowBlogModal(false)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save blog post")
+    } finally {
+      setBlogLoading(false)
+    }
+  }
+
+  async function handleDeleteBlog(id: string) {
+    if (!confirm("Are you sure you want to delete this blog post?")) return
+    try {
+      const { error } = await supabase.from("blogs").delete().eq("id", id)
+      if (error) throw error
+      setBlogs(prev => prev.filter(b => b.id !== id))
+      toast.success("Blog post deleted")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete blog post")
+    }
+  }
+
+  // ----------------------------------------------------
+  // CONTACT INFO SAVE
+  // ----------------------------------------------------
+  async function handleSaveContact() {
+    setSavingContact(true)
+    try {
+      const pairs = [
+        { key: 'contact_phone', value: contactPhone },
+        { key: 'contact_email', value: contactEmail },
+        { key: 'contact_address', value: contactAddress },
+        { key: 'contact_link', value: contactLink },
+        { key: 'contact_label', value: contactLabel },
+        { key: 'footer_about', value: footerAbout },
+      ]
+      for (const p of pairs) {
+        await supabase.from("site_settings").upsert(p, { onConflict: 'key' })
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('medhashiree_contact_phone', contactPhone)
+        localStorage.setItem('medhashiree_contact_email', contactEmail)
+        localStorage.setItem('medhashiree_contact_address', contactAddress)
+        localStorage.setItem('medhashiree_contact_link', contactLink)
+        localStorage.setItem('medhashiree_contact_label', contactLabel)
+        localStorage.setItem('medhashiree_footer_about', footerAbout)
+      }
+      toast.success("Institutional settings saved successfully!")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save settings")
+    } finally {
+      setSavingContact(false)
+    }
+  }
 
   return (
-    <div>
-      {/* Navigation Tabs */}
-      <div className="flex border-b border-gray-200 mb-6 gap-2">
+    <div className="space-y-6">
+      {/* Tab Navigation */}
+      <div className="flex border-b border-gray-200 bg-white px-4 pt-2 rounded-2xl shadow-2xs gap-2 flex-wrap">
         <button
           onClick={() => setActiveTab('slider')}
-          className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === 'slider'
-              ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50 rounded-t-xl'
+              ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          <Sliders className="w-4 h-4" />
-          Hero Slider ({slides.length})
+          <Image className="w-4 h-4" /> Hero Slider ({slides.length})
         </button>
+
+        <button
+          onClick={() => setActiveTab('notices')}
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'notices'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Bell className="w-4 h-4" /> Notice Book ({notices.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('achievements')}
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'achievements'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <Trophy className="w-4 h-4" /> Achievements ({achievements.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('blogs')}
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+            activeTab === 'blogs'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" /> Educational Blogs ({blogs.length})
+        </button>
+
         <button
           onClick={() => setActiveTab('contact')}
-          className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all ${
+          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === 'contact'
-              ? 'border-indigo-600 text-indigo-600 bg-indigo-50/50 rounded-t-xl'
+              ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
           }`}
         >
-          <Globe className="w-4 h-4" />
-          Homepage & Contact Info
+          <Globe className="w-4 h-4" /> Institutional Contacts
         </button>
       </div>
 
-      {/* TAB 1: SLIDER */}
+      {/* ---------------------------------------------------- */}
+      {/* 1. HERO SLIDER TAB */}
+      {/* ---------------------------------------------------- */}
       {activeTab === 'slider' && (
-        <div>
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
-            <p className="text-sm text-gray-500">Manage the hero carousel on the homepage. Add coaching photos, announcements, and banners.</p>
-            <button onClick={() => setShowForm(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+        <div className="space-y-6">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+            <div>
+              <h3 className="font-bold text-gray-900 text-base">Hero Image Slider</h3>
+              <p className="text-xs text-gray-500">
+                Shown on the left 65% of the homepage hero section
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                setEditSlide(null)
+                setSlideForm({ title: "", subtitle: "", image_url: "", link_url: "", branch_id: "" })
+                setShowSlideForm(true)
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+            >
               <Plus className="w-4 h-4" /> Add Slide
             </button>
           </div>
 
-          {slidesWithOldSpelling.length > 0 && (
-            <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-start sm:items-center gap-3">
-                <div className="p-2 bg-amber-100 rounded-lg text-amber-700 shrink-0">
-                  <Sparkles className="w-5 h-5" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {slides.map(slide => {
+              const slideBranch = branches.find(b => b.id === slide.branch_id)
+              return (
+                <div
+                  key={slide.id}
+                  className={`bg-white rounded-2xl border ${
+                    slide.is_active ? 'border-gray-200' : 'border-gray-300 opacity-60'
+                  } overflow-hidden shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between`}
+                >
+                  <div className="relative aspect-video bg-gray-100">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={slide.image_url}
+                      alt={slide.title || "Slide"}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button
+                        onClick={() => handleToggleSlideActive(slide.id, slide.is_active)}
+                        className="p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-lg backdrop-blur-xs transition-colors"
+                      >
+                        {slide.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditSlide(slide)
+                          setSlideForm({
+                            title: slide.title || "",
+                            subtitle: slide.subtitle || "",
+                            image_url: slide.image_url,
+                            link_url: slide.link_url || "",
+                            branch_id: slide.branch_id || "",
+                          })
+                          setShowSlideForm(true)
+                        }}
+                        className="p-1.5 bg-black/60 hover:bg-black/80 text-white rounded-lg backdrop-blur-xs transition-colors"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSlide(slide.id)}
+                        className="p-1.5 bg-red-600/80 hover:bg-red-700 text-white rounded-lg backdrop-blur-xs transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-4">
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <h4 className="font-bold text-gray-900 text-sm truncate">{slide.title || "Untitled Slide"}</h4>
+                      {slideBranch ? (
+                        <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">
+                          {slideBranch.name}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
+                          All Branches
+                        </span>
+                      )}
+                    </div>
+                    {slide.subtitle && (
+                      <p className="text-xs text-gray-500 line-clamp-1">{slide.subtitle}</p>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-amber-900">Spelling Mismatch Detected in Slides</h4>
-                  <p className="text-xs text-amber-700 mt-0.5">
-                    {slidesWithOldSpelling.length} slide(s) contain outdated spelling (e.g. &quot;MedhaSiri&quot;). Click to automatically update them in the database to &quot;MedhaShiree&quot;.
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={fixAllOldSpellings}
-                disabled={fixingSpelling}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all whitespace-nowrap disabled:opacity-50"
-              >
-                {fixingSpelling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                Fix all to MedhaShiree
-              </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 2. NOTICE BOOK TAB */}
+      {/* ---------------------------------------------------- */}
+      {activeTab === 'notices' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+            <div>
+              <h3 className="font-bold text-gray-900 text-base">Notice Book ("সর্বশেষ নোটিশ :")</h3>
+              <p className="text-xs text-gray-500">
+                Notices displayed in the side-by-side institutional notice box next to the slider
+              </p>
             </div>
-          )}
+            <button
+              onClick={openCreateNotice}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+            >
+              <Plus className="w-4 h-4" /> Post Notice
+            </button>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+            <div className="divide-y divide-gray-100">
+              {notices.map(notice => {
+                const noticeBranch = branches.find(b => b.id === notice.branch_id)
+                return (
+                  <div key={notice.id} className="p-4 flex items-start justify-between gap-4 hover:bg-gray-50/70 transition-colors">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-amber-600 font-bold text-base">»</span>
+                        <h4 className="font-bold text-gray-900 text-sm">{notice.title}</h4>
+                        <span className="text-xs text-gray-400 font-medium">
+                          {notice.created_at ? new Date(notice.created_at).toLocaleDateString("en-GB") : ""}
+                        </span>
+                        {noticeBranch ? (
+                          <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">
+                            {noticeBranch.name}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
+                            All Branches
+                          </span>
+                        )}
+                      </div>
+                      {notice.content && (
+                        <p className="text-xs text-gray-600 line-clamp-2 pl-4">{notice.content}</p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => openEditNotice(notice)}
+                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteNotice(notice.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+              {notices.length === 0 && (
+                <div className="p-12 text-center text-gray-400 text-sm">
+                  No notices published yet. Click "Post Notice" to create your first notice.
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 3. ACHIEVEMENTS TAB */}
+      {/* ---------------------------------------------------- */}
+      {activeTab === 'achievements' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+            <div>
+              <h3 className="font-bold text-gray-900 text-base">Student Achievements & Success Stories</h3>
+              <p className="text-xs text-gray-500">
+                Feature top rankers, GPA 5.00 achievers, and medical/university admissions
+              </p>
+            </div>
+            <button
+              onClick={openCreateAch}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+            >
+              <Plus className="w-4 h-4" /> Add Achievement
+            </button>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {slides.map((slide, i) => (
-              <div key={slide.id} className={`bg-white rounded-xl border ${slide.is_active ? "border-gray-200" : "border-gray-200 opacity-60"} overflow-hidden shadow-sm`}>
-                {slide.image_url ? (
-                  <div className="h-44 bg-cover bg-center relative" style={{ backgroundImage: `url(${slide.image_url})` }}>
-                    <div className="absolute inset-0 bg-black/30" />
-                    <span className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 text-white text-xs rounded-full font-semibold">#{i + 1}</span>
+            {achievements.map(ach => {
+              const achBranch = branches.find(b => b.id === ach.branch_id)
+              return (
+                <div key={ach.id} className="bg-white p-4 rounded-2xl border border-gray-200/90 shadow-xs flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0 font-bold overflow-hidden border border-amber-200">
+                        {ach.photo_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={ach.photo_url} alt={ach.student_name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Award className="w-6 h-6" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-bold text-gray-900 text-sm truncate">{ach.student_name}</h4>
+                          {ach.exam_year && (
+                            <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">
+                              {ach.exam_year}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold text-indigo-600 truncate">{ach.title}</p>
+                      </div>
+                    </div>
+
+                    {ach.description && (
+                      <p className="text-xs text-gray-600 line-clamp-2 bg-gray-50 p-2 rounded-lg mb-3">
+                        {ach.description}
+                      </p>
+                    )}
                   </div>
-                ) : (
-                  <div className="h-44 bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center relative">
-                    <Image className="w-10 h-10 text-white/30" />
-                    <span className="absolute top-2 left-2 px-2 py-0.5 bg-black/60 text-white text-xs rounded-full font-semibold">#{i + 1}</span>
-                  </div>
-                )}
-                <div className="p-4">
-                  <h3 className="font-semibold text-gray-900 text-sm">{slide.title || "Untitled"}</h3>
-                  {slide.subtitle && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{slide.subtitle}</p>}
-                  <div className="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100">
-                    <button
-                      onClick={() => {
-                        setEditSlide(slide)
-                        setEditForm({
-                          title: slide.title,
-                          subtitle: slide.subtitle || "",
-                          image_url: slide.image_url,
-                          link_url: slide.link_url || "",
-                        })
-                      }}
-                      className="flex items-center gap-1 px-2.5 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded text-xs font-medium transition-colors"
-                    >
-                      <Pencil className="w-3 h-3" /> Edit
-                    </button>
-                    <button onClick={() => toggleActive(slide.id, slide.is_active)} className={`flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${slide.is_active ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-600"}`}>
-                      {slide.is_active ? <><Eye className="w-3 h-3" /> Active</> : <><EyeOff className="w-3 h-3" /> Hidden</>}
-                    </button>
-                    <button onClick={() => deleteSlide(slide.id)} className="flex items-center gap-1 px-2 py-1 bg-red-50 text-red-600 rounded text-xs font-medium hover:bg-red-100 transition-colors ml-auto">
-                      <Trash2 className="w-3 h-3" /> Delete
-                    </button>
+
+                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                    <span className="text-gray-400 text-[11px]">
+                      {achBranch ? achBranch.name : "All Branches"}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => openEditAch(ach)}
+                        className="p-1 text-gray-400 hover:text-indigo-600 rounded"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteAch(ach.id)}
+                        className="p-1 text-gray-400 hover:text-red-600 rounded"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-            {slides.length === 0 && (
-              <div className="col-span-full text-center py-12 text-gray-400 bg-white rounded-2xl border border-gray-200">
-                <Image className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p className="font-medium">No slides uploaded yet.</p>
-                <p className="text-xs text-gray-400 mt-1">Default gradient slides are currently active on the homepage.</p>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 4. BLOG WRITER TAB */}
+      {/* ---------------------------------------------------- */}
+      {activeTab === 'blogs' && (
+        <div className="space-y-6">
+          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+            <div>
+              <h3 className="font-bold text-gray-900 text-base">Educational Blogs & Articles</h3>
+              <p className="text-xs text-gray-500">
+                Write educational advice, exam guidelines, and motivational articles for students
+              </p>
+            </div>
+            <button
+              onClick={openCreateBlog}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+            >
+              <Plus className="w-4 h-4" /> Write Article
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {blogs.map(blog => {
+              const bBranch = branches.find(b => b.id === blog.branch_id)
+              return (
+                <div key={blog.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs flex flex-col justify-between">
+                  <div className="p-4">
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                        {blog.author_name || "MedhaShiree"}
+                      </span>
+                      <span className="text-[10px] text-gray-400">
+                        {blog.created_at ? new Date(blog.created_at).toLocaleDateString("en-GB") : ""}
+                      </span>
+                    </div>
+
+                    <h4 className="font-bold text-gray-900 text-base mb-1.5 hover:text-indigo-600 transition-colors">
+                      {blog.title}
+                    </h4>
+
+                    {blog.excerpt && (
+                      <p className="text-xs text-gray-600 line-clamp-2 mb-3">{blog.excerpt}</p>
+                    )}
+
+                    {Array.isArray(blog.tags) && blog.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {blog.tags.map((t: string, i: number) => (
+                          <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                            #{t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="px-4 py-2.5 bg-gray-50/70 border-t border-gray-100 flex items-center justify-between text-xs">
+                    <span className="text-gray-500 font-medium">
+                      {bBranch ? bBranch.name : "All Branches"}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => openEditBlog(blog)}
+                        className="text-indigo-600 hover:underline font-semibold flex items-center gap-1"
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Edit
+                      </button>
+                      <button
+                        onClick={() => handleDeleteBlog(blog.id)}
+                        className="text-red-600 hover:underline font-semibold flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Delete
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {blogs.length === 0 && (
+              <div className="col-span-full p-12 text-center text-gray-400 text-sm">
+                No blog articles published yet. Click "Write Article" to publish your first post.
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* TAB 2: CONTACT & FOOTER */}
+      {/* ---------------------------------------------------- */}
+      {/* 5. INSTITUTIONAL CONTACTS & BRANDING */}
+      {/* ---------------------------------------------------- */}
       {activeTab === 'contact' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-7 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-            <div className="flex items-center gap-2 mb-2">
-              <Phone className="w-5 h-5 text-indigo-600" />
-              <h2 className="text-lg font-bold text-gray-900">Homepage Contact & Footer Settings</h2>
-            </div>
-            <p className="text-sm text-gray-500 mb-6">
-              Update your coaching center contact phone number, email address, physical location, and WhatsApp link displayed on the homepage and footer.
+        <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5 shadow-xs max-w-2xl">
+          <div>
+            <h3 className="text-base font-bold text-gray-900">Institutional Contact & Branding</h3>
+            <p className="text-xs text-gray-500">
+              Default coaching contact details displayed on the top utility bar and footer
             </p>
+          </div>
 
-            <form onSubmit={saveContactSettings} className="space-y-4">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Helpline Phone Number</label>
+              <input
+                type="text"
+                value={contactPhone}
+                onChange={e => setContactPhone(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                placeholder="01302201431"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Official Email Address</label>
+              <input
+                type="email"
+                value={contactEmail}
+                onChange={e => setContactEmail(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                placeholder="info@medhashiree.com"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Central Head Office Address</label>
+              <input
+                type="text"
+                value={contactAddress}
+                onChange={e => setContactAddress(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                placeholder="নাচোল, চাঁপাইনবাবগঞ্জ"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">WhatsApp Helpline Link</label>
+              <input
+                type="text"
+                value={contactLink}
+                onChange={e => setContactLink(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                placeholder="https://wa.me/8801302201431"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Footer About Synopsis</label>
+              <textarea
+                rows={3}
+                value={footerAbout}
+                onChange={e => setFooterAbout(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={handleSaveContact}
+                disabled={savingContact}
+                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors"
+              >
+                {savingContact ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                Save Branding Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- ADD/EDIT SLIDE MODAL --- */}
+      {showSlideForm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">
+                {editSlide ? "Edit Hero Slide" : "Add New Hero Slide"}
+              </h3>
+              <button onClick={() => setShowSlideForm(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <form onSubmit={handleSlideSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-indigo-500" /> Phone Number *
-                </label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Image URL *</label>
                 <input
+                  type="url"
                   required
-                  value={contactPhone}
-                  onChange={e => setContactPhone(e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. 01302201431"
+                  value={slideForm.image_url}
+                  onChange={e => setSlideForm({ ...slideForm, image_url: e.target.value })}
+                  placeholder="https://images.unsplash.com/..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
                 />
-                <p className="text-xs text-gray-400 mt-1">Displayed in the homepage footer contact list.</p>
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-indigo-500" /> Email Address *
-                </label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Title</label>
                 <input
-                  required
-                  type="email"
-                  value={contactEmail}
-                  onChange={e => setContactEmail(e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. info@medhashiree.com"
+                  type="text"
+                  value={slideForm.title}
+                  onChange={e => setSlideForm({ ...slideForm, title: e.target.value })}
+                  placeholder="e.g. নতুন সেশনে ভর্তি চলছে"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
                 />
-                <p className="text-xs text-gray-400 mt-1">Official coaching center email address for parent inquiries.</p>
               </div>
-
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-indigo-500" /> Physical Address / Location *
-                </label>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Subtitle</label>
                 <input
-                  required
-                  value={contactAddress}
-                  onChange={e => setContactAddress(e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. Rajshahi, Bangladesh"
+                  type="text"
+                  value={slideForm.subtitle}
+                  onChange={e => setSlideForm({ ...slideForm, subtitle: e.target.value })}
+                  placeholder="e.g. এইচএসসি ও এসএসসি ব্যাচ ২০২৬"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
                 />
-                <p className="text-xs text-gray-400 mt-1">Campus location displayed next to the map pin icon.</p>
               </div>
-
-              <div className="pt-2 border-t border-gray-100">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-indigo-500" /> Navbar Contact Button Label
-                </label>
-                <input
-                  value={contactLabel}
-                  onChange={e => setContactLabel(e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. WhatsApp Us or Contact Us"
-                />
-                <p className="text-xs text-gray-400 mt-1">The button text shown in the top navigation bar.</p>
-              </div>
-
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <ExternalLink className="w-3.5 h-3.5 text-indigo-500" /> Navbar Contact Button Link / URL
-                </label>
-                <input
-                  value={contactLink}
-                  onChange={e => setContactLink(e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. https://wa.me/8801302201431"
-                />
-                <p className="text-xs text-gray-400 mt-1">
-                  Format for WhatsApp: <code className="text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">https://wa.me/880XXXXXXXXXX</code>
-                </p>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Target Branch</label>
+                <select
+                  value={slideForm.branch_id}
+                  onChange={e => setSlideForm({ ...slideForm, branch_id: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white"
+                >
+                  <option value="">All Branches (সকল শাখা)</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
               </div>
-
-              <div className="pt-2 border-t border-gray-100">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                  <Info className="w-3.5 h-3.5 text-indigo-500" /> Footer Tagline / Description
-                </label>
-                <textarea
-                  value={footerAbout}
-                  onChange={e => setFooterAbout(e.target.value)}
-                  rows={3}
-                  className={`${inputClass} resize-none`}
-                  placeholder="Coaching center brief description..."
-                />
-              </div>
-
-              <div className="pt-4">
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowSlideForm(false)}
+                  className="flex-1 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm"
+                >
+                  Cancel
+                </button>
                 <button
                   type="submit"
-                  disabled={savingContact}
-                  className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all disabled:opacity-50"
+                  disabled={slideLoading}
+                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
                 >
-                  {savingContact ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                  Save Homepage & Contact Settings
+                  {slideLoading ? "Saving..." : "Save Slide"}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
 
-          {/* RIGHT COLUMN: LIVE PREVIEW */}
-          <div className="lg:col-span-5 space-y-6">
-            <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-                <span className="text-xs font-bold tracking-wider text-indigo-400 uppercase">Live Preview</span>
-                <span className="text-xs text-slate-400">Homepage Footer Preview</span>
+      {/* --- ADD/EDIT NOTICE MODAL --- */}
+      {showNoticeModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">
+                {editNotice ? "Edit Notice" : "Post New Notice"}
+              </h3>
+              <button onClick={() => setShowNoticeModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <form onSubmit={handleNoticeSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Notice Headline *</label>
+                <input
+                  type="text"
+                  required
+                  value={noticeForm.title}
+                  onChange={e => setNoticeForm({ ...noticeForm, title: e.target.value })}
+                  placeholder="e.g. ভর্তি বিজ্ঞপ্তি : ২০২৫-২৬ সেশনে ভর্তি চলছে"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
               </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Full Notice Content</label>
+                <textarea
+                  rows={4}
+                  value={noticeForm.content}
+                  onChange={e => setNoticeForm({ ...noticeForm, content: e.target.value })}
+                  placeholder="Detailed notice text..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Notice Branch</label>
+                <select
+                  value={noticeForm.branch_id}
+                  onChange={e => setNoticeForm({ ...noticeForm, branch_id: e.target.value })}
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white"
+                >
+                  <option value="">All Branches (সকল শাখা)</option>
+                  {branches.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowNoticeModal(false)}
+                  className="flex-1 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={noticeLoading}
+                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+                >
+                  {noticeLoading ? "Saving..." : "Publish Notice"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-              <div className="mt-6 space-y-6">
+      {/* --- ADD/EDIT ACHIEVEMENT MODAL --- */}
+      {showAchModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">
+                {editAch ? "Edit Achievement" : "Add Student Achievement"}
+              </h3>
+              <button onClick={() => setShowAchModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
+            </div>
+            <form onSubmit={handleAchSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Student Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={achForm.student_name}
+                  onChange={e => setAchForm({ ...achForm, student_name: e.target.value })}
+                  placeholder="e.g. তাসনিম হাসান"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Achievement Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={achForm.title}
+                  onChange={e => setAchForm({ ...achForm, title: e.target.value })}
+                  placeholder="e.g. রাজশাহী মেডিকেল কলেজ (চান্স প্রাপ্ত)"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-base font-bold text-white tracking-tight">Medha<span className="text-indigo-400">Shiree</span></span>
-                  </div>
-                  <p className="text-xs text-slate-400 leading-relaxed">{footerAbout || "No description provided."}</p>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Exam / Session Year</label>
+                  <input
+                    type="text"
+                    value={achForm.exam_year}
+                    onChange={e => setAchForm({ ...achForm, exam_year: e.target.value })}
+                    placeholder="2025"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  />
                 </div>
-
-                <div className="pt-4 border-t border-slate-800">
-                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3">Contact</h4>
-                  <div className="space-y-2 text-xs text-slate-300">
-                    <p className="flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-                      <span>{contactAddress || "Rajshahi, Bangladesh"}</span>
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <Phone className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-                      <span className="text-indigo-300">{contactPhone || "01302201431"}</span>
-                    </p>
-                    <p className="flex items-center gap-2">
-                      <Mail className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-                      <span className="text-indigo-300">{contactEmail || "info@medhashiree.com"}</span>
-                    </p>
-                  </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Branch</label>
+                  <select
+                    value={achForm.branch_id}
+                    onChange={e => setAchForm({ ...achForm, branch_id: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white"
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
-                <span className="text-xs font-bold tracking-wider text-gray-500 uppercase">Navbar Button Preview</span>
-                <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">Header</span>
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Photo URL (Optional)</label>
+                <input
+                  type="url"
+                  value={achForm.photo_url}
+                  onChange={e => setAchForm({ ...achForm, photo_url: e.target.value })}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
               </div>
-              <div className="mt-4 flex items-center justify-center p-6 bg-slate-50 rounded-xl border border-dashed border-gray-200">
-                <a
-                  href={contactLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 shadow-sm hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Description / Testimonial</label>
+                <textarea
+                  rows={2}
+                  value={achForm.description}
+                  onChange={e => setAchForm({ ...achForm, description: e.target.value })}
+                  placeholder="Short comment or congratulations..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAchModal(false)}
+                  className="flex-1 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm"
                 >
-                  <MessageSquare className="w-4 h-4 text-emerald-600" />
-                  <span>{contactLabel || "WhatsApp Us"}</span>
-                </a>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ADD SLIDE MODAL */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Add New Slide</h2>
-              <button onClick={() => setShowForm(false)}><X className="w-5 h-5 text-gray-400" /></button>
-            </div>
-            <form onSubmit={addSlide} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                <input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} className={inputClass} placeholder="Welcome to MedhaShiree" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subtitle</label>
-                <input value={form.subtitle} onChange={e => setForm(f => ({ ...f, subtitle: e.target.value }))} className={inputClass} placeholder="Rajshahi's Premier Coaching Center" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Image URL *</label>
-                <input required value={form.image_url} onChange={e => setForm(f => ({ ...f, image_url: e.target.value }))} className={inputClass} placeholder="https://example.com/image.jpg" />
-                <p className="text-xs text-gray-400 mt-1">Use any hosted image link (Imgur, Cloudinary, etc.)</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Link URL</label>
-                <input value={form.link_url} onChange={e => setForm(f => ({ ...f, link_url: e.target.value }))} className={inputClass} placeholder="#batches (optional)" />
-              </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:bg-indigo-400 flex items-center justify-center gap-2">
-                  {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding...</> : "Add Slide"}
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={achLoading}
+                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+                >
+                  {achLoading ? "Saving..." : "Save Achievement"}
                 </button>
               </div>
             </form>
@@ -517,35 +1167,109 @@ export default function SliderClient({ slides: initial, initialSettings = {} }: 
         </div>
       )}
 
-      {/* EDIT SLIDE MODAL */}
-      {editSlide && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-lg font-bold text-gray-900">Edit Slide</h2>
-              <button onClick={() => setEditSlide(null)}><X className="w-5 h-5 text-gray-400" /></button>
+      {/* --- ADD/EDIT BLOG MODAL --- */}
+      {showBlogModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl border border-gray-100 my-8">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold text-gray-900">
+                {editBlog ? "Edit Educational Article" : "Write Educational Article"}
+              </h3>
+              <button onClick={() => setShowBlogModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5 text-gray-400" />
+              </button>
             </div>
-            <form onSubmit={updateSlide} className="space-y-4">
+            <form onSubmit={handleBlogSubmit} className="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
-                <input required value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} className={inputClass} placeholder="Welcome to MedhaShiree" />
+                <label className="block text-xs font-bold text-gray-700 mb-1">Article Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={blogForm.title}
+                  onChange={e => setBlogForm({ ...blogForm, title: e.target.value })}
+                  placeholder="e.g. এইচএসসি পরীক্ষায় পদার্থবিজ্ঞানে এ+ পাওয়ার সহজ কৌশল"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subtitle</label>
-                <input value={editForm.subtitle} onChange={e => setEditForm(f => ({ ...f, subtitle: e.target.value }))} className={inputClass} placeholder="Optional subtitle" />
+                <label className="block text-xs font-bold text-gray-700 mb-1">Short Excerpt / Summary</label>
+                <textarea
+                  rows={2}
+                  value={blogForm.excerpt}
+                  onChange={e => setBlogForm({ ...blogForm, excerpt: e.target.value })}
+                  placeholder="Brief synopsis for card preview..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Image URL *</label>
-                <input required value={editForm.image_url} onChange={e => setEditForm(f => ({ ...f, image_url: e.target.value }))} className={inputClass} placeholder="https://example.com/image.jpg" />
+                <label className="block text-xs font-bold text-gray-700 mb-1">Full Article Content *</label>
+                <textarea
+                  rows={7}
+                  required
+                  value={blogForm.content}
+                  onChange={e => setBlogForm({ ...blogForm, content: e.target.value })}
+                  placeholder="Write full article here..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Author Name</label>
+                  <input
+                    type="text"
+                    value={blogForm.author_name}
+                    onChange={e => setBlogForm({ ...blogForm, author_name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Branch</label>
+                  <select
+                    value={blogForm.branch_id}
+                    onChange={e => setBlogForm({ ...blogForm, branch_id: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white"
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Link URL</label>
-                <input value={editForm.link_url} onChange={e => setEditForm(f => ({ ...f, link_url: e.target.value }))} className={inputClass} placeholder="/marketplace (optional)" />
+                <label className="block text-xs font-bold text-gray-700 mb-1">Cover Image URL (Optional)</label>
+                <input
+                  type="url"
+                  value={blogForm.cover_image}
+                  onChange={e => setBlogForm({ ...blogForm, cover_image: e.target.value })}
+                  placeholder="https://..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
               </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setEditSlide(null)} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50">Cancel</button>
-                <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 disabled:bg-indigo-400 flex items-center justify-center gap-2">
-                  {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : "Save Changes"}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Tags (Comma-separated)</label>
+                <input
+                  type="text"
+                  value={blogForm.tags}
+                  onChange={e => setBlogForm({ ...blogForm, tags: e.target.value })}
+                  placeholder="পড়াশোনা, এইচএসসি, পদার্থবিজ্ঞান"
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                />
+              </div>
+              <div className="flex gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setShowBlogModal(false)}
+                  className="flex-1 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={blogLoading}
+                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+                >
+                  {blogLoading ? "Publishing..." : "Publish Article"}
                 </button>
               </div>
             </form>

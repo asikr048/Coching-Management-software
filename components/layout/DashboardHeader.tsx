@@ -2,8 +2,10 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Bell, LogOut, User, ChevronDown, Menu } from "lucide-react"
+import { Bell, LogOut, User, ChevronDown, Menu, Landmark, Building2, Check } from "lucide-react"
 import type { Staff } from "@/lib/supabase/types"
+import { useBranch } from "@/components/providers/BranchContext"
+import { cn } from "@/lib/utils"
 
 interface Props {
   user: Staff
@@ -12,8 +14,10 @@ interface Props {
 
 export default function DashboardHeader({ user, onMenuToggle }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
+  const [branchMenuOpen, setBranchMenuOpen] = useState(false)
   const router = useRouter()
   const supabase = createClient()
+  const { selectedBranchId, setSelectedBranchId, branches, currentBranch, isAllBranchesPermitted, permittedBranchIds } = useBranch()
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -29,6 +33,8 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
     accountant: "Accountant",
     course_teacher: "Course Teacher",
   }
+
+  const visibleBranches = branches.filter(b => isAllBranchesPermitted || permittedBranchIds.includes(b.id))
 
   return (
     <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center justify-between shadow-xs z-20 flex-shrink-0">
@@ -60,7 +66,87 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-4">
+        {/* Branch Selector Dropdown */}
+        {branches.length > 0 && (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setBranchMenuOpen(!branchMenuOpen)}
+              className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-950 text-xs sm:text-sm font-semibold transition-all shadow-xs"
+              title="Change active branch"
+            >
+              <Building2 className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+              <span className="truncate max-w-[120px] sm:max-w-[190px]">
+                {selectedBranchId === "all"
+                  ? "All Branches"
+                  : (currentBranch?.name || "Select Branch")}
+              </span>
+              <ChevronDown className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+            </button>
+
+            {branchMenuOpen && (
+              <div
+                className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden py-1"
+                onMouseLeave={() => setBranchMenuOpen(false)}
+              >
+                <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
+                  <span>Branch Filter</span>
+                  <span className="text-[10px] font-normal bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded">
+                    {visibleBranches.length} {visibleBranches.length === 1 ? "branch" : "branches"}
+                  </span>
+                </div>
+
+                {isAllBranchesPermitted && (
+                  <button
+                    onClick={() => {
+                      setSelectedBranchId("all")
+                      setBranchMenuOpen(false)
+                    }}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2.5 text-left text-xs sm:text-sm font-medium transition-colors hover:bg-indigo-50/60 border-b border-gray-100",
+                      selectedBranchId === "all" ? "text-indigo-700 font-bold bg-indigo-50/80" : "text-gray-700"
+                    )}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Landmark className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                      <div>
+                        <p className="font-semibold text-xs sm:text-sm">All Branches (সকল শাখা)</p>
+                        <p className="text-[10px] text-gray-500">Global multi-branch overview</p>
+                      </div>
+                    </div>
+                    {selectedBranchId === "all" && <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />}
+                  </button>
+                )}
+
+                <div className="max-h-60 overflow-y-auto divide-y divide-gray-50">
+                  {visibleBranches.map(branch => (
+                    <button
+                      key={branch.id}
+                      onClick={() => {
+                        setSelectedBranchId(branch.id)
+                        setBranchMenuOpen(false)
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between px-3 py-2 text-left text-xs sm:text-sm transition-colors hover:bg-indigo-50/60",
+                        selectedBranchId === branch.id ? "text-indigo-700 font-bold bg-indigo-50/80" : "text-gray-700"
+                      )}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <p className="truncate font-semibold text-gray-900 text-xs sm:text-sm">{branch.name}</p>
+                        {branch.location && (
+                          <p className="text-[10px] text-gray-500 truncate">{branch.location}</p>
+                        )}
+                      </div>
+                      {selectedBranchId === branch.id && <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           className="relative p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
           aria-label="Notifications"
@@ -107,3 +193,4 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
     </header>
   )
 }
+

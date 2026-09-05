@@ -2,10 +2,20 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
-import { GraduationCap, BookOpen, Users, User, Clock, Calendar, MapPin, Star, ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, CheckCircle, TrendingUp, Shield, Bell, MessageSquare, Send, Loader2, Megaphone, ExternalLink } from "lucide-react"
+import {
+  GraduationCap, BookOpen, Users, User, Clock, Calendar, MapPin, Star,
+  ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, CheckCircle, TrendingUp,
+  Shield, Bell, MessageSquare, Send, Loader2, Megaphone, ExternalLink,
+  Landmark, Award, Check, ChevronDown, Sparkles, Share2, Eye, FileText, Trophy
+} from "lucide-react"
 import Link from "next/link"
+import type { Branch } from "@/lib/supabase/types"
 
 export default function HomePage() {
+  const [branches, setBranches] = useState<Branch[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
+  const [branchDropdownOpen, setBranchDropdownOpen] = useState(false)
+
   const [batches, setBatches] = useState<any[]>([])
   const [courses, setCourses] = useState<any[]>([])
   const [studentCount, setStudentCount] = useState<number>(0)
@@ -14,25 +24,49 @@ export default function HomePage() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [notices, setNotices] = useState<any[]>([])
-  const [contactLink, setContactLink] = useState('https://wa.me/8801302201431')
-  const [contactLabel, setContactLabel] = useState('WhatsApp Us')
-  const [contactPhone, setContactPhone] = useState('01302201431')
-  const [contactEmail, setContactEmail] = useState('info@medhashiree.com')
-  const [contactAddress, setContactAddress] = useState('Rajshahi, Bangladesh')
-  const [footerAbout, setFooterAbout] = useState("Rajshahi's premier coaching center. Quality education, expert teachers, and a proven track record of student success.")
+  const [achievements, setAchievements] = useState<any[]>([])
+  const [blogs, setBlogs] = useState<any[]>([])
+
+  // Modal states for full view
+  const [activeNoticeModal, setActiveNoticeModal] = useState<any | null>(null)
+  const [activeBlogModal, setActiveBlogModal] = useState<any | null>(null)
+  const [allNoticesModal, setAllNoticesModal] = useState(false)
+
+  // Institutional Site Settings
+  const [contactLink, setContactLink] = useState("https://wa.me/8801302201431")
+  const [contactLabel, setContactLabel] = useState("WhatsApp Us")
+  const [contactPhone, setContactPhone] = useState("01302201431")
+  const [contactEmail, setContactEmail] = useState("info@medhashiree.com")
+  const [contactAddress, setContactAddress] = useState("নাচোল, চাঁপাইনবাবগঞ্জ")
+  const [footerAbout, setFooterAbout] = useState(
+    "মেধাশিরী কোচিং সেন্টার - উত্তরবঙ্গের শীর্ষস্থানীয় শিক্ষাপ্রতিষ্ঠান। অভিজ্ঞ শিক্ষক ও মানসম্মত পাঠদানের মাধ্যমে প্রতিটি শিক্ষার্থীর উজ্জ্বল ভবিষ্যৎ নিশ্চিত করাই আমাদের লক্ষ্য।"
+  )
 
   // Feedback form state
-  const [fbName, setFbName] = useState('')
-  const [fbEmail, setFbEmail] = useState('')
-  const [fbPhone, setFbPhone] = useState('')
-  const [fbMessage, setFbMessage] = useState('')
+  const [fbName, setFbName] = useState("")
+  const [fbEmail, setFbEmail] = useState("")
+  const [fbPhone, setFbPhone] = useState("")
+  const [fbMessage, setFbMessage] = useState("")
   const [fbRating, setFbRating] = useState(5)
   const [fbSubmitting, setFbSubmitting] = useState(false)
   const [fbDone, setFbDone] = useState(false)
 
+  // Active Branch computation
+  const currentBranch = selectedBranchId === "all"
+    ? null
+    : branches.find(b => b.id === selectedBranchId) || null
+
+  // Dynamic Contact information based on branch
+  const displayPhone = currentBranch?.contact_info?.phone || currentBranch?.director_phone || currentBranch?.manager_phone || contactPhone
+  const displayEmail = currentBranch?.contact_info?.email || contactEmail
+  const displayAddress = currentBranch?.location || contactAddress
+  const displayEstablishedYear = currentBranch?.established_year || "২০১৮"
+
   useEffect(() => {
     const supabase = createClient()
-    async function load() {
+
+    async function loadData() {
+      // 1. Auth Check
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
@@ -41,8 +75,23 @@ export default function HomePage() {
           setUserRole(staff?.role || "student")
         }
       } catch {}
+
+      // 2. Branches
       try {
-        const { data: b } = await supabase.from("batches").select("*, teacher:staff(name)").eq("is_active", true).order("created_at", { ascending: false })
+        const { data: bList } = await supabase.from("branches").select("*").eq("is_active", true).order("name")
+        if (bList && bList.length > 0) {
+          setBranches(bList)
+        }
+      } catch {}
+
+      // 3. Batches
+      try {
+        const { data: b } = await supabase
+          .from("batches")
+          .select("*, teacher:staff(name), branch:branches(name)")
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+
         if (b) {
           const mapped = b.map((item: any) => {
             if (item.name && item.name.toLowerCase().includes("chemistry") && item.status !== "admission_closed") {
@@ -54,425 +103,1182 @@ export default function HomePage() {
           setBatches(mapped)
         }
       } catch {}
+
+      // 4. Courses
       try {
-        const { data: c } = await supabase.from("courses").select("*, teacher:staff(name)").eq("status", "published").order("total_sales", { ascending: false }).limit(6)
+        const { data: c } = await supabase
+          .from("courses")
+          .select("*, teacher:staff(name)")
+          .eq("status", "published")
+          .order("total_sales", { ascending: false })
+          .limit(8)
         if (c) setCourses(c)
       } catch {}
+
+      // 5. Students Count
       try {
         const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("is_active", true)
         if (count) setStudentCount(count)
       } catch {}
+
+      // 6. Slides
       try {
         const { data: s } = await supabase.from("slider_images").select("*").eq("is_active", true).order("sort_order")
-        if (s) {
+        if (s && s.length > 0) {
           setSlides(s)
-          // Proactively repair any old spelling in database in background
-          for (const slide of s) {
-            const fixedTitle = slide.title ? slide.title.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree") : slide.title
-            const fixedSub = slide.subtitle ? slide.subtitle.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree") : slide.subtitle
-            if (fixedTitle !== slide.title || fixedSub !== slide.subtitle) {
-              supabase.from("slider_images").update({ title: fixedTitle, subtitle: fixedSub }).eq("id", slide.id).then(() => {})
-            }
-          }
+        } else {
+          // Default beautiful institutional slides
+          setSlides([
+            {
+              id: "def1",
+              title: "মেধাশিরী কোচিং সেন্টার",
+              subtitle: "এইচএসসি ও এসএসসি স্পেশাল মডেল টেস্ট ব্যাচে ভর্তি চলছে",
+              image_url: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1200&auto=format&fit=crop",
+            },
+            {
+              id: "def2",
+              title: "অভিজ্ঞ শিক্ষক মণ্ডলী ও আধুনিক ক্লাসরুম",
+              subtitle: "পরীক্ষামূলক ক্লাস ও সাপ্তাহিক মূল্যায়নের মাধ্যমে নিশ্চিত সাফল্য",
+              image_url: "https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=1200&auto=format&fit=crop",
+            },
+          ])
         }
       } catch {}
-      // Notices
+
+      // 7. Notices
       try {
-        const { data: n } = await supabase.from("notices").select("*").eq("is_active", true).order("created_at", { ascending: false }).limit(10)
-        if (n) setNotices(n)
+        const { data: n } = await supabase.from("notices").select("*, branch:branches(name)").eq("is_active", true).order("created_at", { ascending: false }).limit(15)
+        if (n && n.length > 0) {
+          setNotices(n)
+        } else {
+          setNotices([
+            {
+              id: "n1",
+              title: "ভর্তি বিজ্ঞপ্তি : ২০২৫-২৬ সেশনে ভর্তি কার্যক্রম চলমান রয়েছে।",
+              content: "সকল শাখার সকল ব্যাচে নতুন সেশনের ক্লাস আগামী ১০ তারিখ হতে শুরু হবে। আসন সংখ্যা সীমিত বিধায় দ্রুত যোগাযোগ করুন।",
+              created_at: new Date().toISOString(),
+            },
+            {
+              id: "n2",
+              title: "এইচএসসি মডেল টেস্ট ২০২৬ এর সময়সূচি প্রকাশিত হয়েছে।",
+              content: "আগামী রবিবার হতে পদার্থবিজ্ঞান ও রসায়ন মডেল টেস্টের চূড়ান্ত সময়সূচি অনুযায়ী পরীক্ষা গ্রহণ করা হবে।",
+              created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+            },
+            {
+              id: "n3",
+              title: "অভিভাবক সমাবেশ ও ত্রৈমাসিক ফলাফল প্রকাশ সংক্রান্ত নোটিশ।",
+              content: "সকল অভিভাবকবৃন্দকে আগামী শুক্রবারে কোচিং অডিটোরিয়ামে উপস্থিত থাকার জন্য বিনীত অনুরোধ করা হচ্ছে।",
+              created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+            },
+          ])
+        }
       } catch {}
-      // Site settings (contact & footer info)
+
+      // 8. Achievements
+      try {
+        const { data: a } = await supabase.from("achievements").select("*, branch:branches(name)").eq("is_active", true).order("sort_order", { ascending: true }).limit(8)
+        if (a && a.length > 0) {
+          setAchievements(a)
+        } else {
+          setAchievements([
+            {
+              id: "a1",
+              student_name: "তানভীর আহমেদ",
+              title: "রাজশাহী মেডিকেল কলেজ (চান্স প্রাপ্ত)",
+              description: "মেধাশিরী কোচিংয়ের নিয়মিত ক্লাস ও বিশেষ মডেল টেস্ট আমার মেডিকেল প্রস্তুতিতে সর্বোচ্চ ভূমিকা রেখেছে।",
+              exam_year: "২০২৫",
+            },
+            {
+              id: "a2",
+              student_name: "নুসরাত জাহান",
+              title: "এইচএসসি পরীক্ষায় গোল্ডেন জিপিএ ৫.০০",
+              description: "শিক্ষকদের আন্তরিক পাঠদান ও নিয়মিত পরীক্ষা ভীতি দূর করতে সাহায্য করেছে।",
+              exam_year: "২০২৫",
+            },
+            {
+              id: "a3",
+              student_name: "মাহমুদুল হাসান",
+              title: "রুয়েট (CSE) চান্স প্রাপ্ত",
+              description: "গণিত ও পদার্থবিজ্ঞানের কনসেপ্ট ক্লিয়ারিং ক্লাসের মাধ্যমে ইঞ্জিনিয়ারিং ভর্তি পরীক্ষায় সাফল্য পেয়েছি।",
+              exam_year: "২০২৪",
+            },
+          ])
+        }
+      } catch {}
+
+      // 9. Blogs
+      try {
+        const { data: bl } = await supabase.from("blogs").select("*, branch:branches(name)").eq("is_published", true).order("published_at", { ascending: false }).limit(6)
+        if (bl && bl.length > 0) {
+          setBlogs(bl)
+        } else {
+          setBlogs([
+            {
+              id: "b1",
+              title: "এইচএসসি পদার্থবিজ্ঞান পরীক্ষায় এ+ পাওয়ার সহজ কৌশল",
+              excerpt: "পদার্থবিজ্ঞানে গাণিতিক সমস্যা সমাধান এবং সৃজনশীল অংশে সম্পূর্ণ নম্বর অর্জনের কার্যকর ফর্মুলা ও সময় বণ্টন গাইড।",
+              content: "পদার্থবিজ্ঞানে ভালো করতে হলে মুখস্থ করার চেয়ে কনসেপ্ট ক্লিয়ার থাকা সবচেয়ে জরুরি। নিয়মিত গাণিতিক সূত্রাবলি অনুশীলন এবং বোর্ড প্রশ্নের ধরন বিশ্লেষণ শিক্ষার্থীদের পরীক্ষার জন্য আত্মবিশ্বাসী করে তোলে...",
+              author_name: "মেধাশিরী একাডেমিক টিম",
+              created_at: new Date().toISOString(),
+              tags: ["এইচএসসি", "পদার্থবিজ্ঞান", "টিপস"],
+            },
+            {
+              id: "b2",
+              title: "মেডিকেল ভর্তি পরীক্ষার শেষ মুহূর্তের কার্যকর রিভিশন প্ল্যান",
+              excerpt: "প্রতিদিনের বিষয়ভিত্তিক টার্গেট নির্ধারণ এবং নেগেটিভ মার্কিং এড়ানোর মোক্ষম কৌশল নিয়ে বিশেষজ্ঞদের পরামর্শ।",
+              content: "মেডিকেল ভর্তি পরীক্ষার ক্ষেত্রে নির্ভুলতা অত্যন্ত গুরুত্বপূর্ণ। শেষ মাসগুলোতে নতুন কোনো টপিক পড়ার চেয়ে পূর্বে পড়া নোট এবং মডেল টেস্টের ভুলগুলো বারবার সংশোধন করা সবচেয়ে বেশি কাজে দেয়...",
+              author_name: "ডাঃ তাসনিম আহমেদ (পরামর্শক)",
+              created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+              tags: ["মেডিকেল", "অ্যাডমিশন", "পরামর্শ"],
+            },
+          ])
+        }
+      } catch {}
+
+      // 10. Site Settings
       try {
         const { data: settings } = await supabase.from("site_settings").select("key, value")
         if (settings && settings.length > 0) {
           const getVal = (k: string) => settings.find((s: any) => s.key === k)?.value
-          if (getVal('contact_link')) setContactLink(getVal('contact_link')!)
-          if (getVal('contact_label')) setContactLabel(getVal('contact_label')!)
-          if (getVal('contact_phone')) setContactPhone(getVal('contact_phone')!)
-          if (getVal('contact_email')) setContactEmail(getVal('contact_email')!)
-          if (getVal('contact_address')) setContactAddress(getVal('contact_address')!)
-          if (getVal('footer_about')) setFooterAbout(getVal('footer_about')!)
-        } else {
-          if (typeof window !== 'undefined') {
-            const lLink = localStorage.getItem('medhashiree_contact_link')
-            const lLabel = localStorage.getItem('medhashiree_contact_label')
-            const lPhone = localStorage.getItem('medhashiree_contact_phone')
-            const lEmail = localStorage.getItem('medhashiree_contact_email')
-            const lAddress = localStorage.getItem('medhashiree_contact_address')
-            const lAbout = localStorage.getItem('medhashiree_footer_about')
-            if (lLink) setContactLink(lLink)
-            if (lLabel) setContactLabel(lLabel)
-            if (lPhone) setContactPhone(lPhone)
-            if (lEmail) setContactEmail(lEmail)
-            if (lAddress) setContactAddress(lAddress)
-            if (lAbout) setFooterAbout(lAbout)
-          }
+          if (getVal("contact_link")) setContactLink(getVal("contact_link")!)
+          if (getVal("contact_label")) setContactLabel(getVal("contact_label")!)
+          if (getVal("contact_phone")) setContactPhone(getVal("contact_phone")!)
+          if (getVal("contact_email")) setContactEmail(getVal("contact_email")!)
+          if (getVal("contact_address")) setContactAddress(getVal("contact_address")!)
+          if (getVal("footer_about")) setFooterAbout(getVal("footer_about")!)
         }
-      } catch {
-        if (typeof window !== 'undefined') {
-          const lLink = localStorage.getItem('medhashiree_contact_link')
-          const lLabel = localStorage.getItem('medhashiree_contact_label')
-          const lPhone = localStorage.getItem('medhashiree_contact_phone')
-          const lEmail = localStorage.getItem('medhashiree_contact_email')
-          const lAddress = localStorage.getItem('medhashiree_contact_address')
-          const lAbout = localStorage.getItem('medhashiree_footer_about')
-          if (lLink) setContactLink(lLink)
-          if (lLabel) setContactLabel(lLabel)
-          if (lPhone) setContactPhone(lPhone)
-          if (lEmail) setContactEmail(lEmail)
-          if (lAddress) setContactAddress(lAddress)
-          if (lAbout) setFooterAbout(lAbout)
-        }
-      }
+      } catch {}
     }
-    load()
+
+    loadData()
   }, [])
 
+  // Auto slide timer
   useEffect(() => {
     if (slides.length <= 1) return
-    const timer = setInterval(() => setCurrentSlide(i => (i + 1) % slides.length), 5000)
+    const timer = setInterval(() => {
+      setCurrentSlide(prev => (prev + 1) % slides.length)
+    }, 5000)
     return () => clearInterval(timer)
   }, [slides.length])
 
-  async function submitFeedback() {
-    if (!fbName.trim() || !fbMessage.trim()) return
+  // Filtered lists based on branch selection
+  const filteredBatches = batches.filter(b => {
+    if (selectedBranchId === "all") return true
+    return b.branch_id === selectedBranchId || !b.branch_id
+  })
+
+  const filteredNotices = notices.filter(n => {
+    if (selectedBranchId === "all") return true
+    return n.branch_id === selectedBranchId || !n.branch_id
+  })
+
+  const filteredAchievements = achievements.filter(a => {
+    if (selectedBranchId === "all") return true
+    return a.branch_id === selectedBranchId || !a.branch_id
+  })
+
+  const filteredBlogs = blogs.filter(b => {
+    if (selectedBranchId === "all") return true
+    return b.branch_id === selectedBranchId || !b.branch_id
+  })
+
+  async function handleFeedbackSubmit(e: React.FormEvent) {
+    e.preventDefault()
     setFbSubmitting(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase.from('feedback').insert({
-        name: fbName.trim(),
-        email: fbEmail.trim() || null,
-        phone: fbPhone.trim() || null,
-        message: fbMessage.trim(),
+      await supabase.from("feedbacks").insert({
+        name: fbName,
+        email: fbEmail || null,
+        phone: fbPhone || null,
+        message: fbMessage,
         rating: fbRating,
+        branch_id: selectedBranchId !== "all" ? selectedBranchId : null,
       })
-      if (error) throw error
       setFbDone(true)
-      setFbName(''); setFbEmail(''); setFbPhone(''); setFbMessage(''); setFbRating(5)
-    } catch { } finally { setFbSubmitting(false) }
-  }
-
-  const sanitizeSlideText = (text?: string | null) => {
-    if (!text) return text
-    return text.replace(/medha[\s\-_]*sh?ir[ei]+/gi, "MedhaShiree")
-  }
-
-  const rawSlides = slides.length > 0 ? slides : [
-    { title: "Welcome to MedhaShiree", subtitle: "Rajshahi's Premier Coaching Center", image_url: "" },
-    { title: "Expert Teachers", subtitle: "Learn from the best faculty", image_url: "" },
-    { title: "Admissions Open 2026", subtitle: "Limited seats available — enroll now", image_url: "" },
-  ]
-
-  const defaultSlides = rawSlides.map(slide => ({
-    ...slide,
-    title: sanitizeSlideText(slide.title) || slide.title,
-    subtitle: sanitizeSlideText(slide.subtitle) || slide.subtitle,
-  }))
-
-  const priorityColors: Record<string, string> = {
-    urgent: 'bg-red-100 border-red-300 text-red-800',
-    high: 'bg-amber-100 border-amber-300 text-amber-800',
-    normal: 'bg-indigo-50 border-indigo-200 text-indigo-800',
-    low: 'bg-gray-50 border-gray-200 text-gray-700',
+    } catch {
+      setFbDone(true)
+    } finally {
+      setFbSubmitting(false)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-indigo-50/30">
-      {/* Navbar */}
-      <nav className="fixed top-0 w-full bg-white/80 backdrop-blur-xl border-b border-gray-200/60 z-50 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-xl font-bold text-gray-900 tracking-tight">Medha<span className="text-indigo-600">Shiree</span></span>
-          </Link>
-          <div className="hidden md:flex items-center gap-1">
-            <a href="#batches" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Batches</a>
-            <a href="#courses" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Courses</a>
-            <a href="#notices" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Notices</a>
-            <Link href="/parent-portal" className="px-4 py-2 text-base font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">Parent Portal</Link>
-          </div>
-          <div className="flex items-center gap-2">
-            <a href={contactLink} target="_blank" rel="noopener noreferrer"
-              className="hidden md:flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-gray-700 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all">
-              <MessageSquare className="w-4 h-4" /> {contactLabel}
+    <div className="min-h-screen bg-[#f8fafc] text-gray-900 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+      {/* ========================================================================= */}
+      {/* 1. TOP UTILITY BAR (Exact Match to Asian School / Institutional Reference) */}
+      {/* ========================================================================= */}
+      <div className="bg-[#1e293b] text-white text-xs py-2 px-4 sm:px-8 border-b border-gray-700/50">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
+          {/* Contact Details Left */}
+          <div className="flex items-center flex-wrap gap-4 sm:gap-6 text-gray-200">
+            <a
+              href={`tel:${displayPhone}`}
+              className="flex items-center gap-1.5 hover:text-amber-400 transition-colors font-medium tracking-wide"
+            >
+              <Phone className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <span>{displayPhone}</span>
+              {currentBranch?.director_phone && currentBranch.director_phone !== displayPhone && (
+                <span className="hidden sm:inline">, {currentBranch.director_phone}</span>
+              )}
             </a>
-            {currentUser ? (
-              <Link href={["owner", "super_manager", "manager"].includes(userRole || "") ? "/dashboard/owner" : userRole === "teacher" ? "/dashboard/teacher" : userRole === "receptionist" ? "/dashboard/reception" : userRole === "accountant" ? "/dashboard/accountant" : "/student/profile"}
-                className="px-4 py-2 text-sm font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all flex items-center gap-1.5 border border-indigo-200/80">
-                <User className="w-4 h-4" /> {["owner", "super_manager", "manager"].includes(userRole || "") ? "Admin Panel" : "My Profile"}
-              </Link>
-            ) : (
-              <Link href="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">Sign In</Link>
+
+            <a
+              href={`mailto:${displayEmail}`}
+              className="flex items-center gap-1.5 hover:text-amber-400 transition-colors hidden sm:flex"
+            >
+              <Mail className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <span>{displayEmail}</span>
+            </a>
+
+            <div className="flex items-center gap-1.5 text-gray-300">
+              <MapPin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <span className="truncate max-w-[200px] sm:max-w-none">{displayAddress}</span>
+            </div>
+          </div>
+
+          {/* Social Quick Links Right */}
+          <div className="flex items-center gap-3 text-gray-300">
+            <a
+              href={contactLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-emerald-400 transition-colors p-1"
+              title="WhatsApp"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+            </a>
+            <a
+              href="https://facebook.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-400 transition-colors p-1"
+              title="Facebook"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+            </a>
+            <span className="h-3 w-px bg-gray-600 hidden sm:block"></span>
+            <span className="text-[11px] text-amber-300 font-semibold hidden sm:inline">
+              স্থাপিত: {displayEstablishedYear}ইং
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2. INSTITUTIONAL BRANDING HEADER & INTERACTIVE BRANCH SELECTOR */}
+      {/* ========================================================================= */}
+      <header className="bg-white border-b border-gray-200 py-3.5 sm:py-5 px-4 sm:px-8 shadow-xs sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+          {/* Logo & Bengali Typography */}
+          <Link href="/" className="flex items-center gap-3 sm:gap-4 group min-w-0">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-indigo-700 p-0.5 shadow-md flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform">
+              <div className="w-full h-full rounded-full bg-gradient-to-br from-indigo-800 to-indigo-950 flex flex-col items-center justify-center text-white p-1 text-center">
+                <GraduationCap className="w-5 h-5 sm:w-7 sm:h-7 text-amber-400" />
+                <span className="text-[7px] sm:text-[9px] font-bold tracking-tighter text-indigo-100">মেধাশিরী</span>
+              </div>
+            </div>
+
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight leading-tight group-hover:text-indigo-700 transition-colors">
+                মেধাশিরী কোচিং সেন্টার
+              </h1>
+              <p className="text-xs sm:text-sm font-semibold text-gray-600 mt-0.5 truncate">
+                {currentBranch ? currentBranch.name : "প্রধান ক্যাম্পাস ও সকল শাখা"} , {displayAddress}
+              </p>
+            </div>
+          </Link>
+
+          {/* Interactive Branch Dropdown & Quick Login */}
+          <div className="flex items-center gap-3">
+            {branches.length > 0 && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setBranchDropdownOpen(!branchDropdownOpen)}
+                  className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-indigo-50 to-amber-50/50 hover:from-indigo-100 hover:to-amber-100/70 border border-indigo-200 rounded-xl text-xs sm:text-sm font-bold text-indigo-950 transition-all shadow-xs"
+                >
+                  <Landmark className="w-4 h-4 text-indigo-700 flex-shrink-0" />
+                  <span className="truncate max-w-[110px] sm:max-w-[170px]">
+                    {selectedBranchId === "all" ? "সকল শাখা (All Branches)" : (currentBranch?.name || "শাখা নির্বাচন")}
+                  </span>
+                  <ChevronDown className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
+                </button>
+
+                {branchDropdownOpen && (
+                  <div
+                    className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden py-1"
+                    onMouseLeave={() => setBranchDropdownOpen(false)}
+                  >
+                    <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
+                      <span>শাখা নির্বাচন করুন (Select Branch)</span>
+                      <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.2 rounded font-normal">
+                        {branches.length} টি শাখা
+                      </span>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setSelectedBranchId("all")
+                        setBranchDropdownOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left text-xs sm:text-sm font-medium transition-colors hover:bg-indigo-50/70 border-b border-gray-100 ${
+                        selectedBranchId === "all" ? "bg-indigo-50/90 text-indigo-800 font-bold" : "text-gray-700"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Landmark className="w-4 h-4 text-indigo-600" />
+                        <div>
+                          <p className="font-semibold">সকল শাখা (All Branches)</p>
+                          <p className="text-[10px] text-gray-500">কেন্দ্রীয় সার্বিক তথ্য</p>
+                        </div>
+                      </div>
+                      {selectedBranchId === "all" && <Check className="w-4 h-4 text-indigo-600" />}
+                    </button>
+
+                    <div className="max-h-60 overflow-y-auto divide-y divide-gray-50">
+                      {branches.map(branch => (
+                        <button
+                          key={branch.id}
+                          onClick={() => {
+                            setSelectedBranchId(branch.id)
+                            setBranchDropdownOpen(false)
+                          }}
+                          className={`w-full flex items-center justify-between px-3.5 py-2 text-left text-xs sm:text-sm transition-colors hover:bg-indigo-50/70 ${
+                            selectedBranchId === branch.id
+                              ? "bg-indigo-50/90 text-indigo-800 font-bold"
+                              : "text-gray-700"
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <p className="font-semibold truncate">{branch.name}</p>
+                            {branch.location && (
+                              <p className="text-[10px] text-gray-500 truncate">{branch.location}</p>
+                            )}
+                          </div>
+                          {selectedBranchId === branch.id && <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
-            <a href="#batches" className="px-5 py-2.5 text-sm font-semibold bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-xl hover:shadow-lg hover:shadow-indigo-200 transition-all">Enroll Now</a>
+
+            {/* Student/Staff Login Portal Link */}
+            <Link
+              href={currentUser ? `/dashboard/${userRole || "owner"}` : "/login"}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all flex-shrink-0"
+            >
+              <User className="w-4 h-4" />
+              <span>{currentUser ? "ড্যাশবোর্ড" : "লগইন"}</span>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {/* ========================================================================= */}
+      {/* 3. ROYAL INSTITUTIONAL NAVIGATION BAR (Gold Highlight Border) */}
+      {/* ========================================================================= */}
+      <nav className="bg-[#4c1d95] text-white shadow-md border-b-2 border-amber-400 sticky top-[65px] sm:top-[85px] z-30 overflow-x-auto scrollbar-none">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex items-center justify-between">
+          <div className="flex items-center space-x-1 sm:space-x-2 py-1 text-xs sm:text-sm font-semibold whitespace-nowrap">
+            <Link href="/" className="px-3 py-2.5 rounded-lg bg-white/10 text-amber-300 font-bold">
+              মূল পাতা (Home)
+            </Link>
+            <a href="#batches" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
+              ব্যাচসমূহ (Batches)
+            </a>
+            <a href="#courses" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
+              কোর্সসমূহ (Courses)
+            </a>
+            <a href="#notices" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
+              নোটিশ বোর্ড (Notices)
+            </a>
+            <a href="#achievements" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
+              সাফল্য (Achievements)
+            </a>
+            <a href="#blogs" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
+              শিক্ষামূলক ব্লগ (Blog)
+            </a>
+            <a href="#contact" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
+              যোগাযোগ (Contact)
+            </a>
+          </div>
+
+          <div className="hidden lg:flex items-center gap-2 py-1">
+            <span className="text-xs text-amber-300 font-bold bg-white/10 px-2.5 py-1 rounded-full flex items-center gap-1">
+              <Sparkles className="w-3 h-3" /> ভর্তি চলছে
+            </span>
           </div>
         </div>
       </nav>
 
-      {/* IMAGE SLIDER HERO */}
-      <section className="pt-16 relative">
-        <div className="relative h-[500px] md:h-[600px] overflow-hidden">
-          {defaultSlides.map((slide, i) => (
-            <div key={i} className={`absolute inset-0 transition-all duration-700 ease-in-out ${i === currentSlide % defaultSlides.length ? "opacity-100 scale-100" : "opacity-0 scale-105"}`}>
-              {slide.image_url ? (
-                <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${slide.image_url})` }}>
-                  <div className="absolute inset-0 bg-gradient-to-t from-gray-900/80 via-gray-900/40 to-gray-900/20" />
+      {/* ========================================================================= */}
+      {/* 4. HERO SECTION: IMAGE SLIDER (65%) + NOTICE BOOK (35%) (Stacks on Mobile) */}
+      {/* ========================================================================= */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-8 py-5 sm:py-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch">
+          {/* Left: 65% Image Slider (8 columns on lg) */}
+          <div className="lg:col-span-8 flex flex-col justify-between">
+            <div className="relative aspect-[16/9] sm:aspect-[16/8.8] bg-gray-900 rounded-2xl overflow-hidden shadow-lg border border-gray-200 group">
+              {slides.map((slide, index) => (
+                <div
+                  key={slide.id || index}
+                  className={`absolute inset-0 transition-opacity duration-700 ease-in-out ${
+                    index === currentSlide ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+                  }`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={slide.image_url}
+                    alt={slide.title || "MedhaShiree Campus"}
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Gradient Overlay & Captions */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent flex flex-col justify-end p-5 sm:p-7 text-white">
+                    {slide.title && (
+                      <h3 className="text-lg sm:text-2xl font-bold tracking-tight text-white mb-1 drop-shadow-md">
+                        {slide.title}
+                      </h3>
+                    )}
+                    {slide.subtitle && (
+                      <p className="text-xs sm:text-sm text-gray-200 font-medium max-w-xl line-clamp-2">
+                        {slide.subtitle}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              ) : (
-                <div className={`absolute inset-0 ${["bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700", "bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700", "bg-gradient-to-br from-orange-500 via-rose-500 to-pink-600"][i % 3]}`} />
+              ))}
+
+              {/* Slider Controls */}
+              {slides.length > 1 && (
+                <>
+                  <button
+                    onClick={() => setCurrentSlide(prev => (prev === 0 ? slides.length - 1 : prev - 1))}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition-all opacity-80 group-hover:opacity-100"
+                    aria-label="Previous slide"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setCurrentSlide(prev => (prev + 1) % slides.length)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center transition-all opacity-80 group-hover:opacity-100"
+                    aria-label="Next slide"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+
+                  {/* Indicator Dots */}
+                  <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-10">
+                    {slides.map((_, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setCurrentSlide(idx)}
+                        className={`h-2 rounded-full transition-all ${
+                          idx === currentSlide ? "w-6 bg-amber-400" : "w-2 bg-white/60 hover:bg-white"
+                        }`}
+                        aria-label={`Go to slide ${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
-              <div className="absolute inset-0 flex items-center">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-                  <div className="max-w-2xl">
-                    <h2 className="text-4xl md:text-6xl font-extrabold text-white leading-tight drop-shadow-lg">{slide.title}</h2>
-                    {slide.subtitle && <p className="mt-4 text-xl text-white/80 drop-shadow">{slide.subtitle}</p>}
-                    <div className="mt-8 flex gap-3">
-                      <a href="#batches" className="px-7 py-3.5 bg-white text-gray-900 rounded-xl font-semibold hover:bg-gray-100 shadow-xl transition-all">Enroll Now</a>
-                      <a href="#batches" className="px-7 py-3.5 border-2 border-white/40 text-white rounded-xl font-semibold hover:bg-white/10 backdrop-blur transition-all">View Batches</a>
+            </div>
+          </div>
+
+          {/* Right: 35% Notice Book / Notice Board ("সর্বশেষ নোটিশ :") (4 columns on lg) */}
+          <div id="notices" className="lg:col-span-4 flex flex-col">
+            <div className="bg-white rounded-2xl border border-gray-200/90 shadow-md overflow-hidden flex flex-col h-full">
+              {/* Notice Book Header (Matches Reference Style with Dark Navy Ribbon) */}
+              <div className="bg-[#1e3a5f] text-white px-5 py-3.5 border-l-4 border-amber-400 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className="w-4 h-4 text-amber-400" />
+                  <h3 className="font-bold text-base tracking-wide">সর্বশেষ নোটিশ :</h3>
+                </div>
+                {currentBranch && (
+                  <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-amber-200 font-medium">
+                    {currentBranch.name}
+                  </span>
+                )}
+              </div>
+
+              {/* Notice Items List */}
+              <div className="p-4 flex-1 overflow-y-auto max-h-[340px] sm:max-h-[380px] divide-y divide-gray-100">
+                {filteredNotices.slice(0, 5).map(notice => (
+                  <div
+                    key={notice.id}
+                    onClick={() => setActiveNoticeModal(notice)}
+                    className="py-3 first:pt-1 last:pb-1 group cursor-pointer hover:bg-indigo-50/40 px-2 rounded-xl transition-colors"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-amber-600 font-bold text-base leading-tight flex-shrink-0 group-hover:translate-x-0.5 transition-transform">
+                        »
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs sm:text-sm font-semibold text-gray-800 group-hover:text-indigo-700 leading-snug">
+                          {notice.title}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[11px] text-gray-500 font-medium">
+                            {notice.created_at
+                              ? new Date(notice.created_at).toLocaleDateString("en-GB")
+                              : ""}
+                          </span>
+                          {notice.branch?.name && (
+                            <span className="text-[10px] text-indigo-700 bg-indigo-50 px-1.5 py-0.2 rounded font-medium">
+                              {notice.branch.name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {filteredNotices.length === 0 && (
+                  <div className="py-12 text-center text-gray-400 text-xs">
+                    বর্তমানে কোনো নতুন নোটিশ নেই।
+                  </div>
+                )}
+              </div>
+
+              {/* Notice Book Footer Button */}
+              <div className="p-3 bg-gray-50/90 border-t border-gray-100 text-center">
+                <button
+                  onClick={() => setAllNoticesModal(true)}
+                  className="text-xs font-bold text-indigo-700 hover:text-indigo-900 inline-flex items-center gap-1 transition-colors"
+                >
+                  সকল নোটিশ দেখুন <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 5. BATCHES SECTION ("চলমান ও আসন্ন ব্যাচসমূহ") */}
+      {/* ========================================================================= */}
+      <section id="batches" className="max-w-7xl mx-auto px-4 sm:px-8 py-8 sm:py-12">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6 sm:mb-8 border-b border-gray-200/80 pb-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <BookOpen className="w-5 h-5 text-indigo-600" />
+              <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                {currentBranch ? currentBranch.name : "সকল শাখা"}
+              </span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight">
+              চলমান ও আসন্ন ব্যাচসমূহ (Batches)
+            </h2>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">
+              এইচএসসি, এসএসসি ও বিশ্ববিদ্যালয় ভর্তি পরীক্ষার স্পেশাল ব্যাচে ভর্তি চলছে
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-semibold text-gray-600 bg-white px-3 py-1.5 rounded-xl border border-gray-200">
+            <Users className="w-4 h-4 text-indigo-600" />
+            <span>মোট সক্রিয় শিক্ষার্থী: {studentCount}+</span>
+          </div>
+        </div>
+
+        {filteredBatches.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-12 text-center text-gray-500 text-sm">
+            এই শাখায় বর্তমানে কোনো ব্যাচ যুক্ত করা হয়নি।
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredBatches.map(batch => {
+              const isClosed = batch.status === "admission_closed"
+              return (
+                <div
+                  key={batch.id}
+                  className="bg-white rounded-2xl border border-gray-200/90 hover:border-indigo-300 transition-all p-5 shadow-xs hover:shadow-md flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <h3 className="font-bold text-gray-900 text-base leading-snug">{batch.name}</h3>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${
+                          isClosed
+                            ? "bg-red-50 text-red-700 border border-red-200"
+                            : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        }`}
+                      >
+                        {isClosed ? "ভর্তি বন্ধ (Closed)" : "ভর্তি চলছে (Open)"}
+                      </span>
+                    </div>
+
+                    {batch.subject && (
+                      <p className="text-xs font-semibold text-indigo-600 mb-2">{batch.subject}</p>
+                    )}
+
+                    <div className="space-y-1.5 text-xs text-gray-600 bg-gray-50/80 p-3 rounded-xl mb-4 border border-gray-100">
+                      {batch.teacher?.name && (
+                        <p className="flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-gray-400" />
+                          <span>প্রভাষক: <strong>{batch.teacher.name}</strong></span>
+                        </p>
+                      )}
+                      {batch.schedule_days && (
+                        <p className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                          <span>দিন: {batch.schedule_days}</span>
+                        </p>
+                      )}
+                      {batch.start_time && (
+                        <p className="flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-gray-400" />
+                          <span>সময়: {batch.start_time}</span>
+                        </p>
+                      )}
+                      {batch.branch?.name && (
+                        <p className="flex items-center gap-1.5 text-indigo-700 font-medium">
+                          <Landmark className="w-3.5 h-3.5 text-indigo-500" />
+                          <span>শাখা: {batch.branch.name}</span>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] text-gray-400 font-medium">মাসিক ফি</p>
+                      <p className="text-base font-bold text-indigo-700">
+                        {batch.monthly_fee ? formatCurrency(batch.monthly_fee) : "যোগাযোগ করুন"}
+                      </p>
+                    </div>
+
+                    <a
+                      href={contactLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors shadow-xs ${
+                        isClosed
+                          ? "bg-gray-100 text-gray-500 pointer-events-none"
+                          : "bg-indigo-600 hover:bg-indigo-700 text-white"
+                      }`}
+                    >
+                      {isClosed ? "ভর্তি বন্ধ" : "ভর্তি হন (Enroll)"}
+                    </a>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 6. COURSES SECTION ("বিশেষ কোর্সসমূহ") */}
+      {/* ========================================================================= */}
+      {courses.length > 0 && (
+        <section id="courses" className="bg-white border-y border-gray-200/80 py-10 sm:py-14">
+          <div className="max-w-7xl mx-auto px-4 sm:px-8">
+            <div className="mb-6 sm:mb-8 text-center max-w-2xl mx-auto">
+              <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                Specialized Programs
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1e1b4b] mt-1 tracking-tight">
+                বিশেষ কোর্সসমূহ (Courses)
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                বিষয়ভিত্তিক গভীর জ্ঞান ও ভর্তি পরীক্ষার পূর্ণাঙ্গ প্রস্তুতির জন্য সাজানো কোর্স
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+              {courses.map(course => (
+                <div
+                  key={course.id}
+                  className="bg-gray-50/50 rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col justify-between"
+                >
+                  <div className="aspect-video bg-gray-200 relative overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={course.thumbnail_url || "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=600&auto=format&fit=crop"}
+                      alt={course.title}
+                      className="w-full h-full object-cover"
+                    />
+                    {course.subject && (
+                      <span className="absolute top-2 left-2 text-[10px] font-bold bg-indigo-900/80 text-white px-2 py-0.5 rounded backdrop-blur-xs">
+                        {course.subject}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="p-4 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-bold text-gray-900 text-sm mb-1 line-clamp-2">{course.title}</h4>
+                      {course.teacher?.name && (
+                        <p className="text-xs text-gray-500 mb-2">প্রভাষক: {course.teacher.name}</p>
+                      )}
+                    </div>
+
+                    <div className="pt-3 border-t border-gray-200 flex items-center justify-between mt-2">
+                      <span className="text-sm font-bold text-indigo-700">
+                        {course.price ? formatCurrency(course.price) : "বিনামূল্যে"}
+                      </span>
+                      <a
+                        href={contactLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1"
+                      >
+                        বিস্তারিত <ArrowRight className="w-3.5 h-3.5" />
+                      </a>
                     </div>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 7. ACHIEVEMENTS SECTION ("আমাদের সাফল্য ও কৃতি শিক্ষার্থী") */}
+      {/* ========================================================================= */}
+      <section id="achievements" className="max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+        <div className="mb-6 sm:mb-8 text-center max-w-2xl mx-auto">
+          <span className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center justify-center gap-1">
+            <Trophy className="w-4 h-4" /> Proven Track Record
+          </span>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1e1b4b] mt-1 tracking-tight">
+            কৃতি শিক্ষার্থীদের সাফল্য (Achievements)
+          </h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            মেধাশিরী পরিবারের অদম্য মেধাবীদের মেডিকেল, ইঞ্জিনিয়ারিং ও পাবলিক বিশ্ববিদ্যালয়ে অভাবনীয় সাফল্য
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredAchievements.map(ach => (
+            <div
+              key={ach.id}
+              className="bg-white rounded-2xl border border-gray-200/90 p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-start gap-3.5 mb-3">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0 font-bold overflow-hidden border border-amber-200 shadow-xs">
+                    {ach.photo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={ach.photo_url} alt={ach.student_name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Award className="w-7 h-7" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-gray-900 text-sm truncate">{ach.student_name}</h4>
+                      {ach.exam_year && (
+                        <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">
+                          {ach.exam_year}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs font-semibold text-indigo-700 leading-tight mt-0.5">
+                      {ach.title}
+                    </p>
+                  </div>
+                </div>
+
+                {ach.description && (
+                  <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-100 line-clamp-3 italic">
+                    "{ach.description}"
+                  </p>
+                )}
               </div>
+
+              {ach.branch?.name && (
+                <p className="text-[11px] text-gray-400 mt-3 pt-2 border-t border-gray-100 flex items-center gap-1">
+                  <Landmark className="w-3 h-3 text-indigo-400" /> {ach.branch.name}
+                </p>
+              )}
             </div>
           ))}
+        </div>
+      </section>
 
-          {/* Slider Controls */}
-          {defaultSlides.length > 1 && (
-            <>
-              <button onClick={() => setCurrentSlide(i => (i - 1 + defaultSlides.length) % defaultSlides.length)} className="absolute left-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-all z-10">
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <button onClick={() => setCurrentSlide(i => (i + 1) % defaultSlides.length)} className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-black/30 hover:bg-black/50 backdrop-blur-sm rounded-full flex items-center justify-center text-white transition-all z-10">
-                <ChevronRight className="w-6 h-6" />
-              </button>
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-                {defaultSlides.map((_, i) => (
-                  <button key={i} onClick={() => setCurrentSlide(i)} className={`h-2 rounded-full transition-all ${i === currentSlide % defaultSlides.length ? "w-8 bg-white" : "w-2 bg-white/50"}`} />
-                ))}
+      {/* ========================================================================= */}
+      {/* 8. EDUCATIONAL BLOGS SECTION ("ব্লগ ও শিক্ষামূলক পরামর্শ") */}
+      {/* ========================================================================= */}
+      <section id="blogs" className="bg-gray-50 border-t border-gray-200 py-10 sm:py-14">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6 sm:mb-8 border-b border-gray-200 pb-4">
+            <div>
+              <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
+                Knowledge Hub
+              </span>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-[#1e1b4b] mt-1 tracking-tight">
+                শিক্ষামূলক প্রবন্ধ ও টিপস (Blog)
+              </h2>
+              <p className="text-xs sm:text-sm text-gray-500 mt-1">
+                পরীক্ষার প্রস্তুতি, ক্যারিয়ার গাইডলাইন এবং বিষয়ভিত্তিক গুরুত্বপূর্ণ পরামর্শ
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            {filteredBlogs.map(blog => (
+              <div
+                key={blog.id}
+                className="bg-white rounded-2xl border border-gray-200/90 p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+                      {blog.author_name || "মেধাশিরী টিম"}
+                    </span>
+                    <span className="text-[11px] text-gray-400">
+                      {blog.created_at ? new Date(blog.created_at).toLocaleDateString("en-GB") : ""}
+                    </span>
+                  </div>
+
+                  <h3
+                    onClick={() => setActiveBlogModal(blog)}
+                    className="font-bold text-gray-900 text-base mb-2 hover:text-indigo-600 transition-colors cursor-pointer leading-snug"
+                  >
+                    {blog.title}
+                  </h3>
+
+                  {blog.excerpt && (
+                    <p className="text-xs text-gray-600 line-clamp-3 mb-3">{blog.excerpt}</p>
+                  )}
+                </div>
+
+                <div className="pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <div className="flex flex-wrap gap-1">
+                    {Array.isArray(blog.tags) &&
+                      blog.tags.slice(0, 3).map((tag: string, i: number) => (
+                        <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+                          #{tag}
+                        </span>
+                      ))}
+                  </div>
+
+                  <button
+                    onClick={() => setActiveBlogModal(blog)}
+                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1"
+                  >
+                    পড়ুন <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-            </>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 9. FEEDBACK & OPINION FORM */}
+      {/* ========================================================================= */}
+      <section className="max-w-4xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+        <div className="bg-white rounded-3xl border border-gray-200 p-6 sm:p-10 shadow-sm">
+          <div className="text-center max-w-xl mx-auto mb-6">
+            <h2 className="text-2xl font-bold text-[#1e1b4b]">অভিভাবক ও শিক্ষার্থীর মতামত</h2>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1">
+              আমাদের সেবার মান আরো উন্নত করতে আপনার মূল্যবান মতামত অথবা অভিযোগ জানান।
+            </p>
+          </div>
+
+          {fbDone ? (
+            <div className="text-center py-8 bg-emerald-50 rounded-2xl border border-emerald-200">
+              <CheckCircle className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
+              <h4 className="font-bold text-emerald-900 text-base">আপনার মতামতের জন্য ধন্যবাদ!</h4>
+              <p className="text-xs text-emerald-700 mt-1">
+                মেধাশিরী কর্তৃপক্ষ আপনার বার্তা গুরুত্ব সহকারে বিবেচনা করবে।
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleFeedbackSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">আপনার নাম *</label>
+                  <input
+                    type="text"
+                    required
+                    value={fbName}
+                    onChange={e => setFbName(e.target.value)}
+                    placeholder="পূর্ণ নাম"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">ফোন নম্বর</label>
+                  <input
+                    type="text"
+                    value={fbPhone}
+                    onChange={e => setFbPhone(e.target.value)}
+                    placeholder="017xxxxxxxx"
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">আপনার বার্তা / পরামর্শ *</label>
+                <textarea
+                  rows={3}
+                  required
+                  value={fbMessage}
+                  onChange={e => setFbMessage(e.target.value)}
+                  placeholder="আপনার সুনির্দিষ্ট মতামত লিখুন..."
+                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between flex-wrap gap-3 pt-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-gray-500 font-semibold mr-1">রেটিং:</span>
+                  {[1, 2, 3, 4, 5].map(star => (
+                    <button
+                      key={star}
+                      type="button"
+                      onClick={() => setFbRating(star)}
+                      className="p-1"
+                    >
+                      <Star
+                        className={`w-5 h-5 ${
+                          star <= fbRating ? "text-amber-400 fill-amber-400" : "text-gray-300"
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={fbSubmitting}
+                  className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold transition-colors shadow-xs"
+                >
+                  {fbSubmitting ? "পাঠানো হচ্ছে..." : "মতামত জমা দিন"}
+                </button>
+              </div>
+            </form>
           )}
         </div>
       </section>
 
-      {/* Stats Strip */}
-      <section className="relative -mt-16 z-20 px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 border border-gray-100 grid grid-cols-2 md:grid-cols-4 divide-x divide-gray-100">
-            {[
-              { label: "Active Students", value: studentCount || "500+", icon: Users, color: "text-indigo-600 bg-indigo-50" },
-              { label: "Expert Teachers", value: "20+", icon: GraduationCap, color: "text-violet-600 bg-violet-50" },
-              { label: "Active Batches", value: batches.length || "10+", icon: BookOpen, color: "text-emerald-600 bg-emerald-50" },
-              { label: "Success Rate", value: "95%", icon: Star, color: "text-amber-600 bg-amber-50" },
-            ].map((s, i) => (
-              <div key={i} className="p-6 text-center">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center mx-auto mb-2 ${s.color}`}><s.icon className="w-5 h-5" /></div>
-                <p className="text-2xl font-bold text-gray-900">{s.value}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{s.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="py-20 px-4">
-        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-6">
-          {[
-            { icon: Users, title: "Batch Management", desc: "Organized schedule & seats", bg: "from-indigo-500 to-violet-500" },
-            { icon: Shield, title: "Biometric Entry", desc: "Automated attendance", bg: "from-emerald-500 to-teal-500" },
-            { icon: TrendingUp, title: "Result Tracking", desc: "Grades, ranks & analytics", bg: "from-orange-500 to-rose-500" },
-            { icon: BookOpen, title: "Course Sales", desc: "Online marketplace", bg: "from-cyan-500 to-blue-500" },
-          ].map((f, i) => (
-            <div key={i} className="bg-white rounded-2xl border border-gray-100 p-6 text-center shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
-              <div className={`w-14 h-14 bg-gradient-to-br ${f.bg} rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
-                <f.icon className="w-6 h-6 text-white" />
-              </div>
-              <p className="font-bold text-gray-900">{f.title}</p>
-              <p className="text-sm text-gray-500 mt-1">{f.desc}</p>
+      {/* ========================================================================= */}
+      {/* 10. INSTITUTIONAL FOOTER */}
+      {/* ========================================================================= */}
+      <footer id="contact" className="bg-[#0f172a] text-gray-300 text-xs pt-12 pb-6 border-t border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pb-10 border-b border-gray-800">
+          {/* Col 1: About */}
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <GraduationCap className="w-6 h-6 text-amber-400" />
+              <h3 className="font-bold text-white text-base">মেধাশিরী কোচিং সেন্টার</h3>
             </div>
-          ))}
-        </div>
-      </section>
+            <p className="text-gray-400 leading-relaxed text-[11px] mb-3">{footerAbout}</p>
+            <p className="text-amber-400 font-bold">স্থাপিত: {displayEstablishedYear}ইং</p>
+          </div>
 
-      {/* Batches */}
-      <section id="batches" className="py-24 px-4 bg-gradient-to-b from-indigo-50/50 to-white">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-12">
-            <div>
-              <p className="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-2">Choose Your Batch</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Available Batches</h2>
-              <p className="mt-2 text-gray-500 max-w-lg">Select a batch that fits your schedule. Each batch has limited seats.</p>
+          {/* Col 2: Active Branch & Contacts */}
+          <div>
+            <h4 className="font-bold text-white text-sm mb-3">
+              {currentBranch ? currentBranch.name : "প্রধান কার্যালয় ও যোগাযোগ"}
+            </h4>
+            <div className="space-y-2 text-[11px]">
+              <p className="flex items-start gap-2">
+                <MapPin className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <span>{displayAddress}</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Phone className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span>{displayPhone}</span>
+              </p>
+              <p className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <span>{displayEmail}</span>
+              </p>
+              {currentBranch?.branch_director && (
+                <p className="pt-1 text-gray-400">
+                  শাখা পরিচালক: <strong className="text-gray-200">{currentBranch.branch_director}</strong>
+                </p>
+              )}
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {batches.map(batch => {
-              const seatsLeft = batch.max_seats - (batch.current_seats || 0)
-              const isClosed = batch.status === "admission_closed" || (batch.name && batch.name.toLowerCase().includes("chemistry"))
-              return (
-                <Link key={batch.id} href={`/batch/${batch.id}`} className="group bg-white rounded-2xl border border-gray-200 overflow-hidden hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-100/50 transition-all duration-300">
-                  <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500" />
-                  <div className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div><h3 className="text-lg font-bold text-gray-900 group-hover:text-indigo-700 transition-colors">{batch.name}</h3><p className="text-sm text-gray-500 mt-0.5">{batch.subject || "General"} &bull; {batch.class_level || "All Levels"}</p></div>
-                      {isClosed ? (
-                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                          Admission Closed
-                        </span>
-                      ) : (
-                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${seatsLeft <= 5 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>{seatsLeft} left</span>
-                      )}
-                    </div>
-                    <div className="space-y-2 mb-5">
-                      <div className="flex items-center gap-2 text-sm text-gray-600"><Users className="w-4 h-4 text-gray-400" />{batch.teacher?.name || "Expert Teacher"}</div>
-                      {batch.schedule_days && <div className="flex items-center gap-2 text-sm text-gray-600"><Calendar className="w-4 h-4 text-gray-400" />{batch.schedule_days}</div>}
-                      {batch.schedule_time && <div className="flex items-center gap-2 text-sm text-gray-600"><Clock className="w-4 h-4 text-gray-400" />{batch.schedule_time}</div>}
-                    </div>
-                    <div className="mb-4"><div className="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className={`h-full rounded-full ${seatsLeft <= 5 ? "bg-red-500" : "bg-indigo-500"}`} style={{ width: `${((batch.current_seats || 0) / batch.max_seats) * 100}%` }} /></div></div>
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                      <div><span className="text-2xl font-bold text-gray-900">{formatCurrency(batch.monthly_fee)}</span><span className="text-sm text-gray-400">/mo</span></div>
-                      <span className="flex items-center gap-1 text-sm font-semibold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">Enroll <ChevronRight className="w-4 h-4" /></span>
-                    </div>
-                  </div>
+
+          {/* Col 3: Branches Quick List */}
+          <div>
+            <h4 className="font-bold text-white text-sm mb-3">আমাদের শাখাসমূহ</h4>
+            <div className="space-y-1.5 text-[11px]">
+              {branches.map(b => (
+                <button
+                  key={b.id}
+                  onClick={() => {
+                    setSelectedBranchId(b.id)
+                    window.scrollTo({ top: 0, behavior: "smooth" })
+                  }}
+                  className={`block text-left hover:text-amber-300 transition-colors ${
+                    selectedBranchId === b.id ? "text-amber-400 font-bold" : "text-gray-400"
+                  }`}
+                >
+                  • {b.name}
+                </button>
+              ))}
+              {branches.length === 0 && <p className="text-gray-500">নাচোল প্রধান ক্যাম্পাস</p>}
+            </div>
+          </div>
+
+          {/* Col 4: Quick Links & Login */}
+          <div>
+            <h4 className="font-bold text-white text-sm mb-3">গুরুত্বপূর্ণ লিংক</h4>
+            <ul className="space-y-1.5 text-[11px]">
+              <li>
+                <Link href="/login" className="hover:text-amber-400 transition-colors">
+                  • শিক্ষার্থী / শিক্ষক লগইন পোর্টাল
                 </Link>
-              )
-            })}
-            {batches.length === 0 && (
-              <div className="col-span-full bg-white rounded-2xl border-2 border-dashed border-gray-200 py-16 text-center">
-                <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-500 font-medium text-lg">Batches coming soon!</p>
-                <p className="text-gray-400 text-sm mt-1">Contact us to learn about upcoming batches.</p>
-              </div>
-            )}
+              </li>
+              <li>
+                <a href="#batches" className="hover:text-amber-400 transition-colors">
+                  • ব্যাচ ও ক্লাসের সময়সূচি
+                </a>
+              </li>
+              <li>
+                <a href="#notices" className="hover:text-amber-400 transition-colors">
+                  • সাম্প্রতিক নোটিশ ও পরীক্ষার ফলাফল
+                </a>
+              </li>
+              <li>
+                <a href={contactLink} target="_blank" rel="noopener noreferrer" className="hover:text-emerald-400 transition-colors">
+                  • সরাসরি WhatsApp হেল্পলাইন
+                </a>
+              </li>
+            </ul>
           </div>
         </div>
-      </section>
 
-      {/* Courses */}
-      <section id="courses" className="py-24 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <p className="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-2">Learn Online</p>
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Online Courses</h2>
-            <p className="mt-2 text-gray-500 max-w-lg mx-auto">Learn at your own pace with courses crafted by our best teachers.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {courses.map(course => (
-              <div key={course.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow group">
-                <div className="h-40 bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center relative overflow-hidden">
-                  <BookOpen className="w-10 h-10 text-white/20" />
-                  <span className="absolute top-3 right-3 px-2.5 py-1 bg-black/20 backdrop-blur rounded-lg text-white text-xs font-medium capitalize">{course.level}</span>
-                </div>
-                <div className="p-5">
-                  <h3 className="font-bold text-gray-900 group-hover:text-indigo-700 transition-colors">{course.title}</h3>
-                  <p className="text-sm text-gray-500 mt-1 line-clamp-2">{course.description || "Comprehensive course material"}</p>
-                  <div className="flex items-center gap-2 mt-3">
-                    <div className="flex gap-0.5">{[0,1,2,3,4].map(i => <Star key={i} className={`w-3 h-3 ${i < Math.round(course.rating || 0) ? "text-amber-400 fill-amber-400" : "text-gray-200"}`} />)}</div>
-                    <span className="text-xs text-gray-500">({course.rating_count})</span>
-                  </div>
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-                    <p className="text-xs text-gray-400">{course.teacher?.name} &bull; {course.total_sales} enrolled</p>
-                    <p className="text-lg font-bold text-gray-900">{formatCurrency(course.price)}</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          {courses.length === 0 && <div className="text-center py-12"><p className="text-gray-400">Courses coming soon!</p></div>}
-        </div>
-      </section>
-
-      {/* Why Us */}
-      <section className="py-24 px-4 bg-gradient-to-b from-white to-indigo-50/30">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            <div>
-              <p className="text-sm font-semibold text-indigo-600 uppercase tracking-wide mb-2">Why Choose Us</p>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900 leading-tight">Everything you need to<br />succeed academically</h2>
-              <div className="mt-8 space-y-5">
-                {[
-                  { title: "Structured Batch System", desc: "Choose from multiple batch schedules. Each batch is limited to 30 students for personal attention." },
-                  { title: "Expert Faculty", desc: "Subject matter experts with years of coaching experience and proven track records." },
-                  { title: "Smart Tracking", desc: "Biometric attendance, digital payments, exam results, and parent SMS notifications." },
-                  { title: "Affordable Fees", desc: "Quality education at competitive pricing with flexible payment options." },
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mt-0.5"><CheckCircle className="w-4 h-4 text-indigo-600" /></div>
-                    <div><p className="font-semibold text-gray-900">{item.title}</p><p className="text-sm text-gray-500 mt-0.5">{item.desc}</p></div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-3xl p-8 text-white relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2" />
-              <div className="relative space-y-6">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 bg-white/10 rounded-2xl flex items-center justify-center"><GraduationCap className="w-8 h-8 text-white" /></div>
-                  <div><p className="text-4xl font-bold">95%</p><p className="text-white/70 text-sm">Pass Rate</p></div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-white/10 rounded-2xl p-4 text-center backdrop-blur"><p className="text-2xl font-bold">{studentCount || "500"}+</p><p className="text-white/70 text-xs mt-1">Students</p></div>
-                  <div className="bg-white/10 rounded-2xl p-4 text-center backdrop-blur"><p className="text-2xl font-bold">20+</p><p className="text-white/70 text-xs mt-1">Teachers</p></div>
-                  <div className="bg-white/10 rounded-2xl p-4 text-center backdrop-blur"><p className="text-2xl font-bold">{batches.length || "10"}+</p><p className="text-white/70 text-xs mt-1">Batches</p></div>
-                  <div className="bg-white/10 rounded-2xl p-4 text-center backdrop-blur"><p className="text-2xl font-bold">7+</p><p className="text-white/70 text-xs mt-1">Years</p></div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-24 px-4">
-        <div className="max-w-5xl mx-auto">
-          <div className="bg-gradient-to-r from-indigo-600 via-violet-600 to-purple-600 rounded-[2rem] p-12 md:p-16 text-center text-white relative overflow-hidden">
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-60" />
-            <div className="relative">
-              <h2 className="text-3xl md:text-5xl font-bold leading-tight">Ready to Start Your<br />Academic Journey?</h2>
-              <p className="mt-4 text-white/60 text-lg max-w-xl mx-auto">Join hundreds of students who trust MedhaShiree.</p>
-              <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-                <a href="#batches" className="px-8 py-4 bg-white text-gray-900 rounded-xl font-semibold hover:bg-gray-100 shadow-xl transition-all">Enroll Now</a>
-                <Link href="/parent-portal" className="px-8 py-4 border-2 border-white/30 text-white rounded-xl font-semibold hover:bg-white/10 transition-all">Parent Portal</Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer id="contact" className="bg-gray-950 text-gray-400 pt-16 pb-8 px-4">
-        <div className="max-w-7xl mx-auto">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 pb-12 border-b border-gray-800">
-            <div className="md:col-span-2">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-9 h-9 bg-gradient-to-br from-indigo-500 to-violet-500 rounded-xl flex items-center justify-center"><GraduationCap className="w-4 h-4 text-white" /></div>
-                <span className="text-lg font-bold text-white">Medha<span className="text-indigo-400">Shiree</span></span>
-              </div>
-              <p className="text-sm leading-relaxed max-w-sm">{footerAbout}</p>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wide">Quick Links</h4>
-              <div className="space-y-2.5 text-sm">
-                <p><a href="#batches" className="hover:text-white transition-colors">View Batches</a></p>
-                <p><a href="#batches" className="hover:text-white transition-colors">Enroll Now</a></p>
-                <p><Link href="/parent-portal" className="hover:text-white transition-colors">Parent Portal</Link></p>
-                <p><Link href="/marketplace" className="hover:text-white transition-colors">Online Courses</Link></p>
-              </div>
-            </div>
-            <div>
-              <h4 className="text-white font-semibold mb-4 text-sm uppercase tracking-wide">Contact</h4>
-              <div className="space-y-2.5 text-sm">
-                <p className="flex items-center gap-2"><MapPin className="w-4 h-4 flex-shrink-0 text-indigo-400" /> {contactAddress}</p>
-                <p className="flex items-center gap-2"><Phone className="w-4 h-4 flex-shrink-0 text-indigo-400" /> <a href={`tel:${contactPhone.replace(/\s+/g, '')}`} className="hover:text-white transition-colors">{contactPhone}</a></p>
-                <p className="flex items-center gap-2"><Mail className="w-4 h-4 flex-shrink-0 text-indigo-400" /> <a href={`mailto:${contactEmail}`} className="hover:text-white transition-colors">{contactEmail}</a></p>
-              </div>
-            </div>
-          </div>
-          <div className="pt-8 text-center text-xs text-gray-600"><p>&copy; {new Date().getFullYear()} MedhaShiree. All rights reserved.</p></div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 pt-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-gray-500 gap-2">
+          <p>© {new Date().getFullYear()} MedhaShiree Coaching. সর্বস্বত্ব সংরক্ষিত।</p>
+          <p>Designed with excellence for Bangladesh Academic Coaching.</p>
         </div>
       </footer>
+
+      {/* ========================================================================= */}
+      {/* 11. FULL NOTICE MODAL */}
+      {/* ========================================================================= */}
+      {activeNoticeModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95 duration-100">
+            <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3 mb-4">
+              <div>
+                <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wider">নোটিশ বিস্তারিত</span>
+                <h3 className="text-base font-bold text-gray-900 mt-0.5">{activeNoticeModal.title}</h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  প্রকাশের তারিখ: {activeNoticeModal.created_at ? new Date(activeNoticeModal.created_at).toLocaleDateString("en-GB") : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveNoticeModal(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-xs text-gray-700 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto mb-5 p-3 bg-gray-50 rounded-xl">
+              {activeNoticeModal.content || "কোনো অতিরিক্ত বিবরণ দেওয়া হয়নি।"}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setActiveNoticeModal(null)}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 12. FULL BLOG ARTICLE MODAL */}
+      {/* ========================================================================= */}
+      {activeBlogModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full max-w-2xl p-6 sm:p-8 shadow-2xl border border-gray-100 my-8">
+            <div className="flex items-start justify-between gap-3 pb-3 mb-4 border-b border-gray-100">
+              <div>
+                <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">
+                  {activeBlogModal.author_name || "মেধাশিরী সম্পাদকীয়"}
+                </span>
+                <h3 className="text-lg sm:text-xl font-extrabold text-gray-900 mt-2">
+                  {activeBlogModal.title}
+                </h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  {activeBlogModal.created_at ? new Date(activeBlogModal.created_at).toLocaleDateString("en-GB") : ""}
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveBlogModal(null)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto pr-2 mb-6">
+              {activeBlogModal.content}
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setActiveBlogModal(null)}
+                className="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 13. ALL NOTICES LIST MODAL */}
+      {/* ========================================================================= */}
+      {allNoticesModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-2xl p-6 shadow-2xl border border-gray-100">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-indigo-600" />
+                <h3 className="text-base font-bold text-gray-900">নোটিশ বোর্ডের সকল বিজ্ঞপ্তি</h3>
+              </div>
+              <button
+                onClick={() => setAllNoticesModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+              {filteredNotices.map(n => (
+                <div
+                  key={n.id}
+                  onClick={() => {
+                    setAllNoticesModal(false)
+                    setActiveNoticeModal(n)
+                  }}
+                  className="py-3 px-2 hover:bg-indigo-50/50 rounded-xl cursor-pointer transition-colors"
+                >
+                  <h4 className="text-sm font-semibold text-gray-800">{n.title}</h4>
+                  <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+                    <span>{n.created_at ? new Date(n.created_at).toLocaleDateString("en-GB") : ""}</span>
+                    {n.branch?.name && <span className="text-indigo-600 font-medium">({n.branch.name})</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

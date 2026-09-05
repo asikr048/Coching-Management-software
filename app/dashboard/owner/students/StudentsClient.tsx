@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/client"
 import { formatDate, formatCurrency } from "@/lib/utils"
 import { toast } from "sonner"
 import type { Student } from "@/lib/supabase/types"
+import { useBranch } from "@/components/providers/BranchContext"
 
 interface Batch { id: string; name: string }
 interface DueData { student_id: string; due_amount: number; paid_amount: number; due_date: string; status: string }
@@ -197,6 +198,8 @@ export default function StudentsClient({
     })
   }, [localStudents, dueData, examData])
 
+  const { selectedBranchId } = useBranch()
+
   const filteredAndSorted = useMemo(() => {
     let result = enrichedStudents.filter(s => {
       const matchQ = !query || 
@@ -205,8 +208,9 @@ export default function StudentsClient({
         s.phone?.toLowerCase().includes(query.toLowerCase())
       
       const matchB = !batchFilter || (s.enrollments?.some(e => e.batch_id === batchFilter))
+      const matchBranch = selectedBranchId === "all" || !s.branch_id || s.branch_id === selectedBranchId
       
-      return matchQ && matchB
+      return matchQ && matchB && matchBranch
     })
 
     switch (sortOption) {
@@ -224,7 +228,7 @@ export default function StudentsClient({
     }
 
     return result
-  }, [enrichedStudents, query, batchFilter, sortOption])
+  }, [enrichedStudents, query, batchFilter, sortOption, selectedBranchId])
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {

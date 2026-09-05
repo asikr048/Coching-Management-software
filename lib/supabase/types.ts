@@ -1,15 +1,50 @@
 export type Role = "owner" | "super_manager" | "manager" | "receptionist" | "teacher" | "accountant" | "course_teacher"
 
 export interface Branch {
-  id: string; name: string; address?: string; phone?: string; email?: string
-  is_active: boolean; created_at: string
+  id: string
+  name: string
+  address?: string | null
+  location?: string | null
+  description?: string | null
+  phone?: string | null
+  email?: string | null
+  branch_director?: string | null
+  director_phone?: string | null
+  manager?: string | null
+  manager_phone?: string | null
+  whatsapp?: string | null
+  established_year?: string | null
+  contact_info?: Record<string, any> | null
+  sms_gateway_config?: {
+    apiKey?: string
+    senderId?: string
+    callType?: "GET" | "POST_FORM" | "POST_JSON"
+    urlTemplate?: string
+    api_key?: string
+    sender_id?: string
+    api_url?: string
+  } | null
+  is_active: boolean
+  created_at?: string
 }
 
 export interface Staff {
-  id: string; auth_user_id?: string; branch_id?: string; name: string
-  email: string; phone?: string; role: Role; salary: number
-  commission_rate: number; subject?: string; is_active: boolean
-  joined_at: string; created_at: string
+  id: string
+  auth_user_id?: string | null
+  branch_id?: string | null
+  branch_ids?: string[] | null
+  name: string
+  email: string
+  phone?: string | null
+  role: Role
+  salary: number
+  commission_rate?: number
+  subject?: string | null
+  has_financial_access?: boolean
+  has_super_financial_access?: boolean
+  is_active: boolean
+  joined_at?: string
+  created_at?: string
 }
 
 export interface Student {
@@ -88,4 +123,49 @@ export interface Referral {
   id: string; referrer_id: string; referee_id: string; commission_amount: number
   commission_rate: number; status: "pending" | "approved" | "paid"
   referrer?: Student; referee?: Student; created_at: string
+}
+
+export interface Blog {
+  id: string
+  branch_id?: string | null
+  title: string
+  slug: string
+  summary?: string
+  content: string
+  cover_image_url?: string
+  author_name?: string
+  category?: string
+  is_published: boolean
+  published_at?: string
+  created_at: string
+  updated_at?: string
+  branch?: Branch
+}
+
+export interface Achievement {
+  id: string
+  branch_id?: string | null
+  title: string
+  subtitle?: string
+  year?: string
+  category?: string
+  student_name?: string
+  result_details?: string
+  image_url?: string
+  sort_order: number
+  is_active: boolean
+  created_at: string
+  branch?: Branch
+}
+
+export interface Notice {
+  id: string
+  branch_id?: string | null
+  title: string
+  content: string
+  priority: "low" | "normal" | "high" | "urgent"
+  notice_date?: string
+  is_active: boolean
+  created_at: string
+  branch?: Branch
 }

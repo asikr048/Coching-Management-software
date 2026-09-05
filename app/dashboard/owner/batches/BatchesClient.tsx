@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import Link from "next/link"
+import { useBranch } from "@/components/providers/BranchContext"
 
 interface Teacher { id: string; name: string; subject?: string }
 interface Room { id: string; name: string; capacity: number }
@@ -197,7 +198,12 @@ export default function BatchesClient({
     { key: "finished", label: "Finished" }
   ]
 
+  const { selectedBranchId } = useBranch()
+
   const filteredBatches = batches.filter(b => {
+    if (selectedBranchId !== "all" && (b as any).branch_id && (b as any).branch_id !== selectedBranchId) {
+      return false
+    }
     if (filterStatus === "All") return true
     const current = b.status || "ongoing"
     return current === filterStatus

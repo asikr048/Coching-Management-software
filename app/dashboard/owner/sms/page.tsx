@@ -38,6 +38,7 @@ import {
   Award,
 } from "lucide-react"
 import { getGrade, cn } from "@/lib/utils"
+import { useBranch } from "@/components/providers/BranchContext"
 
 interface ExamItem {
   id: string
@@ -131,6 +132,7 @@ interface CsvRecipient {
 
 export default function SmsPage() {
   const supabase = useMemo(() => createClient(), [])
+  const { selectedBranchId, branches, currentBranch } = useBranch()
 
   // Navigation Tabs: "compose" | "gateway" | "logs"
   const [activeTab, setActiveTab] = useState<"compose" | "gateway" | "logs">("compose")
@@ -1170,6 +1172,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           body: JSON.stringify({
             recipients: payloadRecipients,
             configOverride: gatewayConfig,
+            branchId: selectedBranchId !== "all" ? selectedBranchId : undefined,
           }),
         })
 

@@ -8,12 +8,13 @@ import {
   BarChart3, UserCheck, MessageSquare, Settings, ChevronLeft,
   ChevronRight, Package, Trophy, Fingerprint, ShoppingBag,
   DollarSign, GitMerge, Home, FileText, ImageIcon, Shield, ClipboardList,
-  X, Globe
+  X, Globe, Landmark
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
 
 const ownerNav = [
   { href: "/dashboard/owner", icon: LayoutDashboard, label: "Dashboard", exact: true },
+  { href: "/dashboard/owner/branches", icon: Landmark, label: "Branches" },
   { href: "/dashboard/owner/students", icon: Users, label: "Students" },
   { href: "/dashboard/owner/batches", icon: BookOpen, label: "Batches" },
   { href: "/dashboard/owner/payments", icon: CreditCard, label: "Payments" },
