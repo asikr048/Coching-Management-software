@@ -1,11 +1,12 @@
 "use client"
-import { useState, useEffect } from "react"
+import { useState, useEffect, Fragment } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatCurrency, formatDate, getMonthLabel } from "@/lib/utils"
 import {
   AlertCircle, Search, Filter, Calendar, DollarSign, CheckCircle,
-  X, Loader2, MessageSquare, Download, Clock, ArrowUpDown, ShieldAlert
+  X, Loader2, MessageSquare, Download, Clock, ArrowUpDown, ShieldAlert,
+  ChevronDown, ChevronUp, CreditCard, Check, Receipt
 } from "lucide-react"
 import { checkFinancialAccess } from "@/lib/financial-access"
 
@@ -29,7 +30,20 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
     checkFinancialAccess().then(({ hasAccess }) => setHasFinancialAccess(hasAccess))
   }, [])
 
-  // Modals
+  // Modals & Expandable Pay State
+  const [expandedDueId, setExpandedDueId] = useState<string | null>(null)
+  const [payForm, setPayForm] = useState({
+    amount: "",
+    discount: "0",
+    payment_method: "cash",
+    payment_date: new Date().toISOString().split("T")[0],
+    next_due_date: "",
+    referral_name: "",
+    referral_reason: "",
+    notes: "",
+  })
+  const [submittingPayment, setSubmittingPayment] = useState(false)
+
   const [extendModal, setExtendModal] = useState<Due | null>(null)
   const [reduceModal, setReduceModal] = useState<Due | null>(null)
   const [smsModal, setSmsModal] = useState<Due | null>(null)
@@ -80,11 +94,157 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
     setReduceModal(null); setReduceAmount(""); setActionLoading(false)
   }
 
-  async function markPaid(due: Due) {
-    const { error } = await supabase.from("fee_dues").update({ status: "waived", paid_amount: due.due_amount }).eq("id", due.id)
-    if (error) { toast.error("Failed"); return }
-    setDues(prev => prev.filter(d => d.id !== due.id))
-    toast.success(`${due.student?.name}'s due marked as paid/waived`)
+  function togglePayExpand(d: Due) {
+    if (expandedDueId === d.id) {
+      setExpandedDueId(null)
+      return
+    }
+    const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
+    const defaultNextDate = d.due_date ? d.due_date.split("T")[0] : (() => {
+      const nextM = new Date()
+      nextM.setMonth(nextM.getMonth() + 1)
+      nextM.setDate(10)
+      return nextM.toISOString().split("T")[0]
+    })()
+
+    setPayForm({
+      amount: String(outstanding),
+      discount: "0",
+      payment_method: "cash",
+      payment_date: new Date().toISOString().split("T")[0],
+      next_due_date: defaultNextDate,
+      referral_name: "",
+      referral_reason: "",
+      notes: "",
+    })
+    setExpandedDueId(d.id)
+  }
+
+  async function handleRecordPayment(due: Due) {
+    if (!hasFinancialAccess) {
+      toast.error("Financial access required")
+      return
+    }
+    const payAmt = parseFloat(payForm.amount)
+    if (isNaN(payAmt) || payAmt <= 0) {
+      toast.error("Please enter a valid payment amount")
+      return
+    }
+    const discAmt = parseFloat(payForm.discount || "0")
+    if (isNaN(discAmt) || discAmt < 0) {
+      toast.error("Please enter a valid discount amount")
+      return
+    }
+
+    if (payForm.payment_method === "referral") {
+      if (!payForm.referral_name.trim()) {
+        toast.error("Please enter the Referral Student Name or ID")
+        return
+      }
+      if (!payForm.referral_reason.trim()) {
+        toast.error("Please enter the reason for the referral payment")
+        return
+      }
+    }
+
+    setSubmittingPayment(true)
+    try {
+      const now = new Date()
+      const receiptNo = `RCP-${now.getFullYear()}-${Date.now().toString().slice(-6)}`
+      const totalCredited = payAmt + discAmt
+
+      let paymentNotes: string | null = payForm.notes.trim() || null
+      if (payForm.payment_method === "referral") {
+        const refNotes = `Referral: ${payForm.referral_name.trim()} | Reason: ${payForm.referral_reason.trim()}`
+        paymentNotes = paymentNotes ? `${refNotes} | ${paymentNotes}` : refNotes
+      }
+
+      // 1. Insert into payments table
+      const { error: pError } = await supabase.from("payments").insert({
+        student_id: due.student_id,
+        batch_id: due.batch_id || null,
+        amount: payAmt + discAmt,
+        discount: discAmt,
+        total_paid: payAmt,
+        payment_method: payForm.payment_method,
+        payment_for: "monthly",
+        payment_month: due.due_month,
+        receipt_number: receiptNo,
+        notes: paymentNotes,
+        created_at: payForm.payment_date ? `${payForm.payment_date}T12:00:00Z` : undefined,
+      })
+
+      if (pError) throw pError
+
+      // 2. Update fee_dues
+      const currentPaid = Number(due.paid_amount) || 0
+      const newPaidTotal = currentPaid + totalCredited
+      const remainingDue = Math.max(0, due.due_amount - newPaidTotal)
+      const isFullyPaid = remainingDue <= 0
+
+      if (isFullyPaid) {
+        const { error: dError } = await supabase
+          .from("fee_dues")
+          .update({
+            paid_amount: due.due_amount,
+            status: "paid",
+          })
+          .eq("id", due.id)
+
+        if (dError) throw dError
+
+        setDues(prev => prev.filter(item => item.id !== due.id))
+        toast.success(`✓ Full payment of ${formatCurrency(payAmt)} recorded for ${due.student?.name}! Due cleared. Receipt #${receiptNo}`)
+      } else {
+        const nextDate = payForm.next_due_date || due.due_date
+        const { error: dError } = await supabase
+          .from("fee_dues")
+          .update({
+            paid_amount: newPaidTotal,
+            status: "partial",
+            due_date: nextDate,
+          })
+          .eq("id", due.id)
+
+        if (dError) throw dError
+
+        setDues(prev => prev.map(item => item.id === due.id ? {
+          ...item,
+          paid_amount: newPaidTotal,
+          status: "partial",
+          due_date: nextDate,
+        } : item))
+
+        toast.success(`✓ Partial payment of ${formatCurrency(payAmt)} recorded! Remaining due of ${formatCurrency(remainingDue)} listed as partial due. Receipt #${receiptNo}`)
+      }
+
+      setExpandedDueId(null)
+    } catch (err: any) {
+      console.error("Payment recording failed:", err)
+      toast.error(err.message || "Failed to record payment")
+    } finally {
+      setSubmittingPayment(false)
+    }
+  }
+
+  async function waiveEntireDue(due: Due) {
+    if (!hasFinancialAccess) {
+      toast.error("Financial access required")
+      return
+    }
+    if (!confirm(`Are you sure you want to completely waive the remaining balance for ${due.student?.name}?`)) return
+    setActionLoading(true)
+    try {
+      const { error } = await supabase.from("fee_dues").update({ status: "waived", paid_amount: due.due_amount }).eq("id", due.id)
+      if (error) throw error
+      setDues(prev => prev.filter(d => d.id !== due.id))
+      setExpandedDueId(null)
+      toast.success(`${due.student?.name}'s remaining due marked as waived`)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to waive due")
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   function downloadCSV() {
@@ -164,45 +324,288 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
               ) : filtered.map(d => {
                 const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
                 const overdue = new Date(d.due_date) < new Date()
+                const isExpanded = expandedDueId === d.id
                 return (
-                  <tr key={d.id} className={`hover:bg-gray-50 ${overdue ? "bg-red-50/50" : ""}`}>
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-gray-800">{d.student?.name}</p>
-                      <p className="text-xs text-gray-400 font-mono">{d.student?.student_id}</p>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{d.batch?.name}</td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{getMonthLabel(d.due_month)}</td>
-                    <td className="px-4 py-3 text-sm">{formatCurrency(d.due_amount)}</td>
-                    <td className="px-4 py-3 text-sm text-emerald-600">{formatCurrency(d.paid_amount || 0)}</td>
-                    <td className="px-4 py-3 text-sm font-bold text-red-600">{formatCurrency(outstanding)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
-                      {formatDate(d.due_date)}
-                      {overdue && <AlertCircle className="w-3 h-3 text-red-500 inline ml-1" />}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        d.status === "partial" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"
-                      }`}>{d.status}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        {hasFinancialAccess ? (
-                          <>
-                            <button onClick={() => { setExtendModal(d); setNewDate(d.due_date) }} title="Extend due date"
-                              className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors"><Calendar className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => setReduceModal(d)} title="Reduce due"
-                              className="p-1.5 hover:bg-orange-50 rounded-lg text-orange-600 transition-colors"><DollarSign className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => markPaid(d)} title="Mark as paid/waived"
-                              className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors"><CheckCircle className="w-3.5 h-3.5" /></button>
-                          </>
-                        ) : (
-                          <span className="text-xs text-gray-400 flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> No access</span>
-                        )}
-                        <button onClick={() => { setSmsModal(d); setSmsMessage(`Dear Parent, fee of ${formatCurrency(outstanding)} for ${d.student?.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`) }} title="Send SMS reminder"
-                          className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-600 transition-colors"><MessageSquare className="w-3.5 h-3.5" /></button>
-                      </div>
-                    </td>
-                  </tr>
+                  <Fragment key={d.id}>
+                    <tr className={`transition-colors ${overdue ? "bg-red-50/50" : isExpanded ? "bg-emerald-50/40 font-medium" : "hover:bg-gray-50"}`}>
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-medium text-gray-800">{d.student?.name}</p>
+                        <p className="text-xs text-gray-400 font-mono">{d.student?.student_id}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{d.batch?.name}</td>
+                      <td className="px-4 py-3 text-sm text-gray-600">{getMonthLabel(d.due_month)}</td>
+                      <td className="px-4 py-3 text-sm">{formatCurrency(d.due_amount)}</td>
+                      <td className="px-4 py-3 text-sm text-emerald-600 font-semibold">{formatCurrency(d.paid_amount || 0)}</td>
+                      <td className="px-4 py-3 text-sm font-bold text-red-600">{formatCurrency(outstanding)}</td>
+                      <td className="px-4 py-3 text-sm text-gray-500">
+                        {formatDate(d.due_date)}
+                        {overdue && <AlertCircle className="w-3 h-3 text-red-500 inline ml-1" />}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                          d.status === "partial" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"
+                        }`}>{d.status}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          {hasFinancialAccess ? (
+                            <>
+                              <button onClick={() => { setExtendModal(d); setNewDate(d.due_date) }} title="Extend due date"
+                                className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors"><Calendar className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => setReduceModal(d)} title="Reduce due"
+                                className="p-1.5 hover:bg-orange-50 rounded-lg text-orange-600 transition-colors"><DollarSign className="w-3.5 h-3.5" /></button>
+                              <button
+                                onClick={() => togglePayExpand(d)}
+                                title={isExpanded ? "Close payment panel" : "Pay / Settle Due (Enter amount)"}
+                                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                  isExpanded
+                                    ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300"
+                                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                }`}
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" />
+                                <span>Pay</span>
+                                {isExpanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                                )}
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-xs text-gray-400 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5" /> No access</span>
+                          )}
+                          <button onClick={() => { setSmsModal(d); setSmsMessage(`Dear Parent, fee of ${formatCurrency(outstanding)} for ${d.student?.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`) }} title="Send SMS reminder"
+                            className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-600 transition-colors"><MessageSquare className="w-3.5 h-3.5" /></button>
+                        </div>
+                      </td>
+                    </tr>
+
+                    {/* Expandable Detailed Payment Drawer */}
+                    {isExpanded && (
+                      <tr className="bg-gradient-to-r from-emerald-50/70 via-indigo-50/40 to-emerald-50/70 border-y-2 border-emerald-200/90">
+                        <td colSpan={9} className="p-3 sm:p-5">
+                          <div className="bg-white rounded-2xl border border-emerald-200 p-5 shadow-lg space-y-4 max-w-4xl mx-auto">
+                            {/* Top Summary Banner */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black">
+                                  <CreditCard className="w-5 h-5 text-emerald-700" />
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                                    Record Payment for {d.student?.name}
+                                    <span className="font-mono text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md font-bold">
+                                      {d.student?.student_id}
+                                    </span>
+                                  </h4>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    Batch: <strong className="text-gray-700">{d.batch?.name}</strong> • Month:{" "}
+                                    <strong className="text-gray-700">{getMonthLabel(d.due_month)}</strong>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-200 text-right">
+                                  <span className="text-[10px] text-gray-500 uppercase block font-semibold">Total Due</span>
+                                  <strong className="text-xs font-bold text-gray-900">{formatCurrency(d.due_amount)}</strong>
+                                </div>
+                                <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-right">
+                                  <span className="text-[10px] text-emerald-600 uppercase block font-semibold">Already Paid</span>
+                                  <strong className="text-xs font-bold text-emerald-700">{formatCurrency(d.paid_amount || 0)}</strong>
+                                </div>
+                                <div className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-right">
+                                  <span className="text-[10px] text-rose-600 uppercase block font-semibold">Outstanding</span>
+                                  <strong className="text-xs font-black text-rose-700">{formatCurrency(outstanding)}</strong>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Payment Form Fields */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 text-xs">
+                              {/* Pay Amount */}
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="font-bold text-gray-700">Pay Amount (৳) *</label>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPayForm((f) => ({ ...f, amount: String(outstanding) }))}
+                                    className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                                  >
+                                    Pay Full (৳{outstanding})
+                                  </button>
+                                </div>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={outstanding}
+                                  value={payForm.amount}
+                                  onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value }))}
+                                  placeholder="e.g. 1000"
+                                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl font-bold text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                                />
+                              </div>
+
+                              {/* Payment Method */}
+                              <div>
+                                <label className="block font-bold text-gray-700 mb-1">Payment Method *</label>
+                                <select
+                                  value={payForm.payment_method}
+                                  onChange={(e) => setPayForm((f) => ({ ...f, payment_method: e.target.value }))}
+                                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl font-semibold text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                                >
+                                  <option value="cash">Cash (নগদ)</option>
+                                  <option value="bkash">bKash (বিকাশ)</option>
+                                  <option value="nagad">Nagad (নগদ)</option>
+                                  <option value="rocket">Rocket (রকেট)</option>
+                                  <option value="bank">Bank Transfer</option>
+                                  <option value="referral">Referral / Waiver</option>
+                                </select>
+                              </div>
+
+                              {/* Payment Date */}
+                              <div>
+                                <label className="block font-bold text-gray-700 mb-1">Payment Date</label>
+                                <input
+                                  type="date"
+                                  value={payForm.payment_date}
+                                  onChange={(e) => setPayForm((f) => ({ ...f, payment_date: e.target.value }))}
+                                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                                />
+                              </div>
+
+                              {/* Referral Fields (Conditional) */}
+                              {payForm.payment_method === "referral" && (
+                                <>
+                                  <div>
+                                    <label className="block font-bold text-purple-900 mb-1">Referral Student Name / ID *</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={payForm.referral_name}
+                                      onChange={(e) => setPayForm((f) => ({ ...f, referral_name: e.target.value }))}
+                                      placeholder="e.g. Shakib (MS-12345)"
+                                      className="w-full px-3 py-2 bg-purple-50/50 border border-purple-300 rounded-xl font-medium text-xs text-purple-950 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    />
+                                  </div>
+                                  <div className="sm:col-span-2">
+                                    <label className="block font-bold text-purple-900 mb-1">Referral Reason / Note *</label>
+                                    <input
+                                      type="text"
+                                      required
+                                      value={payForm.referral_reason}
+                                      onChange={(e) => setPayForm((f) => ({ ...f, referral_reason: e.target.value }))}
+                                      placeholder="e.g. Referred 2 new students for Chemistry batch"
+                                      className="w-full px-3 py-2 bg-purple-50/50 border border-purple-300 rounded-xl font-medium text-xs text-purple-950 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    />
+                                  </div>
+                                </>
+                              )}
+
+                              {/* Discount / Fee Waiver */}
+                              <div>
+                                <label className="block font-bold text-gray-700 mb-1">Fee Waiver / Discount (৳)</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={payForm.discount}
+                                  onChange={(e) => setPayForm((f) => ({ ...f, discount: e.target.value }))}
+                                  placeholder="0"
+                                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                                />
+                              </div>
+
+                              {/* Partial Payment Calculation & Next Due Date */}
+                              {(() => {
+                                const enteredPay = parseFloat(payForm.amount || "0")
+                                const enteredDisc = parseFloat(payForm.discount || "0")
+                                const totalCredit = enteredPay + enteredDisc
+                                const remaining = Math.max(0, outstanding - totalCredit)
+
+                                if (remaining > 0) {
+                                  return (
+                                    <div className="sm:col-span-2 p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                      <div>
+                                        <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                                          Partial Payment: Remaining due of{" "}
+                                          <strong className="text-red-700 font-black">৳{remaining.toLocaleString("en-BD")}</strong> will
+                                          remain as partial due!
+                                        </span>
+                                        <span className="text-[11px] text-amber-700 block mt-0.5">
+                                          This row will stay in Fee Dues with status partial and the remaining balance.
+                                        </span>
+                                      </div>
+                                      <div className="shrink-0 w-full sm:w-auto">
+                                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-0.5">
+                                          Next Due Date:
+                                        </label>
+                                        <input
+                                          type="date"
+                                          value={payForm.next_due_date}
+                                          onChange={(e) => setPayForm((f) => ({ ...f, next_due_date: e.target.value }))}
+                                          className="px-2.5 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none"
+                                        />
+                                      </div>
+                                    </div>
+                                  )
+                                } else if (totalCredit >= outstanding && outstanding > 0) {
+                                  return (
+                                    <div className="sm:col-span-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800">
+                                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <span className="text-xs font-bold">
+                                        ✓ Full Payment: This due will be completely settled and cleared from pending dues.
+                                      </span>
+                                    </div>
+                                  )
+                                }
+                                return null
+                              })()}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100">
+                              <button
+                                type="button"
+                                onClick={() => waiveEntireDue(d)}
+                                disabled={submittingPayment || actionLoading}
+                                className="text-xs text-rose-600 hover:text-rose-800 hover:underline font-bold cursor-pointer"
+                              >
+                                Waive Entire Remaining Balance (100% Waiver)
+                              </button>
+
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandedDueId(null)}
+                                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRecordPayment(d)}
+                                  disabled={submittingPayment || !payForm.amount || parseFloat(payForm.amount) <= 0}
+                                  className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-100 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                                >
+                                  {submittingPayment ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Recording Payment...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Check className="w-3.5 h-3.5" /> Confirm & Record Payment
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 )
               })}
             </tbody>
