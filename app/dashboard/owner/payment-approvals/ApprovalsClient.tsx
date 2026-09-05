@@ -135,9 +135,13 @@ export default function ApprovalsClient({
 
   function copyFullSummary(sub: Submission) {
     const refInfo = parseReferralNotes(sub.notes)
+    const activeStudentId = (sub.student?.student_id && sub.student.student_id !== "—")
+      ? sub.student.student_id
+      : (sub.notes?.match(/MS-[A-Z0-9]+/i)?.[0] || "—")
+
     const summary = [
       `--- Payment Submission Details ---`,
-      `Student: ${sub.student?.name || "Unknown"} (ID: ${sub.student?.student_id || "—"})`,
+      `Student: ${sub.student?.name || "Unknown"} (ID: ${activeStudentId})`,
       `Phone: ${sub.student?.phone || "—"}`,
       `Item: ${sub.course?.title || sub.batch?.name || "—"} (${sub.course_id ? "Online Course" : "Batch"})`,
       `Amount Paid: ৳${sub.amount}`,
@@ -209,6 +213,7 @@ export default function ApprovalsClient({
       const studentPhone = (s.student?.phone || "").toLowerCase()
       const senderNumber = (s.sender_number || "").toLowerCase()
       const studentId = (s.student?.student_id || "").toLowerCase()
+      const notesStudentId = (s.notes?.match(/MS-[A-Z0-9]+/i)?.[0] || "").toLowerCase()
       const trxId = (s.transaction_id || "").toLowerCase()
       const studentName = (s.student?.name || "").toLowerCase()
       const studentEmail = (s.student?.email || "").toLowerCase()
@@ -228,6 +233,7 @@ export default function ApprovalsClient({
         studentPhone.includes(q) ||
         senderNumber.includes(q) ||
         studentId.includes(q) ||
+        notesStudentId.includes(q) ||
         trxId.includes(q) ||
         studentName.includes(q) ||
         studentEmail.includes(q) ||
@@ -627,22 +633,30 @@ export default function ApprovalsClient({
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="font-bold text-gray-900 text-base">{sub.student?.name || "Unknown Student"}</p>
-                          {sub.student?.student_id && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md text-xs font-mono font-bold border border-indigo-100">
-                              {sub.student.student_id}
-                              <button
-                                onClick={() => copyToClipboard(sub.student!.student_id, "Student ID")}
-                                className="hover:text-indigo-950 cursor-pointer p-0.5"
-                                title="Copy Student ID"
-                              >
-                                {copiedText === sub.student.student_id ? (
-                                  <Check className="w-3 h-3 text-emerald-600" />
-                                ) : (
-                                  <Copy className="w-3 h-3 text-indigo-400" />
-                                )}
-                              </button>
-                            </span>
-                          )}
+                          {(() => {
+                            const activeStudentId = (sub.student?.student_id && sub.student.student_id !== "—")
+                              ? sub.student.student_id
+                              : (sub.notes?.match(/MS-[A-Z0-9]+/i)?.[0] || null)
+
+                            if (!activeStudentId) return null
+
+                            return (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-md text-xs font-mono font-bold border border-indigo-100">
+                                {activeStudentId}
+                                <button
+                                  onClick={() => copyToClipboard(activeStudentId, "Student ID")}
+                                  className="hover:text-indigo-950 cursor-pointer p-0.5"
+                                  title="Copy Student ID"
+                                >
+                                  {copiedText === activeStudentId ? (
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3 text-indigo-400" />
+                                  )}
+                                </button>
+                              </span>
+                            )
+                          })()}
                         </div>
 
                         {sub.student?.phone && (

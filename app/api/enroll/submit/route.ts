@@ -241,6 +241,7 @@ export async function POST(req: NextRequest) {
         .from("students")
         .update({
           name: form.name.trim(),
+          ...(studentCode ? { student_id: studentCode } : {}),
           ...(form.guardian_name?.trim() ? { guardian_name: form.guardian_name.trim() } : {}),
           ...(cleanGuardianPhone ? { guardian_phone: cleanGuardianPhone } : {}),
           ...(form.school_college?.trim() ? { school_college: form.school_college.trim() } : {}),
@@ -315,8 +316,8 @@ export async function POST(req: NextRequest) {
 
     // 6. Insert payment submission
     const notesContent = isCourse
-      ? `Online Course: ${courseId}. Student: ${form.name} (${cleanPhone}). Paid: ৳${actualPaid}, Due: ৳${actualDue}. Trx: ${cleanTrxId}`
-      : `Batch Enrollment: ${batchId}. Student: ${form.name} (${cleanPhone}). Paid: ৳${actualPaid}, Due: ৳${actualDue}. Trx: ${cleanTrxId}`
+      ? `Online Course: ${courseId}. Student: ${form.name} (Student ID: ${studentCode}, Phone: ${cleanPhone}). Paid: ৳${actualPaid}, Due: ৳${actualDue}. Trx: ${cleanTrxId}`
+      : `Batch Enrollment: ${batchId}. Student: ${form.name} (Student ID: ${studentCode}, Phone: ${cleanPhone}). Paid: ৳${actualPaid}, Due: ৳${actualDue}. Trx: ${cleanTrxId}`
 
     const submissionPayload: Record<string, any> = {
       student_id: studentDbId,

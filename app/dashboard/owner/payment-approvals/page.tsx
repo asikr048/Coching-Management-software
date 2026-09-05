@@ -93,29 +93,130 @@ export default async function PaymentApprovalsPage() {
     }
   }
 
-  // Enrich missing student information
-  const missingStudentIds = Array.from(
-    new Set(rawSubmissions.filter(s => !s.student && s.student_id).map(s => s.student_id))
-  )
-  if (missingStudentIds.length > 0) {
-    try {
-      const { data: stList } = await admin
-        .from("students")
-        .select("id, name, student_id, phone, email, guardian_phone")
-        .in("id", missingStudentIds)
+  // Enrich missing or incomplete student information
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  const msCodeRegex = /MS-[A-Z0-9]+/i
 
-      if (stList) {
-        const stMap = new Map(stList.map(st => [st.id, st]))
-        rawSubmissions = rawSubmissions.map(s => {
-          if (!s.student && s.student_id && stMap.has(s.student_id)) {
-            return { ...s, student: stMap.get(s.student_id) }
-          }
-          return s
-        })
+  const missingUuidStudentIds = new Set<string>()
+  const missingCodeStudentIds = new Set<string>()
+  const extractedStudentCodes = new Set<string>()
+  const emailsToEnrich = new Set<string>()
+  const phonesToEnrich = new Set<string>()
+
+  for (const s of rawSubmissions) {
+    if (s.student_id) {
+      if (uuidRegex.test(s.student_id)) {
+        if (!s.student) missingUuidStudentIds.add(s.student_id)
+      } else if (msCodeRegex.test(s.student_id)) {
+        missingCodeStudentIds.add(s.student_id.toUpperCase())
       }
-    } catch (e) {
-      console.warn("Enrich students error:", e)
     }
+    if (s.notes) {
+      const match = s.notes.match(msCodeRegex)
+      if (match) extractedStudentCodes.add(match[0].toUpperCase())
+    }
+    if (s.student?.email) emailsToEnrich.add(s.student.email.toLowerCase())
+    if (s.student?.phone) phonesToEnrich.add(s.student.phone)
+  }
+
+  try {
+    const allCodes = Array.from(new Set([...Array.from(missingCodeStudentIds), ...Array.from(extractedStudentCodes)]))
+    const enrichQueries: any[] = []
+
+    if (missingUuidStudentIds.size > 0) {
+      enrichQueries.push(
+        admin.from("students").select("id, name, student_id, phone, email, guardian_phone").in("id", Array.from(missingUuidStudentIds))
+      )
+    }
+    if (allCodes.length > 0) {
+      enrichQueries.push(
+        admin.from("students").select("id, name, student_id, phone, email, guardian_phone").in("student_id", allCodes)
+      )
+      enrichQueries.push(
+        admin.from("user_profiles").select("id, user_id, name, email, phone, auth_user_id").in("user_id", allCodes)
+      )
+    }
+    if (emailsToEnrich.size > 0) {
+      enrichQueries.push(
+        admin.from("user_profiles").select("id, user_id, name, email, phone, auth_user_id").or(Array.from(emailsToEnrich).map(e => `email.ilike.${e}`).join(","))
+      )
+    }
+
+    const enrichResults = await Promise.all(enrichQueries)
+    const stByIdMap = new Map<string, any>()
+    const stByCodeMap = new Map<string, any>()
+    const upByCodeMap = new Map<string, any>()
+    const upByEmailMap = new Map<string, any>()
+
+    for (const res of enrichResults) {
+      if (!res.data) continue
+      for (const item of res.data) {
+        if (item.student_id) {
+          stByIdMap.set(item.id, item)
+          stByCodeMap.set(item.student_id.toUpperCase(), item)
+        } else if (item.user_id) {
+          upByCodeMap.set(item.user_id.toUpperCase(), item)
+          if (item.email) upByEmailMap.set(item.email.toLowerCase(), item)
+        }
+      }
+    }
+
+    rawSubmissions = rawSubmissions.map(s => {
+      let st = s.student
+
+      // 1. Resolve student record if null
+      if (!st && s.student_id) {
+        if (stByIdMap.has(s.student_id)) {
+          st = stByIdMap.get(s.student_id)
+        } else if (stByCodeMap.has(s.student_id.toUpperCase())) {
+          st = stByCodeMap.get(s.student_id.toUpperCase())
+        } else if (upByCodeMap.has(s.student_id.toUpperCase())) {
+          const up = upByCodeMap.get(s.student_id.toUpperCase())
+          st = { name: up.name, student_id: up.user_id, phone: up.phone, email: up.email }
+        }
+      }
+
+      // 2. Resolve via notes extraction if still null
+      const noteCodeMatch = s.notes?.match(msCodeRegex)
+      const extractedCode = noteCodeMatch ? noteCodeMatch[0].toUpperCase() : null
+
+      if (!st && extractedCode) {
+        if (stByCodeMap.has(extractedCode)) {
+          st = stByCodeMap.get(extractedCode)
+        } else if (upByCodeMap.has(extractedCode)) {
+          const up = upByCodeMap.get(extractedCode)
+          st = { name: up.name, student_id: up.user_id, phone: up.phone, email: up.email }
+        }
+      }
+
+      // 3. Synthesize fallback if notes has Student: Name (Phone)
+      if (!st && s.notes) {
+        const studentMatch = s.notes.match(/Student:\s*([^(,]+)(?:\(([^)]+)\))?/i)
+        if (studentMatch) {
+          const parsedName = studentMatch[1]?.trim() || "Student"
+          const parsedPhone = studentMatch[2]?.trim() || s.sender_number || null
+          st = {
+            name: parsedName,
+            student_id: extractedCode || "—",
+            phone: parsedPhone,
+            email: null,
+          }
+        }
+      }
+
+      // 4. Guarantee student_id is populated if empty
+      if (st && (!st.student_id || st.student_id === "—")) {
+        if (extractedCode) {
+          st = { ...st, student_id: extractedCode }
+        } else if (st.email && upByEmailMap.has(st.email.toLowerCase())) {
+          st = { ...st, student_id: upByEmailMap.get(st.email.toLowerCase()).user_id }
+        }
+      }
+
+      return { ...s, student: st }
+    })
+  } catch (enrichErr) {
+    console.warn("Student enrichment note:", enrichErr)
   }
 
   // Enrich missing batch information

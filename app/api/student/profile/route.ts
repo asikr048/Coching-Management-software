@@ -72,18 +72,13 @@ export async function GET(req: NextRequest) {
     registerPhone(currentProfile.phone)
     registerPhone(user.user_metadata?.phone)
 
-    // Run all student identity lookups in parallel
+    // Run high-confidence student identity lookups in parallel
     const studentQueries: any[] = [
       admin.from("students").select("*").eq("auth_user_id", user.id),
     ]
     if (candidateCodes.size > 0) {
       studentQueries.push(
         admin.from("students").select("*").in("student_id", Array.from(candidateCodes))
-      )
-    }
-    if (candidatePhones.size > 0) {
-      studentQueries.push(
-        admin.from("students").select("*").in("phone", Array.from(candidatePhones))
       )
     }
     if (candidateEmails.size > 0) {
@@ -99,12 +94,33 @@ export async function GET(req: NextRequest) {
       res.data?.forEach((s: any) => matchedStudentsMap.set(s.id, s))
     }
 
+    // Only if ZERO records found by auth_user_id, student_id, or email, fallback to phone lookup
+    if (matchedStudentsMap.size === 0 && candidatePhones.size > 0) {
+      const { data: phoneStudents } = await admin
+        .from("students")
+        .select("*")
+        .in("phone", Array.from(candidatePhones))
+
+      if (phoneStudents && phoneStudents.length > 0) {
+        for (const s of phoneStudents) {
+          // Only adopt if unassigned to a conflicting auth user or conflicting student code
+          if (!s.auth_user_id || s.auth_user_id === user.id) {
+            matchedStudentsMap.set(s.id, s)
+          }
+        }
+      }
+    }
+
     const matchedStudents = Array.from(matchedStudentsMap.values())
-    const candidateDbIds = new Set<string>(matchedStudents.map(s => s.id))
 
     let primaryStudent: any = null
     if (matchedStudents.length > 0) {
-      primaryStudent = matchedStudents.find(s => s.student_id === currentProfile.user_id) || matchedStudents[0]
+      primaryStudent =
+        matchedStudents.find(s => s.auth_user_id === user.id) ||
+        matchedStudents.find(s => s.student_id && candidateCodes.has(s.student_id)) ||
+        matchedStudents.find(s => s.email && candidateEmails.has(s.email.toLowerCase())) ||
+        matchedStudents[0]
+
       if (primaryStudent.student_id) candidateCodes.add(primaryStudent.student_id)
       if (primaryStudent.phone) registerPhone(primaryStudent.phone)
       if (primaryStudent.email) candidateEmails.add(primaryStudent.email.toLowerCase())
@@ -120,6 +136,25 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Ensure candidateDbIds ONLY contains records that belong to THIS student
+    const candidateDbIds = new Set<string>()
+    if (primaryStudent?.id) {
+      candidateDbIds.add(primaryStudent.id)
+    }
+    for (const s of matchedStudents) {
+      // Must not belong to a different student code (prevent cross-student data leakage)
+      if (primaryStudent?.student_id && s.student_id && s.student_id !== primaryStudent.student_id) {
+        continue
+      }
+      if (
+        (primaryStudent?.student_id && s.student_id === primaryStudent.student_id) ||
+        (s.auth_user_id && s.auth_user_id === user.id) ||
+        (primaryStudent?.email && s.email && s.email.toLowerCase() === primaryStudent.email.toLowerCase())
+      ) {
+        candidateDbIds.add(s.id)
+      }
+    }
+
     const sid = primaryStudent?.id || null
     const studentDbIdArray = Array.from(candidateDbIds)
 
@@ -128,15 +163,14 @@ export async function GET(req: NextRequest) {
     if (studentDbIdArray.length > 0) {
       subQueries.push(admin.from("payment_submissions").select("*").in("student_id", studentDbIdArray))
     }
-    if (candidatePhones.size > 0) {
-      subQueries.push(admin.from("payment_submissions").select("*").in("sender_number", Array.from(candidatePhones)))
-    }
     if (candidateCodes.size > 0) {
-      subQueries.push(admin.from("payment_submissions").select("*").or(Array.from(candidateCodes).map(c => `notes.ilike.%${c}%`).join(",")))
-    }
-    const validPhonesForNotes = Array.from(candidatePhones).filter(p => p.length >= 10)
-    if (validPhonesForNotes.length > 0) {
-      subQueries.push(admin.from("payment_submissions").select("*").or(validPhonesForNotes.map(p => `notes.ilike.%${p}%`).join(",")))
+      const codeArray = Array.from(candidateCodes)
+      // Check if student_id column directly stored student code (e.g. MS-98422)
+      subQueries.push(admin.from("payment_submissions").select("*").in("student_id", codeArray))
+      // Check if notes specifically contains the unique student ID
+      subQueries.push(
+        admin.from("payment_submissions").select("*").or(codeArray.map(c => `notes.ilike.%${c}%`).join(","))
+      )
     }
 
     const [
@@ -404,6 +438,17 @@ export async function GET(req: NextRequest) {
 
     const pendingSubs = allSubmissions.filter(s => {
       if (s.status !== "pending") return false
+
+      // Guard: strictly ensure submission belongs to this student
+      const codeList = Array.from(candidateCodes)
+      const belongsToStudent =
+        (s.student_id && (candidateDbIds.has(s.student_id) || candidateCodes.has(s.student_id))) ||
+        (s.notes && codeList.some(c => s.notes.includes(c)))
+
+      if (!belongsToStudent && (candidateDbIds.size > 0 || candidateCodes.size > 0)) {
+        return false
+      }
+
       if (s.batch_id && !enrolledBatchIds.has(s.batch_id)) return true
       if (s.course_id && !courseMap.has(s.course_id)) return true
       return false

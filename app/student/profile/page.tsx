@@ -56,22 +56,22 @@ export default function StudentProfilePage() {
   const supabase = createClient()
 
   useEffect(() => {
-    // 0. Instantly load from cache if available (0ms perceived load time!)
+    // 0. Instantly load from user-specific cache if available
     try {
       const cachedStr = sessionStorage.getItem("ms_student_profile_cache")
       if (cachedStr) {
         const cached = JSON.parse(cachedStr)
-        if (cached?.profile) {
+        if (cached?.profile?.user_id) {
           setProfile(cached.profile)
           setEditName(cached.profile.name || "")
           setEditPhone(cached.profile.phone || "")
           if (cached.student) setStudentData(cached.student)
-          if (cached.enrollments) setEnrollments(cached.enrollments)
-          if (cached.courses) setCourses(cached.courses)
-          if (cached.pendingSubmissions) setPendingSubmissions(cached.pendingSubmissions)
-          if (cached.attendance) setAttendance(cached.attendance)
-          if (cached.dues) setDues(cached.dues)
-          if (cached.examResults) setExamResults(cached.examResults)
+          setEnrollments(cached.enrollments || [])
+          setCourses(cached.courses || [])
+          setPendingSubmissions(cached.pendingSubmissions || [])
+          setAttendance(cached.attendance || [])
+          setDues(cached.dues || [])
+          setExamResults(cached.examResults || [])
           if (cached.paymentAccounts) setPaymentAccounts(cached.paymentAccounts)
           setLoading(false)
         }
@@ -88,13 +88,13 @@ export default function StudentProfilePage() {
             setEditName(data.profile.name || "")
             setEditPhone(data.profile.phone || "")
           }
-          if (data.student) setStudentData(data.student)
-          if (data.enrollments) setEnrollments(data.enrollments)
-          if (data.courses) setCourses(data.courses)
-          if (data.pendingSubmissions) setPendingSubmissions(data.pendingSubmissions)
-          if (data.attendance) setAttendance(data.attendance)
-          if (data.dues) setDues(data.dues)
-          if (data.examResults) setExamResults(data.examResults)
+          setStudentData(data.student || null)
+          setEnrollments(data.enrollments || [])
+          setCourses(data.courses || [])
+          setPendingSubmissions(data.pendingSubmissions || [])
+          setAttendance(data.attendance || [])
+          setDues(data.dues || [])
+          setExamResults(data.examResults || [])
           if (data.paymentAccounts) {
             setPaymentAccounts(data.paymentAccounts)
           } else {
