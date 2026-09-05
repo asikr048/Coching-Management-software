@@ -1,4 +1,4 @@
-# MedhaShiree - Coaching Management System
+# Prottasha Coaching Academy - Coaching Management System
 
 A full-featured coaching center management solution built with Next.js 14 and Supabase, deployable on Vercel.
 
