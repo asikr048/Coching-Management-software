@@ -56,11 +56,30 @@ export default function StudentProfilePage() {
   const supabase = createClient()
 
   useEffect(() => {
+    // 0. Instantly load from cache if available (0ms perceived load time!)
+    try {
+      const cachedStr = sessionStorage.getItem("ms_student_profile_cache")
+      if (cachedStr) {
+        const cached = JSON.parse(cachedStr)
+        if (cached?.profile) {
+          setProfile(cached.profile)
+          setEditName(cached.profile.name || "")
+          setEditPhone(cached.profile.phone || "")
+          if (cached.student) setStudentData(cached.student)
+          if (cached.enrollments) setEnrollments(cached.enrollments)
+          if (cached.courses) setCourses(cached.courses)
+          if (cached.pendingSubmissions) setPendingSubmissions(cached.pendingSubmissions)
+          if (cached.attendance) setAttendance(cached.attendance)
+          if (cached.dues) setDues(cached.dues)
+          if (cached.examResults) setExamResults(cached.examResults)
+          if (cached.paymentAccounts) setPaymentAccounts(cached.paymentAccounts)
+          setLoading(false)
+        }
+      }
+    } catch {}
+
     async function loadStudentProfile() {
       try {
-        setLoading(true)
-
-        // 1. Fetch complete student profile data from server API (immune to client-side RLS)
         const res = await fetch("/api/student/profile")
         if (res.ok) {
           const data = await res.json()
@@ -76,6 +95,16 @@ export default function StudentProfilePage() {
           if (data.attendance) setAttendance(data.attendance)
           if (data.dues) setDues(data.dues)
           if (data.examResults) setExamResults(data.examResults)
+          if (data.paymentAccounts) {
+            setPaymentAccounts(data.paymentAccounts)
+          } else {
+            const { data: acctData } = await supabase.from("payment_accounts").select("*").eq("is_active", true)
+            if (acctData) setPaymentAccounts(acctData)
+          }
+
+          try {
+            sessionStorage.setItem("ms_student_profile_cache", JSON.stringify(data))
+          } catch {}
         } else if (res.status === 401) {
           router.push("/login")
           return
@@ -108,11 +137,10 @@ export default function StudentProfilePage() {
             if (sByEmail) studentRecord = sByEmail
           }
           if (studentRecord) setStudentData(studentRecord)
-        }
 
-        // Fetch payment accounts for pay-due modal
-        const { data: acctData } = await supabase.from("payment_accounts").select("*").eq("is_active", true)
-        if (acctData) setPaymentAccounts(acctData)
+          const { data: acctData } = await supabase.from("payment_accounts").select("*").eq("is_active", true)
+          if (acctData) setPaymentAccounts(acctData)
+        }
       } catch (err) {
         console.error("Failed to load student profile data:", err)
       } finally {
@@ -224,10 +252,42 @@ export default function StudentProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        <p className="text-gray-500 font-medium">Loading your profile...</p>
-      </div>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 animate-pulse">
+        {/* Banner Skeleton */}
+        <div className="h-44 bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-3xl p-6 sm:p-8 flex items-center gap-5">
+          <div className="w-20 h-20 bg-white/20 rounded-2xl animate-pulse" />
+          <div className="space-y-3 flex-1">
+            <div className="h-6 w-48 bg-white/20 rounded-lg" />
+            <div className="h-4 w-32 bg-white/10 rounded-lg" />
+            <div className="h-3 w-56 bg-white/10 rounded-lg" />
+          </div>
+        </div>
+
+        {/* Analytics Cards Skeleton */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="h-28 bg-white rounded-2xl border border-gray-100 p-4 space-y-2">
+              <div className="h-3 w-16 bg-gray-200 rounded" />
+              <div className="h-7 w-12 bg-gray-200 rounded" />
+              <div className="h-2 w-24 bg-gray-100 rounded" />
+            </div>
+          ))}
+        </div>
+
+        {/* Batches Skeleton */}
+        <div className="space-y-4">
+          <div className="h-6 w-48 bg-gray-200 rounded-lg" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2].map(i => (
+              <div key={i} className="h-40 bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
+                <div className="h-4 w-20 bg-indigo-50 rounded" />
+                <div className="h-5 w-40 bg-gray-200 rounded" />
+                <div className="h-3 w-32 bg-gray-100 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </main>
     )
   }
 
