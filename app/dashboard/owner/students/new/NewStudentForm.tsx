@@ -537,33 +537,33 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
     }
   }
 
-  const ic = "w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all"
-  const labelCls = "block text-xs font-bold text-slate-300 mb-1"
+  const ic = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
+  const labelCls = "block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         {/* Mode selector */}
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl px-4 py-3 flex items-center gap-3">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-4 flex items-center gap-3">
           <select value={mode} onChange={e => { setMode(e.target.value as "new"|"existing"); setSelectedStudent(null); setSearchQuery(""); setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" }) }}
-            className="px-3 py-2 border border-slate-700 rounded-xl text-sm font-bold text-white bg-slate-950 focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 focus:outline-none cursor-pointer">
-            <option value="new">➕ New Student</option>
-            <option value="existing">🔍 Existing Student</option>
+            className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 hover:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none cursor-pointer">
+            <option value="new">➕ New Student (নতুন শিক্ষার্থী)</option>
+            <option value="existing">🔍 Existing Student (পূর্বের শিক্ষার্থী)</option>
           </select>
 
           {mode === "existing" && !selectedStudent && (
             <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search name, ID, phone..."
-                className="w-full pl-8 pr-3 py-2 text-sm text-white placeholder:text-slate-500 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 bg-slate-950" autoFocus />
+                className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 bg-white shadow-2xs" autoFocus />
               {filtered.length > 0 && (
-                <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-900 rounded-xl border border-slate-800 shadow-2xl max-h-52 overflow-y-auto divide-y divide-slate-800">
+                <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl max-h-52 overflow-y-auto divide-y divide-slate-100">
                   {filtered.map(s => (
                     <button type="button" key={s.id} onClick={() => { handleSelectStudent(s); setSearchQuery("") }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-slate-800 text-sm transition-colors cursor-pointer">
-                      <span className="font-bold text-white">{s.name}</span>
-                      <span className="text-xs text-amber-400 font-mono ml-2">{s.student_id}</span>
-                      {s.phone && <span className="text-xs text-slate-400 ml-2">• {s.phone}</span>}
+                      className="w-full text-left px-4 py-2.5 hover:bg-amber-50/50 text-sm transition-colors cursor-pointer">
+                      <span className="font-bold text-slate-900">{s.name}</span>
+                      <span className="text-xs text-amber-600 font-mono font-bold ml-2">{s.student_id}</span>
+                      {s.phone && <span className="text-xs text-slate-500 ml-2">• {s.phone}</span>}
                     </button>
                   ))}
                 </div>
@@ -572,27 +572,27 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
           )}
 
           {mode === "existing" && selectedStudent && (
-            <div className="flex-1 flex items-center justify-between px-3 py-2 bg-amber-500/10 rounded-xl border border-amber-500/30">
+            <div className="flex-1 flex items-center justify-between px-3.5 py-2 bg-amber-50 rounded-xl border border-amber-200">
               <div>
-                <span className="text-sm font-bold text-white">{selectedStudent.name}</span>
-                <span className="text-xs text-amber-400 font-mono font-bold ml-2">{selectedStudent.student_id}</span>
-                {selectedStudent.phone && <span className="text-xs text-slate-400 ml-2">• {selectedStudent.phone}</span>}
+                <span className="text-sm font-bold text-slate-900">{selectedStudent.name}</span>
+                <span className="text-xs text-amber-700 font-mono font-bold ml-2">{selectedStudent.student_id}</span>
+                {selectedStudent.phone && <span className="text-xs text-slate-500 ml-2">• {selectedStudent.phone}</span>}
               </div>
-              <button type="button" onClick={() => handleSelectStudent(null)} className="text-rose-400 hover:text-rose-300 text-sm font-bold ml-2 transition-colors cursor-pointer">✕</button>
+              <button type="button" onClick={() => handleSelectStudent(null)} className="text-rose-600 hover:text-rose-700 text-sm font-bold ml-2 transition-colors cursor-pointer">✕</button>
             </div>
           )}
         </div>
 
         {/* Existing student — missing info prompt */}
         {mode === "existing" && selectedStudent && missingFields.length > 0 && (
-          <div className="bg-amber-500/10 rounded-2xl border border-amber-500/30 px-4 py-3 shadow-xl">
-            <p className="text-xs font-bold text-amber-400 flex items-center gap-1.5 mb-2"><AlertCircle className="w-3.5 h-3.5" /> Missing information — please fill in:</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+          <div className="bg-amber-50 rounded-2xl border border-amber-200 px-5 py-4 shadow-sm">
+            <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5 mb-2.5"><AlertCircle className="w-4 h-4 text-amber-600" /> Missing information — please fill in:</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {missingFields.includes("guardian_name") && (
                 <div><label className={labelCls}>Guardian Name</label><input value={existingFix.guardian_name} onChange={e => setExistingFix(f => ({...f, guardian_name: e.target.value}))} className={ic} placeholder="Guardian name" /></div>
               )}
               {missingFields.includes("guardian_phone") && (
-                <div><label className={`${labelCls} text-rose-400`}>Guardian Phone *</label><input required value={existingFix.guardian_phone} onChange={e => setExistingFix(f => ({...f, guardian_phone: e.target.value}))} className={`${ic} border-rose-500/50 focus:border-rose-400`} placeholder="01..." /></div>
+                <div><label className={`${labelCls} text-rose-600`}>Guardian Phone *</label><input required value={existingFix.guardian_phone} onChange={e => setExistingFix(f => ({...f, guardian_phone: e.target.value}))} className={`${ic} border-rose-300 focus:border-rose-500 focus:ring-rose-500/20`} placeholder="01..." /></div>
               )}
               {missingFields.includes("address") && (
                 <div><label className={labelCls}>Address</label><input value={existingFix.address} onChange={e => setExistingFix(f => ({...f, address: e.target.value}))} className={ic} /></div>
@@ -609,24 +609,30 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
         {/* New student form */}
         {mode === "new" && (
-          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl px-4 py-4 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5 space-y-5">
             {/* Personal */}
-            <p className="text-xs font-black text-amber-400 uppercase tracking-wider">Personal Info</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="sm:col-span-2"><label className={labelCls}>Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
-              <div><label className={labelCls}>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-              <div><label className={labelCls}>Email</label><input type="email" value={form.email} onChange={e => update("email", e.target.value)} className={ic} placeholder="Optional" /></div>
-              <div><label className={labelCls}>Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={ic}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
-              <div><label className={labelCls}>Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => update("date_of_birth", e.target.value)} className={ic} /></div>
-              <div><label className={labelCls}>Class</label><input value={form.class_level} onChange={e => update("class_level", e.target.value)} className={ic} placeholder="HSC 2025" /></div>
+            <div>
+              <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span> Personal Info (ব্যক্তিগত তথ্য)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2"><label className={labelCls}>Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
+                <div><label className={labelCls}>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+                <div><label className={labelCls}>Email</label><input type="email" value={form.email} onChange={e => update("email", e.target.value)} className={ic} placeholder="Optional" /></div>
+                <div><label className={labelCls}>Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={ic}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
+                <div><label className={labelCls}>Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => update("date_of_birth", e.target.value)} className={ic} /></div>
+                <div><label className={labelCls}>Class</label><input value={form.class_level} onChange={e => update("class_level", e.target.value)} className={ic} placeholder="HSC 2025" /></div>
+              </div>
             </div>
 
             {/* Guardian */}
-            <div className="pt-3 border-t border-slate-800">
-              <p className="text-xs font-black text-emerald-400 uppercase tracking-wider mb-2">Guardian</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Guardian Info (অভিভাবক তথ্য)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div><label className={labelCls}>Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={ic} /></div>
                 <div><label className={labelCls}>Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={ic} placeholder="01..." /></div>
                 <div><label className={labelCls}>Relation</label><select value={form.guardian_relation} onChange={e => update("guardian_relation", e.target.value)} className={ic}><option>Parent</option><option>Father</option><option>Mother</option><option>Uncle</option><option>Other</option></select></div>
@@ -635,15 +641,17 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
             </div>
 
             {/* Account */}
-            <div className="pt-3 border-t border-slate-800">
-              <p className="text-xs font-black text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1"><Lock className="w-3 h-3 text-amber-400" /> Login Account</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-500"></span> <Lock className="w-3.5 h-3.5 text-indigo-600" /> Student Login Account
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div><label className={labelCls}>School / College</label><input value={form.school_college} onChange={e => update("school_college", e.target.value)} className={ic} /></div>
                 <div><label className={labelCls}>Referral Name / Code</label><input value={form.referred_by_code} onChange={e => update("referred_by_code", e.target.value)} className={ic} placeholder="Referrer name or code (optional)" /></div>
                 <div><label className={labelCls}>Password *</label><input type="password" required value={form.password} onChange={e => update("password", e.target.value)} className={ic} placeholder="Min 6 chars" minLength={6} /></div>
-                <div><label className={labelCls}>Confirm Password *</label><input type="password" required value={form.confirmPassword} onChange={e => update("confirmPassword", e.target.value)} className={`${ic} ${form.confirmPassword && form.password !== form.confirmPassword ? "border-rose-500/50 focus:border-rose-400" : ""}`} placeholder="Re-enter" />
-                  {form.confirmPassword && form.password !== form.confirmPassword && <p className="text-[10px] text-rose-400 mt-0.5">Passwords don&apos;t match</p>}
-                  {form.confirmPassword && form.password === form.confirmPassword && form.password.length >= 6 && <p className="text-[10px] text-emerald-400 mt-0.5">✓ Match</p>}
+                <div><label className={labelCls}>Confirm Password *</label><input type="password" required value={form.confirmPassword} onChange={e => update("confirmPassword", e.target.value)} className={`${ic} ${form.confirmPassword && form.password !== form.confirmPassword ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`} placeholder="Re-enter" />
+                  {form.confirmPassword && form.password !== form.confirmPassword && <p className="text-[10px] text-rose-600 font-semibold mt-1">Passwords don&apos;t match</p>}
+                  {form.confirmPassword && form.password === form.confirmPassword && form.password.length >= 6 && <p className="text-[10px] text-emerald-600 font-semibold mt-1">✓ Match</p>}
                 </div>
               </div>
             </div>
@@ -651,9 +659,11 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         )}
 
         {/* Batch selection */}
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl px-4 py-4">
-          <p className="text-xs font-black text-white mb-2 flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5 text-amber-400" /> Select Batch *</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5">
+          <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <BookOpen className="w-4 h-4 text-indigo-600" /> Select Batch (ব্যাচ নির্বাচন) *
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {batches.map(b => {
               const isEnrolled = enrolledBatchIds.includes(b.id)
               const sel = form.batch_id === b.id
@@ -672,37 +682,37 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                     update("batch_id", sel ? "" : b.id)
                     if (!sel) setPaidAmount("")
                   }}
-                  className={`px-3 py-2.5 rounded-xl border text-left text-xs transition-all relative cursor-pointer ${
+                  className={`px-3.5 py-3 rounded-xl border text-left text-xs transition-all relative cursor-pointer ${
                     sel
-                      ? "border-amber-400 bg-amber-500/10 shadow-lg shadow-amber-500/10 ring-1 ring-amber-400/50"
+                      ? "border-amber-500 bg-amber-50/80 shadow-sm ring-2 ring-amber-500/20"
                       : isEnrolled
-                      ? "border-emerald-500/30 bg-emerald-500/10 opacity-70 cursor-not-allowed"
+                      ? "border-emerald-200 bg-emerald-50/50 opacity-70 cursor-not-allowed"
                       : isClosed
-                      ? "border-amber-500/30 bg-amber-500/10 opacity-60 cursor-not-allowed"
+                      ? "border-amber-200 bg-amber-50/50 opacity-60 cursor-not-allowed"
                       : isFinished
-                      ? "border-slate-800 bg-slate-950/60 opacity-50 cursor-not-allowed"
+                      ? "border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed"
                       : full
-                      ? "border-slate-800 opacity-40 cursor-not-allowed"
-                      : "border-slate-800 bg-slate-950 hover:border-amber-500/40 hover:bg-slate-900/80"
+                      ? "border-slate-200 opacity-40 cursor-not-allowed"
+                      : "border-slate-200 bg-slate-50/60 hover:border-amber-400 hover:bg-amber-50/40"
                   }`}>
-                  {sel && <Check className="float-right w-4 h-4 text-amber-400" />}
+                  {sel && <Check className="float-right w-4 h-4 text-amber-600" />}
                   {isEnrolled && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
                       ✓ Enrolled
                     </span>
                   )}
                   {!isEnrolled && isClosed && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                       Closed
                     </span>
                   )}
                   {!isEnrolled && isFinished && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
                       Finished
                     </span>
                   )}
-                  <p className={`font-bold text-[12px] ${isEnrolled ? "text-emerald-400" : isClosed ? "text-amber-400" : "text-white"}`}>{b.name}</p>
-                  <p className="text-slate-400 text-[10px] mt-0.5">
+                  <p className={`font-bold text-[13px] ${isEnrolled ? "text-emerald-700" : isClosed ? "text-amber-800" : "text-slate-900"}`}>{b.name}</p>
+                  <p className="text-slate-500 text-[11px] mt-0.5">
                     {isEnrolled
                       ? "Already enrolled in this batch"
                       : isClosed
@@ -719,95 +729,95 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
         {/* Payment */}
         {batch && (mode === "new" || selectedStudent) && (
-          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl px-4 py-4">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs mb-3">
-              <CreditCard className="w-4 h-4 text-amber-400 flex-shrink-0" />
-              <span className="text-slate-400">Monthly: <b className="text-white">{formatCurrency(batch.monthly_fee)}</b></span>
-              <span className="text-slate-400">Admission: <b className="text-white">{formatCurrency(batch.admission_fee)}</b></span>
-              <span className="sm:ml-auto text-amber-400 font-black text-sm w-full sm:w-auto text-right">Total: {formatCurrency(total)}</span>
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <CreditCard className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="text-slate-600">Monthly Fee: <b className="text-slate-900">{formatCurrency(batch.monthly_fee)}</b></span>
+              <span className="text-slate-600">Admission Fee: <b className="text-slate-900">{formatCurrency(batch.admission_fee)}</b></span>
+              <span className="sm:ml-auto text-amber-700 font-black text-sm w-full sm:w-auto text-right">Total Payable: {formatCurrency(total)}</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-              <div><label className={labelCls}>Paid (৳)</label><input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${ic} font-bold`} placeholder="0" min="0" /></div>
-              <div><label className={labelCls}>Due</label><div className={`px-3 py-2 rounded-xl text-sm font-black text-center ${due > 0 ? "bg-rose-500/15 text-rose-400 border border-rose-500/30" : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"}`}>{formatCurrency(due)}</div></div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div><label className={labelCls}>Paid Amount (৳) *</label><input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${ic} font-bold text-slate-900`} placeholder="0" min="0" /></div>
+              <div><label className={labelCls}>Remaining Due</label><div className={`px-3.5 py-2.5 rounded-xl text-sm font-black text-center ${due > 0 ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{formatCurrency(due)}</div></div>
               <div><label className={labelCls}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={ic} /></div>
             </div>
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 pt-1">
-          <button type="button" onClick={() => router.back()} className="py-2.5 px-5 border border-slate-800 text-slate-400 rounded-xl font-bold hover:bg-slate-800 hover:text-white text-sm transition-colors cursor-pointer">Cancel</button>
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <button type="button" onClick={() => router.back()} className="py-2.5 px-6 border border-slate-300 text-slate-700 rounded-xl font-bold hover:bg-slate-100 text-sm transition-colors cursor-pointer">Cancel</button>
           <button type="submit" disabled={loading || !form.batch_id || (mode === "existing" && !selectedStudent) || (mode === "new" && form.password !== form.confirmPassword)}
-            className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-black disabled:opacity-40 flex items-center justify-center gap-2 text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer">
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin text-slate-950" /> Processing...</> : <><UserPlus className="w-4 h-4" /> {mode === "new" ? "Create & Enroll" : "Enroll Student"}</>}
+            className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-black disabled:opacity-40 flex items-center justify-center gap-2 text-sm shadow-md shadow-amber-500/25 transition-all cursor-pointer">
+            {loading ? <><Loader2 className="w-4 h-4 animate-spin text-white" /> Processing...</> : <><UserPlus className="w-4 h-4" /> {mode === "new" ? "Create & Enroll (ভর্তি সম্পন্ন করুন)" : "Enroll Student"}</>}
           </button>
         </div>
       </form>
 
       {/* Confirmation & Printable PDF Modal with QR Code */}
       {receipt && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-slate-900 rounded-3xl w-full max-w-lg shadow-2xl border border-slate-800 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6 text-slate-950 text-center relative">
-              <div className="w-12 h-12 bg-slate-950/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-2 border border-slate-950/20">
-                <Check className="w-6 h-6 text-slate-950 font-black" />
+            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6 text-white text-center relative">
+              <div className="w-12 h-12 bg-white/20 backdrop-blur-xs rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
+                <Check className="w-6 h-6 text-white font-black" />
               </div>
               <h3 className="text-xl font-black">Enrollment Confirmed!</h3>
-              <p className="text-xs text-slate-900/80 font-medium mt-1">Ready to print, download PDF, or start next enrollment</p>
+              <p className="text-xs text-amber-100 font-medium mt-1">Ready to print, download PDF, or start next enrollment</p>
             </div>
 
             {/* Printable preview card */}
             <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
-              <div ref={receiptRef} className="border border-slate-800 rounded-2xl p-4 sm:p-5 bg-slate-950 space-y-3">
-                <div className="text-center border-b border-dashed border-slate-800 pb-3">
-                  <h4 className="font-black text-amber-400 text-base">MedhaShiree Coaching</h4>
-                  <p className="text-[11px] text-slate-400">Official Enrollment & Clearance Receipt</p>
-                  <span className="inline-block bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold px-2.5 py-0.5 rounded-full mt-1">
+              <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50 space-y-3">
+                <div className="text-center border-b border-dashed border-slate-300 pb-3">
+                  <h4 className="font-black text-indigo-950 text-base">MedhaShiree Coaching</h4>
+                  <p className="text-[11px] text-slate-500">Official Enrollment & Clearance Receipt</p>
+                  <span className="inline-block bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full mt-1">
                     ID: {receipt.student_id}
                   </span>
                 </div>
 
                 <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-400">Student Name:</span><span className="font-bold text-white">{receipt.student_name}</span></div>
-                  {receipt.student_phone && <div className="flex justify-between"><span className="text-slate-400">Phone:</span><span className="font-medium text-slate-300">{receipt.student_phone}</span></div>}
-                  {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-400">Guardian Contact:</span><span className="font-medium text-slate-300">{receipt.guardian_phone}</span></div>}
-                  <div className="flex justify-between"><span className="text-slate-400">Batch Enrolled:</span><span className="font-bold text-amber-400">{receipt.batch_name}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Date:</span><span className="text-slate-300">{receipt.date}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Student Name:</span><span className="font-bold text-slate-900">{receipt.student_name}</span></div>
+                  {receipt.student_phone && <div className="flex justify-between"><span className="text-slate-500">Phone:</span><span className="font-medium text-slate-700">{receipt.student_phone}</span></div>}
+                  {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-500">Guardian Contact:</span><span className="font-medium text-slate-700">{receipt.guardian_phone}</span></div>}
+                  <div className="flex justify-between"><span className="text-slate-500">Batch Enrolled:</span><span className="font-bold text-indigo-700">{receipt.batch_name}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Date:</span><span className="text-slate-700">{receipt.date}</span></div>
                 </div>
 
                 {/* Account credentials box */}
                 {receipt.password && (
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-xs space-y-1">
-                    <div className="flex justify-between"><span className="text-amber-400 font-medium">Login User ID:</span><span className="font-bold text-white">{receipt.student_id}</span></div>
-                    <div className="flex justify-between"><span className="text-amber-400 font-medium">Password:</span><span className="font-mono font-bold text-amber-300">{receipt.password}</span></div>
+                  <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 text-xs space-y-1">
+                    <div className="flex justify-between"><span className="text-indigo-800 font-medium">Login User ID:</span><span className="font-bold text-slate-900">{receipt.student_id}</span></div>
+                    <div className="flex justify-between"><span className="text-indigo-800 font-medium">Password:</span><span className="font-mono font-bold text-indigo-900">{receipt.password}</span></div>
                   </div>
                 )}
 
-                <div className="border-t border-dashed border-slate-800 pt-3 space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-400">Total Program Fee:</span><span className="font-bold text-white">{formatCurrency(receipt.total_fee)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Amount Paid:</span><span className="font-bold text-emerald-400">{formatCurrency(receipt.paid_amount)}</span></div>
+                <div className="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-slate-500">Total Program Fee:</span><span className="font-bold text-slate-900">{formatCurrency(receipt.total_fee)}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-500">Amount Paid:</span><span className="font-bold text-emerald-700">{formatCurrency(receipt.paid_amount)}</span></div>
                   <div className="flex justify-between text-sm font-black pt-1">
-                    <span className="text-slate-300">Due Remaining:</span>
-                    <span className={receipt.due_amount > 0 ? "text-rose-400" : "text-emerald-400"}>{formatCurrency(receipt.due_amount)}</span>
+                    <span className="text-slate-700">Due Remaining:</span>
+                    <span className={receipt.due_amount > 0 ? "text-rose-600" : "text-emerald-700"}>{formatCurrency(receipt.due_amount)}</span>
                   </div>
                   {receipt.due_date && (
-                    <div className="flex justify-between text-[11px] text-amber-400 pt-0.5">
+                    <div className="flex justify-between text-[11px] text-amber-700 pt-0.5 font-semibold">
                       <span>Due Date:</span><span>{receipt.due_date}</span>
                     </div>
                   )}
                 </div>
 
                 {/* QR Code section */}
-                <div className="pt-2 border-t border-dashed border-slate-800 flex items-center justify-between">
+                <div className="pt-2 border-t border-dashed border-slate-300 flex items-center justify-between">
                   <div>
-                    <p className="text-[11px] font-bold text-white">Verification QR</p>
+                    <p className="text-[11px] font-bold text-slate-800">Verification QR</p>
                     <p className="text-[10px] text-slate-500">Scan for student credentials</p>
                   </div>
                   <img
                     src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(receipt.qr_data)}`}
                     alt="QR Verification"
-                    className="w-16 h-16 border border-slate-700 rounded-lg p-0.5 bg-white"
+                    className="w-16 h-16 border border-slate-200 rounded-lg p-0.5 bg-white"
                   />
                 </div>
               </div>
@@ -817,13 +827,13 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                 <button
                   type="button"
                   onClick={handlePrint}
-                  className="py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-black flex items-center justify-center gap-2 text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer">
+                  className="py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 text-sm shadow-md shadow-amber-500/20 transition-all cursor-pointer">
                   <Printer className="w-4 h-4" /> Print Receipt
                 </button>
                 <button
                   type="button"
                   onClick={handleSavePDF}
-                  className="py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 rounded-xl font-black flex items-center justify-center gap-2 text-sm transition-all cursor-pointer">
+                  className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl font-bold flex items-center justify-center gap-2 text-sm transition-all cursor-pointer">
                   <Download className="w-4 h-4" /> Save PDF
                 </button>
               </div>
@@ -831,7 +841,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
               <button
                 type="button"
                 onClick={resetForm}
-                className="w-full py-2.5 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer">
+                className="w-full py-2.5 border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer">
                 <RefreshCw className="w-4 h-4" /> Enroll Another Student
               </button>
             </div>

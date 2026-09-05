@@ -374,7 +374,7 @@ export default function ApprovalsClient({
           className={`p-4 rounded-2xl border transition-all cursor-pointer backdrop-blur-md ${
             filter === "pending"
               ? "border-amber-400 bg-amber-500/10 ring-1 ring-amber-400/30 shadow-lg"
-              : "border-slate-800 bg-slate-900/90 hover:border-slate-700"
+              : "border-slate-200 bg-white hover:border-slate-700"
           }`}
         >
           <div className="flex items-center justify-between">
@@ -392,7 +392,7 @@ export default function ApprovalsClient({
           className={`p-4 rounded-2xl border transition-all cursor-pointer backdrop-blur-md ${
             filter === "approved"
               ? "border-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-400/30 shadow-lg"
-              : "border-slate-800 bg-slate-900/90 hover:border-slate-700"
+              : "border-slate-200 bg-white hover:border-slate-700"
           }`}
         >
           <div className="flex items-center justify-between">
@@ -410,7 +410,7 @@ export default function ApprovalsClient({
           className={`p-4 rounded-2xl border transition-all cursor-pointer backdrop-blur-md ${
             filter === "rejected"
               ? "border-rose-400 bg-rose-500/10 ring-1 ring-rose-400/30 shadow-lg"
-              : "border-slate-800 bg-slate-900/90 hover:border-slate-700"
+              : "border-slate-200 bg-white hover:border-slate-700"
           }`}
         >
           <div className="flex items-center justify-between">
@@ -426,7 +426,7 @@ export default function ApprovalsClient({
           className={`p-4 rounded-2xl border transition-all cursor-pointer backdrop-blur-md ${
             filter === "all"
               ? "border-amber-400 bg-slate-800 ring-1 ring-amber-400/30 shadow-lg"
-              : "border-slate-800 bg-slate-900/90 hover:border-slate-700"
+              : "border-slate-200 bg-white hover:border-slate-700"
           }`}
         >
           <div className="flex items-center justify-between">
@@ -439,7 +439,7 @@ export default function ApprovalsClient({
       </div>
 
       {/* 2. Search, Sort & Filter Control Panel */}
-      <div className="bg-slate-900/90 backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-slate-800 shadow-xl space-y-3.5">
+      <div className="bg-white backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xl space-y-3.5">
         {/* Real-time search across number, payment sender number, student ID, TrxID, name */}
         <div className="relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -448,7 +448,7 @@ export default function ApprovalsClient({
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search by student phone, sender number, student ID (MS-...), TrxID, name, batch, course..."
-            className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-950 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-amber-400 transition-all placeholder:text-slate-500 font-medium"
+            className="w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-slate-300 rounded-xl text-white focus:outline-none focus:border-amber-400 transition-all placeholder:text-slate-500 font-medium"
           />
           {searchQuery && (
             <button
@@ -462,7 +462,7 @@ export default function ApprovalsClient({
         </div>
 
         {/* Filter controls row */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-1 border-t border-slate-800">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-1 border-t border-slate-200">
           {/* Status Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
             <Filter className="w-3.5 h-3.5 text-slate-400 mr-0.5 flex-shrink-0" />
@@ -472,7 +472,7 @@ export default function ApprovalsClient({
                 onClick={() => setFilter(f)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                   filter === f
-                    ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md shadow-amber-500/20"
+                    ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20"
                     : "bg-slate-800 text-slate-300 hover:bg-slate-700"
                 }`}
               >
@@ -497,7 +497,7 @@ export default function ApprovalsClient({
           {/* Sort & Method & Type Dropdowns */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Sort Dropdown */}
-            <div className="flex items-center gap-1.5 text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-1.5 text-xs bg-white border border-slate-300 rounded-xl px-3 py-2">
               <ArrowUpDown className="w-3.5 h-3.5 text-amber-400" />
               <label htmlFor="sort-select" className="text-slate-400 font-medium">
                 Sort:
@@ -523,7 +523,7 @@ export default function ApprovalsClient({
             <select
               value={methodFilter}
               onChange={e => setMethodFilter(e.target.value)}
-              className="text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none cursor-pointer"
+              className="text-xs bg-white border border-slate-300 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none cursor-pointer"
             >
               <option value="all" className="bg-slate-900 text-white">All Methods</option>
               <option value="bkash" className="bg-slate-900 text-white">bKash</option>
@@ -538,7 +538,7 @@ export default function ApprovalsClient({
             <select
               value={itemTypeFilter}
               onChange={e => setItemTypeFilter(e.target.value)}
-              className="text-xs bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none cursor-pointer"
+              className="text-xs bg-white border border-slate-300 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none cursor-pointer"
             >
               <option value="all" className="bg-slate-900 text-white">All Types</option>
               <option value="batch" className="bg-slate-900 text-white">Batches Only</option>
@@ -578,9 +578,9 @@ export default function ApprovalsClient({
 
       {/* 3. Submissions List */}
       {filteredAndSorted.length === 0 ? (
-        <div className="bg-slate-900/90 rounded-2xl border border-slate-800 text-center py-16 px-4 text-slate-400 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm text-center py-16 px-4 text-slate-400 shadow-xl">
           <Banknote className="w-12 h-12 mx-auto mb-3 opacity-30 text-amber-400" />
-          <p className="font-bold text-white text-base">No payment submissions found</p>
+          <p className="font-bold text-slate-900 text-base">No payment submissions found</p>
           <p className="text-xs mt-1 text-slate-400 max-w-md mx-auto">
             {searchQuery
               ? `No payment matches "${searchQuery}". Try searching with a different student phone, sender number, student ID, or TrxID.`
@@ -613,12 +613,12 @@ export default function ApprovalsClient({
             return (
               <div
                 key={sub.id}
-                className={`bg-slate-900/90 backdrop-blur-md rounded-2xl border p-5 transition-all hover:shadow-xl ${
+                className={`bg-white rounded-2xl border p-5 transition-all hover:shadow-xl ${
                   sub.status === "pending"
-                    ? "border-slate-800 border-l-4 border-l-amber-400"
+                    ? "border-slate-200 border-l-4 border-l-amber-400"
                     : sub.status === "approved"
-                    ? "border-slate-800 border-l-4 border-l-emerald-500"
-                    : "border-slate-800 border-l-4 border-l-rose-500"
+                    ? "border-slate-200 border-l-4 border-l-emerald-500"
+                    : "border-slate-200 border-l-4 border-l-rose-500"
                 }`}
               >
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -632,7 +632,7 @@ export default function ApprovalsClient({
 
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-bold text-white text-base">{sub.student?.name || "Unknown Student"}</p>
+                          <p className="font-bold text-slate-900 text-base">{sub.student?.name || "Unknown Student"}</p>
                           {(() => {
                             const activeStudentId = (sub.student?.student_id && sub.student.student_id !== "—")
                               ? sub.student.student_id
@@ -690,7 +690,7 @@ export default function ApprovalsClient({
                     </div>
 
                     {/* Details 4-Column Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-slate-800">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-slate-200">
                       {/* Enrolled Item */}
                       <div>
                         <p className="text-xs font-medium text-slate-400 mb-0.5">
@@ -856,13 +856,13 @@ export default function ApprovalsClient({
                   </div>
 
                   {/* Right Column: Action Buttons */}
-                  <div className="flex lg:flex-col items-center justify-end gap-2 lg:min-w-[140px] pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-800">
+                  <div className="flex lg:flex-col items-center justify-end gap-2 lg:min-w-[140px] pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-200">
                     {sub.status === "pending" && canApprove ? (
                       <>
                         <button
                           onClick={() => setApproveModal(sub)}
                           disabled={processing === sub.id}
-                          className="flex-1 lg:w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold transition-all shadow-md shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
+                          className="flex-1 lg:w-full flex items-center justify-center gap-1.5 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold transition-all shadow-md shadow-amber-500/20 disabled:opacity-50 cursor-pointer"
                         >
                           {processing === sub.id ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -909,15 +909,15 @@ export default function ApprovalsClient({
       {/* 4. Approve Confirmation Modal */}
       {approveModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-white">
+          <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-white">
             {/* Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-[#0f172a] to-slate-950 border-b border-slate-800 p-5 text-white">
+            <div className="bg-gradient-to-r from-slate-900 via-[#0f172a] to-slate-950 border-b border-slate-200 p-5 text-white">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
                   <CheckCircle className="w-6 h-6 text-amber-300" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Confirm Payment Approval</h3>
+                  <h3 className="text-lg font-bold text-slate-900">Confirm Payment Approval</h3>
                   <p className="text-slate-400 text-xs mt-0.5">Review student credentials before authorizing admission</p>
                 </div>
               </div>
@@ -926,12 +926,12 @@ export default function ApprovalsClient({
             {/* Modal Body */}
             <div className="p-6 space-y-4">
               {/* Student Summary */}
-              <div className="flex items-center gap-3 p-3.5 bg-slate-950 rounded-2xl border border-slate-800">
+              <div className="flex items-center gap-3 p-3.5 bg-slate-950 rounded-2xl border border-slate-200">
                 <div className="w-10 h-10 bg-slate-800 border border-slate-700 rounded-full flex items-center justify-center text-amber-400 font-bold flex-shrink-0">
                   {approveModal.student?.name?.charAt(0)?.toUpperCase() || "?"}
                 </div>
                 <div className="min-w-0">
-                  <p className="font-bold text-white text-sm">{approveModal.student?.name || "Student"}</p>
+                  <p className="font-bold text-slate-900 text-sm">{approveModal.student?.name || "Student"}</p>
                   <p className="text-xs text-amber-400/90 font-mono mt-0.5">
                     {approveModal.student?.student_id} · <span className="text-slate-400">{approveModal.student?.phone || "No phone"}</span>
                   </p>
@@ -946,7 +946,7 @@ export default function ApprovalsClient({
                     {formatCurrency(approveModal.amount)}
                   </p>
                 </div>
-                <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-800">
+                <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-200">
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Remaining Due</p>
                   <p
                     className={`text-xl font-black mt-0.5 ${
@@ -959,10 +959,10 @@ export default function ApprovalsClient({
               </div>
 
               {/* Transaction details breakdown */}
-              <div className="space-y-2 text-xs divide-y divide-slate-800">
+              <div className="space-y-2 text-xs divide-y divide-slate-100">
                 <div className="flex items-center justify-between py-1.5">
                   <span className="text-slate-400">Enrolled Item</span>
-                  <span className="font-bold text-white">
+                  <span className="font-bold text-slate-900">
                     {approveModal.course?.title || approveModal.batch?.name || "Enrollment"}
                   </span>
                 </div>
@@ -1048,7 +1048,7 @@ export default function ApprovalsClient({
                 <button
                   onClick={() => handleApprove(approveModal.id, approveModal)}
                   disabled={processing === approveModal.id}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-amber-500/20 text-sm"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-amber-500/20 text-sm"
                 >
                   {processing === approveModal.id ? (
                     <>
@@ -1069,10 +1069,10 @@ export default function ApprovalsClient({
       {/* 5. Reject Payment Modal */}
       {rejectModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-white">
+          <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-white">
             <div className="flex items-center gap-2 text-rose-400">
               <XCircle className="w-5 h-5" />
-              <h3 className="text-lg font-bold text-white">Reject Payment Submission</h3>
+              <h3 className="text-lg font-bold text-slate-900">Reject Payment Submission</h3>
             </div>
 
             <p className="text-xs text-slate-400">
@@ -1124,8 +1124,8 @@ export default function ApprovalsClient({
       {/* 6. Full Details View Modal */}
       {detailModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-white">
-            <div className="bg-gradient-to-r from-slate-900 via-[#0f172a] to-slate-950 border-b border-slate-800 p-5 text-white flex items-center justify-between">
+          <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-white">
+            <div className="bg-gradient-to-r from-slate-900 via-[#0f172a] to-slate-950 border-b border-slate-200 p-5 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <Banknote className="w-5 h-5 text-amber-400" />
                 <h3 className="text-base font-bold">Payment Details</h3>
@@ -1140,8 +1140,8 @@ export default function ApprovalsClient({
 
             <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
               {/* Status Header */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-950 rounded-2xl border border-slate-800">
-                <span className="font-bold text-slate-300 uppercase tracking-wider">Submission Status</span>
+              <div className="flex items-center justify-between p-3.5 bg-slate-950 rounded-2xl border border-slate-200">
+                <span className="font-bold text-slate-700 uppercase tracking-wider">Submission Status</span>
                 <span
                   className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
                     statusColors[detailModal.status]
@@ -1153,8 +1153,8 @@ export default function ApprovalsClient({
               </div>
 
               {/* Student info */}
-              <div className="space-y-2 p-4 bg-slate-950 rounded-2xl border border-slate-800">
-                <p className="font-bold text-white text-sm">{detailModal.student?.name || "Unknown Student"}</p>
+              <div className="space-y-2 p-4 bg-slate-950 rounded-2xl border border-slate-200">
+                <p className="font-bold text-slate-900 text-sm">{detailModal.student?.name || "Unknown Student"}</p>
                 <div className="grid grid-cols-2 gap-2 text-slate-400">
                   <p>Student ID: <strong className="font-mono text-amber-300">{detailModal.student?.student_id || "—"}</strong></p>
                   <p>Phone: <strong className="font-mono text-slate-200">{detailModal.student?.phone || "—"}</strong></p>
@@ -1171,7 +1171,7 @@ export default function ApprovalsClient({
                   <p className="text-[10px] uppercase font-bold text-emerald-400">Amount Paid</p>
                   <p className="text-base font-extrabold text-emerald-300 mt-0.5">{formatCurrency(detailModal.amount)}</p>
                 </div>
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-200">
                   <p className="text-[10px] uppercase font-bold text-slate-400">Total Fee</p>
                   <p className="text-base font-bold text-white mt-0.5">{formatCurrency(detailModal.total_fee)}</p>
                 </div>
@@ -1182,7 +1182,7 @@ export default function ApprovalsClient({
               </div>
 
               {/* Transaction Meta */}
-              <div className="space-y-2 divide-y divide-slate-800">
+              <div className="space-y-2 divide-y divide-slate-100">
                 <div className="flex justify-between py-2">
                   <span className="text-slate-400">Method</span>
                   <span className={`inline-flex px-2.5 py-0.5 rounded-full font-bold text-xs border ${methodColors[detailModal.payment_method] || "bg-slate-800 text-slate-300"}`}>
@@ -1201,7 +1201,7 @@ export default function ApprovalsClient({
                 </div>
                 <div className="flex justify-between py-2">
                   <span className="text-slate-400">Item Enrolled</span>
-                  <span className="font-bold text-white">{detailModal.course?.title || detailModal.batch?.name || "—"}</span>
+                  <span className="font-bold text-slate-900">{detailModal.course?.title || detailModal.batch?.name || "—"}</span>
                 </div>
                 <div className="flex justify-between py-2">
                   <span className="text-slate-400">Submitted On</span>
@@ -1222,7 +1222,7 @@ export default function ApprovalsClient({
                 {detailModal.notes && (
                   <div className="py-2">
                     <span className="text-slate-400 block mb-1">Notes</span>
-                    <p className="text-slate-200 bg-slate-950 border border-slate-800 p-2.5 rounded-xl">{detailModal.notes}</p>
+                    <p className="text-slate-200 bg-white border border-slate-300 p-2.5 rounded-xl">{detailModal.notes}</p>
                   </div>
                 )}
 

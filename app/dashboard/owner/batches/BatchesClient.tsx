@@ -210,14 +210,14 @@ export default function BatchesClient({
   })
 
   const ic = "w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white bg-slate-950 focus:outline-none focus:border-amber-400 placeholder:text-slate-500 transition-all shadow-sm"
-  const lbl = "block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5"
+  const lbl = "block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
 
   return (
     <div className="space-y-6">
       {/* Top action & filter bar */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-200">
           {filterTabs.map(tab => {
             const active = filterStatus === tab.key
             return (
@@ -244,7 +244,7 @@ export default function BatchesClient({
         <button
           type="button"
           onClick={openCreateModal}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all"
         >
           <Plus className="w-4 h-4" /> Create New Batch
         </button>
@@ -263,7 +263,7 @@ export default function BatchesClient({
           return (
             <div 
               key={batch.id} 
-              className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl hover:border-amber-500/40 hover:shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden group"
+              className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-500/40 hover:shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden group"
             >
               {/* Header color accent */}
               <div className={`h-1.5 w-full ${
@@ -282,7 +282,7 @@ export default function BatchesClient({
                       <BookOpen className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-bold text-white text-base truncate leading-tight group-hover:text-amber-400 transition-colors">
+                      <h3 className="font-bold text-slate-900 text-base truncate leading-tight group-hover:text-amber-400 transition-colors">
                         {batch.name}
                       </h3>
                       <p className="text-xs font-medium text-slate-400 mt-0.5 truncate">
@@ -313,7 +313,7 @@ export default function BatchesClient({
                 </div>
 
                 {/* Seats progress bar */}
-                <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
+                <div className="space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200/80">
                   <div className="flex items-center justify-between text-xs font-semibold">
                     <span className="flex items-center gap-1.5 text-slate-300">
                       <Users className="w-3.5 h-3.5 text-amber-400" />
@@ -323,7 +323,7 @@ export default function BatchesClient({
                       {seatsLeft === 0 ? "Full" : `${seatsLeft} seats left`}
                     </span>
                   </div>
-                  <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                  <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-200">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${
                         pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500"
@@ -335,11 +335,11 @@ export default function BatchesClient({
 
                 {/* Details list */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                     <p className="text-[10px] text-slate-400 font-medium">Monthly Fee</p>
                     <p className="font-extrabold text-amber-400 text-sm">{formatCurrency(batch.monthly_fee)}</p>
                   </div>
-                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                     <p className="text-[10px] text-slate-400 font-medium">Admission Fee</p>
                     <p className="font-bold text-slate-200 text-sm">{batch.admission_fee > 0 ? formatCurrency(batch.admission_fee) : "Free"}</p>
                   </div>
@@ -367,7 +367,7 @@ export default function BatchesClient({
               </div>
 
               {/* Bottom Actions */}
-              <div className="px-5 py-3 bg-slate-950/60 border-t border-slate-800 flex items-center justify-between gap-2">
+              <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
                 <Link
                   href={`/batch/${batch.id}`}
                   className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-amber-400 transition-colors"
@@ -399,13 +399,13 @@ export default function BatchesClient({
         })}
 
         {filteredBatches.length === 0 && (
-          <div className="col-span-full bg-slate-900/90 backdrop-blur-md rounded-2xl border-2 border-dashed border-slate-800 py-16 text-center shadow-xl">
+          <div className="col-span-full bg-white rounded-2xl border-2 border-dashed border-slate-200 py-16 text-center shadow-xl">
             <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-3" />
             <p className="text-white font-bold text-base">No batches found</p>
             <p className="text-slate-400 text-xs mt-1">Try switching tabs or create a new batch.</p>
             <button
               onClick={openCreateModal}
-              className="mt-4 inline-flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 rounded-xl text-xs font-bold hover:scale-[1.02] shadow-md shadow-amber-500/20 transition-all"
+              className="mt-4 inline-flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl text-xs font-bold hover:scale-[1.02] shadow-md shadow-amber-500/20 transition-all"
             >
               <Plus className="w-3.5 h-3.5" /> Create Batch
             </button>
@@ -416,15 +416,15 @@ export default function BatchesClient({
       {/* Create / Edit Batch Modal */}
       {(showCreateModal || editingBatch) && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-slate-900 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-800 text-white animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-2xl shadow-2xl overflow-hidden border border-slate-200 text-white animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-slate-950 via-[#0f172a] to-slate-900 p-5 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
+            <div className="bg-gradient-to-r from-slate-950 via-[#0f172a] to-slate-900 p-5 text-white flex items-center justify-between shrink-0 border-b border-slate-200">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-center justify-center text-amber-400">
                   {editingBatch ? <Edit3 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-white">
+                  <h3 className="text-lg font-extrabold text-slate-900">
                     {editingBatch ? `Edit Batch: ${editingBatch.name}` : "Create New Batch"}
                   </h3>
                   <p className="text-xs text-amber-400/90 font-medium">
@@ -505,7 +505,7 @@ export default function BatchesClient({
               </div>
 
               {/* Section 2: Teacher & Room Allocation */}
-              <div className="pt-2 border-t border-slate-800">
+              <div className="pt-2 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Teacher & Classroom</h4>
@@ -545,7 +545,7 @@ export default function BatchesClient({
               </div>
 
               {/* Section 3: Pricing & Fees */}
-              <div className="pt-2 border-t border-slate-800">
+              <div className="pt-2 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Fee Structure</h4>
@@ -590,7 +590,7 @@ export default function BatchesClient({
               </div>
 
               {/* Section 4: Schedule */}
-              <div className="pt-2 border-t border-slate-800">
+              <div className="pt-2 border-t border-slate-200">
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full bg-amber-400"></span>
                   <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Class Schedule & Timings</h4>
@@ -618,7 +618,7 @@ export default function BatchesClient({
               </div>
 
               {/* Section 5: Public Description */}
-              <div className="pt-2 border-t border-slate-800">
+              <div className="pt-2 border-t border-slate-200">
                 <label className={lbl}>Public Description (Shown on Website & Portal)</label>
                 <textarea 
                   value={form.description} 
@@ -630,7 +630,7 @@ export default function BatchesClient({
               </div>
 
               {/* Sticky bottom submit bar */}
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3 sticky bottom-0 bg-slate-900">
+              <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-3 sticky bottom-0 bg-slate-900">
                 <button 
                   type="button" 
                   onClick={() => { setShowCreateModal(false); setEditingBatch(null) }} 
@@ -641,7 +641,7 @@ export default function BatchesClient({
                 <button 
                   type="submit" 
                   disabled={loading} 
-                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50 hover:scale-[1.02]"
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50 hover:scale-[1.02]"
                 >
                   {loading ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>

@@ -18,7 +18,7 @@ export default async function TeacherDashboard() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-black text-white tracking-tight">Teacher Dashboard</h2><p className="text-slate-400 text-sm mt-1">Manage your batches and courses.</p></div>
+      <div><h2 className="text-2xl font-black text-slate-900 tracking-tight">Teacher Dashboard</h2><p className="text-slate-400 text-sm mt-1">Manage your batches and courses.</p></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard title="My Batches" value={batches.data?.length || 0} icon={BookOpen} color="blue" />
         <StatsCard title="Total Students" value={totalStudents} icon={Users} color="indigo" />
@@ -32,7 +32,7 @@ export default async function TeacherDashboard() {
           { href: "/dashboard/teacher/results", label: "Enter Results" },
           { href: "/dashboard/teacher/courses", label: "My Courses" },
         ].map(a => (
-          <Link key={a.href} href={a.href} className="p-4 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 hover:bg-slate-800/60 shadow-lg transition-all text-center text-sm font-bold text-slate-300 hover:text-amber-400">{a.label}</Link>
+          <Link key={a.href} href={a.href} className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-500/40 hover:bg-slate-800/60 shadow-lg transition-all text-center text-sm font-bold text-slate-300 hover:text-amber-400">{a.label}</Link>
         ))}
       </div>
     </div>

@@ -30,7 +30,7 @@ export default async function BranchesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
           Branch Management (শাখা ব্যবস্থাপনা)
         </h2>
         <p className="text-sm text-amber-400/90 font-medium mt-1">

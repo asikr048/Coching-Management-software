@@ -48,27 +48,27 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-black text-white tracking-tight">Mark Attendance</h2><p className="text-sm text-slate-400 mt-1">{today}</p></div>
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5">
-        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Select Batch</label>
-        <select value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)} className="w-full max-w-xs px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10">
+      <div><h2 className="text-2xl font-black text-slate-900 tracking-tight">Mark Attendance</h2><p className="text-sm text-slate-400 mt-1">{today}</p></div>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5">
+        <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">Select Batch</label>
+        <select value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)} className="w-full max-w-xs px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10">
           <option value="" className="bg-slate-950 text-white">-- Select Batch --</option>
           {batches.map(b => <option key={b.id} value={b.id} className="bg-slate-950 text-white">{b.name}</option>)}
         </select>
       </div>
       {selectedBatch && students.length > 0 && (
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead><tr className="bg-slate-950/80 border-b border-slate-800">
+              <thead><tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">#</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Student</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">ID</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Status</th>
               </tr></thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-slate-100">
                 {students.map((s, i) => (
-                  <tr key={s.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={s.id} className="hover:bg-amber-50/30 transition-colors">
                     <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
                     <td className="px-4 py-3 text-sm font-bold text-white">{s.name}</td>
                     <td className="px-4 py-3 text-sm text-slate-400 font-mono">{s.student_id}</td>
@@ -87,15 +87,15 @@ export default function AttendancePage() {
               </tbody>
             </table>
           </div>
-          <div className="px-5 py-4 border-t border-slate-800 bg-slate-950/40 flex flex-col sm:flex-row justify-between items-center gap-3">
+          <div className="px-5 py-4 border-t border-slate-200 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-center gap-3">
             <p className="text-sm text-slate-400">{students.length} students • Present: <span className="text-emerald-400 font-bold">{Object.values(attendance).filter(v => v === "present").length}</span> • Absent: <span className="text-rose-400 font-bold">{Object.values(attendance).filter(v => v === "absent").length}</span></p>
-            <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer">
+            <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer">
               {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><UserCheck className="w-4 h-4" /> Save Attendance</>}
             </button>
           </div>
         </div>
       )}
-      {selectedBatch && students.length === 0 && <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-8 text-center text-slate-400">No students enrolled in this batch.</div>}
+      {selectedBatch && students.length === 0 && <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-8 text-center text-slate-400">No students enrolled in this batch.</div>}
     </div>
   )
 }

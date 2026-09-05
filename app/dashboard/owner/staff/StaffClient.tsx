@@ -275,7 +275,7 @@ export default function StaffClient({
       {/* Control Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Role hierarchy legend */}
-        <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-lg">
+        <div className="flex flex-wrap items-center gap-2 p-3 bg-white rounded-2xl border border-slate-200/90 shadow-sm shadow-lg">
           <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mr-2">
             Role Hierarchy:
           </span>
@@ -292,7 +292,7 @@ export default function StaffClient({
         {canAddStaff && (
           <button
             onClick={() => setShowModal(true)}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-extrabold rounded-xl text-sm transition-all shadow-md shadow-amber-500/20 hover:scale-[1.02] flex-shrink-0"
+            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-extrabold rounded-xl text-sm transition-all shadow-md shadow-amber-500/20 hover:scale-[1.02] flex-shrink-0"
           >
             <Plus className="w-4 h-4" /> Add Staff Member
           </button>
@@ -308,8 +308,8 @@ export default function StaffClient({
           return (
             <div
               key={s.id}
-              className={`bg-slate-900/90 backdrop-blur-md rounded-2xl border ${
-                s.is_active ? "border-slate-800 hover:border-amber-500/40" : "border-rose-900/60 bg-rose-950/20"
+              className={`bg-white rounded-2xl border ${
+                s.is_active ? "border-slate-200 hover:border-amber-500/40" : "border-rose-900/60 bg-rose-950/20"
               } p-5 hover:shadow-xl transition-all relative flex flex-col justify-between text-white`}
             >
               <div>
@@ -329,7 +329,7 @@ export default function StaffClient({
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-bold text-white truncate text-base">{s.name}</p>
+                      <p className="font-bold text-slate-900 truncate text-base">{s.name}</p>
                       {!s.is_active && (
                         <span className="text-[10px] px-1.5 py-0.5 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded font-bold">
                           Inactive
@@ -352,7 +352,7 @@ export default function StaffClient({
                 </div>
 
                 {/* Assigned Branches Display */}
-                <div className="mt-2.5 mb-3 p-2.5 bg-slate-950/70 rounded-xl border border-slate-800">
+                <div className="mt-2.5 mb-3 p-2.5 bg-slate-50 rounded-xl border border-slate-200">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
                       <Landmark className="w-3 h-3 text-amber-400" /> Permitted Branches
@@ -430,7 +430,7 @@ export default function StaffClient({
 
                 {/* Standard Financial Access Badge + Toggle */}
                 {s.role !== "owner" && (
-                  <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between">
+                  <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <Banknote
                         className={`w-3.5 h-3.5 ${
@@ -462,7 +462,7 @@ export default function StaffClient({
                 )}
 
                 {s.role === "owner" && (
-                  <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-1.5">
+                  <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-1.5">
                     <Banknote className="w-3.5 h-3.5 text-emerald-400" />
                     <span className="text-xs font-bold text-emerald-400">Financial Access: Always (Owner)</span>
                   </div>
@@ -471,7 +471,7 @@ export default function StaffClient({
 
               {/* Role change dropdown & active toggle */}
               {canChangeRole(s.role) && assignableRoles.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2">
+                <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-2">
                   <select
                     value={s.role}
                     onChange={e => handleChangeRole(s.id, e.target.value)}
@@ -514,8 +514,8 @@ export default function StaffClient({
       {showModal && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-[#0f172a] text-slate-100 rounded-3xl w-full max-w-lg p-6 shadow-2xl border border-slate-700 my-8">
-            <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold flex items-center gap-2 text-white">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-200 pb-3">
+              <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900">
                 <UserCheck className="w-5 h-5 text-amber-400" /> Add Staff Member
               </h3>
               <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-white rounded-lg">
@@ -602,14 +602,14 @@ export default function StaffClient({
 
               {/* Branch Assignment Checkboxes */}
               {branches.length > 0 && (
-                <div className="pt-2 border-t border-slate-800">
+                <div className="pt-2 border-t border-slate-200">
                   <label className="block text-xs font-bold text-amber-400 mb-2">
                     Branch Assignment (শাখা নির্ধারণ)
                   </label>
                   <p className="text-[11px] text-slate-400 mb-2">
                     Select one or multiple branches this staff member can access:
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-950 p-3 rounded-xl border border-slate-800 max-h-40 overflow-y-auto">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200/80 max-h-40 overflow-y-auto">
                     {branches.map(branch => {
                       const checked = form.branch_ids.includes(branch.id)
                       return (
@@ -640,7 +640,7 @@ export default function StaffClient({
                 </div>
               )}
 
-              <div className="flex gap-3 pt-3 border-t border-slate-800">
+              <div className="flex gap-3 pt-3 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
@@ -651,7 +651,7 @@ export default function StaffClient({
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-2"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
@@ -671,13 +671,13 @@ export default function StaffClient({
       {branchModalStaff && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4">
           <div className="bg-[#0f172a] text-slate-100 rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-700">
-            <div className="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between mb-4 border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center font-bold text-xs">
                   <Landmark className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-white">Branch Access Control</h3>
+                  <h3 className="text-base font-bold text-slate-900">Branch Access Control</h3>
                   <p className="text-xs text-amber-400 truncate">{branchModalStaff.name}</p>
                 </div>
               </div>
@@ -693,7 +693,7 @@ export default function StaffClient({
               Assign single or multiple branch access for <strong className="text-white">{branchModalStaff.name}</strong>.
             </p>
 
-            <div className="space-y-2 max-h-60 overflow-y-auto mb-4 border border-slate-800 rounded-xl p-2.5 bg-slate-950">
+            <div className="space-y-2 max-h-60 overflow-y-auto mb-4 border border-slate-200 rounded-xl p-2.5 bg-slate-950">
               {branches.map(branch => {
                 const isSelected = selectedBranchIds.includes(branch.id)
                 return (

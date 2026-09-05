@@ -153,15 +153,15 @@ export default function MarketplaceClient({ courses, students: initialStudents }
     win.print()
   }
 
-  const inputClass = "w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all"
+  const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
 
   return (
     <div>
       {/* Course Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {courses.map(c => (
-          <div key={c.id} className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 overflow-hidden shadow-xl hover:border-amber-500/30 transition-all">
-            <div className="h-32 bg-gradient-to-r from-amber-500/10 via-slate-800 to-amber-600/10 border-b border-slate-800 flex items-center justify-center">
+          <div key={c.id} className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden shadow-xl hover:border-amber-500/30 transition-all">
+            <div className="h-32 bg-gradient-to-r from-amber-500/10 via-slate-800 to-amber-600/10 border-b border-slate-200 flex items-center justify-center">
               <ShoppingBag className="w-10 h-10 text-amber-400/40" />
             </div>
             <div className="p-5">
@@ -200,7 +200,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
               <p className="text-xs text-slate-500 mt-2">{c.total_sales || 0} sales • {c.level || "All levels"}</p>
               <button 
                 onClick={() => openBuy(c)} 
-                className="w-full mt-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full mt-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <CreditCard className="w-4 h-4" /> Buy Course
               </button>
@@ -212,12 +212,12 @@ export default function MarketplaceClient({ courses, students: initialStudents }
 
       {/* Buy Course Modal */}
       {buyModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-3xl w-full max-w-lg shadow-2xl border border-slate-800 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 bg-slate-50 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-lg shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-slate-800">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200">
               <div>
-                <h3 className="text-lg font-black text-white">Buy Course</h3>
+                <h3 className="text-lg font-black text-slate-900">Buy Course</h3>
                 <p className="text-sm text-slate-400">{buyModal.title} — <strong className="text-amber-400 font-bold">{formatCurrency(buyModal.discount_price || buyModal.price)}</strong></p>
               </div>
               <button onClick={closeBuy} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"><X className="w-5 h-5" /></button>
@@ -236,11 +236,11 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student by name, ID, or phone..."
                           className="w-full pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 bg-slate-950" />
                         {filteredStudents.length > 0 && (
-                          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-slate-900 rounded-xl border border-slate-800 shadow-2xl max-h-48 overflow-y-auto divide-y divide-slate-800">
+                          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-slate-900 rounded-xl border border-slate-200 shadow-2xl max-h-48 overflow-y-auto divide-y divide-slate-100">
                             {filteredStudents.map(s => (
                               <button key={s.id} onClick={() => { setSelectedStudent(s); setSearch("") }}
                                 className="w-full text-left px-4 py-2.5 hover:bg-slate-800 text-sm flex items-center justify-between transition-colors cursor-pointer">
-                                <div><p className="font-bold text-white">{s.name}</p><p className="text-xs text-slate-400"><span className="text-amber-400 font-mono">{s.student_id}</span> {s.phone ? `• ${s.phone}` : ""}</p></div>
+                                <div><p className="font-bold text-slate-900">{s.name}</p><p className="text-xs text-slate-400"><span className="text-amber-400 font-mono">{s.student_id}</span> {s.phone ? `• ${s.phone}` : ""}</p></div>
                               </button>
                             ))}
                           </div>
@@ -268,7 +268,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
 
                   {/* New student form */}
                   {isNewStudent && (
-                    <div className="space-y-3 p-4 bg-slate-950 rounded-xl border border-slate-800">
+                    <div className="space-y-3 p-4 bg-slate-950 rounded-xl border border-slate-200">
                       <div className="flex items-center justify-between">
                         <p className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1"><UserPlus className="w-4 h-4 text-amber-400" /> New Student</p>
                         <button onClick={() => setIsNewStudent(false)} className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer">Cancel</button>
@@ -283,7 +283,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                   )}
 
                   {(selectedStudent || isNewStudent) && (
-                    <button onClick={() => setStep("payment")} className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-black shadow-lg shadow-amber-500/20 transition-all cursor-pointer">
+                    <button onClick={() => setStep("payment")} className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-black shadow-lg shadow-amber-500/20 transition-all cursor-pointer">
                       Next → Payment
                     </button>
                   )}
@@ -295,10 +295,10 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                 <div className="space-y-4">
                   <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Step 2: Payment</p>
 
-                  <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 text-sm space-y-1">
-                    <div className="flex justify-between"><span className="text-slate-400">Course</span><span className="font-bold text-white">{buyModal.title}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-400">Student</span><span className="font-bold text-white">{selectedStudent?.name || newForm.name}</span></div>
-                    <div className="flex justify-between pt-1 border-t border-slate-800"><span className="text-slate-400">Price</span><span className="font-black text-amber-400">{formatCurrency(buyModal.discount_price || buyModal.price)}</span></div>
+                  <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-200 text-sm space-y-1">
+                    <div className="flex justify-between"><span className="text-slate-400">Course</span><span className="font-bold text-slate-900">{buyModal.title}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Student</span><span className="font-bold text-slate-900">{selectedStudent?.name || newForm.name}</span></div>
+                    <div className="flex justify-between pt-1 border-t border-slate-200"><span className="text-slate-400">Price</span><span className="font-black text-amber-400">{formatCurrency(buyModal.discount_price || buyModal.price)}</span></div>
                   </div>
 
                   <div>
@@ -313,8 +313,8 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                   </div>
 
                   <div className="flex gap-3 pt-2">
-                    <button onClick={() => setStep("select")} className="flex-1 py-2.5 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">← Back</button>
-                    <button onClick={handleBuy} disabled={loading} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <button onClick={() => setStep("select")} className="flex-1 py-2.5 border border-slate-200 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">← Back</button>
+                    <button onClick={handleBuy} disabled={loading} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer">
                       {loading ? <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> : <Check className="w-4 h-4 text-slate-950" />}
                       {loading ? "Processing..." : `Pay ${formatCurrency(parseFloat(paidAmount) || 0)}`}
                     </button>
@@ -330,8 +330,8 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                     <p className="text-lg font-black text-white">Purchase Successful!</p>
                   </div>
 
-                  <div ref={receiptRef} className="border border-slate-800 rounded-2xl p-5 bg-slate-950 space-y-2">
-                    <div className="text-center border-b border-dashed border-slate-800 pb-3 mb-3">
+                  <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-5 bg-slate-950 space-y-2">
+                    <div className="text-center border-b border-dashed border-slate-200 pb-3 mb-3">
                       <p className="font-black text-amber-400">MedhaShiree</p>
                       <p className="text-xs text-slate-400">Course Purchase Receipt</p>
                     </div>
@@ -345,19 +345,19 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                     ].map(([label, value]) => (
                       <div key={label} className="flex justify-between text-xs">
                         <span className="text-slate-400">{label}</span>
-                        <span className="font-bold text-white">{value}</span>
+                        <span className="font-bold text-slate-900">{value}</span>
                       </div>
                     ))}
-                    <div className="border-t border-dashed border-slate-800 pt-3 mt-3 text-center">
+                    <div className="border-t border-dashed border-slate-200 pt-3 mt-3 text-center">
                       <p className="text-lg font-black text-amber-400">Total: {formatCurrency(receipt.amount)}</p>
                     </div>
                   </div>
 
                   <div className="flex gap-3">
-                    <button onClick={handlePrint} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <button onClick={handlePrint} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer">
                       <Printer className="w-4 h-4" /> Print Receipt
                     </button>
-                    <button onClick={closeBuy} className="flex-1 py-2.5 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">
+                    <button onClick={closeBuy} className="flex-1 py-2.5 border border-slate-200 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">
                       Done
                     </button>
                   </div>

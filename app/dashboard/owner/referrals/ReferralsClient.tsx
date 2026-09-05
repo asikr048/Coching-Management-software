@@ -369,7 +369,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2 sm:gap-2.5">
+          <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2 sm:gap-2.5">
             <div className="w-8 h-8 sm:w-9 sm:h-9 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 shadow-sm flex-shrink-0">
               <GitMerge className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
@@ -393,10 +393,10 @@ export default function ReferralsClient({ initialReferrals }: Props) {
 
       {/* Stat Cards - Responsive Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-4 shadow-xl">
           <div className="flex items-center justify-between">
             <span className="text-[10px] sm:text-xs font-bold uppercase text-slate-400 truncate">Total Referrals</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-amber-400 flex-shrink-0">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-amber-400 flex-shrink-0">
               <GitMerge className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
@@ -404,10 +404,10 @@ export default function ReferralsClient({ initialReferrals }: Props) {
           <p className="text-[11px] text-slate-500 mt-0.5 truncate">{stats.uniqueReferrers} unique referrers</p>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-4 shadow-xl">
           <div className="flex items-center justify-between">
             <span className="text-[10px] sm:text-xs font-bold uppercase text-amber-400 truncate">Pending Payout</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-amber-400 flex-shrink-0">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-amber-400 flex-shrink-0">
               <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
@@ -415,10 +415,10 @@ export default function ReferralsClient({ initialReferrals }: Props) {
           <p className="text-[11px] text-slate-500 mt-0.5 truncate">{stats.pendingCount + stats.approvedCount} pending</p>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-4 shadow-xl">
           <div className="flex items-center justify-between">
             <span className="text-[10px] sm:text-xs font-bold uppercase text-emerald-400 truncate">Paid Out</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-emerald-400 flex-shrink-0">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-emerald-400 flex-shrink-0">
               <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
@@ -426,10 +426,10 @@ export default function ReferralsClient({ initialReferrals }: Props) {
           <p className="text-[11px] text-slate-500 mt-0.5 truncate">{stats.paidCount} paid referrals</p>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-4 shadow-xl">
           <div className="flex items-center justify-between">
             <span className="text-[10px] sm:text-xs font-bold uppercase text-purple-400 truncate">Total Commission</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-purple-400 flex-shrink-0">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-purple-400 flex-shrink-0">
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
@@ -437,10 +437,10 @@ export default function ReferralsClient({ initialReferrals }: Props) {
           <p className="text-[11px] text-slate-500 mt-0.5 truncate">10% standard rate</p>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl col-span-2 sm:col-span-1">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-4 shadow-xl col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] sm:text-xs font-bold uppercase text-blue-400 truncate">Active Referrers</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-blue-400 flex-shrink-0">
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-white border border-slate-300 rounded-lg flex items-center justify-center text-blue-400 flex-shrink-0">
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
@@ -450,7 +450,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       </div>
 
       {/* Control Bar: Search, Status Filter & Sorting */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3 sm:p-4 shadow-xl space-y-3">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 shadow-xl space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
           {/* Search input */}
           <div className="relative flex-1 min-w-0">
@@ -497,7 +497,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
         </div>
 
         {/* Status Filter Tabs - Scrollable on mobile */}
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800 flex-wrap">
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200 flex-wrap">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none w-full sm:w-auto">
             {(
               [
@@ -513,7 +513,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 cursor-pointer ${
                   statusFilter === tab.key
                     ? "bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20"
-                    : "bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 hover:text-white"
+                    : "bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-200 hover:text-white"
                 }`}
               >
                 <span>{tab.label}</span>
@@ -537,7 +537,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       {/* MOBILE CARDS VIEW (block on mobile, hidden on tablet/desktop) */}
       <div className="block md:hidden space-y-3">
         {filteredAndSorted.length === 0 ? (
-          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-8 text-center space-y-2">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-8 text-center space-y-2">
             <div className="w-10 h-10 bg-amber-500/10 text-amber-400 rounded-xl flex items-center justify-center mx-auto border border-amber-500/20">
               <GitMerge className="w-5 h-5" />
             </div>
@@ -550,10 +550,10 @@ export default function ReferralsClient({ initialReferrals }: Props) {
           filteredAndSorted.map((r, idx) => (
             <div
               key={r.id}
-              className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3 hover:border-slate-700 transition-all"
+              className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 shadow-xl space-y-3 hover:border-slate-700 transition-all"
             >
               {/* Card Header: Referrer + Status */}
-              <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-800">
+              <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-200">
                 <div className="flex items-center gap-2 min-w-0">
                   <div
                     className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-black ${
@@ -608,7 +608,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               {/* Card Details Grid */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {/* Enrolled Student */}
-                <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl">
+                <div className="bg-white border border-slate-300/80 p-2.5 rounded-xl">
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">Enrolled Student</span>
                   <Link
                     href={`/dashboard/owner/students/${r.referee_id}`}
@@ -621,9 +621,9 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                 </div>
 
                 {/* Batch Enrolled */}
-                <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl">
+                <div className="bg-white border border-slate-300/80 p-2.5 rounded-xl">
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">Batch</span>
-                  <p className="font-bold text-white mt-0.5 truncate">{r.batch_name || "General"}</p>
+                  <p className="font-bold text-slate-900 mt-0.5 truncate">{r.batch_name || "General"}</p>
                   {r.batch_fee ? (
                     <p className="text-[11px] text-slate-400 mt-0.5">{formatCurrency(r.batch_fee)}</p>
                   ) : null}
@@ -639,7 +639,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                 </div>
 
                 {/* Date */}
-                <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl">
+                <div className="bg-white border border-slate-300/80 p-2.5 rounded-xl">
                   <span className="text-[10px] font-bold text-slate-500 uppercase block">Date</span>
                   <p className="font-semibold text-slate-300 mt-0.5">{formatDate(r.created_at)}</p>
                   <p className="text-[10px] text-slate-500">
@@ -653,7 +653,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
 
               {/* Notes if any */}
               {r.notes && (
-                <div className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300">
+                <div className="bg-white border border-slate-300 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300">
                   <strong className="text-amber-400">Note:</strong> {r.notes}
                 </div>
               )}
@@ -713,11 +713,11 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       </div>
 
       {/* DESKTOP / TABLET TABLE VIEW (hidden on mobile, visible on md+) */}
-      <div className="hidden md:block bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+      <div className="hidden md:block bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-[760px]">
             <thead>
-              <tr className="bg-slate-950 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
                 <th className="px-4 py-3.5 w-12 text-center">#</th>
                 <th className="px-4 py-3.5">Referrer / Written Name</th>
                 <th className="px-4 py-3.5">Referred Student</th>
@@ -728,7 +728,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                 <th className="px-4 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 text-sm">
+            <tbody className="divide-y divide-slate-100 text-sm">
               {filteredAndSorted.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-16">
@@ -748,7 +748,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               ) : (
                 filteredAndSorted.map((r, idx) => {
                   return (
-                    <tr key={r.id} className="hover:bg-slate-800/40 transition-colors">
+                    <tr key={r.id} className="hover:bg-amber-50/30 transition-colors">
                       {/* Index */}
                       <td className="px-4 py-3.5 text-center text-xs font-bold text-slate-500">
                         {idx + 1}
@@ -768,7 +768,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-white">{r.referrer_name}</span>
+                              <span className="font-bold text-slate-900">{r.referrer_name}</span>
                               {r.is_matched_student ? (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
                                   Student Referrer
@@ -956,13 +956,13 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       {/* Pay Out Modal - Mobile Responsive Bottom Sheet / Center Dialog */}
       {payingItem && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-800 space-y-4 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto text-white">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl flex items-center justify-center">
                   <CreditCard className="w-4 h-4" />
                 </div>
-                <h3 className="text-base font-bold text-white">Record Commission Payout</h3>
+                <h3 className="text-base font-bold text-slate-900">Record Commission Payout</h3>
               </div>
               <button
                 onClick={() => setPayingItem(null)}
@@ -1048,13 +1048,13 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       {/* Edit Commission Modal - Mobile Responsive */}
       {editingItem && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-800 space-y-4 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto text-white">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+          <div className="bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl flex items-center justify-center">
                   <Edit3 className="w-4 h-4" />
                 </div>
-                <h3 className="text-base font-bold text-white">Edit Referral Commission</h3>
+                <h3 className="text-base font-bold text-slate-900">Edit Referral Commission</h3>
               </div>
               <button
                 onClick={() => setEditingItem(null)}
@@ -1064,7 +1064,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               </button>
             </div>
 
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 space-y-1">
+            <div className="bg-white border border-slate-300 rounded-xl p-3 text-xs text-slate-300 space-y-1">
               <p>
                 <strong className="text-amber-400">Referrer:</strong> {editingItem.referrer_name}
               </p>

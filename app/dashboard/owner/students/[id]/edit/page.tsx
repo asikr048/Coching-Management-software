@@ -55,19 +55,19 @@ export default function EditStudentPage() {
     finally { setLoading(false) }
   }
 
-  const inputClass = "w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all"
+  const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
 
   if (fetching) return <div className="flex items-center justify-center h-64 text-slate-400"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /></div>
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-black text-white tracking-tight">Edit Student</h2>
+        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Edit Student</h2>
         <p className="text-sm text-slate-400 mt-1">Update student information</p>
       </div>
       <form onSubmit={handleSave} className="space-y-6">
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
-          <h3 className="font-black text-white text-base mb-4">Personal Information</h3>
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
+          <h3 className="font-black text-slate-900 text-base mb-4">Personal Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={inputClass} /></div>
             <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={inputClass}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
@@ -79,8 +79,8 @@ export default function EditStudentPage() {
             <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Address</label><input value={form.address} onChange={e => update("address", e.target.value)} className={inputClass} /></div>
           </div>
         </div>
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
-          <h3 className="font-black text-white text-base mb-4">Guardian Information</h3>
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
+          <h3 className="font-black text-slate-900 text-base mb-4">Guardian Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Guardian Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={inputClass} /></div>
             <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Guardian Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={inputClass} /></div>
@@ -89,8 +89,8 @@ export default function EditStudentPage() {
           </div>
         </div>
         <div className="flex gap-3">
-          <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">Cancel</button>
-          <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-40 flex items-center justify-center gap-2 transition-all cursor-pointer">
+          <button type="button" onClick={() => router.back()} className="flex-1 py-2.5 border border-slate-200 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">Cancel</button>
+          <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-40 flex items-center justify-center gap-2 transition-all cursor-pointer">
             {loading ? <><Loader2 className="w-4 h-4 animate-spin text-slate-950" /> Saving...</> : <><Save className="w-4 h-4" /> Save Changes</>}
           </button>
         </div>

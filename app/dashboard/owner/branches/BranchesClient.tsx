@@ -207,49 +207,49 @@ export default function BranchesClient({
     <div className="space-y-6">
       {/* Top Metrics Banner */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-3">
+        <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex items-center gap-3">
           <div className="w-11 h-11 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <Landmark className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Branches</p>
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Branches</p>
             <p className="text-xl font-extrabold text-white mt-0.5">{branches.length}</p>
           </div>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-3">
+        <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex items-center gap-3">
           <div className="w-11 h-11 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Branches</p>
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Active Branches</p>
             <p className="text-xl font-extrabold text-white mt-0.5">{activeBranches}</p>
           </div>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-3">
+        <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex items-center gap-3">
           <div className="w-11 h-11 bg-sky-500/15 text-sky-400 border border-sky-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">All Students</p>
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">All Students</p>
             <p className="text-xl font-extrabold text-white mt-0.5">{totalStudents}</p>
           </div>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-3">
+        <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex items-center gap-3">
           <div className="w-11 h-11 bg-purple-500/15 text-purple-400 border border-purple-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">All Batches</p>
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">All Batches</p>
             <p className="text-xl font-extrabold text-white mt-0.5">{totalBatches}</p>
           </div>
         </div>
       </div>
 
       {/* Control Bar: Search & Add */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
@@ -257,14 +257,14 @@ export default function BranchesClient({
             placeholder="Search by branch name, location, director, or manager..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-700 bg-slate-950/80 text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400/20"
+            className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-700 bg-slate-50 text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400/20"
           />
         </div>
 
         {isOwnerOrSuper && (
           <button
             onClick={openCreateModal}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-extrabold transition-all shadow-md shadow-amber-500/20 hover:scale-[1.02]"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-extrabold transition-all shadow-md shadow-amber-500/20 hover:scale-[1.02]"
           >
             <Plus className="w-4 h-4" />
             Add New Branch (শাখা যোগ)
@@ -274,16 +274,16 @@ export default function BranchesClient({
 
       {/* Branch Cards Grid */}
       {filteredBranches.length === 0 ? (
-        <div className="bg-slate-900/80 rounded-2xl border border-dashed border-slate-800 p-12 text-center">
+        <div className="bg-slate-50 rounded-2xl border border-dashed border-slate-200 p-12 text-center">
           <Landmark className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-white">No branches found</h3>
+          <h3 className="text-base font-bold text-slate-900">No branches found</h3>
           <p className="text-xs text-slate-400 mt-1">
             {search ? "No branch matches your search term." : "Start by adding your first coaching branch."}
           </p>
           {isOwnerOrSuper && !search && (
             <button
               onClick={openCreateModal}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold rounded-xl text-xs"
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-bold rounded-xl text-xs"
             >
               <Plus className="w-4 h-4" /> Add Branch
             </button>
@@ -302,14 +302,14 @@ export default function BranchesClient({
             return (
               <div
                 key={branch.id}
-                className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 transition-all p-5 shadow-xl flex flex-col justify-between"
+                className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-500/40 transition-all p-5 shadow-xl flex flex-col justify-between"
               >
                 <div>
                   {/* Top Bar with Badges */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-lg font-extrabold text-white truncate">{branch.name}</h3>
+                        <h3 className="text-lg font-extrabold text-slate-900 truncate">{branch.name}</h3>
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             branch.is_active
@@ -364,13 +364,13 @@ export default function BranchesClient({
 
                   {/* Description */}
                   {branch.description && (
-                    <p className="text-xs text-slate-300 line-clamp-2 mb-4 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
+                    <p className="text-xs text-slate-300 line-clamp-2 mb-4 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
                       {branch.description}
                     </p>
                   )}
 
                   {/* Operational Metrics Pill */}
-                  <div className="grid grid-cols-3 gap-2 py-2.5 px-3 bg-slate-950/70 rounded-xl mb-4 text-center border border-slate-800/90">
+                  <div className="grid grid-cols-3 gap-2 py-2.5 px-3 bg-slate-50 rounded-xl mb-4 text-center border border-slate-200/90">
                     <div>
                       <p className="text-sm font-extrabold text-amber-400">{branchStudents}</p>
                       <p className="text-[11px] text-slate-400">Students</p>
@@ -387,11 +387,11 @@ export default function BranchesClient({
 
                   {/* Director & Manager Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs mb-3">
-                    <div className="bg-slate-950/60 border border-slate-800/90 p-2.5 rounded-xl">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <div className="bg-slate-50 border border-slate-200/90 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
                         <Shield className="w-3 h-3 text-amber-400" /> Branch Director
                       </p>
-                      <p className="font-bold text-white mt-0.5">
+                      <p className="font-bold text-slate-900 mt-0.5">
                         {branch.branch_director || "Not assigned"}
                       </p>
                       {branch.director_phone && (
@@ -404,11 +404,11 @@ export default function BranchesClient({
                       )}
                     </div>
 
-                    <div className="bg-slate-950/60 border border-slate-800/90 p-2.5 rounded-xl">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                    <div className="bg-slate-50 border border-slate-200/90 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider flex items-center gap-1">
                         <User className="w-3 h-3 text-emerald-400" /> Branch Manager
                       </p>
-                      <p className="font-bold text-white mt-0.5">
+                      <p className="font-bold text-slate-900 mt-0.5">
                         {branch.manager || "Not assigned"}
                       </p>
                       {branch.manager_phone && (
@@ -424,7 +424,7 @@ export default function BranchesClient({
                 </div>
 
                 {/* Contacts & SMS Gateway Footer */}
-                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2 text-xs">
+                <div className="pt-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2 text-xs">
                   <div className="flex items-center gap-3 text-slate-400">
                     {branch.contact_info?.phone && (
                       <span className="flex items-center gap-1" title="Helpline">
@@ -466,13 +466,13 @@ export default function BranchesClient({
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
           <div className="bg-[#0f172a] text-slate-100 w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-700 my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 flex items-center justify-center shadow-md font-bold">
                   <Landmark className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-white text-base">
+                  <h3 className="font-extrabold text-slate-900 text-base">
                     {editingBranch ? "Edit Branch" : "Add New Branch (শাখা যোগ করুন)"}
                   </h3>
                   <p className="text-xs text-amber-400/90 font-medium">
@@ -552,7 +552,7 @@ export default function BranchesClient({
               </div>
 
               {/* Leadership Information */}
-              <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
                 <p className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-amber-400" /> Branch Leadership
                 </p>
@@ -609,7 +609,7 @@ export default function BranchesClient({
               </div>
 
               {/* Contact Information */}
-              <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
                 <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
                   <Phone className="w-3.5 h-3.5 text-emerald-400" /> Helpline & Public Contacts
                 </p>
@@ -705,7 +705,7 @@ export default function BranchesClient({
                 </label>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}

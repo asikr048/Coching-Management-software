@@ -719,7 +719,7 @@ export default function PaymentsClient({
   // Financial access guard
   if (!hasAccess) {
     return (
-      <div className="bg-slate-900/90 border border-red-500/30 rounded-2xl p-8 text-center shadow-xl backdrop-blur-md">
+      <div className="bg-white border border-red-500/30 rounded-2xl p-8 text-center shadow-xl backdrop-blur-md">
         <ShieldAlert className="w-12 h-12 text-red-400 mx-auto mb-3" />
         <h3 className="text-lg font-bold text-red-400 mb-1">Financial Access Required</h3>
         <p className="text-sm text-slate-400">You don&apos;t have financial access to record payments. Contact the Owner.</p>
@@ -730,7 +730,7 @@ export default function PaymentsClient({
   return (
     <div className="space-y-6">
       {/* Top Search & Record Payment Toolbar */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-col sm:flex-row gap-3">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 shadow-xl flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -746,7 +746,7 @@ export default function PaymentsClient({
 
           {/* Search dropdown results */}
           {filteredStudents.length > 0 && !selectedStudent && (
-            <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl max-h-72 overflow-y-auto divide-y divide-slate-800">
+            <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-slate-900 rounded-2xl border border-slate-200 shadow-2xl max-h-72 overflow-y-auto divide-y divide-slate-100">
               {filteredStudents.map(s => {
                 const sDues = dues.filter(d => d.student_id === s.id)
                 const totalDue = sDues.reduce((sum, d) => sum + Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)), 0)
@@ -790,7 +790,7 @@ export default function PaymentsClient({
         <button 
           type="button"
           onClick={openRecordModal} 
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-lg shadow-amber-500/20 hover:shadow-xl transition-all whitespace-nowrap cursor-pointer"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-lg shadow-amber-500/20 hover:shadow-xl transition-all whitespace-nowrap cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Record Payment
         </button>
@@ -807,7 +807,7 @@ export default function PaymentsClient({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-xl text-white">{selectedStudent.name}</h3>
+                  <h3 className="font-bold text-xl text-slate-900">{selectedStudent.name}</h3>
                   <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-xs font-semibold border border-amber-500/30">
                     {selectedStudent.student_id}
                   </span>
@@ -834,7 +834,7 @@ export default function PaymentsClient({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">
+                  <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
                     Pending Dues ({studentDues.length})
                   </h4>
                 </div>
@@ -857,12 +857,12 @@ export default function PaymentsClient({
                         className={`p-4 rounded-2xl border transition-all relative ${
                           isSelected 
                             ? "border-amber-500 bg-amber-500/10 shadow-lg ring-2 ring-amber-500/30 text-white" 
-                            : "border-slate-800 bg-slate-950/80 hover:border-amber-500/40 hover:shadow-md text-white"
+                            : "border-slate-200 bg-slate-50 hover:border-amber-500/40 hover:shadow-md text-white"
                         }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="cursor-pointer flex-1" onClick={() => selectDueToPay(d)}>
-                            <p className="font-bold text-white text-sm">{getBatchName(d.batch)}</p>
+                            <p className="font-bold text-slate-900 text-sm">{getBatchName(d.batch)}</p>
                             <p className="text-xs text-slate-400 mt-0.5">
                               Month: <b className="text-slate-200">{d.due_month}</b> • Deadline: <span className="text-amber-400 font-medium">{formatDate(d.due_date)}</span>
                             </p>
@@ -905,7 +905,7 @@ export default function PaymentsClient({
 
             {/* Pay Selected Due Form (when due clicked) */}
             {payingDue && (
-              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <div className="bg-white border border-slate-300 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm font-bold text-amber-400">
                     <DollarSign className="w-4 h-4 text-amber-400" />
@@ -922,7 +922,7 @@ export default function PaymentsClient({
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Pay Amount (৳)</label>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Pay Amount (৳)</label>
                     <input 
                        type="number" 
                       value={form.amount} 
@@ -931,7 +931,7 @@ export default function PaymentsClient({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Discount (৳)</label>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Discount (৳)</label>
                     <input 
                       type="number" 
                       value={form.discount} 
@@ -940,7 +940,7 @@ export default function PaymentsClient({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Method</label>
+                    <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Method</label>
                     <select 
                       value={form.payment_method} 
                       onChange={e => update("payment_method", e.target.value)} 
@@ -959,7 +959,7 @@ export default function PaymentsClient({
                       type="button"
                       onClick={() => handlePay()} 
                       disabled={loading} 
-                      className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 rounded-xl text-sm font-bold hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all"
+                      className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-xl text-sm font-bold hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all"
                     >
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                       {loading ? "Processing..." : `Record & Get PDF`}
@@ -1004,19 +1004,19 @@ export default function PaymentsClient({
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-                <h4 className="text-sm font-bold text-white uppercase tracking-wider">
+                <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
                   Payment History of {selectedStudent.name} ({studentPayments.length})
                 </h4>
               </div>
 
               {studentPayments.length === 0 ? (
-                <div className="text-center py-6 text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl bg-slate-950/40">
+                <div className="text-center py-6 text-slate-500 text-xs border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
                   No payment records found for this student.
                 </div>
               ) : (
-                <div className="border border-slate-800 rounded-2xl overflow-hidden shadow-lg bg-slate-950">
+                <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-lg bg-slate-950">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase font-semibold">
+                    <thead className="bg-slate-900 border-b border-slate-200 text-slate-400 uppercase font-semibold">
                       <tr>
                         <th className="px-3.5 py-2.5">Receipt #</th>
                         <th className="px-3.5 py-2.5">Batch</th>
@@ -1027,7 +1027,7 @@ export default function PaymentsClient({
                         <th className="px-3.5 py-2.5 text-right">Receipt</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-800/80">
+                    <tbody className="divide-y divide-slate-100">
                       {studentPayments.map(p => (
                         <tr key={p.id} className="hover:bg-slate-900/50 transition-colors">
                           <td className="px-3.5 py-2.5 font-mono font-bold text-amber-400">{p.receipt_number}</td>
@@ -1086,10 +1086,10 @@ export default function PaymentsClient({
       )}
 
       {/* Global Payments History Table */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden space-y-3">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden space-y-3">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-white text-base">Recent Payments Log</h3>
+            <h3 className="font-bold text-slate-900 text-base">Recent Payments Log</h3>
             <p className="text-xs text-slate-400 mt-0.5">Showing last 100 payments recorded across all batches</p>
           </div>
         </div>
@@ -1097,7 +1097,7 @@ export default function PaymentsClient({
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-950/80 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
+              <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                 <th className="px-4 py-3">Receipt</th>
                 <th className="px-4 py-3">Student</th>
                 <th className="px-4 py-3">Batch</th>
@@ -1108,15 +1108,15 @@ export default function PaymentsClient({
                 <th className="px-4 py-3 text-right">Print / Save</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/80 text-sm">
+            <tbody className="divide-y divide-slate-100 text-sm">
               {payments.length === 0 ? (
                 <tr><td colSpan={8} className="text-center py-12 text-slate-500">No payments recorded yet</td></tr>
               ) : (
                 payments.map(p => (
-                  <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={p.id} className="hover:bg-amber-50/30 transition-colors">
                     <td className="px-4 py-3 font-mono text-xs font-bold text-amber-400">{p.receipt_number}</td>
                     <td className="px-4 py-3">
-                      <p className="font-bold text-white text-sm">{p.student?.name}</p>
+                      <p className="font-bold text-slate-900 text-sm">{p.student?.name}</p>
                       <span className="text-xs font-mono text-slate-400">{p.student?.student_id}</span>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-300">{p.batch?.name || "—"}</td>
@@ -1174,15 +1174,15 @@ export default function PaymentsClient({
       {/* Record Payment Modal (Searchable Student Entry) */}
       {showRecordModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-slate-900 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-800 animate-in zoom-in-95 duration-200 text-white">
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-lg shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 text-white">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-5 text-white flex items-center justify-between">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 bg-amber-500/20 rounded-xl flex items-center justify-center border border-amber-500/30 text-amber-400">
                   <CreditCard className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">Record Payment</h3>
+                  <h3 className="font-bold text-base text-slate-900">Record Payment</h3>
                   <p className="text-xs text-slate-400">Search student and record counter payment</p>
                 </div>
               </div>
@@ -1199,7 +1199,7 @@ export default function PaymentsClient({
             <form onSubmit={handlePay} className="p-6 space-y-4">
               {/* Searchable Student Field */}
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
                   Search & Select Student *
                 </label>
                 
@@ -1224,11 +1224,11 @@ export default function PaymentsClient({
                       value={modalSearchQuery}
                       onChange={e => setModalSearchQuery(e.target.value)}
                       placeholder="Type student name or ID..."
-                      className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                      className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
                       autoFocus
                     />
                     {modalFilteredStudents.length > 0 && (
-                      <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-900 rounded-xl border border-slate-800 shadow-2xl max-h-48 overflow-y-auto divide-y divide-slate-800">
+                      <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-900 rounded-xl border border-slate-200 shadow-2xl max-h-48 overflow-y-auto divide-y divide-slate-100">
                         {modalFilteredStudents.map(s => (
                           <button
                             type="button"
@@ -1236,7 +1236,7 @@ export default function PaymentsClient({
                             onClick={() => handleModalSelectStudent(s)}
                             className="w-full text-left px-3.5 py-2.5 hover:bg-slate-800 text-sm flex items-center justify-between"
                           >
-                            <span className="font-bold text-white">{s.name}</span>
+                            <span className="font-bold text-slate-900">{s.name}</span>
                             <span className="text-xs text-amber-400 font-mono">{s.student_id}</span>
                           </button>
                         ))}
@@ -1248,7 +1248,7 @@ export default function PaymentsClient({
 
               {/* Batch selection */}
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Batch / Program</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Batch / Program</label>
                 <select 
                   value={form.batch_id} 
                   onChange={e => { 
@@ -1270,7 +1270,7 @@ export default function PaymentsClient({
               {/* Amount & Discount */}
               <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Amount (৳) *</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Amount (৳) *</label>
                   <input 
                     type="number" 
                     required 
@@ -1281,7 +1281,7 @@ export default function PaymentsClient({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Discount (৳)</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Discount (৳)</label>
                   <input 
                     type="number" 
                     value={form.discount} 
@@ -1294,7 +1294,7 @@ export default function PaymentsClient({
 
               {/* Total Summary preview */}
               {form.amount && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold text-amber-400 flex items-center justify-between">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-200 text-xs font-bold text-amber-400 flex items-center justify-between">
                   <span className="text-slate-400">Net Payable Amount:</span>
                   <span className="text-base text-amber-400">{formatCurrency(Math.max(0, parseFloat(form.amount || "0") - parseFloat(form.discount || "0")))}</span>
                 </div>
@@ -1303,7 +1303,7 @@ export default function PaymentsClient({
               {/* Payment Method & Type */}
               <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Payment Method</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Payment Method</label>
                   <select 
                     value={form.payment_method} 
                     onChange={e => update("payment_method", e.target.value)} 
@@ -1318,7 +1318,7 @@ export default function PaymentsClient({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Payment For</label>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Payment For</label>
                   <select 
                     value={form.payment_for} 
                     onChange={e => update("payment_for", e.target.value)} 
@@ -1376,7 +1376,7 @@ export default function PaymentsClient({
                 <button 
                   type="submit" 
                   disabled={loading || (!form.student_id && !modalSelectedStudent)} 
-                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-40"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-40"
                 >
                   {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Recording...</> : "Record & Get PDF"}
                 </button>
@@ -1389,14 +1389,14 @@ export default function PaymentsClient({
       {/* Edit / Change Due Modal */}
       {editingDue && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-800 animate-in zoom-in-95 duration-200 text-white">
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-5 text-white flex items-center justify-between">
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-md shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 text-white">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 bg-indigo-500/20 border border-indigo-500/30 rounded-xl flex items-center justify-center text-indigo-400">
                   <Edit2 className="w-4 h-4 text-indigo-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-white">Change Student Due</h3>
+                  <h3 className="font-bold text-base text-slate-900">Change Student Due</h3>
                   <p className="text-xs text-slate-400">{getBatchName(editingDue.batch)} ({editingDue.due_month})</p>
                 </div>
               </div>
@@ -1411,7 +1411,7 @@ export default function PaymentsClient({
 
             <form onSubmit={handleSaveDueEdit} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Due Amount (৳)</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Due Amount (৳)</label>
                 <input 
                   type="number" 
                   min="0"
@@ -1424,7 +1424,7 @@ export default function PaymentsClient({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Deadline / Due Date</label>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">Deadline / Due Date</label>
                 <input 
                   type="date" 
                   value={editDueDate} 
@@ -1444,7 +1444,7 @@ export default function PaymentsClient({
                 <button 
                   type="submit" 
                   disabled={dueUpdating} 
-                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
                 >
                   {dueUpdating ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</> : "Update Due"}
                 </button>
@@ -1457,9 +1457,9 @@ export default function PaymentsClient({
       {/* Instant Printable & Downloadable PDF Receipt Modal */}
       {receiptModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-800 text-white">
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200 text-white">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-5 text-white text-center relative">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white text-center relative">
               <button 
                 type="button"
                 onClick={() => setReceiptModal(null)}
@@ -1470,7 +1470,7 @@ export default function PaymentsClient({
               <div className="w-11 h-11 bg-amber-500/20 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto mb-2 text-amber-400">
                 <Check className="w-6 h-6 text-amber-400" />
               </div>
-              <h3 className="text-lg font-bold text-white">Payment Receipt Ready</h3>
+              <h3 className="text-lg font-bold text-slate-900">Payment Receipt Ready</h3>
               <p className="text-xs text-slate-400">Print receipt or download PDF for student records</p>
             </div>
 
@@ -1545,7 +1545,7 @@ export default function PaymentsClient({
                 <button
                   type="button"
                   onClick={handleDownloadPDF}
-                  className="py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-lg shadow-amber-500/20 transition-all"
+                  className="py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-lg shadow-amber-500/20 transition-all"
                 >
                   <Download className="w-4 h-4" /> Save PDF
                 </button>
@@ -1566,14 +1566,14 @@ export default function PaymentsClient({
       {/* Payment Gateway Numbers Modal (Owner Configurable) */}
       {showGatewayModal && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md">
-          <div className="bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-800 animate-in fade-in zoom-in-95 text-white">
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-6 text-white flex items-center justify-between">
+          <div className="bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 text-white">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-6 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
                   <Smartphone className="w-5 h-5 text-purple-300" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg text-white">Payment Gateway Numbers</h3>
+                  <h3 className="font-bold text-lg text-slate-900">Payment Gateway Numbers</h3>
                   <p className="text-xs text-slate-400">Shown to students on batch &amp; course checkout pages</p>
                 </div>
               </div>
@@ -1734,7 +1734,7 @@ export default function PaymentsClient({
                 <button
                   type="submit"
                   disabled={savingGateways}
-                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold shadow-lg shadow-amber-500/20 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold shadow-lg shadow-amber-500/20 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {savingGateways ? (
                     <>

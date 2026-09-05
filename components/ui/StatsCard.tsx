@@ -13,30 +13,30 @@ interface Props {
 }
 
 const colorMap = {
-  indigo: "bg-indigo-500/15 text-indigo-400 border-indigo-500/30 shadow-indigo-500/10",
-  emerald: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 shadow-emerald-500/10",
-  orange: "bg-amber-500/15 text-amber-400 border-amber-500/30 shadow-amber-500/10",
-  red: "bg-rose-500/15 text-rose-400 border-rose-500/30 shadow-rose-500/10",
-  blue: "bg-sky-500/15 text-sky-400 border-sky-500/30 shadow-sky-500/10",
-  purple: "bg-purple-500/15 text-purple-400 border-purple-500/30 shadow-purple-500/10",
+  indigo: "bg-indigo-50 text-indigo-700 border-indigo-200/80 shadow-indigo-100",
+  emerald: "bg-emerald-50 text-emerald-700 border-emerald-200/80 shadow-emerald-100",
+  orange: "bg-amber-50 text-amber-700 border-amber-200/80 shadow-amber-100",
+  red: "bg-rose-50 text-rose-700 border-rose-200/80 shadow-rose-100",
+  blue: "bg-sky-50 text-sky-700 border-sky-200/80 shadow-sky-100",
+  purple: "bg-purple-50 text-purple-700 border-purple-200/80 shadow-purple-100",
 }
 
 export default function StatsCard({ title, value, subtitle, icon: Icon, color = "indigo", trend, href }: Props) {
   const content = (
-    <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800/90 hover:border-amber-500/40 p-5 shadow-lg shadow-black/20 hover:shadow-amber-500/5 transition-all duration-200 h-full flex flex-col justify-between">
+    <div className="bg-white rounded-2xl border border-slate-200/80 hover:border-amber-400/60 p-5 shadow-xs hover:shadow-md transition-all duration-200 h-full flex flex-col justify-between">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider truncate">{title}</p>
-          <p className="text-2xl font-extrabold text-white mt-1 tracking-tight truncate">{value}</p>
-          {subtitle && <p className="text-xs text-amber-400/90 font-medium mt-0.5 truncate">{subtitle}</p>}
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider truncate">{title}</p>
+          <p className="text-2xl font-black text-slate-900 mt-1 tracking-tight truncate">{value}</p>
+          {subtitle && <p className="text-xs text-amber-600 font-semibold mt-0.5 truncate">{subtitle}</p>}
           {trend && (
-            <div className={cn("inline-flex items-center gap-1 mt-2 text-xs font-semibold", trend.value >= 0 ? "text-emerald-400" : "text-rose-400")}>
+            <div className={cn("inline-flex items-center gap-1 mt-2 text-xs font-bold", trend.value >= 0 ? "text-emerald-600" : "text-rose-600")}>
               <span>{trend.value >= 0 ? "↑" : "↓"} {Math.abs(trend.value)}%</span>
-              <span className="text-slate-500">{trend.label}</span>
+              <span className="text-slate-400 font-normal">{trend.label}</span>
             </div>
           )}
         </div>
-        <div className={cn("p-3 rounded-xl border shadow-sm flex-shrink-0", colorMap[color])}>
+        <div className={cn("p-3 rounded-2xl border shadow-xs flex-shrink-0", colorMap[color])}>
           <Icon className="w-5 h-5" />
         </div>
       </div>

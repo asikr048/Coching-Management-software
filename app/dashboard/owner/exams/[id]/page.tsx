@@ -551,13 +551,13 @@ export default function ExamResultsPage() {
 
   if (!exam) {
     return (
-      <div className="text-center py-16 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl">
+      <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/90 shadow-sm">
         <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
-        <h3 className="text-lg font-bold text-white">Exam not found</h3>
+        <h3 className="text-lg font-bold text-slate-900">Exam not found</h3>
         <p className="text-sm text-slate-400 mt-1 mb-6">The requested test may have been moved or deleted.</p>
         <Link
           href={backUrl}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all"
         >
           <ArrowLeft className="w-4 h-4" /> Return to Exams
         </Link>
@@ -573,18 +573,18 @@ export default function ExamResultsPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Navigation & Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/90 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-xl">
         <div className="flex items-start gap-4">
           <Link
             href={backUrl}
-            className="p-2.5 rounded-xl border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors shrink-0 mt-0.5"
+            className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors shrink-0 mt-0.5"
             title="Back to Exams"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                 <Trophy className="w-6 h-6 text-amber-400" />
                 {exam.title}
               </h1>
@@ -616,7 +616,7 @@ export default function ExamResultsPage() {
           <button
             onClick={handleSaveAll}
             disabled={loading}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm active:scale-[0.98] shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm active:scale-[0.98] shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer"
           >
             {loading ? (
               <>
@@ -634,8 +634,8 @@ export default function ExamResultsPage() {
       {/* Batch Marks Visibility Option Card */}
       <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
         showAllResults 
-          ? "bg-slate-900/90 backdrop-blur-md border-emerald-500/30 shadow-xl" 
-          : "bg-slate-900/90 backdrop-blur-md border-amber-500/30 shadow-xl"
+          ? "bg-white backdrop-blur-md border-emerald-500/30 shadow-xl" 
+          : "bg-white backdrop-blur-md border-amber-500/30 shadow-xl"
       }`}>
         <div className="flex items-start gap-3.5">
           <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
@@ -645,7 +645,7 @@ export default function ExamResultsPage() {
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-sm sm:text-base font-bold text-white">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900">
                 Batch Marks Visibility & Merit List
               </h2>
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
@@ -679,7 +679,7 @@ export default function ExamResultsPage() {
               onChange={(e) => handleToggleShowAllResults(e.target.checked)}
               className="sr-only peer"
             />
-            <div className="w-12 h-6.5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-950 after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-slate-800 after:border after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-emerald-500"></div>
+            <div className="w-12 h-6.5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-950 after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-slate-200 after:border after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-emerald-500"></div>
             <span className="ml-3 text-xs font-bold text-slate-300 min-w-[140px]">
               {updatingVisibility ? (
                 <span className="flex items-center gap-1.5 text-slate-400">
@@ -701,7 +701,7 @@ export default function ExamResultsPage() {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-xl flex items-center gap-3">
+        <div className="bg-white backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
             <Users className="w-5 h-5" />
           </div>
@@ -711,7 +711,7 @@ export default function ExamResultsPage() {
           </div>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-xl flex items-center gap-3">
+        <div className="bg-white backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
@@ -723,7 +723,7 @@ export default function ExamResultsPage() {
           </div>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-xl flex items-center gap-3">
+        <div className="bg-white backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
             <TrendingUp className="w-5 h-5" />
           </div>
@@ -735,7 +735,7 @@ export default function ExamResultsPage() {
           </div>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-xl flex items-center gap-3">
+        <div className="bg-white backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
             <Award className="w-5 h-5" />
           </div>
@@ -749,13 +749,13 @@ export default function ExamResultsPage() {
       </div>
 
       {/* QUICK SEARCH & ENTER MARK SECTION */}
-      <div className="bg-slate-900/90 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
+      <div className="bg-white backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-xl">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
             <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-sm">
               <Sparkles className="w-4 h-4" />
             </span>
-            <h2 className="text-base font-black text-white">Quick Mark Entry (Search & Enter)</h2>
+            <h2 className="text-base font-black text-slate-900">Quick Mark Entry (Search & Enter)</h2>
           </div>
           <span className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-medium hidden sm:inline-block">
             Keyboard shortcut: Type name/ID → Select → Type mark → Press Enter ↵
@@ -788,7 +788,7 @@ export default function ExamResultsPage() {
                   }
                 }}
                 placeholder="Type student name (e.g. Asik) or ID (e.g. MS-86053)..."
-                className="w-full pl-10 pr-9 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder:text-slate-500 placeholder:font-normal focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10 shadow-sm"
+                className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-white placeholder:text-slate-500 placeholder:font-normal focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10 shadow-sm"
               />
               {studentSearchQuery && (
                 <button
@@ -806,7 +806,7 @@ export default function ExamResultsPage() {
 
             {/* Dropdown Suggestions */}
             {isSearchDropdownOpen && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-900 rounded-xl border border-slate-800 shadow-2xl max-h-64 overflow-y-auto z-50 divide-y divide-slate-800">
+              <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-900 rounded-xl border border-slate-200 shadow-2xl max-h-64 overflow-y-auto z-50 divide-y divide-slate-100">
                 {filteredSearchStudents.length === 0 ? (
                   <div className="p-4 text-center text-xs text-slate-500 font-medium">
                     No matching enrolled student found
@@ -861,14 +861,14 @@ export default function ExamResultsPage() {
           </div>
 
           {/* Enter Mark & Action Box */}
-          <div className="lg:col-span-6 bg-slate-950 p-3.5 rounded-xl border border-slate-800 shadow-sm">
+          <div className="lg:col-span-6 bg-slate-950 p-3.5 rounded-xl border border-slate-200 shadow-sm">
             <label className="block text-xs font-bold text-slate-300 mb-1.5">
               2. Enter Mark & Save (Auto-saves to database)
             </label>
 
             {selectedStudent ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                <div className="flex items-center justify-between gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-200">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-7 h-7 rounded-full bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0">
                       {selectedStudent.name?.charAt(0).toUpperCase()}
@@ -947,7 +947,7 @@ export default function ExamResultsPage() {
                   <button
                     type="submit"
                     disabled={savingQuickMark || !quickMarkInput}
-                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:shadow-none cursor-pointer shrink-0"
+                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:shadow-none cursor-pointer shrink-0"
                   >
                     {savingQuickMark ? (
                       <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
@@ -962,7 +962,7 @@ export default function ExamResultsPage() {
             ) : (
               <div
                 onClick={() => searchInputRef.current?.focus()}
-                className="py-4 px-3 border border-dashed border-slate-800 rounded-xl bg-slate-900/50 text-center cursor-pointer hover:bg-slate-900 hover:border-amber-500/40 transition-colors"
+                className="py-4 px-3 border border-dashed border-slate-200 rounded-xl bg-slate-900/50 text-center cursor-pointer hover:bg-slate-900 hover:border-amber-500/40 transition-colors"
               >
                 <p className="text-xs font-semibold text-slate-300">
                   Select a student on the left to quickly enter mark
@@ -977,9 +977,9 @@ export default function ExamResultsPage() {
       </div>
 
       {/* TABLE SECTION WITH LIVE SEARCH & FILTERS */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         {/* Table Filter Controls */}
-        <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/60">
+        <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50">
           <div className="relative flex-1 max-w-md">
             <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -987,7 +987,7 @@ export default function ExamResultsPage() {
               value={tableSearchQuery}
               onChange={(e) => setTableSearchQuery(e.target.value)}
               placeholder="Filter list by student name or roll number..."
-              className="w-full pl-9 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 shadow-sm"
+              className="w-full pl-9 pr-8 py-2 bg-slate-900 border border-slate-200 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 shadow-sm"
             />
             {tableSearchQuery && (
               <button
@@ -1017,7 +1017,7 @@ export default function ExamResultsPage() {
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   statusFilter === tab.key
                     ? "bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20"
-                    : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
+                    : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-200"
                 }`}
               >
                 {tab.label}
@@ -1030,7 +1030,7 @@ export default function ExamResultsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[11px] font-bold">
+              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider text-[11px] font-bold">
                 <th className="px-4 py-3 w-12 text-center">#</th>
                 <th className="px-4 py-3">Student Name</th>
                 <th className="px-4 py-3">Student ID</th>
@@ -1040,7 +1040,7 @@ export default function ExamResultsPage() {
                 <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60 text-sm">
+            <tbody className="divide-y divide-slate-100 text-sm">
               {tableStudents.map((s, idx) => {
                 const saved = savedResults[s.id]
                 const draftVal = draftMarks[s.id] ?? ""
@@ -1060,7 +1060,7 @@ export default function ExamResultsPage() {
                         : isJustSaved
                         ? "bg-emerald-500/15"
                         : hasEntered
-                        ? "hover:bg-slate-800/40"
+                        ? "hover:bg-amber-50/30"
                         : "hover:bg-slate-800/20"
                     }`}
                   >
@@ -1077,7 +1077,7 @@ export default function ExamResultsPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-amber-400 font-mono text-xs font-bold">
+                      <span className="px-2 py-1 rounded bg-white border border-slate-300 text-amber-400 font-mono text-xs font-bold">
                         {s.student_id}
                       </span>
                     </td>
@@ -1107,7 +1107,7 @@ export default function ExamResultsPage() {
                               ? "border-emerald-500 bg-emerald-500/20 text-emerald-300 ring-2 ring-emerald-500/30"
                               : hasEntered
                               ? "border-emerald-500/40 bg-slate-950 text-emerald-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
-                              : "border-slate-800 bg-slate-950 text-white focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
+                              : "border-slate-200 bg-slate-950 text-white focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
                           } focus:outline-none shadow-sm`}
                           placeholder="—"
                         />
@@ -1204,7 +1204,7 @@ export default function ExamResultsPage() {
         </div>
 
         {/* Footer info */}
-        <div className="p-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <div className="p-3.5 bg-slate-950 border-t border-slate-200 flex items-center justify-between text-xs text-slate-400">
           <span>
             Showing <strong className="text-white">{tableStudents.length}</strong> of{" "}
             <strong className="text-white">{students.length}</strong> students

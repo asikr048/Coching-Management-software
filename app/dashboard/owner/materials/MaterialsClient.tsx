@@ -685,7 +685,7 @@ export default function MaterialsClient({
       {/* Page Header & Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black text-white flex items-center gap-2.5">
+          <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2.5">
             <Package className="w-7 h-7 text-amber-400" />
             Study Materials & Distribution
           </h2>
@@ -703,7 +703,7 @@ export default function MaterialsClient({
           </button>
           <button
             onClick={openAddModal}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             + Add Material
@@ -713,10 +713,10 @@ export default function MaterialsClient({
 
       {/* Top Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Items</span>
-            <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-amber-400">
+            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Total Items</span>
+            <div className="p-2 bg-slate-950 rounded-xl border border-slate-200 text-amber-400">
               <Package className="w-4 h-4" />
             </div>
           </div>
@@ -724,10 +724,10 @@ export default function MaterialsClient({
           <p className="text-xs text-slate-500 mt-1">Books, sheets, and notes</p>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Units In Stock</span>
-            <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-emerald-400">
+            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Units In Stock</span>
+            <div className="p-2 bg-slate-950 rounded-xl border border-slate-200 text-emerald-400">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
@@ -735,10 +735,10 @@ export default function MaterialsClient({
           <p className="text-xs text-slate-500 mt-1">Available for distribution</p>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Distributed</span>
-            <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-blue-400">
+            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Distributed</span>
+            <div className="p-2 bg-slate-950 rounded-xl border border-slate-200 text-blue-400">
               <Users className="w-4 h-4" />
             </div>
           </div>
@@ -746,10 +746,10 @@ export default function MaterialsClient({
           <p className="text-xs text-slate-500 mt-1">Copies given to students</p>
         </div>
 
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Low Stock Alert</span>
-            <div className="p-2 bg-slate-950 rounded-xl border border-slate-800 text-amber-400">
+            <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Low Stock Alert</span>
+            <div className="p-2 bg-slate-950 rounded-xl border border-slate-200 text-amber-400">
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
@@ -759,7 +759,7 @@ export default function MaterialsClient({
       </div>
 
       {/* Toolbar & Filters */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 shadow-xl space-y-3">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="flex-1 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -767,7 +767,7 @@ export default function MaterialsClient({
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search materials by title or subject..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+              className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
             />
           </div>
 
@@ -775,7 +775,7 @@ export default function MaterialsClient({
             <select
               value={selectedType}
               onChange={e => setSelectedType(e.target.value)}
-              className="px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
             >
               <option value="all">All Types</option>
               <option value="sheet">Lecture Sheets</option>
@@ -789,7 +789,7 @@ export default function MaterialsClient({
             <select
               value={selectedBatchFilter}
               onChange={e => setSelectedBatchFilter(e.target.value)}
-              className="px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
             >
               <option value="all">All Batches</option>
               {batches.map(b => (
@@ -800,7 +800,7 @@ export default function MaterialsClient({
             <select
               value={stockFilter}
               onChange={e => setStockFilter(e.target.value as any)}
-              className="px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
             >
               <option value="all">All Stock Status</option>
               <option value="in_stock">In Stock (&gt;0)</option>
@@ -813,7 +813,7 @@ export default function MaterialsClient({
 
       {/* Materials Grid */}
       {filteredMaterials.length === 0 ? (
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-12 text-center">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-12 text-center">
           <Package className="w-12 h-12 text-slate-600 mx-auto mb-3" />
           <p className="text-base font-bold text-slate-300">No study materials found</p>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
@@ -851,7 +851,7 @@ export default function MaterialsClient({
             return (
               <div 
                 key={m.id} 
-                className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl hover:border-slate-700 transition-all flex flex-col justify-between group"
+                className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl hover:border-slate-700 transition-all flex flex-col justify-between group"
               >
                 <div>
                   {/* Top Badges */}
@@ -873,7 +873,7 @@ export default function MaterialsClient({
                   </div>
 
                   {/* Title & Subject */}
-                  <h3 className="font-bold text-white text-base group-hover:text-amber-400 transition-colors">
+                  <h3 className="font-bold text-slate-900 text-base group-hover:text-amber-400 transition-colors">
                     {m.name}
                   </h3>
                   <p className="text-xs text-slate-400 mt-0.5 font-medium">
@@ -902,14 +902,14 @@ export default function MaterialsClient({
                   )}
 
                   {/* Stock Indicator */}
-                  <div className="mt-4 pt-3 border-t border-slate-800">
+                  <div className="mt-4 pt-3 border-t border-slate-200">
                     <div className="flex items-center justify-between text-xs mb-1.5">
                       <span className="text-slate-400">
                         In Stock: <strong className={isOutOfStock ? "text-rose-400" : isLowStock ? "text-amber-400" : "text-white"}>{m.available_stock}</strong> / {m.total_stock} units
                       </span>
                       <span className="text-slate-500 font-mono">{stockPct}%</span>
                     </div>
-                    <div className="w-full bg-slate-950 border border-slate-800 h-2 rounded-full overflow-hidden">
+                    <div className="w-full bg-white border border-slate-300 h-2 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
                           isOutOfStock ? "bg-rose-500" : isLowStock ? "bg-amber-500" : "bg-emerald-500"
@@ -921,7 +921,7 @@ export default function MaterialsClient({
                 </div>
 
                 {/* Bottom Actions */}
-                <div className="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+                <div className="mt-5 pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
                   <button
                     onClick={() => openWhoGotItModal(m)}
                     className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-750 text-slate-200 text-xs font-semibold rounded-lg border border-slate-700 transition-colors text-center flex items-center justify-center gap-1 cursor-pointer"
@@ -968,9 +968,9 @@ export default function MaterialsClient({
       {/* ========================================== */}
       {addModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-800 text-white">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
-              <h3 className="font-black text-white flex items-center gap-2">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-200 text-white">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-950">
+              <h3 className="font-black text-slate-900 flex items-center gap-2">
                 <Package className="w-5 h-5 text-amber-400" />
                 {editingMaterial ? "Edit Material" : "Add New Study Material"}
               </h3>
@@ -989,7 +989,7 @@ export default function MaterialsClient({
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., HSC Physics Chapter 1 Lecture Sheet"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
                 />
               </div>
 
@@ -1001,7 +1001,7 @@ export default function MaterialsClient({
                   <select
                     value={formData.type}
                     onChange={e => setFormData({ ...formData, type: e.target.value as MaterialType })}
-                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
                   >
                     <option value="sheet">📄 Lecture Sheet</option>
                     <option value="book">📖 Book</option>
@@ -1020,7 +1020,7 @@ export default function MaterialsClient({
                     value={formData.subject}
                     onChange={e => setFormData({ ...formData, subject: e.target.value })}
                     placeholder="e.g., Physics, Math"
-                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
                   />
                 </div>
               </div>
@@ -1046,14 +1046,14 @@ export default function MaterialsClient({
                   </button>
                 </div>
 
-                <div className="border border-slate-800 rounded-xl p-2.5 bg-slate-950 max-h-44 overflow-y-auto space-y-1.5">
+                <div className="border border-slate-200 rounded-xl p-2.5 bg-slate-950 max-h-44 overflow-y-auto space-y-1.5">
                   {/* Option: All Batches */}
                   <div
                     onClick={() => setFormData({ ...formData, batch_ids: [] })}
                     className={`p-2 rounded-lg text-xs font-medium flex items-center justify-between cursor-pointer transition-colors ${
                       formData.batch_ids.length === 0 
                         ? "bg-amber-500 text-slate-950 shadow-sm font-bold" 
-                        : "bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800"
+                        : "bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-200"
                     }`}
                   >
                     <span>✨ Available for All Batches (Open to Everyone)</span>
@@ -1071,7 +1071,7 @@ export default function MaterialsClient({
                           className={`p-2 rounded-lg text-xs font-medium flex items-center justify-between cursor-pointer border transition-all ${
                             isSelected 
                               ? "bg-amber-500/15 border-amber-500/40 text-amber-300 font-bold shadow-sm" 
-                              : "bg-slate-900 border-slate-800 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                              : "bg-slate-900 border-slate-200 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                           }`}
                         >
                           <div className="flex items-center gap-2 truncate">
@@ -1123,7 +1123,7 @@ export default function MaterialsClient({
                     required
                     value={formData.total_stock}
                     onChange={e => setFormData({ ...formData, total_stock: Math.max(1, parseInt(e.target.value) || 1) })}
-                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white font-mono"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white font-mono"
                   />
                 </div>
 
@@ -1136,7 +1136,7 @@ export default function MaterialsClient({
                     min="0"
                     value={formData.price}
                     onChange={e => setFormData({ ...formData, price: Math.max(0, parseFloat(e.target.value) || 0) })}
-                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white font-mono"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white font-mono"
                   />
                 </div>
               </div>
@@ -1150,11 +1150,11 @@ export default function MaterialsClient({
                   onChange={e => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
                   placeholder="e.g., Covers chapter formulas, exercises, and past questions..."
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500 resize-none"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500 resize-none"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => setAddModalOpen(false)}
@@ -1179,10 +1179,10 @@ export default function MaterialsClient({
       {/* ========================================== */}
       {distributeModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-800 flex flex-col max-h-[90vh] text-white">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] text-white">
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-950">
               <div>
-                <h3 className="font-black text-white flex items-center gap-2">
+                <h3 className="font-black text-slate-900 flex items-center gap-2">
                   <Users className="w-5 h-5 text-amber-400" />
                   Distribute Study Material
                 </h3>
@@ -1211,7 +1211,7 @@ export default function MaterialsClient({
                       setDistributeSelectedBatchIds(found.batch_ids)
                     }
                   }}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
                 >
                   {materials.map(m => (
                     <option key={m.id} value={m.id}>
@@ -1227,7 +1227,7 @@ export default function MaterialsClient({
               </div>
 
               {/* Mode Toggle */}
-              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-200">
                 <button
                   type="button"
                   onClick={() => {
@@ -1277,7 +1277,7 @@ export default function MaterialsClient({
                       </button>
                     </div>
 
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-slate-950 border border-slate-800 rounded-xl max-h-28 overflow-y-auto">
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-slate-300 rounded-xl max-h-28 overflow-y-auto">
                       {batches.map(b => {
                         const isSelected = distributeSelectedBatchIds.includes(b.id)
                         return (
@@ -1288,7 +1288,7 @@ export default function MaterialsClient({
                             className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
                               isSelected 
                                 ? "bg-amber-500 text-slate-950 border-amber-500 shadow-sm font-bold" 
-                                : "bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800"
+                                : "bg-slate-900 text-slate-300 border-slate-200 hover:bg-slate-800"
                             }`}
                           >
                             <input
@@ -1305,7 +1305,7 @@ export default function MaterialsClient({
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                       Students in Selected Batches ({batchStudents.length})
                     </span>
                     <button
@@ -1317,7 +1317,7 @@ export default function MaterialsClient({
                     </button>
                   </div>
 
-                  <div className="max-h-56 overflow-y-auto border border-slate-800 rounded-xl divide-y divide-slate-800/80 bg-slate-950">
+                  <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-slate-950">
                     {batchStudents.length === 0 ? (
                       <p className="p-6 text-center text-xs text-slate-500">
                         {distributeSelectedBatchIds.length === 0 
@@ -1336,7 +1336,7 @@ export default function MaterialsClient({
                             onClick={() => !alreadyIssued && toggleDistributeStudent(student.id)}
                             className={`p-3 flex items-center justify-between text-xs transition-colors ${
                               alreadyIssued 
-                                ? "bg-slate-950/40 opacity-50 cursor-not-allowed" 
+                                ? "bg-slate-50/50 opacity-50 cursor-not-allowed" 
                                 : isSelected 
                                 ? "bg-amber-500/15 cursor-pointer" 
                                 : "hover:bg-slate-900 cursor-pointer"
@@ -1351,7 +1351,7 @@ export default function MaterialsClient({
                                 className="w-4 h-4 text-amber-500 rounded cursor-pointer bg-slate-950 border-slate-700"
                               />
                               <div>
-                                <p className="font-bold text-white">{student.name}</p>
+                                <p className="font-bold text-slate-900">{student.name}</p>
                                 <p className="text-[11px] text-slate-400 font-mono">
                                   {student.student_id} • {studentBatchNames || "Enrolled"}
                                 </p>
@@ -1384,12 +1384,12 @@ export default function MaterialsClient({
                       value={distributeSearchStudentQuery}
                       onChange={e => setDistributeSearchStudentQuery(e.target.value)}
                       placeholder="Search student by name, student ID, or phone..."
-                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
                     />
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
                       Matching Students ({searchStudents.length})
                     </span>
                     <button
@@ -1401,7 +1401,7 @@ export default function MaterialsClient({
                     </button>
                   </div>
 
-                  <div className="max-h-56 overflow-y-auto border border-slate-800 rounded-xl divide-y divide-slate-800/80 bg-slate-950">
+                  <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-slate-950">
                     {searchStudents.length === 0 ? (
                       <p className="p-6 text-center text-xs text-slate-500">No matching students found.</p>
                     ) : (
@@ -1415,7 +1415,7 @@ export default function MaterialsClient({
                             onClick={() => !alreadyIssued && toggleDistributeStudent(student.id)}
                             className={`p-3 flex items-center justify-between text-xs transition-colors ${
                               alreadyIssued 
-                                ? "bg-slate-950/40 opacity-50 cursor-not-allowed" 
+                                ? "bg-slate-50/50 opacity-50 cursor-not-allowed" 
                                 : isSelected 
                                 ? "bg-amber-500/15 cursor-pointer" 
                                 : "hover:bg-slate-900 cursor-pointer"
@@ -1430,7 +1430,7 @@ export default function MaterialsClient({
                                 className="w-4 h-4 text-amber-500 rounded cursor-pointer bg-slate-950 border-slate-700"
                               />
                               <div>
-                                <p className="font-bold text-white">{student.name}</p>
+                                <p className="font-bold text-slate-900">{student.name}</p>
                                 <p className="text-[11px] text-slate-400 font-mono">{student.student_id} • {student.phone || "No phone"}</p>
                               </div>
                             </div>
@@ -1461,13 +1461,13 @@ export default function MaterialsClient({
                   value={distributeNotes}
                   onChange={e => setDistributeNotes(e.target.value)}
                   placeholder="e.g. Handed over in class / collection verified"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
                 />
               </div>
 
               {/* Stock Preview Alert */}
               {distributeMaterial && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
                   <div>
                     <span className="text-slate-400">Selected: </span>
                     <strong className="text-amber-400 font-bold">{distributeSelectedStudentIds.size} students</strong>
@@ -1486,7 +1486,7 @@ export default function MaterialsClient({
               )}
             </div>
 
-            <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between bg-slate-950">
+            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-950">
               <span className="text-xs text-slate-400">
                 {distributeSelectedStudentIds.size} students selected
               </span>
@@ -1517,9 +1517,9 @@ export default function MaterialsClient({
       {/* ========================================== */}
       {whoGotItModalOpen && whoGotItMaterial && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden border border-slate-800 flex flex-col max-h-[90vh] text-white">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] text-white">
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-800 bg-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="px-6 py-4 border-b border-slate-200 bg-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-black text-white text-lg">
@@ -1547,7 +1547,7 @@ export default function MaterialsClient({
             </div>
 
             {/* Distribution Summary Card */}
-            <div className="px-6 py-3 bg-slate-950/80 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
+            <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
               <div className="flex items-center gap-4">
                 <span>Total Target: <strong className="text-white">{targetStudentsForMaterial.length}</strong></span>
                 <span>Distributed: <strong className="text-emerald-400">{materialIssuesList.length}</strong></span>
@@ -1564,9 +1564,9 @@ export default function MaterialsClient({
             </div>
 
             {/* Sub Filter Tabs, Batch Selector & Search */}
-            <div className="px-6 py-3 border-b border-slate-800 bg-slate-900 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="px-6 py-3 border-b border-slate-200 bg-slate-900 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-200 text-xs">
                   <button
                     onClick={() => setWhoGotItTab("all")}
                     className={`px-3 py-1 font-bold rounded-lg transition-all cursor-pointer ${
@@ -1613,17 +1613,17 @@ export default function MaterialsClient({
                   value={whoGotItSearch}
                   onChange={e => setWhoGotItSearch(e.target.value)}
                   placeholder="Find student..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
                 />
               </div>
             </div>
 
             {/* Student Distribution Table */}
             <div className="p-6 overflow-y-auto flex-1">
-              <div className="border border-slate-800 rounded-xl overflow-hidden shadow-xl bg-slate-900">
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xl bg-slate-900">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-950 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                       <th className="px-4 py-2.5">#</th>
                       <th className="px-4 py-2.5">Student</th>
                       <th className="px-4 py-2.5">Batch</th>
@@ -1632,7 +1632,7 @@ export default function MaterialsClient({
                       <th className="px-4 py-2.5 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800/60 text-xs">
+                  <tbody className="divide-y divide-slate-100 text-xs">
                     {(() => {
                       const list = targetStudentsForMaterial.filter(s => {
                         const issue = materialIssuesList.find(i => i.student_id === s.id)
@@ -1672,10 +1672,10 @@ export default function MaterialsClient({
                         const batchNames = student.enrollments?.map(e => e.batch?.name).filter(Boolean).join(", ")
 
                         return (
-                          <tr key={student.id} className="hover:bg-slate-800/40 transition-colors">
+                          <tr key={student.id} className="hover:bg-amber-50/30 transition-colors">
                             <td className="px-4 py-3 text-slate-500 font-mono">{idx + 1}</td>
                             <td className="px-4 py-3">
-                              <p className="font-bold text-white">{student.name}</p>
+                              <p className="font-bold text-slate-900">{student.name}</p>
                               <p className="text-[11px] text-slate-400 font-mono">{student.student_id} • {student.phone || "No phone"}</p>
                             </td>
                             <td className="px-4 py-3 text-slate-300">

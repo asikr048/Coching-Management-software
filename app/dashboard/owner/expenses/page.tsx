@@ -10,7 +10,7 @@ export default async function ExpensesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white tracking-tight">Expenses</h2>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Expenses</h2>
           <p className="text-sm text-slate-400 mt-1">Track operational expenditures & coaching overheads</p>
         </div>
         <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-2.5 backdrop-blur-md">
@@ -18,22 +18,22 @@ export default async function ExpensesPage() {
           <p className="text-xl font-black text-amber-300">{formatCurrency(total)}</p>
         </div>
       </div>
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
         <table className="w-full">
           <thead>
-            <tr className="bg-slate-950/80 border-b border-slate-800">
-              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Category</th>
-              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Description</th>
-              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Amount</th>
-              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Date</th>
+            <tr className="bg-slate-50 border-b border-slate-200">
+              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Category</th>
+              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Description</th>
+              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Amount</th>
+              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-600 uppercase tracking-wider">Date</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/70">
+          <tbody className="divide-y divide-slate-100/70">
             {(!expenses || expenses.length === 0) ? (
               <tr><td colSpan={4} className="text-center py-14 text-slate-500 text-sm">No expenses recorded yet</td></tr>
             ) : (
               expenses.map(e => (
-                <tr key={e.id} className="hover:bg-slate-800/40 transition-colors">
+                <tr key={e.id} className="hover:bg-amber-50/30 transition-colors">
                   <td className="px-5 py-3.5">
                     <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800/80 text-amber-300 border border-slate-700/80 capitalize">
                       {e.category}

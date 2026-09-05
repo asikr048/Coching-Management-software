@@ -444,7 +444,7 @@ export default function SliderClient({
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
-      <div className="flex border border-slate-800 bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl shadow-xl gap-2 flex-wrap text-white">
+      <div className="flex border border-slate-200 bg-white backdrop-blur-md p-2 rounded-2xl shadow-xl gap-2 flex-wrap text-white">
         <button
           onClick={() => setActiveTab('slider')}
           className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${
@@ -506,9 +506,9 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'slider' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
+          <div className="flex justify-between items-center bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl">
             <div>
-              <h3 className="font-extrabold text-white text-base">Hero Image Slider</h3>
+              <h3 className="font-extrabold text-slate-900 text-base">Hero Image Slider</h3>
               <p className="text-xs text-amber-400/90 font-medium">
                 Shown on the left 65% of the homepage hero section
               </p>
@@ -519,7 +519,7 @@ export default function SliderClient({
                 setSlideForm({ title: "", subtitle: "", image_url: "", link_url: "", branch_id: "" })
                 setShowSlideForm(true)
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" /> Add Slide
             </button>
@@ -531,8 +531,8 @@ export default function SliderClient({
               return (
                 <div
                   key={slide.id}
-                  className={`bg-slate-900/90 backdrop-blur-md rounded-2xl border ${
-                    slide.is_active ? 'border-slate-800 hover:border-amber-500/40' : 'border-slate-800 opacity-50'
+                  className={`bg-white rounded-2xl border ${
+                    slide.is_active ? 'border-slate-200 hover:border-amber-500/40' : 'border-slate-200 opacity-50'
                   } overflow-hidden shadow-xl hover:shadow-2xl transition-all flex flex-col justify-between`}
                 >
                   <div className="relative aspect-video bg-slate-950">
@@ -576,7 +576,7 @@ export default function SliderClient({
 
                   <div className="p-4">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <h4 className="font-bold text-white text-sm truncate">{slide.title || "Untitled Slide"}</h4>
+                      <h4 className="font-bold text-slate-900 text-sm truncate">{slide.title || "Untitled Slide"}</h4>
                       {slideBranch ? (
                         <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md font-medium">
                           {slideBranch.name}
@@ -603,27 +603,27 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'notices' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
+          <div className="flex justify-between items-center bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl">
             <div>
-              <h3 className="font-extrabold text-white text-base">Notice Book ("সর্বশেষ নোটিশ :")</h3>
+              <h3 className="font-extrabold text-slate-900 text-base">Notice Book ("সর্বশেষ নোটিশ :")</h3>
               <p className="text-xs text-amber-400/90 font-medium">
                 Notices displayed in the side-by-side institutional notice box next to the slider
               </p>
             </div>
             <button
               onClick={openCreateNotice}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" /> Post Notice
             </button>
           </div>
 
-          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
-            <div className="divide-y divide-slate-800/80">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden shadow-xl">
+            <div className="divide-y divide-slate-100">
               {notices.map(notice => {
                 const noticeBranch = branches.find(b => b.id === notice.branch_id)
                 return (
-                  <div key={notice.id} className="p-4 flex items-start justify-between gap-4 hover:bg-slate-800/40 transition-colors">
+                  <div key={notice.id} className="p-4 flex items-start justify-between gap-4 hover:bg-amber-50/30 transition-colors">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="text-amber-400 font-bold text-base">»</span>
@@ -678,16 +678,16 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'achievements' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
+          <div className="flex justify-between items-center bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl">
             <div>
-              <h3 className="font-extrabold text-white text-base">Student Achievements & Success Stories</h3>
+              <h3 className="font-extrabold text-slate-900 text-base">Student Achievements & Success Stories</h3>
               <p className="text-xs text-amber-400/90 font-medium">
                 Feature top rankers, GPA 5.00 achievers, and medical/university admissions
               </p>
             </div>
             <button
               onClick={openCreateAch}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" /> Add Achievement
             </button>
@@ -697,7 +697,7 @@ export default function SliderClient({
             {achievements.map(ach => {
               const achBranch = branches.find(b => b.id === ach.branch_id)
               return (
-                <div key={ach.id} className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 hover:border-amber-500/40 shadow-xl transition-all flex flex-col justify-between">
+                <div key={ach.id} className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 hover:border-amber-500/40 shadow-xl transition-all flex flex-col justify-between">
                   <div>
                     <div className="flex items-start gap-3 mb-3">
                       <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center flex-shrink-0 font-bold overflow-hidden border border-amber-500/30">
@@ -710,7 +710,7 @@ export default function SliderClient({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-1">
-                          <h4 className="font-bold text-white text-sm truncate">{ach.student_name}</h4>
+                          <h4 className="font-bold text-slate-900 text-sm truncate">{ach.student_name}</h4>
                           {ach.exam_year && (
                             <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold shrink-0">
                               {ach.exam_year}
@@ -722,13 +722,13 @@ export default function SliderClient({
                     </div>
 
                     {ach.description && (
-                      <p className="text-xs text-slate-300 line-clamp-2 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 mb-3 leading-relaxed">
+                      <p className="text-xs text-slate-300 line-clamp-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200 mb-3 leading-relaxed">
                         {ach.description}
                       </p>
                     )}
                   </div>
 
-                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                  <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
                     <span className="text-slate-400 text-[11px]">
                       {achBranch ? achBranch.name : "All Branches"}
                     </span>
@@ -759,16 +759,16 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'blogs' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
+          <div className="flex justify-between items-center bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl">
             <div>
-              <h3 className="font-extrabold text-white text-base">Educational Blogs & Articles</h3>
+              <h3 className="font-extrabold text-slate-900 text-base">Educational Blogs & Articles</h3>
               <p className="text-xs text-amber-400/90 font-medium">
                 Write educational advice, exam guidelines, and motivational articles for students
               </p>
             </div>
             <button
               onClick={openCreateBlog}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" /> Write Article
             </button>
@@ -778,7 +778,7 @@ export default function SliderClient({
             {blogs.map(blog => {
               const bBranch = branches.find(b => b.id === blog.branch_id)
               return (
-                <div key={blog.id} className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 overflow-hidden shadow-xl transition-all flex flex-col justify-between">
+                <div key={blog.id} className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-500/40 overflow-hidden shadow-xl transition-all flex flex-col justify-between">
                   <div className="p-4">
                     <div className="flex items-center justify-between gap-2 mb-2">
                       <span className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
@@ -789,7 +789,7 @@ export default function SliderClient({
                       </span>
                     </div>
 
-                    <h4 className="font-bold text-white text-base mb-1.5 hover:text-amber-400 transition-colors">
+                    <h4 className="font-bold text-slate-900 text-base mb-1.5 hover:text-amber-400 transition-colors">
                       {blog.title}
                     </h4>
 
@@ -808,7 +808,7 @@ export default function SliderClient({
                     )}
                   </div>
 
-                  <div className="px-4 py-2.5 bg-slate-950/60 border-t border-slate-800 flex items-center justify-between text-xs">
+                  <div className="px-4 py-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between text-xs">
                     <span className="text-slate-400 font-medium">
                       {bBranch ? bBranch.name : "All Branches"}
                     </span>
@@ -843,9 +843,9 @@ export default function SliderClient({
       {/* 5. INSTITUTIONAL CONTACTS & BRANDING */}
       {/* ---------------------------------------------------- */}
       {activeTab === 'contact' && (
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 space-y-5 shadow-xl max-w-2xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 space-y-5 shadow-xl max-w-2xl">
           <div>
-            <h3 className="text-base font-extrabold text-white">Institutional Contact & Branding</h3>
+            <h3 className="text-base font-extrabold text-slate-900">Institutional Contact & Branding</h3>
             <p className="text-xs text-amber-400/90 font-medium">
               Default coaching contact details displayed on the top utility bar and footer
             </p>
@@ -858,7 +858,7 @@ export default function SliderClient({
                 type="text"
                 value={contactPhone}
                 onChange={e => setContactPhone(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="01302201431"
               />
             </div>
@@ -869,7 +869,7 @@ export default function SliderClient({
                 type="email"
                 value={contactEmail}
                 onChange={e => setContactEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="info@medhashiree.com"
               />
             </div>
@@ -880,7 +880,7 @@ export default function SliderClient({
                 type="text"
                 value={contactAddress}
                 onChange={e => setContactAddress(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="নাচোল, চাঁপাইনবাবগঞ্জ"
               />
             </div>
@@ -891,7 +891,7 @@ export default function SliderClient({
                 type="text"
                 value={contactLink}
                 onChange={e => setContactLink(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="https://wa.me/8801302201431"
               />
             </div>
@@ -902,7 +902,7 @@ export default function SliderClient({
                 rows={3}
                 value={footerAbout}
                 onChange={e => setFooterAbout(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
               />
             </div>
 
@@ -910,7 +910,7 @@ export default function SliderClient({
               <button
                 onClick={handleSaveContact}
                 disabled={savingContact}
-                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
               >
                 {savingContact ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Branding Settings
@@ -923,9 +923,9 @@ export default function SliderClient({
       {/* --- ADD/EDIT SLIDE MODAL --- */}
       {showSlideForm && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-800 text-white">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-extrabold text-white">
+              <h3 className="text-base font-extrabold text-slate-900">
                 {editSlide ? "Edit Hero Slide" : "Add New Hero Slide"}
               </h3>
               <button onClick={() => setShowSlideForm(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
@@ -941,7 +941,7 @@ export default function SliderClient({
                   value={slideForm.image_url}
                   onChange={e => setSlideForm({ ...slideForm, image_url: e.target.value })}
                   placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -951,7 +951,7 @@ export default function SliderClient({
                   value={slideForm.title}
                   onChange={e => setSlideForm({ ...slideForm, title: e.target.value })}
                   placeholder="e.g. নতুন সেশনে ভর্তি চলছে"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -961,7 +961,7 @@ export default function SliderClient({
                   value={slideForm.subtitle}
                   onChange={e => setSlideForm({ ...slideForm, subtitle: e.target.value })}
                   placeholder="e.g. এইচএসসি ও এসএসসি ব্যাচ ২০২৬"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -969,7 +969,7 @@ export default function SliderClient({
                 <select
                   value={slideForm.branch_id}
                   onChange={e => setSlideForm({ ...slideForm, branch_id: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none"
                 >
                   <option value="">All Branches (সকল শাখা)</option>
                   {branches.map(b => (
@@ -988,7 +988,7 @@ export default function SliderClient({
                 <button
                   type="submit"
                   disabled={slideLoading}
-                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
                 >
                   {slideLoading ? "Saving..." : "Save Slide"}
                 </button>
@@ -1001,9 +1001,9 @@ export default function SliderClient({
       {/* --- ADD/EDIT NOTICE MODAL --- */}
       {showNoticeModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-800 text-white">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-extrabold text-white">
+              <h3 className="text-base font-extrabold text-slate-900">
                 {editNotice ? "Edit Notice" : "Post New Notice"}
               </h3>
               <button onClick={() => setShowNoticeModal(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
@@ -1019,7 +1019,7 @@ export default function SliderClient({
                   value={noticeForm.title}
                   onChange={e => setNoticeForm({ ...noticeForm, title: e.target.value })}
                   placeholder="e.g. ভর্তি বিজ্ঞপ্তি : ২০২৫-২৬ সেশনে ভর্তি চলছে"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1029,7 +1029,7 @@ export default function SliderClient({
                   value={noticeForm.content}
                   onChange={e => setNoticeForm({ ...noticeForm, content: e.target.value })}
                   placeholder="Detailed notice text..."
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1037,7 +1037,7 @@ export default function SliderClient({
                 <select
                   value={noticeForm.branch_id}
                   onChange={e => setNoticeForm({ ...noticeForm, branch_id: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none"
                 >
                   <option value="">All Branches (সকল শাখা)</option>
                   {branches.map(b => (
@@ -1056,7 +1056,7 @@ export default function SliderClient({
                 <button
                   type="submit"
                   disabled={noticeLoading}
-                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
                 >
                   {noticeLoading ? "Saving..." : "Publish Notice"}
                 </button>
@@ -1069,9 +1069,9 @@ export default function SliderClient({
       {/* --- ADD/EDIT ACHIEVEMENT MODAL --- */}
       {showAchModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-800 text-white">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-extrabold text-white">
+              <h3 className="text-base font-extrabold text-slate-900">
                 {editAch ? "Edit Achievement" : "Add Student Achievement"}
               </h3>
               <button onClick={() => setShowAchModal(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
@@ -1087,7 +1087,7 @@ export default function SliderClient({
                   value={achForm.student_name}
                   onChange={e => setAchForm({ ...achForm, student_name: e.target.value })}
                   placeholder="e.g. তাসনিম হাসান"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1098,7 +1098,7 @@ export default function SliderClient({
                   value={achForm.title}
                   onChange={e => setAchForm({ ...achForm, title: e.target.value })}
                   placeholder="e.g. রাজশাহী মেডিকেল কলেজ (চান্স প্রাপ্ত)"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1109,7 +1109,7 @@ export default function SliderClient({
                     value={achForm.exam_year}
                     onChange={e => setAchForm({ ...achForm, exam_year: e.target.value })}
                     placeholder="2025"
-                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                   />
                 </div>
                 <div>
@@ -1117,7 +1117,7 @@ export default function SliderClient({
                   <select
                     value={achForm.branch_id}
                     onChange={e => setAchForm({ ...achForm, branch_id: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none"
                   >
                     <option value="">All Branches</option>
                     {branches.map(b => (
@@ -1133,7 +1133,7 @@ export default function SliderClient({
                   value={achForm.photo_url}
                   onChange={e => setAchForm({ ...achForm, photo_url: e.target.value })}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1143,7 +1143,7 @@ export default function SliderClient({
                   value={achForm.description}
                   onChange={e => setAchForm({ ...achForm, description: e.target.value })}
                   placeholder="Short comment or congratulations..."
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="flex gap-2 pt-3">
@@ -1157,7 +1157,7 @@ export default function SliderClient({
                 <button
                   type="submit"
                   disabled={achLoading}
-                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
                 >
                   {achLoading ? "Saving..." : "Save Achievement"}
                 </button>
@@ -1170,9 +1170,9 @@ export default function SliderClient({
       {/* --- ADD/EDIT BLOG MODAL --- */}
       {showBlogModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-xl p-6 shadow-2xl border border-slate-800 text-white my-8">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-xl p-6 shadow-2xl border border-slate-200 text-white my-8">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-extrabold text-white">
+              <h3 className="text-base font-extrabold text-slate-900">
                 {editBlog ? "Edit Educational Article" : "Write Educational Article"}
               </h3>
               <button onClick={() => setShowBlogModal(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
@@ -1188,7 +1188,7 @@ export default function SliderClient({
                   value={blogForm.title}
                   onChange={e => setBlogForm({ ...blogForm, title: e.target.value })}
                   placeholder="e.g. এইচএসসি পরীক্ষায় পদার্থবিজ্ঞানে এ+ পাওয়ার সহজ কৌশল"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1198,7 +1198,7 @@ export default function SliderClient({
                   value={blogForm.excerpt}
                   onChange={e => setBlogForm({ ...blogForm, excerpt: e.target.value })}
                   placeholder="Brief synopsis for card preview..."
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1209,7 +1209,7 @@ export default function SliderClient({
                   value={blogForm.content}
                   onChange={e => setBlogForm({ ...blogForm, content: e.target.value })}
                   placeholder="Write full article here..."
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1219,7 +1219,7 @@ export default function SliderClient({
                     type="text"
                     value={blogForm.author_name}
                     onChange={e => setBlogForm({ ...blogForm, author_name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                   />
                 </div>
                 <div>
@@ -1227,7 +1227,7 @@ export default function SliderClient({
                   <select
                     value={blogForm.branch_id}
                     onChange={e => setBlogForm({ ...blogForm, branch_id: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none"
                   >
                     <option value="">All Branches</option>
                     {branches.map(b => (
@@ -1243,7 +1243,7 @@ export default function SliderClient({
                   value={blogForm.cover_image}
                   onChange={e => setBlogForm({ ...blogForm, cover_image: e.target.value })}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1253,7 +1253,7 @@ export default function SliderClient({
                   value={blogForm.tags}
                   onChange={e => setBlogForm({ ...blogForm, tags: e.target.value })}
                   placeholder="পড়াশোনা, এইচএসসি, পদার্থবিজ্ঞান"
-                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="flex gap-2 pt-3">
@@ -1267,7 +1267,7 @@ export default function SliderClient({
                 <button
                   type="submit"
                   disabled={blogLoading}
-                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
                 >
                   {blogLoading ? "Publishing..." : "Publish Article"}
                 </button>

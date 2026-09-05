@@ -111,7 +111,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
     toast.success("Approver removed")
   }
 
-  const inputClass = "w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all"
+  const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
   const approverIds = approvers.map(a => a.staff_id)
   const availableStaff = allStaff.filter(s => !approverIds.includes(s.id))
 
@@ -120,8 +120,8 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
   return (
     <div className="max-w-3xl space-y-6">
       {/* General Settings */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
-        <h3 className="font-black text-white text-base mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-amber-400" /> General Settings</h3>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
+        <h3 className="font-black text-slate-900 text-base mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-amber-400" /> General Settings</h3>
         <div className="space-y-3 text-sm text-slate-300">
           <p>Center Name: <strong className="text-white font-bold">MedhaShiree</strong></p>
           <p>Default Fee Due Day: <strong className="text-white font-bold">10th of every month</strong></p>
@@ -130,10 +130,10 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
 
       {/* Payment Accounts — Owner only */}
       {isOwner && (
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-black text-white text-base flex items-center gap-2"><Smartphone className="w-5 h-5 text-amber-400" /> Payment Accounts</h3>
-            <button onClick={() => setShowAddAccount(true)} className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer">
+            <h3 className="font-black text-slate-900 text-base flex items-center gap-2"><Smartphone className="w-5 h-5 text-amber-400" /> Payment Accounts</h3>
+            <button onClick={() => setShowAddAccount(true)} className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer">
               <Plus className="w-3.5 h-3.5" /> Add Number
             </button>
           </div>
@@ -148,7 +148,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
           ) : (
             <div className="space-y-2">
               {accounts.map(acc => (
-                <div key={acc.id} className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${acc.is_active ? "bg-slate-950 border-slate-800" : "bg-slate-950/50 border-slate-800/60 opacity-60"}`}>
+                <div key={acc.id} className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${acc.is_active ? "bg-slate-950 border-slate-200" : "bg-slate-950/50 border-slate-200 opacity-60"}`}>
                   <div className="flex items-center gap-3">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${methodColors[acc.method] || "text-slate-400 bg-slate-800 border-slate-700"}`}>
                       {methodLabels[acc.method] || acc.method}
@@ -173,10 +173,10 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
 
           {/* Add account modal */}
           {showAddAccount && (
-            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
-              <div className="bg-slate-900 rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-800 animate-in fade-in zoom-in-95">
+            <div className="fixed inset-0 bg-slate-50 backdrop-blur-md flex items-center justify-center z-50 p-4">
+              <div className="bg-white rounded-3xl w-full text-slate-900 max-w-md p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-black text-white">Add Payment Number</h3>
+                  <h3 className="text-lg font-black text-slate-900">Add Payment Number</h3>
                   <button onClick={() => setShowAddAccount(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
                 </div>
                 <form onSubmit={addAccount} className="space-y-4">
@@ -198,8 +198,8 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                     <input value={accName} onChange={e => setAccName(e.target.value)} className={inputClass} placeholder="e.g. MedhaShiree Official" />
                   </div>
                   <div className="flex gap-3 pt-2">
-                    <button type="button" onClick={() => setShowAddAccount(false)} className="flex-1 py-2.5 border border-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-800 hover:text-white transition-colors cursor-pointer">Cancel</button>
-                    <button type="submit" disabled={addingAcc} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-40 flex items-center justify-center gap-2 transition-all cursor-pointer">
+                    <button type="button" onClick={() => setShowAddAccount(false)} className="flex-1 py-2.5 border border-slate-200 text-slate-300 rounded-xl font-bold hover:bg-slate-800 hover:text-white transition-colors cursor-pointer">Cancel</button>
+                    <button type="submit" disabled={addingAcc} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-40 flex items-center justify-center gap-2 transition-all cursor-pointer">
                       {addingAcc ? <><Loader2 className="w-4 h-4 animate-spin text-slate-950" /> Adding...</> : "Add Account"}
                     </button>
                   </div>
@@ -212,19 +212,19 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
 
       {/* Payment Approvers — Owner only */}
       {isOwner && (
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
-          <h3 className="font-black text-white text-base mb-2 flex items-center gap-2"><Shield className="w-5 h-5 text-amber-400" /> Payment Approvers</h3>
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
+          <h3 className="font-black text-slate-900 text-base mb-2 flex items-center gap-2"><Shield className="w-5 h-5 text-amber-400" /> Payment Approvers</h3>
           <p className="text-xs text-slate-400 mb-4">Staff members who can approve or reject student payment submissions. Owners and Super Managers can always approve.</p>
 
           {/* Current approvers */}
           {approvers.length > 0 && (
             <div className="space-y-2 mb-4">
               {approvers.map(app => (
-                <div key={app.id} className="flex items-center justify-between p-3.5 bg-slate-950 rounded-xl border border-slate-800">
+                <div key={app.id} className="flex items-center justify-between p-3.5 bg-slate-950 rounded-xl border border-slate-200">
                   <div className="flex items-center gap-3">
                     <UserCheck className="w-5 h-5 text-emerald-400" />
                     <div>
-                      <p className="font-bold text-white text-sm">{app.staff?.name || "Unknown"}</p>
+                      <p className="font-bold text-slate-900 text-sm">{app.staff?.name || "Unknown"}</p>
                       <p className="text-xs text-slate-400">{app.staff?.email} • {app.staff?.role}</p>
                     </div>
                   </div>
@@ -244,7 +244,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                 <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
               ))}
             </select>
-            <button onClick={addApprover} disabled={!selectedStaff || addingApprover} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 disabled:opacity-40 flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
+            <button onClick={addApprover} disabled={!selectedStaff || addingApprover} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 disabled:opacity-40 flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
               {addingApprover ? <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> : <Plus className="w-4 h-4" />} Add
             </button>
           </div>
@@ -252,9 +252,9 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
       )}
 
       {/* Supabase Connection */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
-        <h3 className="font-black text-white text-base mb-2">Supabase Connection</h3>
-        <p className="text-sm text-slate-400">Configure your Supabase URL and keys in the <code className="bg-slate-950 border border-slate-800 text-amber-400 px-1.5 py-0.5 rounded text-xs font-mono">.env.local</code> file.</p>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
+        <h3 className="font-black text-slate-900 text-base mb-2">Supabase Connection</h3>
+        <p className="text-sm text-slate-400">Configure your Supabase URL and keys in the <code className="bg-white border border-slate-300 text-amber-400 px-1.5 py-0.5 rounded text-xs font-mono">.env.local</code> file.</p>
       </div>
     </div>
   )

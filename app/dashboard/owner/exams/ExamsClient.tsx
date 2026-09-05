@@ -227,7 +227,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex p-1 bg-slate-950 border border-slate-800 rounded-xl">
+          <div className="flex p-1 bg-white border border-slate-300 rounded-xl">
             {["all", "published", "draft", "online"].map(t => (
               <button key={t} onClick={() => setStatusFilter(t as any)} className={cn("px-4 py-1.5 text-xs sm:text-sm font-bold rounded-lg capitalize transition-all", statusFilter === t ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs" : "text-slate-400 hover:text-white")}>
                 {t}
@@ -240,7 +240,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
           </select>
         </div>
 
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all">
+        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all">
           <Plus className="w-4 h-4" /> Create Exam
         </button>
       </div>
@@ -248,14 +248,14 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
       {/* Exam Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredExams.map(exam => (
-          <div key={exam.id} className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 p-5 shadow-xl transition-all flex flex-col h-full">
+          <div key={exam.id} className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-500/40 p-5 shadow-xl transition-all flex flex-col h-full">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className={cn("p-2 rounded-xl border", exam.is_online ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20")}>
                   {exam.is_online ? <Globe className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
                 </div>
                 <div>
-                  <p className="font-bold text-white text-base leading-snug">{exam.title}</p>
+                  <p className="font-bold text-slate-900 text-base leading-snug">{exam.title}</p>
                   <p className="text-xs text-slate-400 mt-0.5">{exam.batch?.name || "All Batches"} • {exam.subject || "No Subject"}</p>
                 </div>
               </div>
@@ -267,7 +267,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-4 bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex-grow">
+            <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex-grow">
               <div className="flex flex-col"><span className="text-[11px] text-slate-400 font-medium">Total Marks</span><span className="font-bold text-amber-400 text-sm">{exam.total_marks}</span></div>
               <div className="flex flex-col"><span className="text-[11px] text-slate-400 font-medium">Date</span><span className="font-semibold text-slate-200 text-sm">{exam.exam_date ? formatDate(exam.exam_date) : "TBD"}</span></div>
               {exam.is_online && (
@@ -278,7 +278,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
               )}
             </div>
 
-            <div className="pt-3 border-t border-slate-800 flex flex-col gap-2 mt-auto">
+            <div className="pt-3 border-t border-slate-200 flex flex-col gap-2 mt-auto">
               <div className="flex items-center gap-2 w-full">
                 {exam.is_online ? (
                   <>
@@ -306,31 +306,31 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
             </div>
           </div>
         ))}
-        {filteredExams.length === 0 && <div className="col-span-full text-center py-16 bg-slate-900/90 rounded-2xl border border-dashed border-slate-800 text-slate-400 shadow-xl">No exams match your filters.</div>}
+        {filteredExams.length === 0 && <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-400 shadow-xl">No exams match your filters.</div>}
       </div>
 
       {/* Analytics Section */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 text-white shadow-xl">
-        <h3 className="text-lg font-extrabold text-white mb-1">Exam Analytics</h3>
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 text-white shadow-xl">
+        <h3 className="text-lg font-extrabold text-slate-900 mb-1">Exam Analytics</h3>
         <p className="text-xs text-amber-400/90 font-medium">Performance summary and publication status</p>
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800"><p className="text-xs text-slate-400 font-medium">Total Exams</p><p className="text-2xl font-extrabold text-white mt-1">{exams.length}</p></div>
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800"><p className="text-xs text-slate-400 font-medium">Published</p><p className="text-2xl font-extrabold text-emerald-400 mt-1">{exams.filter(e=>e.is_published).length}</p></div>
-          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800"><p className="text-xs text-slate-400 font-medium">Online Exams</p><p className="text-2xl font-extrabold text-blue-400 mt-1">{exams.filter(e=>e.is_online).length}</p></div>
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-200"><p className="text-xs text-slate-400 font-medium">Total Exams</p><p className="text-2xl font-extrabold text-white mt-1">{exams.length}</p></div>
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-200"><p className="text-xs text-slate-400 font-medium">Published</p><p className="text-2xl font-extrabold text-emerald-400 mt-1">{exams.filter(e=>e.is_published).length}</p></div>
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-200"><p className="text-xs text-slate-400 font-medium">Online Exams</p><p className="text-2xl font-extrabold text-blue-400 mt-1">{exams.filter(e=>e.is_online).length}</p></div>
         </div>
       </div>
 
       {/* Create Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-slate-900 rounded-3xl w-full max-w-4xl shadow-2xl my-8 flex flex-col max-h-[90vh] border border-slate-800 text-white">
-            <div className="flex items-center justify-between p-5 border-b border-slate-800 shrink-0 bg-slate-950/60">
-              <h3 className="text-lg font-extrabold text-white">Create New Exam</h3>
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-4xl shadow-2xl my-8 flex flex-col max-h-[90vh] border border-slate-200 text-white">
+            <div className="flex items-center justify-between p-5 border-b border-slate-200 shrink-0 bg-slate-50">
+              <h3 className="text-lg font-extrabold text-slate-900">Create New Exam</h3>
               <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"><X className="w-5 h-5" /></button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-5">
-              <div className="flex gap-2 p-1 bg-slate-950 border border-slate-800 rounded-xl w-fit mb-6">
+              <div className="flex gap-2 p-1 bg-white border border-slate-300 rounded-xl w-fit mb-6">
                 <button onClick={() => setExamMode("offline")} className={cn("px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all", examMode === "offline" ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs" : "text-slate-400 hover:text-white")}>Offline Exam</button>
                 <button onClick={() => setExamMode("online")} className={cn("px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all", examMode === "online" ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs" : "text-slate-400 hover:text-white")}>Online Exam</button>
               </div>
@@ -357,7 +357,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                   )}
 
                   {/* Batch Marks Visibility Option */}
-                  <div className="col-span-1 md:col-span-2 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                  <div className="col-span-1 md:col-span-2 bg-slate-950 p-3.5 rounded-xl border border-slate-200">
                     <label className="flex items-start gap-3 text-sm text-slate-200 cursor-pointer select-none">
                       <input 
                         type="checkbox" 
@@ -366,7 +366,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                         className="w-4 h-4 mt-0.5 text-amber-500 rounded border-slate-700 bg-slate-950 focus:ring-amber-400 cursor-pointer" 
                       />
                       <div>
-                        <span className="font-bold text-white">Show marks & merit list to all students in batch (Default)</span>
+                        <span className="font-bold text-slate-900">Show marks & merit list to all students in batch (Default)</span>
                         <p className="text-xs text-slate-400 mt-0.5">
                           When checked, all students in this batch can view everyone&apos;s marks. If deselected, each student will only see their own marks privately.
                         </p>
@@ -377,15 +377,15 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
 
                 {/* Question Builder */}
                 {examMode === "online" && (
-                  <div className="mt-8 border-t border-slate-800 pt-6">
+                  <div className="mt-8 border-t border-slate-200 pt-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-base font-bold text-white">Question Builder</h4>
+                      <h4 className="text-base font-bold text-slate-900">Question Builder</h4>
                       <div className="text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full">Total Marks: {computedTotal}</div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                       {/* Left: Add Form */}
-                      <div className="lg:col-span-2 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                      <div className="lg:col-span-2 bg-slate-950 p-4 rounded-xl border border-slate-200">
                         <h5 className="font-bold text-white text-sm mb-4">{editingQuestion ? "Edit Question" : "Add Question"}</h5>
                         <div className="space-y-4">
                           <div><label className="block text-xs font-bold text-slate-300 mb-1">Question Type</label><select value={qForm.type} onChange={e => setQForm({...qForm, type: e.target.value as QuestionType})} className={inputClass}><option value="mcq" className="bg-slate-900 text-white">Multiple Choice</option><option value="short" className="bg-slate-900 text-white">Short Answer (Auto-graded)</option><option value="long" className="bg-slate-900 text-white">Long Answer (Manual)</option></select></div>
@@ -421,28 +421,28 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                       {/* Right: Question List */}
                       <div className="lg:col-span-3 space-y-3">
                         {questions.length === 0 ? (
-                          <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-800 rounded-xl p-8 text-center text-slate-500">
+                          <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-8 text-center text-slate-500">
                             No questions added yet.<br/>Use the form to add questions to this exam.
                           </div>
                         ) : (
                           questions.map((q, idx) => (
-                            <div key={q.id} className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex gap-3 group relative hover:border-amber-500/40">
+                            <div key={q.id} className="bg-white border border-slate-300 p-4 rounded-xl flex gap-3 group relative hover:border-amber-500/40">
                               <div className="mt-1 cursor-grab text-slate-500"><GripVertical className="w-5 h-5" /></div>
                               <div className="flex-1">
                                 <div className="flex justify-between items-start mb-2">
                                   <h6 className="font-bold text-white text-sm">Q{idx + 1}. {q.question_text}</h6>
-                                  <span className="shrink-0 ml-2 px-2 py-0.5 bg-slate-900 text-amber-300 border border-slate-800 rounded text-xs font-mono">{q.marks} Marks</span>
+                                  <span className="shrink-0 ml-2 px-2 py-0.5 bg-slate-900 text-amber-300 border border-slate-200 rounded text-xs font-mono">{q.marks} Marks</span>
                                 </div>
                                 {q.question_type === "mcq" && (
                                   <div className="grid grid-cols-2 gap-1.5 mt-2">
                                     {q.options?.map((opt, i) => (
-                                      <div key={i} className={cn("text-xs px-2.5 py-1.5 rounded-lg border", q.correct_answer === opt ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 font-bold" : "bg-slate-900 border-slate-800 text-slate-300")}>
+                                      <div key={i} className={cn("text-xs px-2.5 py-1.5 rounded-lg border", q.correct_answer === opt ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 font-bold" : "bg-slate-900 border-slate-200 text-slate-300")}>
                                         {String.fromCharCode(65+i)}. {opt}
                                       </div>
                                     ))}
                                   </div>
                                 )}
-                                {q.question_type === "short" && <div className="text-xs text-slate-300 mt-1 bg-slate-900 p-2 rounded-lg border border-slate-800">Expected: <strong className="text-amber-300">{q.correct_answer}</strong></div>}
+                                {q.question_type === "short" && <div className="text-xs text-slate-300 mt-1 bg-slate-900 p-2 rounded-lg border border-slate-200">Expected: <strong className="text-amber-300">{q.correct_answer}</strong></div>}
                                 {q.hint_note && <div className="text-xs text-amber-300 mt-2 bg-amber-500/10 border border-amber-500/20 p-1.5 rounded-lg inline-block">Hint: {q.hint_note}</div>}
                               </div>
                               <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -459,9 +459,9 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
               </form>
             </div>
             
-            <div className="flex justify-end gap-3 p-5 border-t border-slate-800 bg-slate-950/60 rounded-b-3xl shrink-0">
+            <div className="flex justify-end gap-3 p-5 border-t border-slate-200 bg-slate-50 rounded-b-3xl shrink-0">
               <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 hover:text-white transition-colors">Cancel</button>
-              <button form="examForm" type="submit" disabled={loading || (examMode === "online" && questions.length === 0)} className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all">
+              <button form="examForm" type="submit" disabled={loading || (examMode === "online" && questions.length === 0)} className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all">
                 {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : "Save Exam"}
               </button>
             </div>

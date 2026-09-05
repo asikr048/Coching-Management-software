@@ -70,7 +70,7 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-white tracking-tight">Revenue & Analytics</h2>
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Revenue & Analytics</h2>
         <p className="text-sm text-slate-400 mt-1">Institutional business intelligence and financial trajectory — Owner access only</p>
       </div>
 
@@ -94,10 +94,10 @@ export default async function AnalyticsPage() {
       {/* Monthly Breakdown + Payment Methods */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Monthly Breakdown Table */}
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
           <div className="flex items-center gap-2 mb-4">
             <BarChart3 className="w-5 h-5 text-amber-400" />
-            <h3 className="font-bold text-white text-base">Monthly Revenue (Last 6 Months)</h3>
+            <h3 className="font-bold text-slate-900 text-base">Monthly Revenue (Last 6 Months)</h3>
           </div>
           <div className="space-y-3.5">
             {monthlyData.map((m, i) => {
@@ -109,7 +109,7 @@ export default async function AnalyticsPage() {
                     <span className="font-semibold text-slate-300">{m.month}</span>
                     <span className="text-amber-300 font-bold">{formatCurrency(m.revenue)}</span>
                   </div>
-                  <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+                  <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-200">
                     <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
@@ -119,10 +119,10 @@ export default async function AnalyticsPage() {
         </div>
 
         {/* Payment Method Breakdown */}
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
           <div className="flex items-center gap-2 mb-4">
             <PieChart className="w-5 h-5 text-amber-400" />
-            <h3 className="font-bold text-white text-base">Payment Methods (This Month)</h3>
+            <h3 className="font-bold text-slate-900 text-base">Payment Methods (This Month)</h3>
           </div>
           {methodBreakdown.length === 0 ? (
             <p className="text-slate-500 text-sm text-center py-8">No payments this month</p>
@@ -138,7 +138,7 @@ export default async function AnalyticsPage() {
                         <span className="font-semibold text-slate-300 capitalize">{method}</span>
                         <span className="text-slate-400 font-mono text-xs">{formatCurrency(amount)} <span className="text-amber-400 font-bold">({pct}%)</span></span>
                       </div>
-                      <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+                      <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-200">
                         <div className={`h-full rounded-full ${methodColors[method] || "bg-slate-700"}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
@@ -151,10 +151,10 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Top Batches by Revenue */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
         <div className="flex items-center gap-2 mb-4">
           <BookOpen className="w-5 h-5 text-amber-400" />
-          <h3 className="font-bold text-white text-base">Top Batches by Revenue ({now.getFullYear()})</h3>
+          <h3 className="font-bold text-slate-900 text-base">Top Batches by Revenue ({now.getFullYear()})</h3>
         </div>
         {topBatches.length === 0 ? (
           <p className="text-slate-500 text-sm text-center py-4">No revenue data yet</p>
@@ -162,24 +162,24 @@ export default async function AnalyticsPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-slate-950/80 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
                   <th className="px-4 py-3.5 text-left">#</th>
                   <th className="px-4 py-3.5 text-left">Batch</th>
                   <th className="px-4 py-3.5 text-left">Revenue</th>
                   <th className="px-4 py-3.5 text-left">Share</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/70">
+              <tbody className="divide-y divide-slate-100/70">
                 {topBatches.map((b, i) => {
                   const share = yearRevenue > 0 ? Math.round((b.revenue / yearRevenue) * 100) : 0
                   return (
-                    <tr key={i} className="hover:bg-slate-800/40 transition-colors">
+                    <tr key={i} className="hover:bg-amber-50/30 transition-colors">
                       <td className="px-4 py-3.5 text-sm text-slate-400 font-mono">{i + 1}</td>
                       <td className="px-4 py-3.5 text-sm font-bold text-white">{b.name}</td>
                       <td className="px-4 py-3.5 text-sm font-extrabold text-amber-400">{formatCurrency(b.revenue)}</td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2">
-                          <div className="w-24 h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                          <div className="w-24 h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-200">
                             <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-600" style={{ width: `${share}%` }} />
                           </div>
                           <span className="text-xs font-bold text-amber-300 font-mono">{share}%</span>

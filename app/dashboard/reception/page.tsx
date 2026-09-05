@@ -17,7 +17,7 @@ export default async function ReceptionDashboard() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-black text-white tracking-tight">Reception Dashboard</h2><p className="text-slate-400 text-sm mt-1">Welcome! Manage daily operations.</p></div>
+      <div><h2 className="text-2xl font-black text-slate-900 tracking-tight">Reception Dashboard</h2><p className="text-slate-400 text-sm mt-1">Welcome! Manage daily operations.</p></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard title="Active Students" value={students.count || 0} icon={Users} color="indigo" />
         <StatsCard title="Today Present" value={todayPresent} icon={UserCheck} color="emerald" />
@@ -32,7 +32,7 @@ export default async function ReceptionDashboard() {
           { href: "/dashboard/reception/biometric", label: "Biometric Entry" },
           { href: "/dashboard/reception/students", label: "View Students" },
         ].map(a => (
-          <Link key={a.href} href={a.href} className="p-4 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 hover:bg-slate-800/60 shadow-lg transition-all text-center text-sm font-bold text-slate-300 hover:text-amber-400">{a.label}</Link>
+          <Link key={a.href} href={a.href} className="p-4 bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-500/40 hover:bg-slate-800/60 shadow-lg transition-all text-center text-sm font-bold text-slate-300 hover:text-amber-400">{a.label}</Link>
         ))}
       </div>
     </div>

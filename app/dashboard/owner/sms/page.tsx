@@ -1215,13 +1215,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-20">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/90 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-xl">
         <div className="flex items-center gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-inner shrink-0">
             <MessageSquare className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               Bulk SMS Management
             </h1>
             <p className="text-xs text-slate-400 mt-1">
@@ -1250,12 +1250,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
         <button
           onClick={() => setActiveTab("compose")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "compose"
-              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
               : "text-slate-400 hover:text-white hover:bg-slate-800/80"
           }`}
         >
@@ -1266,7 +1266,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           onClick={() => setActiveTab("gateway")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "gateway"
-              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
               : "text-slate-400 hover:text-white hover:bg-slate-800/80"
           }`}
         >
@@ -1278,7 +1278,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           onClick={() => setActiveTab("logs")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "logs"
-              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
               : "text-slate-400 hover:text-white hover:bg-slate-800/80"
           }`}
         >
@@ -1293,9 +1293,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Target Audience Selector */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h2 className="text-sm font-black text-white flex items-center gap-2">
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
                   <Users className="w-4 h-4 text-amber-400" />
                   1. Select Target Audience
                 </h2>
@@ -1325,7 +1325,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-center transition-all cursor-pointer ${
                         isActive
                           ? "border-amber-500 bg-amber-500/15 text-amber-300 font-black shadow-sm"
-                          : "border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-800/60 font-medium hover:text-slate-200"
+                          : "border-slate-200 bg-slate-950 text-slate-400 hover:bg-slate-800/60 font-medium hover:text-slate-200"
                       }`}
                     >
                       <Icon className={`w-4 h-4 ${isActive ? "text-amber-400" : "text-slate-500"}`} />
@@ -1337,7 +1337,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Phone Target Selector (Guardian vs Student) */}
               {targetType !== "csv" && targetType !== "direct_numbers" && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-200 flex items-center justify-between gap-3">
                   <span className="text-xs font-bold text-slate-400">Send To:</span>
                   <div className="flex items-center gap-2">
                     {[
@@ -1352,7 +1352,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                           targetPhoneType === opt.id
                             ? "bg-amber-500 text-slate-950 shadow-sm"
-                            : "bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-800"
+                            : "bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-200"
                         }`}
                       >
                         {opt.label}
@@ -1364,7 +1364,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* SUB-PANEL: All Active */}
               {targetType === "all" && (
-                <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800 text-center space-y-1">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-1">
                   <p className="text-xs font-bold text-slate-200">Targeting All Active Enrolled Students</p>
                   <p className="text-[11px] text-slate-400">
                     Total {students.length} active students enrolled in coaching.
@@ -1388,7 +1388,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       {selectedBatchIds.length === batches.length ? "Deselect All" : "Select All Batches"}
                     </button>
                   </div>
-                  <div className="max-h-48 overflow-y-auto space-y-1.5 border border-slate-800 rounded-xl p-2.5 bg-slate-950/60">
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2.5 bg-slate-50">
                     {batches.map((b) => {
                       const isChecked = selectedBatchIds.includes(b.id)
                       const count = enrollments.filter((e) => e.batch_id === b.id).length
@@ -1411,7 +1411,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                             />
                             <span className="text-xs font-bold text-white">{b.name}</span>
                           </div>
-                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 font-mono font-bold">
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-200 text-slate-400 font-mono font-bold">
                             {count} Students
                           </span>
                         </label>
@@ -1433,11 +1433,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       </p>
                     </div>
                   </div>
-                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-800/80 border border-slate-800 rounded-xl bg-slate-950">
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-950">
                     {dues.map((d) => (
                       <div key={d.id} className="p-2.5 flex items-center justify-between text-xs">
                         <div>
-                          <p className="font-bold text-white">{d.student?.name || "Student"}</p>
+                          <p className="font-bold text-slate-900">{d.student?.name || "Student"}</p>
                           <p className="text-[11px] text-slate-400 font-mono">
                             <span className="text-amber-400">{d.student?.student_id}</span> • Month: {d.due_month}
                           </p>
@@ -1471,7 +1471,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     <select
                       value={selectedExamId}
                       onChange={(e) => setSelectedExamId(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-amber-400 shadow-sm"
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-amber-400 shadow-sm"
                     >
                       <option value="">-- Choose an Exam --</option>
                       {exams.map((ex) => (
@@ -1514,7 +1514,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       </div>
 
                       {/* Student Table with Draggable Number Badges */}
-                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-800/80 border border-slate-800 rounded-xl bg-slate-950 shadow-inner">
+                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-950 shadow-inner">
                         {examStudents.map((s) => {
                           const isSelected = selectedExamStudentIds.includes(s.id)
                           const selectedEx = exams.find((e) => e.id === selectedExamId)
@@ -1522,7 +1522,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                             <div
                               key={s.id}
                               className={`p-2.5 flex items-center justify-between gap-2 transition-colors ${
-                                isSelected ? "bg-slate-900/80" : "opacity-60 hover:bg-slate-900/40"
+                                isSelected ? "bg-slate-50" : "opacity-60 hover:bg-slate-900/40"
                               }`}
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
@@ -1578,11 +1578,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       </div>
                     </div>
                   ) : selectedExamId ? (
-                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-800">
+                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-200">
                       No active students found in this exam's batch.
                     </div>
                   ) : (
-                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-800">
+                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-200">
                       Please select an exam above to load students and marks.
                     </div>
                   )}
@@ -1600,13 +1600,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         value={pickerSearchQuery}
                         onChange={(e) => setPickerSearchQuery(e.target.value)}
                         placeholder="Search student name, ID, or phone..."
-                        className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 shadow-sm"
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 shadow-sm"
                       />
                     </div>
                     <select
                       value={pickerBatchFilter}
                       onChange={(e) => setPickerBatchFilter(e.target.value)}
-                      className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-amber-400 shadow-sm"
+                      className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-amber-400 shadow-sm"
                     >
                       <option value="all">All Batches</option>
                       {batches.map((b) => (
@@ -1644,14 +1644,14 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     </div>
                   </div>
 
-                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-800/80 border border-slate-800 rounded-xl bg-slate-950 shadow-inner">
+                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-slate-950 shadow-inner">
                     {filteredStudentsInPicker.map((s) => {
                       const isSelected = customSelectedStudentIds.includes(s.id)
                       return (
                         <label
                           key={s.id}
                           className={`p-2.5 flex items-center justify-between cursor-pointer transition-colors ${
-                            isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/40"
+                            isSelected ? "bg-slate-50" : "hover:bg-slate-900/40"
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
@@ -1710,14 +1710,14 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* SUB-PANEL: Custom CSV File */}
               {targetType === "csv" && (
                 <div className="space-y-3">
-                  <div className="border-2 border-dashed border-slate-700 hover:border-amber-500/50 bg-slate-950/60 rounded-2xl p-5 text-center transition-all">
+                  <div className="border-2 border-dashed border-slate-700 hover:border-amber-500/50 bg-slate-50 rounded-2xl p-5 text-center transition-all">
                     <Upload className="w-8 h-8 text-amber-400 mx-auto mb-2" />
                     <p className="text-xs font-bold text-white">Upload CSV / TXT Contact List</p>
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       File format: Column for <span className="font-mono font-bold text-amber-400">phone</span> and optional{" "}
                       <span className="font-mono font-bold text-amber-400">name</span>
                     </p>
-                    <label className="mt-3 inline-block px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs font-bold shadow-md cursor-pointer">
+                    <label className="mt-3 inline-block px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer">
                       Browse File
                       <input type="file" accept=".csv,.txt" onChange={handleCsvUpload} className="hidden" />
                     </label>
@@ -1750,7 +1750,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
             <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-amber-500/30 rounded-2xl p-4 text-white shadow-xl flex items-center justify-between">
               <div>
                 <p className="text-xs text-amber-400/90 font-semibold uppercase tracking-wider">Ready to Deliver</p>
-                <h3 className="text-2xl font-black mt-0.5 text-white">
+                <h3 className="text-2xl font-black mt-0.5 text-slate-900">
                   {resolvedRecipients.length} Recipient{resolvedRecipients.length !== 1 ? "s" : ""}
                 </h3>
               </div>
@@ -1765,9 +1765,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
           {/* Right Column: Compose Message, Merge Tags & Preview */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <h2 className="text-sm font-black text-white flex items-center gap-2">
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
                   <FileText className="w-4 h-4 text-amber-400" />
                   2. Compose Message & Dynamic Merge Tags
                 </h2>
@@ -1877,8 +1877,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </div>
 
               {/* Live Smartphone Screen Mockup */}
-              <div className="p-3.5 bg-slate-950 rounded-2xl text-white space-y-2 border border-slate-800 shadow-inner">
-                <div className="flex items-center justify-between text-slate-400 text-[11px] pb-1 border-b border-slate-800">
+              <div className="p-3.5 bg-slate-950 rounded-2xl text-white space-y-2 border border-slate-200 shadow-inner">
+                <div className="flex items-center justify-between text-slate-400 text-[11px] pb-1 border-b border-slate-200">
                   <span className="flex items-center gap-1.5">
                     <Smartphone className="w-3.5 h-3.5 text-amber-400" />
                     Recipient Mobile View Simulation
@@ -1901,7 +1901,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     </select>
                   </div>
                 )}
-                <div className="p-3 bg-slate-900 rounded-xl text-xs text-slate-100 font-medium leading-relaxed border border-slate-800">
+                <div className="p-3 bg-slate-900 rounded-xl text-xs text-slate-100 font-medium leading-relaxed border border-slate-200">
                   {sampleMessagePreview}
                 </div>
               </div>
@@ -1921,7 +1921,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   setShowConfirmModal(true)
                 }}
                 disabled={sending || resolvedRecipients.length === 0 || !message.trim()}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 {sending ? (
                   <>
@@ -1944,14 +1944,14 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       {activeTab === "gateway" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8 space-y-6">
-            <form onSubmit={handleSaveGateway} className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
-              <div className="border-b border-slate-800 pb-4">
+            <form onSubmit={handleSaveGateway} className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl space-y-6">
+              <div className="border-b border-slate-200 pb-4">
                 <div className="flex items-center gap-2">
                   <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
                     <Settings className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-base font-black text-white">Custom SMS Gateway API Builder</h2>
+                    <h2 className="text-base font-black text-slate-900">Custom SMS Gateway API Builder</h2>
                     <p className="text-xs text-slate-400 mt-0.5">
                       Visual parameter mapping with drag-and-drop token placement for sms.net.bd and any SMS provider
                     </p>
@@ -1973,21 +1973,21 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("greenweb")}
-                    className="p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-200 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
                   >
                     Greenweb BD
                   </button>
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("mimsms")}
-                    className="p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-200 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
                   >
                     MIM SMS (JSON)
                   </button>
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("ssl_wireless")}
-                    className="p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-200 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
                   >
                     SSL Wireless
                   </button>
@@ -2006,7 +2006,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     value={gatewayConfig.apiKey}
                     onChange={(e) => setGatewayConfig({ ...gatewayConfig, apiKey: e.target.value })}
                     placeholder="e.g. 48673a5a87b1c4e92... (paste your API key here)"
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-500"
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-500"
                   />
                   <button
                     type="button"
@@ -2034,7 +2034,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       className={`p-3 rounded-xl border flex flex-col cursor-pointer transition-all ${
                         gatewayConfig.callType === ct.id
                           ? "border-amber-500/60 bg-amber-500/10 text-amber-300 font-bold shadow-sm ring-1 ring-amber-500/30"
-                          : "border-slate-800 hover:bg-slate-800/40 text-slate-400 bg-slate-950/60"
+                          : "border-slate-200 hover:bg-amber-50/30 text-slate-400 bg-slate-50"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -2071,7 +2071,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       setGatewayConfig({ ...gatewayConfig, baseUrl: clean, urlTemplate: newTemplate })
                     }}
                     placeholder="https://api.sms.net.bd/sendsms"
-                    className="w-full pl-10 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-500"
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-500"
                   />
                 </div>
               </div>
@@ -2151,7 +2151,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                             ? "border-amber-400 bg-amber-500/15 ring-2 ring-amber-500/40 scale-[1.01]"
                             : isAssigned
                             ? "border-emerald-500/30 bg-emerald-950/20"
-                            : "border-slate-800 bg-slate-950"
+                            : "border-slate-200 bg-slate-950"
                         }`}
                       >
                         {/* Parameter Key */}
@@ -2177,7 +2177,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                 ? "border-amber-400 bg-amber-500/20 text-amber-200 font-black animate-pulse"
                                 : isAssigned
                                 ? "border-emerald-500/40 bg-slate-900 text-emerald-300 font-bold"
-                                : "border-slate-800 bg-slate-950/80 text-slate-500"
+                                : "border-slate-200 bg-slate-50 text-slate-500"
                             }`}
                           >
                             <span className="text-xs font-mono">
@@ -2227,8 +2227,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </div>
 
               {/* Assembled Request URL Preview */}
-              <div className="p-4 bg-slate-950 rounded-xl text-slate-300 font-mono text-xs space-y-1.5 border border-slate-800">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-sans font-bold flex items-center gap-1.5">
+              <div className="p-4 bg-slate-950 rounded-xl text-slate-300 font-mono text-xs space-y-1.5 border border-slate-200">
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider font-sans font-bold flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   Live Assembled Request URL
                 </p>
@@ -2244,7 +2244,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               <button
                 type="submit"
                 disabled={savingGateway}
-                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
               >
                 {savingGateway ? (
                   <>
@@ -2284,7 +2284,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       Copy SQL Fix
                     </button>
                   </div>
-                  <div className="bg-slate-950 text-slate-300 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800">
+                  <div className="bg-slate-950 text-slate-300 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-200">
                     <pre>{SITE_SETTINGS_SQL}</pre>
                   </div>
                 </div>
@@ -2295,8 +2295,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           {/* Right Column: Gateway Status & Live Test Sender */}
           <div className="lg:col-span-4 space-y-6">
             {/* Setup Status Checklist */}
-            <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
-              <h3 className="text-sm font-black text-white border-b border-slate-800 pb-2 flex items-center gap-2">
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl space-y-4">
+              <h3 className="text-sm font-black text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 Gateway Readiness Checklist
               </h3>
@@ -2360,8 +2360,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
             </div>
 
             {/* Test Gateway Sender Tool */}
-            <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl space-y-3.5">
-              <h3 className="text-sm font-black text-white border-b border-slate-800 pb-2 flex items-center gap-2">
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl space-y-3.5">
+              <h3 className="text-sm font-black text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
                 <Send className="w-4 h-4 text-amber-400" />
                 Live Test SMS Sender
               </h3>
@@ -2373,7 +2373,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
                   placeholder="e.g. 01800000000 or 88018..."
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-amber-400 placeholder:text-slate-500"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-amber-400 placeholder:text-slate-500"
                 />
               </div>
 
@@ -2381,7 +2381,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 type="button"
                 onClick={handleSendTestSms}
                 disabled={testingGateway || !testPhone.trim() || !gatewayConfig.apiKey}
-                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
+                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
               >
                 {testingGateway ? (
                   <>
@@ -2395,9 +2395,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </button>
 
               {testResult && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1 text-xs">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-200 space-y-1 text-xs">
                   <p className="font-bold text-slate-200">Gateway Response:</p>
-                  <pre className="text-[11px] font-mono text-emerald-400 bg-slate-900 p-2 rounded border border-slate-800 overflow-x-auto max-h-32">
+                  <pre className="text-[11px] font-mono text-emerald-400 bg-slate-900 p-2 rounded border border-slate-200 overflow-x-auto max-h-32">
                     {JSON.stringify(testResult, null, 2)}
                   </pre>
                 </div>
@@ -2411,10 +2411,10 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       {/* TAB 3: DELIVERY LOGS & SMS QUEUE */}
       {/* ========================================================================= */}
       {activeTab === "logs" && (
-        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <div>
-              <h3 className="text-sm font-black text-white flex items-center gap-2">
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
                 <History className="w-4 h-4 text-amber-400" />
                 Recent Message Delivery Logs
               </h3>
@@ -2431,7 +2431,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[11px] font-bold">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider text-[11px] font-bold">
                   <th className="px-4 py-3">Phone</th>
                   <th className="px-4 py-3">Message Snippet</th>
                   <th className="px-4 py-3">Type</th>
@@ -2439,9 +2439,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   <th className="px-4 py-3 text-right">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-xs">
+              <tbody className="divide-y divide-slate-100 text-xs">
                 {logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={log.id} className="hover:bg-amber-50/30 transition-colors">
                     <td className="px-4 py-3 font-mono font-bold text-white">{log.to_phone}</td>
                     <td className="px-4 py-3 max-w-md truncate text-slate-300 font-medium">{log.message}</td>
                     <td className="px-4 py-3">
@@ -2495,9 +2495,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       {/* CONFIRM BULK SEND MODAL */}
       {showConfirmModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-800 animate-in fade-in zoom-in duration-150 text-white">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-black text-white flex items-center gap-2">
+          <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150 text-white">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
                 <Send className="w-4 h-4 text-amber-400" />
                 Confirm Bulk SMS Dispatch
               </h3>
@@ -2528,7 +2528,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               <div>
                 <p className="font-bold text-slate-200 mb-1">Message Preview:</p>
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-medium max-h-36 overflow-y-auto">
+                <div className="p-3 bg-white border border-slate-300 rounded-xl text-slate-300 font-medium max-h-36 overflow-y-auto">
                   {sampleMessagePreview}
                 </div>
               </div>
@@ -2545,7 +2545,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               <button
                 type="button"
                 onClick={handleExecuteBulkSend}
-                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" /> Start Dispatch
               </button>
@@ -2557,15 +2557,15 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       {/* SENDING PROGRESS MODAL */}
       {sending && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-slate-800 text-white">
+          <div className="bg-slate-900 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-slate-200 text-white">
             <Loader2 className="w-10 h-10 text-amber-400 animate-spin mx-auto" />
             <div>
-              <h3 className="text-base font-black text-white">Dispatching Messages...</h3>
+              <h3 className="text-base font-black text-slate-900">Dispatching Messages...</h3>
               <p className="text-xs text-slate-400 mt-1">Please keep this window open while sending.</p>
             </div>
 
             <div className="space-y-1.5">
-              <div className="w-full h-3 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-white border border-slate-300 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-300"
                   style={{

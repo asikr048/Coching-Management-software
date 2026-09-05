@@ -30,7 +30,7 @@ export default async function OwnerDashboard() {
   return (
     <div className="space-y-6">
       {/* Top Banner Greeting */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950/80 to-slate-900 p-6 rounded-3xl border border-slate-800 shadow-xl relative overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#1e1b4b] via-indigo-950 to-slate-900 p-6 rounded-3xl border border-indigo-900/60 shadow-lg relative overflow-hidden text-white">
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-1">
             <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
@@ -40,7 +40,7 @@ export default async function OwnerDashboard() {
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             Owner Dashboard (সার্বিক ড্যাশবোর্ড)
           </h2>
-          <p className="text-slate-400 text-xs sm:text-sm mt-1">
+          <p className="text-slate-300 text-xs sm:text-sm mt-1">
             Welcome back! Real-time operations, financial metrics, and multi-branch pulse.
           </p>
         </div>
@@ -48,7 +48,7 @@ export default async function OwnerDashboard() {
         <div className="flex items-center gap-3 relative z-10 flex-shrink-0">
           <Link
             href="/dashboard/owner/students/new"
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-extrabold rounded-xl text-sm transition-all shadow-md shadow-amber-500/20 hover:scale-[1.02]"
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-extrabold rounded-xl text-sm transition-all shadow-md shadow-amber-500/25 hover:scale-[1.02]"
           >
             <Plus className="w-4 h-4" />
             <span>New Student (নতুন ভর্তি)</span>
@@ -73,36 +73,36 @@ export default async function OwnerDashboard() {
       </div>
 
       {/* Batch Occupancy Monitor */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="font-bold text-white text-base">Batch Occupancy (ব্যাচ আসন সংখ্যা)</h3>
-            <p className="text-xs text-slate-400">Current enrollment capacity per active batch</p>
+            <h3 className="font-bold text-slate-900 text-base">Batch Occupancy (ব্যাচ আসন সংখ্যা)</h3>
+            <p className="text-xs text-slate-500">Current enrollment capacity per active batch</p>
           </div>
-          <Link href="/dashboard/owner/batches" className="text-xs font-bold text-amber-400 hover:text-amber-300">
+          <Link href="/dashboard/owner/batches" className="text-xs font-bold text-amber-700 hover:text-amber-800">
             View All Batches →
           </Link>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {activeBatches.slice(0, 6).map(batch => {
             const pct = Math.round((batch.current_seats / Math.max(batch.max_seats, 1)) * 100)
             return (
-              <div key={batch.id} className="bg-slate-950/60 p-3 rounded-xl border border-slate-800/80">
+              <div key={batch.id} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
                 <div className="flex justify-between text-xs sm:text-sm mb-1.5">
-                  <span className="font-bold text-white">{batch.name}</span>
-                  <span className="text-amber-400 font-mono font-semibold">
+                  <span className="font-bold text-slate-900">{batch.name}</span>
+                  <span className="text-amber-800 font-mono font-bold">
                     {batch.current_seats} / {batch.max_seats} ({pct}%)
                   </span>
                 </div>
-                <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
                       pct >= 90
-                        ? "bg-rose-500 shadow-xs shadow-rose-500/50"
+                        ? "bg-rose-500 shadow-xs"
                         : pct >= 70
-                        ? "bg-amber-400 shadow-xs shadow-amber-400/50"
-                        : "bg-emerald-400 shadow-xs shadow-emerald-400/50"
+                        ? "bg-amber-500 shadow-xs"
+                        : "bg-emerald-500 shadow-xs"
                     }`}
                     style={{ width: `${Math.min(pct, 100)}%` }}
                   />
@@ -112,7 +112,7 @@ export default async function OwnerDashboard() {
           })}
           {activeBatches.length === 0 && (
             <p className="text-slate-500 text-sm text-center py-6">
-              No active batches. <Link href="/dashboard/owner/batches" className="text-amber-400 underline">Create your first batch</Link>
+              No active batches. <Link href="/dashboard/owner/batches" className="text-amber-600 underline font-bold">Create your first batch</Link>
             </p>
           )}
         </div>
@@ -121,8 +121,8 @@ export default async function OwnerDashboard() {
       <FeeDueAlert />
 
       {/* Quick Actions Grid */}
-      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
-        <h3 className="font-bold text-white text-base mb-4">Quick Operations (দ্রুত অপশন)</h3>
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm">
+        <h3 className="font-bold text-slate-900 text-base mb-4">Quick Operations (দ্রুত অপশন)</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3.5">
           {[
             { href: "/dashboard/owner/students/new", label: "Add Student", icon: "👨‍🎓", bg: "from-indigo-600 to-indigo-800", hover: "hover:border-indigo-400" },

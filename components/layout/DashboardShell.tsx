@@ -17,7 +17,7 @@ export default function DashboardShell({
 
   return (
     <BranchProvider>
-      <div className="flex h-screen bg-[#090d16] text-slate-100 overflow-hidden selection:bg-amber-500 selection:text-black">
+      <div className="flex h-screen bg-[#f8fafc] text-slate-900 overflow-hidden selection:bg-amber-500 selection:text-white">
         {/* Sidebar (Desktop Persistent + Mobile Drawer) */}
         <DashboardSidebar
           role={staff.role}
@@ -26,13 +26,13 @@ export default function DashboardShell({
           onMobileClose={() => setMobileMenuOpen(false)}
         />
 
-        {/* Main App Layout with Luxury Slate & Royal Ambient Backdrop */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-gradient-to-br from-[#090d16] via-[#0f172a] to-[#111827]">
+        {/* Main App Layout with Executive Institutional Canvas */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#f8fafc]">
           <DashboardHeader
             user={staff}
             onMenuToggle={() => setMobileMenuOpen(prev => !prev)}
           />
-          <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 min-w-0">
+          <main className="flex-1 overflow-y-auto p-3 sm:p-4 md:p-6 min-w-0 bg-[#f8fafc]">
             {children}
           </main>
         </div>

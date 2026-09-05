@@ -63,31 +63,31 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
     <div className="space-y-8">
       {/* Today's Summary */}
       <section>
-        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+        <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
           <CalendarDays className="w-5 h-5 text-amber-400" /> Today's Attendance Overview ({formatDate(todayDate)})
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-amber-500/30 transition-all">
+          <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex flex-col items-center justify-center hover:border-amber-500/30 transition-all">
             <div className="w-10 h-10 bg-slate-800 text-amber-400 rounded-xl flex items-center justify-center mb-2 border border-slate-700/60"><Users className="w-5 h-5" /></div>
             <p className="text-2xl font-black text-white">{totalMarked}</p>
             <p className="text-xs text-slate-400 font-medium">Total Marked</p>
           </div>
-          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-emerald-500/30 transition-all">
+          <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex flex-col items-center justify-center hover:border-emerald-500/30 transition-all">
             <div className="w-10 h-10 bg-emerald-950/60 text-emerald-400 rounded-xl flex items-center justify-center mb-2 border border-emerald-500/30"><UserCheck className="w-5 h-5" /></div>
             <p className="text-2xl font-black text-emerald-400">{presentCount}</p>
             <p className="text-xs text-slate-400 font-medium">Present</p>
           </div>
-          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-amber-500/30 transition-all">
+          <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex flex-col items-center justify-center hover:border-amber-500/30 transition-all">
             <div className="w-10 h-10 bg-amber-950/60 text-amber-400 rounded-xl flex items-center justify-center mb-2 border border-amber-500/30"><Clock className="w-5 h-5" /></div>
             <p className="text-2xl font-black text-amber-300">{lateCount}</p>
             <p className="text-xs text-slate-400 font-medium">Late</p>
           </div>
-          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-red-500/30 transition-all">
+          <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex flex-col items-center justify-center hover:border-red-500/30 transition-all">
             <div className="w-10 h-10 bg-red-950/60 text-red-400 rounded-xl flex items-center justify-center mb-2 border border-red-500/30"><UserX className="w-5 h-5" /></div>
             <p className="text-2xl font-black text-red-400">{absentCount}</p>
             <p className="text-xs text-slate-400 font-medium">Absent</p>
           </div>
-          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-slate-700 transition-all">
+          <div className="bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl flex flex-col items-center justify-center hover:border-slate-700 transition-all">
             <div className="w-10 h-10 bg-slate-800 text-slate-300 rounded-xl flex items-center justify-center mb-2 border border-slate-700/60"><UserX className="w-5 h-5" /></div>
             <p className="text-2xl font-black text-slate-300">{excusedCount}</p>
             <p className="text-xs text-slate-400 font-medium">Excused</p>
@@ -103,13 +103,13 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Batchwise Breakdown */}
         <section>
-          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
             <Users className="w-5 h-5 text-amber-400" /> Batchwise Breakdown
           </h3>
-          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-400">
                   <tr>
                     <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs">Batch Name</th>
                     <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Enrolled</th>
@@ -118,9 +118,9 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
                     <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Rate %</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/70">
+                <tbody className="divide-y divide-slate-100/70">
                   {batchBreakdown.length > 0 ? batchBreakdown.map(b => (
-                    <tr key={b.id} className="hover:bg-slate-800/40 transition-colors">
+                    <tr key={b.id} className="hover:bg-amber-50/30 transition-colors">
                       <td className="px-4 py-3.5 font-bold text-white">{b.name}</td>
                       <td className="px-4 py-3.5 text-right text-slate-400 font-mono">{b.enrolled}</td>
                       <td className="px-4 py-3.5 text-right text-emerald-400 font-bold font-mono">{b.present}</td>
@@ -142,13 +142,13 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
 
         {/* Attendance Trends */}
         <section>
-          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-amber-400" /> Last 7 Days Trend
           </h3>
-          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-400">
                   <tr>
                     <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs">Date</th>
                     <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Total Marked</th>
@@ -157,9 +157,9 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
                     <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Rate %</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/70">
+                <tbody className="divide-y divide-slate-100/70">
                   {trendsArray.length > 0 ? trendsArray.map(t => (
-                    <tr key={t.date} className="hover:bg-slate-800/40 transition-colors">
+                    <tr key={t.date} className="hover:bg-amber-50/30 transition-colors">
                       <td className="px-4 py-3.5 font-semibold text-slate-200">{formatDate(t.date)}</td>
                       <td className="px-4 py-3.5 text-right text-slate-400 font-mono">{t.total}</td>
                       <td className="px-4 py-3.5 text-right text-emerald-400 font-bold font-mono">{t.present}</td>
@@ -180,22 +180,22 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
 
       {/* Leaderboard Section */}
       <section>
-        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+        <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
           <Activity className="w-5 h-5 text-amber-400" /> Student Attendance Leaderboard
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
             <div className="bg-emerald-950/40 border-b border-emerald-500/20 px-4 py-3.5 flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-emerald-400" />
               <h4 className="font-bold text-emerald-300">Top 10 Best Attendance</h4>
             </div>
             <div className="p-0">
-              <ul className="divide-y divide-slate-800/70">
+              <ul className="divide-y divide-slate-100/70">
                 {top10.length > 0 ? top10.map((s, idx) => (
-                  <li key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-slate-800/40 transition-colors">
+                  <li key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-amber-50/30 transition-colors">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold text-slate-500 font-mono w-5">{idx + 1}.</span>
-                      <span className="font-bold text-white">{s.name}</span>
+                      <span className="font-bold text-slate-900">{s.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-slate-400">{s.total} classes</span>
@@ -209,18 +209,18 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
             </div>
           </div>
           
-          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
             <div className="bg-red-950/40 border-b border-red-500/20 px-4 py-3.5 flex items-center gap-2">
               <TrendingDown className="w-5 h-5 text-red-400" />
               <h4 className="font-bold text-red-300">Bottom 10 Worst Attendance</h4>
             </div>
             <div className="p-0">
-              <ul className="divide-y divide-slate-800/70">
+              <ul className="divide-y divide-slate-100/70">
                 {bottom10.length > 0 ? bottom10.map((s, idx) => (
-                  <li key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-slate-800/40 transition-colors">
+                  <li key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-amber-50/30 transition-colors">
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-bold text-slate-500 font-mono w-5">{idx + 1}.</span>
-                      <span className="font-bold text-white">{s.name}</span>
+                      <span className="font-bold text-slate-900">{s.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-slate-400">{s.total} classes</span>

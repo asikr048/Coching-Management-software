@@ -9,10 +9,10 @@ export default async function NewStudentPage() {
   ])
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-5">
-        <h2 className="text-2xl font-black text-white tracking-tight">Enroll Student</h2>
-        <p className="text-sm text-slate-400 mt-1">Select existing student or create new account, then enroll in a batch.</p>
+    <div className="max-w-3xl mx-auto space-y-5">
+      <div>
+        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Enroll Student (নতুন শিক্ষার্থী ভর্তি)</h2>
+        <p className="text-sm text-slate-500 mt-1">Select existing student or create new account, then enroll in a batch.</p>
       </div>
       <NewStudentForm batches={batchesRes.data || []} students={studentsRes.data || []} />
     </div>
