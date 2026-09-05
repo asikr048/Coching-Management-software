@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MedhaShiree - Offline Local PC Dashboard</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --amber-bg: #fffbeb;
+      --amber-border: #fef3c7;
+      --amber-text: #92400e;
+      --emerald-bg: #ecfdf5;
+      --emerald-text: #065f46;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #ffffff;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #4f46e5, #7c3aed);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-weight: 900;
+      font-size: 20px;
+      box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+    }
+    .brand h1 {
+      font-size: 18px;
+      font-weight: 800;
+      color: #1e1b4b;
+      line-height: 1.2;
+    }
+    .brand p {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .status-bar {
+      background: #fffbeb;
+      border-bottom: 1px solid #fde68a;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 12px;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #92400e;
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #d97706;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.2); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s ease;
+    }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+    .btn-outline {
+      background: white;
+      border: 1px solid var(--border);
+      color: var(--text-main);
+    }
+    .btn-outline:hover {
+      background: #f1f5f9;
+    }
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      padding: 16px 24px 0;
+      border-bottom: 1px solid var(--border);
+      background: white;
+    }
+    .tab-btn {
+      padding: 10px 18px;
+      border: none;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+    main {
+      flex: 1;
+      padding: 24px;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .search-bar {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 12px;
+    }
+    .search-input {
+      flex: 1;
+      padding: 12px 18px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+      background: white;
+      outline: none;
+    }
+    .search-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(79,70,229,0.1);
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+      overflow: hidden;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th {
+      background: #f8fafc;
+      padding: 12px 16px;
+      text-align: left;
+      font-weight: 700;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+    td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      color: #334155;
+    }
+    tr:hover td {
+      background: #f8fafc;
+    }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .pill-blue { background: #e0e7ff; color: #3730a3; }
+    .pill-amber { background: #fef3c7; color: #92400e; }
+    .pill-green { background: #d1fae5; color: #065f46; }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: white;
+      padding: 18px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+    .stat-card p.label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+    .stat-card p.val {
+      font-size: 26px;
+      font-weight: 900;
+      color: var(--text-main);
+      margin-top: 4px;
+    }
+    .empty-state {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+    .empty-state h3 {
+      font-size: 18px;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">M</div>
+      <div>
+        <h1>MedhaShiree Coaching</h1>
+        <p>Windows PC Desktop Edition &bull; Local Vault Storage</p>
+      </div>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center;">
+      <button class="btn btn-primary" id="btn-reconnect">
+        🔄 Connect to Cloud Server
+      </button>
+    </div>
+  </header>
+
+  <!-- Offline Status Bar -->
+  <div class="status-bar">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span class="status-badge">
+        <span class="pulse-dot"></span>
+        Offline Mode Active
+      </span>
+      <span style="font-size: 12px; color: #78350f; font-weight: 600;">
+        Working smoothly from local PC database without internet. All searches & data viewing are 100% functional.
+      </span>
+    </div>
+    <div style="font-size: 12px; color: #78350f; font-weight: 600;" id="last-sync-time">
+      Last synced: Checking local vault...
+    </div>
+  </div>
+
+  <!-- Navigation Tabs -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" data-tab="students">👥 Students Directory (<span id="count-students">0</span>)</button>
+    <button class="tab-btn" data-tab="batches">📚 Classroom Batches (<span id="count-batches">0</span>)</button>
+    <button class="tab-btn" data-tab="dues">💰 Fee Dues (<span id="count-dues">0</span>)</button>
+    <button class="tab-btn" data-tab="attendance">📝 Offline Attendance</button>
+    <button class="tab-btn" data-tab="vault">💾 Local PC Storage Vault</button>
+  </div>
+
+  <!-- Main Content -->
+  <main>
+    <!-- Stats Row -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <p class="label">Local Students</p>
+        <p class="val" id="stat-students">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="label">Offline Batches</p>
+        <p class="val" id="stat-batches">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="label">Pending Fee Dues</p>
+        <p class="val" id="stat-dues">0</p>
+      </div>
+      <div class="stat-card">
+        <p class="label">Queued Actions</p>
+        <p class="val" id="stat-queue">0</p>
+      </div>
+    </div>
+
+    <!-- Tab 1: Students -->
+    <div id="tab-students" class="tab-content">
+      <div class="search-bar">
+        <input type="text" id="search-students" class="search-input" placeholder="Search by Student ID (MS-...), Name, Phone number, or Guardian Phone...">
+      </div>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Student Name</th>
+              <th>Phone</th>
+              <th>Guardian Phone</th>
+              <th>Email</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-students">
+            <tr><td colspan="6" class="empty-state">Loading local vault students...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 2: Batches -->
+    <div id="tab-batches" class="tab-content" style="display: none;">
+      <div class="search-bar">
+        <input type="text" id="search-batches" class="search-input" placeholder="Search batches by name or subject...">
+      </div>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Batch Name</th>
+              <th>Subject</th>
+              <th>Monthly Fee</th>
+              <th>Room</th>
+              <th>Schedule</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-batches">
+            <tr><td colspan="5" class="empty-state">Loading local vault batches...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 3: Fee Dues -->
+    <div id="tab-dues" class="tab-content" style="display: none;">
+      <div class="search-bar">
+        <input type="text" id="search-dues" class="search-input" placeholder="Search dues by student name or ID...">
+      </div>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Student Name</th>
+              <th>Batch</th>
+              <th>Due Month</th>
+              <th>Total Due</th>
+              <th>Already Paid</th>
+              <th>Outstanding</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-dues">
+            <tr><td colspan="7" class="empty-state">Loading local vault fee dues...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 4: Offline Attendance -->
+    <div id="tab-attendance" class="tab-content" style="display: none;">
+      <div class="card" style="padding: 24px; margin-bottom: 20px;">
+        <h3 style="margin-bottom: 12px; font-size: 16px;">Record Offline Attendance</h3>
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 16px;">
+          Select a batch and date to mark attendance locally. Attendance is saved securely to your local PC storage and will auto-sync when internet is connected.
+        </p>
+        <div style="display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 20px;">
+          <select id="attendance-batch-select" class="search-input" style="max-width: 300px;">
+            <option value="">-- Select Batch --</option>
+          </select>
+          <input type="date" id="attendance-date" class="search-input" style="max-width: 200px;">
+          <button class="btn btn-primary" id="btn-save-attendance">Save Attendance Locally</button>
+        </div>
+        <div id="attendance-student-list">
+          <p style="color: var(--text-muted); font-size: 13px;">Please select a batch above to display students.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 5: Local Vault Info -->
+    <div id="tab-vault" class="tab-content" style="display: none;">
+      <div class="card" style="padding: 28px;">
+        <h3 style="font-size: 18px; margin-bottom: 10px;">💾 Local PC Storage Vault Information</h3>
+        <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 24px;">
+          Your MedhaShiree PC Application automatically saves all coaching center records locally to this computer. When you have internet, it stays in continuous sync with the cloud server. When there is no internet, you can continue working smoothly.
+        </p>
+        <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 18px; font-family: monospace; font-size: 12px; line-height: 1.8; margin-bottom: 20px;" id="vault-debug-info">
+          Loading vault storage path...
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <button class="btn btn-outline" id="btn-export-vault">📥 Export Local Vault Backup (.json)</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let vaultData = {
+      students: [],
+      batches: [],
+      dues: [],
+      attendance: [],
+      lastSyncedAt: null
+    };
+
+    // Load initial vault data
+    async function loadVault() {
+      if (window.electronAPI) {
+        try {
+          const v = await window.electronAPI.getLocalVault();
+          if (v) vaultData = v;
+          const info = await window.electronAPI.getVaultInfo();
+          renderVaultInfo(info);
+        } catch (e) {
+          console.error("Vault load error:", e);
+        }
+      }
+      renderAll();
+    }
+
+    function renderVaultInfo(info) {
+      if (!info) return;
+      const debugDiv = document.getElementById("vault-debug-info");
+      debugDiv.innerHTML = `
+        <strong>Storage Location:</strong> ${info.storageDir}<br>
+        <strong>Vault File:</strong> ${info.vaultPath}<br>
+        <strong>Last Cloud Sync:</strong> ${info.lastSyncedAt ? new Date(info.lastSyncedAt).toLocaleString() : "Not synced yet"}<br>
+        <strong>Network Status:</strong> ${info.isOnline ? "🟢 Connected to Cloud" : "📡 Offline (Local PC Mode)"}<br>
+        <strong>Stored Records:</strong> ${info.counts.students} Students, ${info.counts.batches} Batches, ${info.counts.dues} Fee Dues
+      `;
+      document.getElementById("last-sync-time").textContent = info.lastSyncedAt
+        ? "Last synced: " + new Date(info.lastSyncedAt).toLocaleString()
+        : "Local vault active";
+    }
+
+    function renderAll() {
+      // Counts
+      const students = vaultData.students || [];
+      const batches = vaultData.batches || [];
+      const dues = vaultData.dues || [];
+
+      document.getElementById("stat-students").textContent = students.length;
+      document.getElementById("count-students").textContent = students.length;
+      document.getElementById("stat-batches").textContent = batches.length;
+      document.getElementById("count-batches").textContent = batches.length;
+      document.getElementById("stat-dues").textContent = dues.length;
+      document.getElementById("count-dues").textContent = dues.length;
+
+      renderStudentsTable(students);
+      renderBatchesTable(batches);
+      renderDuesTable(dues);
+      populateBatchSelect(batches);
+    }
+
+    function renderStudentsTable(list) {
+      const tbody = document.getElementById("tbody-students");
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state"><h3>No students cached locally yet</h3><p>Connect to the server once to mirror all student records to this PC.</p></td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(s => `
+        <tr>
+          <td><strong style="color: var(--primary); font-family: monospace;">${s.student_id || "—"}</strong></td>
+          <td><strong>${s.name || "Student"}</strong></td>
+          <td style="font-family: monospace;">${s.phone || "—"}</td>
+          <td style="font-family: monospace;">${s.guardian_phone || "—"}</td>
+          <td>${s.email || "—"}</td>
+          <td><span class="pill pill-green">Active (Local)</span></td>
+        </tr>
+      `).join("");
+    }
+
+    function renderBatchesTable(list) {
+      const tbody = document.getElementById("tbody-batches");
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><h3>No batches cached locally</h3></td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(b => `
+        <tr>
+          <td><strong>${b.name || "Batch"}</strong></td>
+          <td><span class="pill pill-blue">${b.subject || "General"}</span></td>
+          <td>৳${b.monthly_fee || 0}</td>
+          <td>${b.room?.name || "Room 1"}</td>
+          <td style="color: var(--text-muted); font-size: 12px;">${b.schedule || "Scheduled Batch"}</td>
+        </tr>
+      `).join("");
+    }
+
+    function renderDuesTable(list) {
+      const tbody = document.getElementById("tbody-dues");
+      if (list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><h3>No fee dues cached locally</h3></td></tr>';
+        return;
+      }
+      tbody.innerHTML = list.map(d => {
+        const out = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0));
+        return `
+          <tr>
+            <td><strong>${d.student?.name || d.student_name || "Student"}</strong></td>
+            <td>${d.batch?.name || "Batch"}</td>
+            <td>${d.due_month || "Month"}</td>
+            <td>৳${d.due_amount || 0}</td>
+            <td>৳${d.paid_amount || 0}</td>
+            <td><strong style="color: #b91c1c;">৳${out}</strong></td>
+            <td><span class="pill ${out === 0 ? 'pill-green' : 'pill-amber'}">${d.status || 'pending'}</span></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function populateBatchSelect(batches) {
+      const sel = document.getElementById("attendance-batch-select");
+      sel.innerHTML = '<option value="">-- Select Batch --</option>' + batches.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
+    }
+
+    // Tabs logic
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        document.querySelectorAll(".tab-content").forEach(c => c.style.display = "none");
+        btn.classList.add("active");
+        const target = document.getElementById("tab-" + btn.getAttribute("data-tab"));
+        if (target) target.style.display = "block";
+      });
+    });
+
+    // Search filters
+    document.getElementById("search-students").addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      const filtered = (vaultData.students || []).filter(s =>
+        (s.name || "").toLowerCase().includes(q) ||
+        (s.student_id || "").toLowerCase().includes(q) ||
+        (s.phone || "").toLowerCase().includes(q) ||
+        (s.guardian_phone || "").toLowerCase().includes(q)
+      );
+      renderStudentsTable(filtered);
+    });
+
+    document.getElementById("search-batches").addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      const filtered = (vaultData.batches || []).filter(b =>
+        (b.name || "").toLowerCase().includes(q) ||
+        (b.subject || "").toLowerCase().includes(q)
+      );
+      renderBatchesTable(filtered);
+    });
+
+    document.getElementById("search-dues").addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      const filtered = (vaultData.dues || []).filter(d =>
+        (d.student?.name || d.student_name || "").toLowerCase().includes(q) ||
+        (d.batch?.name || "").toLowerCase().includes(q)
+      );
+      renderDuesTable(filtered);
+    });
+
+    // Reconnect Button
+    document.getElementById("btn-reconnect").addEventListener("click", async () => {
+      if (window.electronAPI) {
+        document.getElementById("btn-reconnect").textContent = "Connecting...";
+        const res = await window.electronAPI.checkConnection();
+        if (res.isOnline) {
+          window.electronAPI.loadServer();
+        } else {
+          alert("Server is not reachable yet. Please check your internet connection or Wi-Fi.");
+          document.getElementById("btn-reconnect").textContent = "🔄 Connect to Cloud Server";
+        }
+      }
+    });
+
+    // Listen for network transitions
+    if (window.electronAPI) {
+      window.electronAPI.onNetworkStatusChanged((data) => {
+        if (data.isOnline) {
+          if (confirm("🟢 Internet connection restored! Would you like to switch to the live cloud server now?")) {
+            window.electronAPI.loadServer();
+          }
+        }
+      });
+    }
+
+    // Set today's date for attendance
+    document.getElementById("attendance-date").value = new Date().toISOString().slice(0, 10);
+
+    loadVault();
+  </script>
+</body>
+</html>

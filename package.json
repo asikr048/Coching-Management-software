@@ -1,12 +1,52 @@
 {
   "name": "coaching-management",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
+  "description": "MedhaShiree Coaching Management System - PC Desktop Edition",
+  "main": "electron/main.js",
+  "author": "MedhaShiree",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "electron:dev": "electron .",
+    "electron:pack": "electron-builder --dir",
+    "electron:build": "electron-builder --win --x64"
+  },
+  "build": {
+    "appId": "com.medhashiree.coaching",
+    "productName": "MedhaShiree Coaching",
+    "copyright": "Copyright © 2026 MedhaShiree",
+    "electronVersion": "44.2.0",
+    "directories": {
+      "app": "electron",
+      "output": "dist"
+    },
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "files": [
+      "**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "MedhaShiree Coaching"
+    }
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
@@ -52,6 +92,8 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "electron": "44.2.0",
+    "electron-builder": "^26.15.3",
     "eslint": "^9",
     "eslint-config-next": "16.3.3",
     "tailwindcss": "^4",
