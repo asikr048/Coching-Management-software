@@ -321,7 +321,7 @@ export default function StaffClient({
                         ? "bg-amber-400/20 text-amber-300 border border-amber-400/40"
                         : s.role === "manager"
                         ? "bg-teal-400/20 text-teal-300 border border-teal-400/40"
-                        : "bg-slate-800 text-slate-300"
+                        : "bg-slate-800 text-slate-700"
                     }`}
                   >
                     {s.name.charAt(0).toUpperCase()}
@@ -342,7 +342,7 @@ export default function StaffClient({
                 <div className="flex items-center justify-between text-sm mb-3">
                   <span
                     className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                      roleColor[s.role] || "bg-slate-800 text-slate-300 border-slate-700"
+                      roleColor[s.role] || "bg-slate-800 text-slate-700 border-slate-700"
                     }`}
                   >
                     {roleIcon[s.role]} {roleLabel[s.role] || s.role}
@@ -475,7 +475,7 @@ export default function StaffClient({
                     value={s.role}
                     onChange={e => handleChangeRole(s.id, e.target.value)}
                     disabled={changingRole === s.id}
-                    className="flex-1 px-2 py-1.5 text-xs border border-slate-700 rounded-lg bg-slate-950 text-slate-200 focus:border-amber-400 disabled:opacity-50"
+                    className="flex-1 px-2 py-1.5 text-xs border border-slate-700 rounded-lg bg-slate-50 text-slate-200 focus:border-amber-400 disabled:opacity-50"
                   >
                     {!assignableRoles.includes(s.role) && (
                       <option value={s.role}>{roleLabel[s.role] || s.role}</option>
@@ -614,7 +614,7 @@ export default function StaffClient({
                       return (
                         <label
                           key={branch.id}
-                          className="flex items-center gap-2 text-xs font-medium text-slate-300 cursor-pointer p-1 hover:bg-slate-900 rounded-lg transition-colors"
+                          className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer p-1 hover:bg-slate-100 rounded-lg transition-colors"
                         >
                           <input
                             type="checkbox"
@@ -643,7 +643,7 @@ export default function StaffClient({
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-100 text-xs text-slate-600"
+                  className="flex-1 py-2.5 border border-slate-700 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 text-xs text-slate-600"
                 >
                   Cancel
                 </button>
@@ -692,7 +692,7 @@ export default function StaffClient({
               Assign single or multiple branch access for <strong className="text-white">{branchModalStaff.name}</strong>.
             </p>
 
-            <div className="space-y-2 max-h-60 overflow-y-auto mb-4 border border-slate-200 rounded-xl p-2.5 bg-slate-950">
+            <div className="space-y-2 max-h-60 overflow-y-auto mb-4 border border-slate-200 rounded-xl p-2.5 bg-slate-50">
               {branches.map(branch => {
                 const isSelected = selectedBranchIds.includes(branch.id)
                 return (
@@ -701,7 +701,7 @@ export default function StaffClient({
                     className={`flex items-center justify-between p-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
                       isSelected
                         ? "bg-amber-500/15 border border-amber-500/40 text-amber-300"
-                        : "hover:bg-slate-900 text-slate-300 border border-transparent"
+                        : "hover:bg-slate-100 text-slate-700 border border-transparent"
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0 pr-2">

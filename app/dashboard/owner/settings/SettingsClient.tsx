@@ -148,7 +148,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
           ) : (
             <div className="space-y-2">
               {accounts.map(acc => (
-                <div key={acc.id} className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${acc.is_active ? "bg-slate-950 border-slate-200" : "bg-slate-950/50 border-slate-200 opacity-60"}`}>
+                <div key={acc.id} className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${acc.is_active ? "bg-slate-50 border-slate-200" : "bg-slate-50/50 border-slate-200 opacity-60"}`}>
                   <div className="flex items-center gap-3">
                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${methodColors[acc.method] || "text-slate-400 bg-slate-800 border-slate-700"}`}>
                       {methodLabels[acc.method] || acc.method}
@@ -220,7 +220,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
           {approvers.length > 0 && (
             <div className="space-y-2 mb-4">
               {approvers.map(app => (
-                <div key={app.id} className="flex items-center justify-between p-3.5 bg-slate-950 rounded-xl border border-slate-200">
+                <div key={app.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                   <div className="flex items-center gap-3">
                     <UserCheck className="w-5 h-5 text-emerald-400" />
                     <div>

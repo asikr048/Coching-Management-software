@@ -571,13 +571,13 @@ export default function StudentsClient({
                 value={query} 
                 onChange={e => setQuery(e.target.value)} 
                 placeholder="Search by name, ID, phone..."
-                className="w-full pl-9 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-400 focus:outline-none text-white placeholder:text-slate-500" 
+                className="w-full pl-9 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 placeholder:text-slate-400 shadow-2xs" 
               />
             </div>
             <select 
               value={batchFilter} 
               onChange={e => setBatchFilter(e.target.value)}
-              className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-400 focus:outline-none text-white min-w-[150px]">
+              className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-[150px] shadow-2xs">
               <option value="" className="bg-white text-slate-900">All Batches</option>
               {batches.map(b => (
                 <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>
@@ -586,7 +586,7 @@ export default function StudentsClient({
             <select 
               value={sortOption} 
               onChange={e => setSortOption(e.target.value as SortOption)}
-              className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-400 focus:outline-none text-white min-w-[180px]">
+              className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-[180px] shadow-2xs">
               <option value="default" className="bg-white text-slate-900">Default Sort</option>
               <option value="due" className="bg-white text-slate-900">Due Payment (Highest)</option>
               <option value="performance" className="bg-white text-slate-900">Best Performance</option>
@@ -597,7 +597,7 @@ export default function StudentsClient({
           {/* Deletion Queue Security Badge / Button */}
           <button 
             onClick={() => setQueueModal(true)}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shadow-md bg-slate-950 hover:bg-slate-800 border-slate-700 hover:border-amber-500/50 text-slate-200"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shadow-md bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900 shadow-xs"
           >
             <ShieldAlert className={`w-4 h-4 ${totalActiveQueue > 0 ? "text-amber-400" : "text-slate-500"}`} />
             <span>Deletion Queue</span>
@@ -705,7 +705,7 @@ export default function StudentsClient({
                         </Link>
                       </td>
                       <td className="px-4 py-4 text-sm">
-                        <span className="font-mono bg-slate-950 px-2.5 py-1 rounded-md text-xs font-semibold text-amber-300 border border-slate-200">
+                        <span className="font-mono bg-amber-50 px-2.5 py-1 rounded-md text-xs font-bold text-amber-800 border border-amber-200">
                           {student.student_id}
                         </span>
                       </td>
@@ -908,7 +908,7 @@ export default function StudentsClient({
                   onChange={e => setDeletionReason(e.target.value)}
                   placeholder="e.g., Requested by parent for transfer / duplicate test record / left institute..."
                   rows={3}
-                  className="w-full p-3 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                  className="w-full p-3 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                 />
               </div>
 
@@ -1317,7 +1317,7 @@ export default function StudentsClient({
                 value={secondApproverName}
                 onChange={e => setSecondApproverName(e.target.value)}
                 placeholder="e.g. Asif Mahmud (Manager) / Co-Owner"
-                className="w-full p-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                className="w-full p-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 text-slate-900 placeholder:text-slate-400 shadow-2xs"
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">

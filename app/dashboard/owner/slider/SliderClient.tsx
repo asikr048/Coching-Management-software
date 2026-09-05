@@ -858,7 +858,7 @@ export default function SliderClient({
                 type="text"
                 value={contactPhone}
                 onChange={e => setContactPhone(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="01302201431"
               />
             </div>
@@ -869,7 +869,7 @@ export default function SliderClient({
                 type="email"
                 value={contactEmail}
                 onChange={e => setContactEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="info@medhashiree.com"
               />
             </div>
@@ -880,7 +880,7 @@ export default function SliderClient({
                 type="text"
                 value={contactAddress}
                 onChange={e => setContactAddress(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="নাচোল, চাঁপাইনবাবগঞ্জ"
               />
             </div>
@@ -891,7 +891,7 @@ export default function SliderClient({
                 type="text"
                 value={contactLink}
                 onChange={e => setContactLink(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="https://wa.me/8801302201431"
               />
             </div>
@@ -902,7 +902,7 @@ export default function SliderClient({
                 rows={3}
                 value={footerAbout}
                 onChange={e => setFooterAbout(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
               />
             </div>
 
@@ -941,7 +941,7 @@ export default function SliderClient({
                   value={slideForm.image_url}
                   onChange={e => setSlideForm({ ...slideForm, image_url: e.target.value })}
                   placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -951,7 +951,7 @@ export default function SliderClient({
                   value={slideForm.title}
                   onChange={e => setSlideForm({ ...slideForm, title: e.target.value })}
                   placeholder="e.g. নতুন সেশনে ভর্তি চলছে"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -961,7 +961,7 @@ export default function SliderClient({
                   value={slideForm.subtitle}
                   onChange={e => setSlideForm({ ...slideForm, subtitle: e.target.value })}
                   placeholder="e.g. এইচএসসি ও এসএসসি ব্যাচ ২০২৬"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -969,7 +969,7 @@ export default function SliderClient({
                 <select
                   value={slideForm.branch_id}
                   onChange={e => setSlideForm({ ...slideForm, branch_id: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none"
                 >
                   <option value="">All Branches (সকল শাখা)</option>
                   {branches.map(b => (
@@ -1019,7 +1019,7 @@ export default function SliderClient({
                   value={noticeForm.title}
                   onChange={e => setNoticeForm({ ...noticeForm, title: e.target.value })}
                   placeholder="e.g. ভর্তি বিজ্ঞপ্তি : ২০২৫-২৬ সেশনে ভর্তি চলছে"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1029,7 +1029,7 @@ export default function SliderClient({
                   value={noticeForm.content}
                   onChange={e => setNoticeForm({ ...noticeForm, content: e.target.value })}
                   placeholder="Detailed notice text..."
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1037,7 +1037,7 @@ export default function SliderClient({
                 <select
                   value={noticeForm.branch_id}
                   onChange={e => setNoticeForm({ ...noticeForm, branch_id: e.target.value })}
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none"
                 >
                   <option value="">All Branches (সকল শাখা)</option>
                   {branches.map(b => (
@@ -1087,7 +1087,7 @@ export default function SliderClient({
                   value={achForm.student_name}
                   onChange={e => setAchForm({ ...achForm, student_name: e.target.value })}
                   placeholder="e.g. তাসনিম হাসান"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1098,7 +1098,7 @@ export default function SliderClient({
                   value={achForm.title}
                   onChange={e => setAchForm({ ...achForm, title: e.target.value })}
                   placeholder="e.g. রাজশাহী মেডিকেল কলেজ (চান্স প্রাপ্ত)"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1109,7 +1109,7 @@ export default function SliderClient({
                     value={achForm.exam_year}
                     onChange={e => setAchForm({ ...achForm, exam_year: e.target.value })}
                     placeholder="2025"
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                   />
                 </div>
                 <div>
@@ -1117,7 +1117,7 @@ export default function SliderClient({
                   <select
                     value={achForm.branch_id}
                     onChange={e => setAchForm({ ...achForm, branch_id: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none"
                   >
                     <option value="">All Branches</option>
                     {branches.map(b => (
@@ -1133,7 +1133,7 @@ export default function SliderClient({
                   value={achForm.photo_url}
                   onChange={e => setAchForm({ ...achForm, photo_url: e.target.value })}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1143,7 +1143,7 @@ export default function SliderClient({
                   value={achForm.description}
                   onChange={e => setAchForm({ ...achForm, description: e.target.value })}
                   placeholder="Short comment or congratulations..."
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="flex gap-2 pt-3">
@@ -1188,7 +1188,7 @@ export default function SliderClient({
                   value={blogForm.title}
                   onChange={e => setBlogForm({ ...blogForm, title: e.target.value })}
                   placeholder="e.g. এইচএসসি পরীক্ষায় পদার্থবিজ্ঞানে এ+ পাওয়ার সহজ কৌশল"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1198,7 +1198,7 @@ export default function SliderClient({
                   value={blogForm.excerpt}
                   onChange={e => setBlogForm({ ...blogForm, excerpt: e.target.value })}
                   placeholder="Brief synopsis for card preview..."
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1209,7 +1209,7 @@ export default function SliderClient({
                   value={blogForm.content}
                   onChange={e => setBlogForm({ ...blogForm, content: e.target.value })}
                   placeholder="Write full article here..."
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -1219,7 +1219,7 @@ export default function SliderClient({
                     type="text"
                     value={blogForm.author_name}
                     onChange={e => setBlogForm({ ...blogForm, author_name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                   />
                 </div>
                 <div>
@@ -1227,7 +1227,7 @@ export default function SliderClient({
                   <select
                     value={blogForm.branch_id}
                     onChange={e => setBlogForm({ ...blogForm, branch_id: e.target.value })}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none"
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none"
                   >
                     <option value="">All Branches</option>
                     {branches.map(b => (
@@ -1243,7 +1243,7 @@ export default function SliderClient({
                   value={blogForm.cover_image}
                   onChange={e => setBlogForm({ ...blogForm, cover_image: e.target.value })}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
@@ -1253,7 +1253,7 @@ export default function SliderClient({
                   value={blogForm.tags}
                   onChange={e => setBlogForm({ ...blogForm, tags: e.target.value })}
                   placeholder="পড়াশোনা, এইচএসসি, পদার্থবিজ্ঞান"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="flex gap-2 pt-3">

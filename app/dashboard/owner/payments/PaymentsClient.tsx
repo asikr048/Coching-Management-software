@@ -768,7 +768,7 @@ export default function PaymentsClient({
                         Due: {formatCurrency(totalDue)}
                       </span>
                     ) : (
-                      <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-lg">
+                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-lg">
                         Clear
                       </span>
                     )}
@@ -842,8 +842,8 @@ export default function PaymentsClient({
               </div>
 
               {studentDues.length === 0 ? (
-                <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-2xl p-4 flex items-center gap-2.5 text-emerald-300 text-sm font-semibold">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-2.5 text-emerald-900 text-sm font-semibold">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0" />
                   No outstanding dues for {selectedStudent.name}! All fee payments are up to date.
                 </div>
               ) : (
@@ -927,7 +927,7 @@ export default function PaymentsClient({
                        type="number" 
                       value={form.amount} 
                       onChange={e => update("amount", e.target.value)} 
-                      className={`${inputClass} font-bold text-emerald-400`} 
+                      className={`${inputClass} font-bold text-emerald-700`} 
                     />
                   </div>
                   <div>
@@ -1032,7 +1032,7 @@ export default function PaymentsClient({
                         <tr key={p.id} className="hover:bg-slate-900/50 transition-colors">
                           <td className="px-3.5 py-2.5 font-mono font-bold text-amber-400">{p.receipt_number}</td>
                           <td className="px-3.5 py-2.5 font-medium text-slate-200">{p.batch?.name || "—"}</td>
-                          <td className="px-3.5 py-2.5 font-bold text-emerald-400">
+                          <td className="px-3.5 py-2.5 font-bold text-emerald-700">
                             {formatCurrency(p.total_paid)}
                             {p.discount > 0 && <span className="text-[10px] text-slate-500 block font-normal">disc: {formatCurrency(p.discount)}</span>}
                           </td>
@@ -1120,7 +1120,7 @@ export default function PaymentsClient({
                       <span className="text-xs font-mono text-slate-400">{p.student?.student_id}</span>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-300">{p.batch?.name || "—"}</td>
-                    <td className="px-4 py-3 font-extrabold text-emerald-400">
+                    <td className="px-4 py-3 font-extrabold text-emerald-700">
                       {formatCurrency(p.total_paid)}
                       {p.discount > 0 && <span className="text-xs text-slate-500 block font-normal">disc: {formatCurrency(p.discount)}</span>}
                     </td>
@@ -1174,9 +1174,9 @@ export default function PaymentsClient({
       {/* Record Payment Modal (Searchable Student Entry) */}
       {showRecordModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-lg shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 text-white">
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-lg shadow-2xl overflow-hidden border border-slate-200/90 animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white flex items-center justify-between">
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-50/50 to-transparent border-b border-slate-100 p-5 text-slate-900 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 bg-amber-500/20 rounded-xl flex items-center justify-center border border-amber-500/30 text-amber-400">
                   <CreditCard className="w-5 h-5 text-amber-400" />
@@ -1204,10 +1204,10 @@ export default function PaymentsClient({
                 </label>
                 
                 {modalSelectedStudent ? (
-                  <div className="flex items-center justify-between p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-xl">
+                  <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
                     <div>
-                      <p className="text-sm font-bold text-emerald-300">{modalSelectedStudent.name}</p>
-                      <p className="text-xs text-emerald-400 font-mono">{modalSelectedStudent.student_id} {modalSelectedStudent.phone ? `• ${modalSelectedStudent.phone}` : ""}</p>
+                      <p className="text-sm font-bold text-emerald-900">{modalSelectedStudent.name}</p>
+                      <p className="text-xs text-emerald-700 font-mono">{modalSelectedStudent.student_id} {modalSelectedStudent.phone ? `• ${modalSelectedStudent.phone}` : ""}</p>
                     </div>
                     <button 
                       type="button" 
@@ -1276,7 +1276,7 @@ export default function PaymentsClient({
                     required 
                     value={form.amount} 
                     onChange={e => update("amount", e.target.value)} 
-                    className={`${inputClass} font-bold text-emerald-400 text-base`} 
+                    className={`${inputClass} font-bold text-emerald-700 text-base`} 
                     placeholder="0"
                   />
                 </div>
@@ -1390,7 +1390,7 @@ export default function PaymentsClient({
       {editingDue && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl w-full text-slate-900 max-w-md shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 text-white">
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white flex items-center justify-between">
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-50/50 to-transparent border-b border-slate-100 p-5 text-slate-900 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 bg-indigo-500/20 border border-indigo-500/30 rounded-xl flex items-center justify-center text-indigo-400">
                   <Edit2 className="w-4 h-4 text-indigo-400" />
@@ -1459,7 +1459,7 @@ export default function PaymentsClient({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl w-full text-slate-900 max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200 text-white">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white text-center relative">
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-50/50 to-transparent border-b border-slate-100 p-5 text-slate-900 text-center relative">
               <button 
                 type="button"
                 onClick={() => setReceiptModal(null)}
@@ -1566,8 +1566,8 @@ export default function PaymentsClient({
       {/* Payment Gateway Numbers Modal (Owner Configurable) */}
       {showGatewayModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 backdrop-blur-md">
-          <div className="bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 text-white">
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-6 text-white flex items-center justify-between">
+          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200/90 animate-in fade-in zoom-in-95 text-slate-900">
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-50/50 to-transparent border-b border-slate-100 p-6 text-slate-900 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
                   <Smartphone className="w-5 h-5 text-purple-300" />
@@ -1588,13 +1588,13 @@ export default function PaymentsClient({
 
             <form onSubmit={handleSaveGatewayNumbers} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               {/* bKash */}
-              <div className="p-4 rounded-2xl border border-pink-900/40 bg-pink-950/20 space-y-2.5">
+              <div className="p-4 rounded-2xl border border-pink-200 bg-pink-50/50 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-pink-400 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-pink-500"></span>
                     bKash Number &amp; Account
                   </span>
-                  <span className="text-[10px] font-semibold text-pink-300 bg-pink-900/40 px-2 py-0.5 rounded-md border border-pink-800/40">Dial *247#</span>
+                  <span className="text-[10px] font-semibold text-pink-700 bg-pink-100 px-2 py-0.5 rounded-md border border-pink-200 font-bold">Dial *247#</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -1605,7 +1605,7 @@ export default function PaymentsClient({
                       value={gatewayNumbers.bkash}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, bkash: e.target.value }))}
                       placeholder="01XXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm font-mono border border-pink-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-pink-500 text-white placeholder:text-slate-500"
+                      className="w-full px-3 py-2 text-sm font-mono border border-pink-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
                   </div>
                   <div>
@@ -1615,20 +1615,20 @@ export default function PaymentsClient({
                       value={gatewayNumbers.bkash_type}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, bkash_type: e.target.value }))}
                       placeholder="e.g. Send Money (Personal)"
-                      className="w-full px-3 py-2 text-xs border border-pink-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-pink-500 text-white placeholder:text-slate-500"
+                      className="w-full px-3 py-2 text-xs border border-pink-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Nagad */}
-              <div className="p-4 rounded-2xl border border-orange-900/40 bg-orange-950/20 space-y-2.5">
+              <div className="p-4 rounded-2xl border border-orange-200 bg-orange-50/50 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-orange-400 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-orange-500"></span>
                     Nagad Number &amp; Account
                   </span>
-                  <span className="text-[10px] font-semibold text-orange-300 bg-orange-900/40 px-2 py-0.5 rounded-md border border-orange-800/40">Dial *167#</span>
+                  <span className="text-[10px] font-semibold text-orange-700 bg-orange-100 px-2 py-0.5 rounded-md border border-orange-200 font-bold">Dial *167#</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -1639,7 +1639,7 @@ export default function PaymentsClient({
                       value={gatewayNumbers.nagad}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, nagad: e.target.value }))}
                       placeholder="01XXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm font-mono border border-orange-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-orange-500 text-white placeholder:text-slate-500"
+                      className="w-full px-3 py-2 text-sm font-mono border border-orange-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
                   </div>
                   <div>
@@ -1649,20 +1649,20 @@ export default function PaymentsClient({
                       value={gatewayNumbers.nagad_type}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, nagad_type: e.target.value }))}
                       placeholder="e.g. Send Money (Personal)"
-                      className="w-full px-3 py-2 text-xs border border-orange-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-orange-500 text-white placeholder:text-slate-500"
+                      className="w-full px-3 py-2 text-xs border border-orange-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Rocket */}
-              <div className="p-4 rounded-2xl border border-purple-900/40 bg-purple-950/20 space-y-2.5">
+              <div className="p-4 rounded-2xl border border-purple-200 bg-purple-50/50 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-purple-500"></span>
                     Rocket Number &amp; Account
                   </span>
-                  <span className="text-[10px] font-semibold text-purple-300 bg-purple-900/40 px-2 py-0.5 rounded-md border border-purple-800/40">Dial *322#</span>
+                  <span className="text-[10px] font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-md border border-purple-200 font-bold">Dial *322#</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -1673,7 +1673,7 @@ export default function PaymentsClient({
                       value={gatewayNumbers.rocket}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, rocket: e.target.value }))}
                       placeholder="01XXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm font-mono border border-purple-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder:text-slate-500"
+                      className="w-full px-3 py-2 text-sm font-mono border border-purple-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
                   </div>
                   <div>
@@ -1683,20 +1683,20 @@ export default function PaymentsClient({
                       value={gatewayNumbers.rocket_type}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, rocket_type: e.target.value }))}
                       placeholder="e.g. Send Money (Personal)"
-                      className="w-full px-3 py-2 text-xs border border-purple-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder:text-slate-500"
+                      className="w-full px-3 py-2 text-xs border border-purple-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Upay */}
-              <div className="p-4 rounded-2xl border border-teal-900/40 bg-teal-950/20 space-y-2.5">
+              <div className="p-4 rounded-2xl border border-teal-200 bg-teal-50/50 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-teal-500"></span>
                     Upay Number &amp; Account
                   </span>
-                  <span className="text-[10px] font-semibold text-teal-300 bg-teal-900/40 px-2 py-0.5 rounded-md border border-teal-800/40">Dial *268#</span>
+                  <span className="text-[10px] font-semibold text-teal-700 bg-teal-100 px-2 py-0.5 rounded-md border border-teal-200 font-bold">Dial *268#</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -1707,7 +1707,7 @@ export default function PaymentsClient({
                       value={gatewayNumbers.upay}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, upay: e.target.value }))}
                       placeholder="01XXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm font-mono border border-teal-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white placeholder:text-slate-500"
+                      className="w-full px-3 py-2 text-sm font-mono border border-teal-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
                   </div>
                   <div>
@@ -1717,7 +1717,7 @@ export default function PaymentsClient({
                       value={gatewayNumbers.upay_type}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, upay_type: e.target.value }))}
                       placeholder="e.g. Send Money (Personal)"
-                      className="w-full px-3 py-2 text-xs border border-teal-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white placeholder:text-slate-500"
+                      className="w-full px-3 py-2 text-xs border border-teal-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 text-slate-900 placeholder:text-slate-400 shadow-2xs"
                     />
                   </div>
                 </div>
@@ -1727,7 +1727,7 @@ export default function PaymentsClient({
                 <button
                   type="button"
                   onClick={() => setShowGatewayModal(false)}
-                  className="flex-1 py-3 border border-slate-700 rounded-xl text-slate-300 font-semibold hover:bg-slate-800 transition-colors text-sm cursor-pointer"
+                  className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-700 font-bold hover:bg-slate-100 transition-colors text-sm cursor-pointer"
                 >
                   Cancel
                 </button>
