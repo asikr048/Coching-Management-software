@@ -36,6 +36,7 @@ import {
   Trophy,
   GripVertical,
   Award,
+  Building,
 } from "lucide-react"
 import { getGrade, cn } from "@/lib/utils"
 import { useBranch } from "@/components/providers/BranchContext"
@@ -130,9 +131,15 @@ interface CsvRecipient {
   isValid: boolean
 }
 
+const defaultGatewayParams: ParamItem[] = [
+  { id: "p1", key: "api_key", value: "{api_key}", description: "Your API Key / Secret Token", isStandard: true },
+  { id: "p2", key: "msg", value: "{msg}", description: "URL-encoded SMS text content", isStandard: true },
+  { id: "p3", key: "to", value: "{to}", description: "Recipient mobile number", isStandard: true },
+]
+
 export default function SmsPage() {
   const supabase = useMemo(() => createClient(), [])
-  const { selectedBranchId, branches, currentBranch } = useBranch()
+  const { selectedBranchId, branches, currentBranch, refreshBranches } = useBranch()
 
   // Navigation Tabs: "compose" | "gateway" | "logs"
   const [activeTab, setActiveTab] = useState<"compose" | "gateway" | "logs">("compose")
@@ -166,6 +173,10 @@ export default function SmsPage() {
   const [testPhone, setTestPhone] = useState("")
   const [testResult, setTestResult] = useState<any>(null)
   const [hasMissingTable, setHasMissingTable] = useState(false)
+
+  // Branch Selection for Custom SMS Gateway API
+  const [selectedGatewayBranches, setSelectedGatewayBranches] = useState<string[]>([])
+  const [testBranchId, setTestBranchId] = useState<string>("custom")
 
   // Drag over target tracking
   const [activeDragSlot, setActiveDragSlot] = useState<string | null>(null)
@@ -226,6 +237,131 @@ export default function SmsPage() {
       .join("&")
     return queryString ? `${cleanBase}?${queryString}` : cleanBase
   }
+
+  // Load global default gateway config from localStorage or fallback
+  function loadDefaultGatewayConfig() {
+    try {
+      const cached = localStorage.getItem("medhashiree_sms_gateway_config")
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        const base = cleanBaseUrl(parsed.baseUrl || "https://api.sms.net.bd/sendsms")
+        const params = parsed.params?.length ? parsed.params : defaultGatewayParams
+        setGatewayConfig({
+          apiKey: parsed.apiKey || parsed.api_key || "",
+          callType: parsed.callType || "GET",
+          baseUrl: base,
+          urlTemplate: parsed.urlTemplate ? syncUrlTemplate(base, params) : syncUrlTemplate(base, defaultGatewayParams),
+          params,
+          senderId: parsed.senderId || parsed.sender_id || "",
+        })
+        return
+      }
+    } catch (e) {
+      console.warn("Could not reload default config:", e)
+    }
+    setGatewayConfig({
+      apiKey: "",
+      callType: "GET",
+      baseUrl: "https://api.sms.net.bd/sendsms",
+      urlTemplate: syncUrlTemplate("https://api.sms.net.bd/sendsms", defaultGatewayParams),
+      params: defaultGatewayParams,
+      senderId: "",
+    })
+  }
+
+  // Load a specific branch's gateway config if it has one
+  function loadBranchGatewayConfig(branchId: string) {
+    const b = branches.find((item) => item.id === branchId)
+    if (b?.sms_gateway_config && (b.sms_gateway_config.apiKey || b.sms_gateway_config.api_key)) {
+      const bConf = b.sms_gateway_config
+      const base = cleanBaseUrl(bConf.baseUrl || "https://api.sms.net.bd/sendsms")
+      const params = bConf.params?.length ? bConf.params : defaultGatewayParams
+      setGatewayConfig({
+        apiKey: bConf.apiKey || bConf.api_key || "",
+        callType: bConf.callType || "GET",
+        baseUrl: base,
+        urlTemplate: bConf.urlTemplate || syncUrlTemplate(base, params),
+        params: params,
+        senderId: bConf.senderId || bConf.sender_id || "",
+      })
+      return true
+    }
+    return false
+  }
+
+  // Toggle branch in selection
+  function handleToggleBranchSelection(branchId: string) {
+    setSelectedGatewayBranches((prev) => {
+      let next: string[]
+      if (prev.includes(branchId)) {
+        next = prev.filter((id) => id !== branchId)
+      } else {
+        next = [...prev, branchId]
+      }
+
+      // If only 1 branch is left selected, load its configuration
+      if (next.length === 1) {
+        const loaded = loadBranchGatewayConfig(next[0])
+        if (!loaded) {
+          loadDefaultGatewayConfig()
+        }
+      }
+      return next
+    })
+  }
+
+  // Focus and select only 1 branch
+  function selectOnlyBranch(branchId: string) {
+    setSelectedGatewayBranches([branchId])
+    const loaded = loadBranchGatewayConfig(branchId)
+    if (!loaded) {
+      loadDefaultGatewayConfig()
+    }
+  }
+
+  // Select all available branches
+  function selectAllBranches() {
+    setSelectedGatewayBranches(branches.map((b) => b.id))
+  }
+
+  // Clear branch selection
+  function clearBranchSelection() {
+    setSelectedGatewayBranches([])
+  }
+
+  // Revert a branch to the global default SMS API
+  async function handleRevertBranchToDefault(branchId: string) {
+    try {
+      const { error } = await supabase
+        .from("branches")
+        .update({ sms_gateway_config: null })
+        .eq("id", branchId)
+
+      if (error) throw error
+
+      if (refreshBranches) {
+        await refreshBranches()
+      }
+
+      loadDefaultGatewayConfig()
+      const bName = branches.find((b) => b.id === branchId)?.name || "Branch"
+      toast.success(`✓ Reverted "${bName}" to Default SMS Gateway API.`)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to revert branch to default API")
+    }
+  }
+
+  // Keep selectedGatewayBranches populated when branches load
+  useEffect(() => {
+    if (branches.length > 0 && selectedGatewayBranches.length === 0) {
+      if (selectedBranchId && selectedBranchId !== "all") {
+        setSelectedGatewayBranches([selectedBranchId])
+        loadBranchGatewayConfig(selectedBranchId)
+      } else {
+        setSelectedGatewayBranches(branches.map((b) => b.id))
+      }
+    }
+  }, [branches, selectedBranchId])
 
   // 1. Load Data on Mount
   useEffect(() => {
@@ -648,7 +784,7 @@ CREATE POLICY "Public read settings" ON public.site_settings FOR SELECT USING (t
 DROP POLICY IF EXISTS "Staff manage settings" ON public.site_settings;
 CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (true);`
 
-  // Save Gateway Configuration
+  // Save Gateway Configuration for Selected Branches
   async function handleSaveGateway(e?: React.FormEvent) {
     if (e) e.preventDefault()
     if (!gatewayConfig.apiKey.trim()) {
@@ -668,6 +804,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       return
     }
 
+    if (selectedGatewayBranches.length === 0) {
+      toast.error("Please select at least one branch for this SMS Gateway API")
+      return
+    }
+
     setSavingGateway(true)
 
     // 1. ALWAYS persist to browser localStorage first so it works immediately
@@ -677,43 +818,64 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       console.warn("Could not save to localStorage:", e)
     }
 
-    // 2. Attempt to save to Supabase site_settings
-    let savedToCloud = false
-    let isTableMissing = false
-
-    try {
-      const { error } = await supabase.from("site_settings").upsert({
-        key: "sms_gateway_config",
-        value: JSON.stringify(gatewayConfig),
-        updated_at: new Date().toISOString(),
-      })
-
-      if (error) {
-        if (error.message?.includes("site_settings") || error.code === "PGRST205" || (error as any).status === 404) {
-          isTableMissing = true
-        } else {
-          console.warn("Cloud save error:", error)
-        }
-      } else {
-        savedToCloud = true
-      }
-    } catch (err: any) {
-      if (err?.message?.includes("site_settings") || err?.code === "PGRST205") {
-        isTableMissing = true
-      }
-    } finally {
-      setSavingGateway(false)
+    const gatewayPayload = {
+      apiKey: gatewayConfig.apiKey.trim(),
+      api_key: gatewayConfig.apiKey.trim(),
+      callType: gatewayConfig.callType,
+      baseUrl: gatewayConfig.baseUrl.trim(),
+      urlTemplate: gatewayConfig.urlTemplate.trim(),
+      api_url: gatewayConfig.urlTemplate.trim(),
+      params: gatewayConfig.params,
+      senderId: gatewayConfig.senderId?.trim() || "",
+      sender_id: gatewayConfig.senderId?.trim() || "",
     }
 
-    if (savedToCloud) {
-      setHasMissingTable(false)
-      toast.success("✓ SMS Gateway saved & synced to Supabase! All messaging options are active.")
-    } else if (isTableMissing) {
-      setHasMissingTable(true)
-      toast.success("✓ Gateway saved locally and ACTIVE! You can now send SMS.", { duration: 5000 })
-      toast.info("Database table 'site_settings' not created yet. See SQL script below to sync cloud.", { duration: 8000 })
-    } else {
-      toast.success("✓ Gateway configuration saved locally and active.")
+    let savedBranches = false
+    try {
+      // 2. Save directly to selected branches in Supabase
+      const { error: branchErr } = await supabase
+        .from("branches")
+        .update({ sms_gateway_config: gatewayPayload })
+        .in("id", selectedGatewayBranches)
+
+      if (branchErr) {
+        console.warn("Could not update branch sms_gateway_config:", branchErr)
+        throw branchErr
+      }
+      savedBranches = true
+
+      // 3. If all branches are selected, also persist to site_settings as system-wide default
+      if (selectedGatewayBranches.length === branches.length || branches.length === 0) {
+        try {
+          await supabase.from("site_settings").upsert({
+            key: "sms_gateway_config",
+            value: JSON.stringify(gatewayConfig),
+            updated_at: new Date().toISOString(),
+          })
+          setHasMissingTable(false)
+        } catch (globalErr) {
+          console.warn("Could not sync global site_settings:", globalErr)
+        }
+      }
+
+      // 4. Refresh branches in BranchContext
+      if (refreshBranches) {
+        await refreshBranches()
+      }
+
+      if (selectedGatewayBranches.length === 1) {
+        const bName = branches.find((b) => b.id === selectedGatewayBranches[0])?.name || "Selected Branch"
+        toast.success(`✓ SMS Gateway API saved specifically for "${bName}"!`)
+      } else if (selectedGatewayBranches.length === branches.length) {
+        toast.success(`✓ SMS Gateway API applied to all ${branches.length} branches!`)
+      } else {
+        toast.success(`✓ SMS Gateway API applied to ${selectedGatewayBranches.length} selected branches!`)
+      }
+    } catch (err: any) {
+      console.error("Save gateway error:", err)
+      toast.error(err?.message || "Failed to save SMS gateway settings to database")
+    } finally {
+      setSavingGateway(false)
     }
   }
 
@@ -723,8 +885,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       toast.error("Please enter a test recipient phone number")
       return
     }
-    if (!gatewayConfig.apiKey) {
-      toast.error("Please enter an API Key first")
+    if (testBranchId === "custom" && !gatewayConfig.apiKey) {
+      toast.error("Please enter an API Key in the builder first")
       return
     }
 
@@ -732,21 +894,29 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
     setTestResult(null)
 
     try {
+      const payload: any = {
+        recipients: [testPhone.trim()],
+        message: "MedhaShiree: Test SMS gateway configuration verified successfully!",
+      }
+
+      if (testBranchId === "custom") {
+        payload.configOverride = gatewayConfig
+      } else {
+        payload.branchId = testBranchId
+      }
+
       const res = await fetch("/api/sms/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipients: [testPhone.trim()],
-          message: "MedhaShiree: Test SMS gateway configuration verified successfully!",
-          configOverride: gatewayConfig,
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await res.json()
       setTestResult(data)
 
       if (res.ok && data.sentCount > 0) {
-        toast.success(`✓ Test SMS sent successfully to ${testPhone}!`)
+        const routeLabel = data.gatewayUsed ? ` via ${data.gatewayUsed}` : ""
+        toast.success(`✓ Test SMS sent successfully to ${testPhone}${routeLabel}!`)
         refreshLogs()
       } else {
         toast.error(`Test failed: ${data.error || "Gateway returned an error"}`)
@@ -1965,6 +2135,149 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 </div>
               </div>
 
+              {/* Branch Selection for SMS Gateway API */}
+              <div className="p-4 bg-amber-50/40 border border-amber-200/80 rounded-2xl space-y-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/60 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Building className="w-4 h-4 text-amber-600" />
+                      <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        Branch Selection (Who uses this SMS Gateway API?) *
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Select <strong>1 branch</strong> for a branch-specific API, or <strong>multi-select</strong> to apply these settings across multiple branches at once.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllBranches}
+                      className="px-2.5 py-1 text-xs font-bold text-amber-700 hover:text-amber-800 bg-amber-100/90 hover:bg-amber-200/80 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Select All ({branches.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearBranchSelection}
+                      className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branches Grid */}
+                {branches.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic">Loading branches...</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {branches.map((b) => {
+                      const isSelected = selectedGatewayBranches.includes(b.id)
+                      const hasDedicatedApi = Boolean(b.sms_gateway_config?.apiKey || b.sms_gateway_config?.api_key)
+
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => handleToggleBranchSelection(b.id)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between gap-2.5 ${
+                            isSelected
+                              ? "bg-white border-amber-500 shadow-sm ring-2 ring-amber-500/25"
+                              : "bg-white/80 border-slate-200/90 hover:border-amber-300 hover:bg-white"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                isSelected ? "bg-amber-500 border-amber-600 text-white" : "border-slate-300 bg-white"
+                              }`}>
+                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              </div>
+                              <span className="text-xs font-bold text-slate-900 truncate">
+                                {b.name}
+                              </span>
+                            </div>
+                            {hasDedicatedApi ? (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300/80">
+                                Dedicated API
+                              </span>
+                            ) : (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                Default API
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-100">
+                            <span className="text-slate-500 truncate max-w-[130px]">
+                              {b.location || b.address || "Main branch"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                selectOnlyBranch(b.id)
+                              }}
+                              className="text-amber-700 hover:text-amber-900 font-bold hover:underline cursor-pointer ml-2 shrink-0 text-[11px]"
+                              title="Select only this branch to view or configure its dedicated API"
+                            >
+                              Configure Only →
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Dynamic Selection Alert / Notice */}
+                {selectedGatewayBranches.length === 1 && (() => {
+                  const single = branches.find((b) => b.id === selectedGatewayBranches[0])
+                  const hasDedicated = Boolean(single?.sms_gateway_config?.apiKey || single?.sms_gateway_config?.api_key)
+                  return (
+                    <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs">
+                      <div className="flex items-center gap-2 text-slate-900 font-medium">
+                        <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>
+                          Configuring SMS API for <strong>{single?.name}</strong>. {hasDedicated ? "This branch has a dedicated SMS API active." : "Currently using default API. Saving will assign a dedicated API."}
+                        </span>
+                      </div>
+                      {hasDedicated && (
+                        <button
+                          type="button"
+                          onClick={() => single && handleRevertBranchToDefault(single.id)}
+                          className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+                        >
+                          Revert to Default API
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {selectedGatewayBranches.length > 1 && (
+                  <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-950 font-medium flex items-center gap-2">
+                    <Users className="w-4 h-4 text-sky-600 shrink-0" />
+                    <span>
+                      <strong>Multi-Branch Selected ({selectedGatewayBranches.length} Branches):</strong> Saving will apply this entire SMS API configuration across all {selectedGatewayBranches.length} selected branches at once. Other branches will remain completely untouched.
+                    </span>
+                  </div>
+                )}
+
+                {selectedGatewayBranches.length === 0 && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-medium flex items-center justify-between gap-2">
+                    <span>⚠️ No branch selected. Please select at least one branch to apply this SMS Gateway API to.</span>
+                    <button
+                      type="button"
+                      onClick={selectAllBranches}
+                      className="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded font-bold transition-colors cursor-pointer"
+                    >
+                      Select All Branches
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* 1-Click Provider Templates */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-2">1-Click Provider Presets:</label>
@@ -2249,16 +2562,24 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* Save Button */}
               <button
                 type="submit"
-                disabled={savingGateway}
+                disabled={savingGateway || selectedGatewayBranches.length === 0}
                 className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
               >
                 {savingGateway ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Saving Gateway Configuration...
+                    <Loader2 className="w-4 h-4 animate-spin" /> Saving SMS Gateway Configuration...
+                  </>
+                ) : selectedGatewayBranches.length === 1 ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" /> Save SMS Gateway for {branches.find((b) => b.id === selectedGatewayBranches[0])?.name || "Selected Branch"}
+                  </>
+                ) : selectedGatewayBranches.length > 1 ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" /> Save & Apply SMS Gateway to {selectedGatewayBranches.length} Selected Branches
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" /> Save Gateway Configuration & Activate
+                    <CheckCircle2 className="w-4 h-4" /> Select Branch(es) Above to Save SMS Gateway
                   </>
                 )}
               </button>
@@ -2314,7 +2635,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   ) : (
                     <X className="w-4 h-4 text-rose-400 shrink-0" />
                   )}
-                  <span className={gatewayConfig.apiKey ? "text-slate-200 font-bold" : "text-slate-500"}>
+                  <span className={gatewayConfig.apiKey ? "text-slate-900 font-bold" : "text-slate-500"}>
                     API Key Entered
                   </span>
                 </div>
@@ -2328,7 +2649,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   <span
                     className={
                       gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}")
-                        ? "text-slate-200 font-bold"
+                        ? "text-slate-900 font-bold"
                         : "text-slate-500"
                     }
                   >
@@ -2345,7 +2666,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   <span
                     className={
                       gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}")
-                        ? "text-slate-200 font-bold"
+                        ? "text-slate-900 font-bold"
                         : "text-slate-500"
                     }
                   >
@@ -2373,6 +2694,22 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </h3>
 
               <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Send Test Via</label>
+                <select
+                  value={testBranchId}
+                  onChange={(e) => setTestBranchId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                >
+                  <option value="custom">Current Form Settings (Direct)</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} {b.sms_gateway_config?.api_key || b.sms_gateway_config?.apiKey ? "(Dedicated API)" : "(Default API)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Test Recipient Phone</label>
                 <input
                   type="text"
@@ -2386,7 +2723,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               <button
                 type="button"
                 onClick={handleSendTestSms}
-                disabled={testingGateway || !testPhone.trim() || !gatewayConfig.apiKey}
+                disabled={testingGateway || !testPhone.trim() || (testBranchId === "custom" && !gatewayConfig.apiKey)}
                 className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
               >
                 {testingGateway ? (

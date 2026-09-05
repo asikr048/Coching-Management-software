@@ -19,10 +19,14 @@ export interface Branch {
     apiKey?: string
     senderId?: string
     callType?: "GET" | "POST_FORM" | "POST_JSON"
+    baseUrl?: string
     urlTemplate?: string
+    params?: any[]
+    headers?: Record<string, string>
     api_key?: string
     sender_id?: string
     api_url?: string
+    [key: string]: any
   } | null
   is_active: boolean
   created_at?: string

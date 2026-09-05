@@ -126,6 +126,7 @@ export async function POST(req: NextRequest) {
     }
 
     let branchFound = false
+    let branchName = ""
     if (branchId && branchId !== "all") {
       try {
         const { data: branchRow } = await admin
@@ -134,42 +135,50 @@ export async function POST(req: NextRequest) {
           .eq("id", branchId)
           .maybeSingle()
 
-        if (branchRow?.sms_gateway_config?.api_key) {
+        if (branchRow) {
+          branchName = branchRow.name || ""
           const bConf = branchRow.sms_gateway_config
-          config.apiKey = bConf.api_key
-          if (bConf.sender_id) config.senderId = bConf.sender_id
-          if (bConf.api_url) {
-            config.urlTemplate = bConf.api_url.includes("{api_key}")
-              ? bConf.api_url
-              : `${bConf.api_url}?api_key={api_key}&msg={msg}&to={to}`
+          if (bConf && (bConf.apiKey || bConf.api_key)) {
+            config.apiKey = bConf.apiKey || bConf.api_key || ""
+            if (bConf.callType) config.callType = bConf.callType
+            if (bConf.senderId || bConf.sender_id) config.senderId = bConf.senderId || bConf.sender_id
+            if (bConf.urlTemplate) {
+              config.urlTemplate = bConf.urlTemplate
+            } else if (bConf.api_url) {
+              config.urlTemplate = bConf.api_url.includes("{api_key}")
+                ? bConf.api_url
+                : `${bConf.api_url}?api_key={api_key}&msg={msg}&to={to}`
+            }
+            branchFound = true
           }
-          branchFound = true
         }
       } catch (bErr) {
         console.warn("Could not load branch-specific SMS config:", bErr)
       }
     }
 
-    if (configOverride && (configOverride.apiKey || configOverride.urlTemplate)) {
-      config = { ...config, ...configOverride }
-    } else if (!branchFound) {
-      try {
-        const { data: settingRow } = await admin
-          .from("site_settings")
-          .select("value")
-          .eq("key", "sms_gateway_config")
-          .maybeSingle()
+    if (!branchFound) {
+      if (configOverride && (configOverride.apiKey || configOverride.urlTemplate)) {
+        config = { ...config, ...configOverride }
+      } else {
+        try {
+          const { data: settingRow } = await admin
+            .from("site_settings")
+            .select("value")
+            .eq("key", "sms_gateway_config")
+            .maybeSingle()
 
-        if (settingRow?.value) {
-          try {
-            const parsed = JSON.parse(settingRow.value)
-            config = { ...config, ...parsed }
-          } catch (e) {
-            console.error("Failed to parse sms_gateway_config JSON:", e)
+          if (settingRow?.value) {
+            try {
+              const parsed = JSON.parse(settingRow.value)
+              config = { ...config, ...parsed }
+            } catch (e) {
+              console.error("Failed to parse sms_gateway_config JSON:", e)
+            }
           }
+        } catch (e) {
+          console.warn("Could not load gateway config from site_settings:", e)
         }
-      } catch (e) {
-        console.warn("Could not load gateway config from site_settings:", e)
       }
     }
 
@@ -234,6 +243,9 @@ export async function POST(req: NextRequest) {
           targetUrl = targetUrl.replace(/\{msg\}|\{MSG\}|\{YOUR_MSG\}|\{message\}/g, encodeURIComponent(task.message))
           // Replace {to} token or any template sample phone number
           targetUrl = targetUrl.replace(/\{to\}|\{TO\}|\{YOUR_TO\}|\{number\}|\{phone\}|\{msisdn\}|8801800000000/g, encodeURIComponent(phoneToUse))
+          if (config.senderId) {
+            targetUrl = targetUrl.replace(/\{sender_id\}|\{senderId\}|\{SENDER_ID\}|\{sender_id_value\}/g, encodeURIComponent(config.senderId))
+          }
 
           const res = await fetch(targetUrl, { method: "GET" })
           const text = await res.text()
@@ -320,6 +332,8 @@ export async function POST(req: NextRequest) {
       total: results.length,
       sentCount: sentSuccessCount,
       failedCount,
+      gatewayUsed: branchFound ? `Branch: ${branchName || branchId}` : "Global Default",
+      branchUsed: branchName || null,
       results,
       sampleResponse: results[0]?.response || null,
     })
