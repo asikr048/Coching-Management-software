@@ -943,7 +943,7 @@ export default function MaterialsClient({
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => openEditModal(m)}
-                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                      className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                       title="Edit material"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -967,7 +967,7 @@ export default function MaterialsClient({
       {/* 1. ADD / EDIT MATERIAL MODAL (MULTI-BATCH) */}
       {/* ========================================== */}
       {addModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-200 text-white">
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-950">
               <h3 className="font-black text-slate-900 flex items-center gap-2">
@@ -1178,7 +1178,7 @@ export default function MaterialsClient({
       {/* 2. DISTRIBUTE MATERIAL MODAL (MULTI-BATCH) */}
       {/* ========================================== */}
       {distributeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] text-white">
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-950">
               <div>
@@ -1227,7 +1227,7 @@ export default function MaterialsClient({
               </div>
 
               {/* Mode Toggle */}
-              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-200">
+              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
                 <button
                   type="button"
                   onClick={() => {
@@ -1516,7 +1516,7 @@ export default function MaterialsClient({
       {/* 3. "WHO GOT IT" DISTRIBUTION CONTROLLER    */}
       {/* ========================================== */}
       {whoGotItModalOpen && whoGotItMaterial && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] text-white">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-200 bg-slate-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1566,7 +1566,7 @@ export default function MaterialsClient({
             {/* Sub Filter Tabs, Batch Selector & Search */}
             <div className="px-6 py-3 border-b border-slate-200 bg-slate-900 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-200 text-xs">
+                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
                   <button
                     onClick={() => setWhoGotItTab("all")}
                     className={`px-3 py-1 font-bold rounded-lg transition-all cursor-pointer ${

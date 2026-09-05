@@ -618,7 +618,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
       {/* Extend Due Date Modal */}
       {extendModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-sm p-6 shadow-2xl text-white">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-slate-900 text-base">Extend Due Date</h3>
@@ -641,7 +641,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
       {/* Reduce Due Modal */}
       {reduceModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-sm p-6 shadow-2xl text-white">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-slate-900 text-base">Reduce Due Amount</h3>
@@ -664,7 +664,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
       {/* SMS Reminder Modal */}
       {smsModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-md p-6 shadow-2xl text-white">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-slate-900 text-base">Send SMS Reminder</h3>

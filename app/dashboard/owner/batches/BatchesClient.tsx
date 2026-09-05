@@ -209,7 +209,7 @@ export default function BatchesClient({
     return current === filterStatus
   })
 
-  const ic = "w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white bg-slate-950 focus:outline-none focus:border-amber-400 placeholder:text-slate-500 transition-all shadow-sm"
+  const ic = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
   const lbl = "block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
 
   return (
@@ -217,7 +217,7 @@ export default function BatchesClient({
       {/* Top action & filter bar */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-200">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
           {filterTabs.map(tab => {
             const active = filterStatus === tab.key
             return (
@@ -228,7 +228,7 @@ export default function BatchesClient({
                 className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   active 
                     ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs" 
-                    : "text-slate-400 hover:text-white hover:bg-slate-800"
+                    : "text-slate-400 hover:text-slate-900 hover:bg-slate-100"
                 }`}
               >
                 {tab.label}
@@ -304,9 +304,9 @@ export default function BatchesClient({
                           : "bg-slate-800 text-slate-400 border-slate-700"
                       }`}
                     >
-                      <option value="ongoing" className="bg-slate-900 text-white">Admission Ongoing</option>
-                      <option value="admission_closed" className="bg-slate-900 text-white">Admission Closed</option>
-                      <option value="finished" className="bg-slate-900 text-white">Finished</option>
+                      <option value="ongoing" className="bg-white text-slate-900">Admission Ongoing</option>
+                      <option value="admission_closed" className="bg-white text-slate-900">Admission Closed</option>
+                      <option value="finished" className="bg-white text-slate-900">Finished</option>
                     </select>
                     <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                   </div>
@@ -415,10 +415,10 @@ export default function BatchesClient({
 
       {/* Create / Edit Batch Modal */}
       {(showCreateModal || editingBatch) && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-2xl shadow-2xl overflow-hidden border border-slate-200 text-white animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-2xl shadow-2xl overflow-hidden border border-slate-200/90 animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-slate-950 via-[#0f172a] to-slate-900 p-5 text-white flex items-center justify-between shrink-0 border-b border-slate-200">
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-50/50 to-transparent p-5 text-slate-900 flex items-center justify-between shrink-0 border-b border-slate-200">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-center justify-center text-amber-400">
                   {editingBatch ? <Edit3 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
@@ -435,7 +435,7 @@ export default function BatchesClient({
               <button 
                 type="button"
                 onClick={() => { setShowCreateModal(false); setEditingBatch(null) }} 
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
+                className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -467,9 +467,9 @@ export default function BatchesClient({
                       onChange={e => updateForm("status", e.target.value)} 
                       className={`${ic} font-bold`}
                     >
-                      <option value="ongoing" className="bg-slate-900 text-white">Admission Ongoing</option>
-                      <option value="admission_closed" className="bg-slate-900 text-white">Admission Closed</option>
-                      <option value="finished" className="bg-slate-900 text-white">Finished</option>
+                      <option value="ongoing" className="bg-white text-slate-900">Admission Ongoing</option>
+                      <option value="admission_closed" className="bg-white text-slate-900">Admission Closed</option>
+                      <option value="finished" className="bg-white text-slate-900">Finished</option>
                     </select>
                   </div>
                   <div>
@@ -518,9 +518,9 @@ export default function BatchesClient({
                       onChange={e => updateForm("teacher_id", e.target.value)} 
                       className={ic}
                     >
-                      <option value="" className="bg-slate-900 text-white">-- No Teacher Assigned --</option>
+                      <option value="" className="bg-white text-slate-900">-- No Teacher Assigned --</option>
                       {teachers.map(t => (
-                        <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                        <option key={t.id} value={t.id} className="bg-white text-slate-900">
                           {t.name} {t.subject ? `(${t.subject})` : ""}
                         </option>
                       ))}
@@ -533,9 +533,9 @@ export default function BatchesClient({
                       onChange={e => updateForm("room_id", e.target.value)} 
                       className={ic}
                     >
-                      <option value="" className="bg-slate-900 text-white">-- Select Classroom --</option>
+                      <option value="" className="bg-white text-slate-900">-- Select Classroom --</option>
                       {rooms.map(r => (
-                        <option key={r.id} value={r.id} className="bg-slate-900 text-white">
+                        <option key={r.id} value={r.id} className="bg-white text-slate-900">
                           {r.name} ({r.capacity} seats capacity)
                         </option>
                       ))}
@@ -581,9 +581,9 @@ export default function BatchesClient({
                       onChange={e => updateForm("fee_type", e.target.value)} 
                       className={ic}
                     >
-                      <option value="monthly" className="bg-slate-900 text-white">Monthly</option>
-                      <option value="quarterly" className="bg-slate-900 text-white">Quarterly</option>
-                      <option value="one_time" className="bg-slate-900 text-white">One-Time Complete Course</option>
+                      <option value="monthly" className="bg-white text-slate-900">Monthly</option>
+                      <option value="quarterly" className="bg-white text-slate-900">Quarterly</option>
+                      <option value="one_time" className="bg-white text-slate-900">One-Time Complete Course</option>
                     </select>
                   </div>
                 </div>

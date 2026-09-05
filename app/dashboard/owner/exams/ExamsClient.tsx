@@ -220,7 +220,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
     }
   }
 
-  const inputClass = "w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400 bg-slate-950 placeholder:text-slate-500 transition-all shadow-sm"
+  const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
 
   return (
     <div className="space-y-6">
@@ -235,8 +235,8 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
             ))}
           </div>
           <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)} className={inputClass + " w-48 font-semibold"}>
-            <option value="all" className="bg-slate-900 text-white">All Batches</option>
-            {batches.map(b => <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>)}
+            <option value="all" className="bg-white text-slate-900">All Batches</option>
+            {batches.map(b => <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>)}
           </select>
         </div>
 
@@ -322,11 +322,11 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
 
       {/* Create Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-4xl shadow-2xl my-8 flex flex-col max-h-[90vh] border border-slate-200 text-white">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl w-full text-slate-900 max-w-4xl shadow-2xl my-8 flex flex-col max-h-[90vh] border border-slate-200/90">
             <div className="flex items-center justify-between p-5 border-b border-slate-200 shrink-0 bg-slate-50">
               <h3 className="text-lg font-extrabold text-slate-900">Create New Exam</h3>
-              <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"><X className="w-5 h-5" /></button>
+              <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"><X className="w-5 h-5" /></button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-5">
@@ -338,14 +338,14 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
               <form id="examForm" onSubmit={handleCreate} className="space-y-6">
                 {/* Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Exam Title *</label><input required value={form.title} onChange={e => update("title", e.target.value)} className={inputClass} placeholder="e.g., Monthly Test - Physics" /></div>
-                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Batch</label><select value={form.batch_id} onChange={e => update("batch_id", e.target.value)} className={inputClass}><option value="" className="bg-slate-900 text-white">All Batches</option>{batches.map(b => <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>)}</select></div>
-                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Subject</label><input value={form.subject} onChange={e => update("subject", e.target.value)} className={inputClass} /></div>
-                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Exam Date</label><input type="date" value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Title *</label><input required value={form.title} onChange={e => update("title", e.target.value)} className={inputClass} placeholder="e.g., Monthly Test - Physics" /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Batch</label><select value={form.batch_id} onChange={e => update("batch_id", e.target.value)} className={inputClass}><option value="" className="bg-white text-slate-900">All Batches</option>{batches.map(b => <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>)}</select></div>
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Subject</label><input value={form.subject} onChange={e => update("subject", e.target.value)} className={inputClass} /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Date</label><input type="date" value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} /></div>
                   
-                  {examMode === "offline" && <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Total Marks</label><input type="number" required value={form.total_marks} onChange={e => update("total_marks", e.target.value)} className={inputClass} /></div>}
-                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Pass Marks</label><input type="number" required value={form.pass_marks} onChange={e => update("pass_marks", e.target.value)} className={inputClass} /></div>
-                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Duration (minutes)</label><input type="number" required value={form.duration_minutes} onChange={e => update("duration_minutes", e.target.value)} className={inputClass} /></div>
+                  {examMode === "offline" && <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Total Marks</label><input type="number" required value={form.total_marks} onChange={e => update("total_marks", e.target.value)} className={inputClass} /></div>}
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Pass Marks</label><input type="number" required value={form.pass_marks} onChange={e => update("pass_marks", e.target.value)} className={inputClass} /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Duration (minutes)</label><input type="number" required value={form.duration_minutes} onChange={e => update("duration_minutes", e.target.value)} className={inputClass} /></div>
                   
                   {examMode === "online" && (
                     <div className="col-span-1 md:col-span-2">
@@ -357,7 +357,7 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                   )}
 
                   {/* Batch Marks Visibility Option */}
-                  <div className="col-span-1 md:col-span-2 bg-slate-950 p-3.5 rounded-xl border border-slate-200">
+                  <div className="col-span-1 md:col-span-2 bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
                     <label className="flex items-start gap-3 text-sm text-slate-200 cursor-pointer select-none">
                       <input 
                         type="checkbox" 
@@ -388,8 +388,8 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                       <div className="lg:col-span-2 bg-slate-950 p-4 rounded-xl border border-slate-200">
                         <h5 className="font-bold text-white text-sm mb-4">{editingQuestion ? "Edit Question" : "Add Question"}</h5>
                         <div className="space-y-4">
-                          <div><label className="block text-xs font-bold text-slate-300 mb-1">Question Type</label><select value={qForm.type} onChange={e => setQForm({...qForm, type: e.target.value as QuestionType})} className={inputClass}><option value="mcq" className="bg-slate-900 text-white">Multiple Choice</option><option value="short" className="bg-slate-900 text-white">Short Answer (Auto-graded)</option><option value="long" className="bg-slate-900 text-white">Long Answer (Manual)</option></select></div>
-                          <div><label className="block text-xs font-bold text-slate-300 mb-1">Question Text</label><textarea value={qForm.text} onChange={e => setQForm({...qForm, text: e.target.value})} className={inputClass} rows={3} placeholder="Enter question..." /></div>
+                          <div><label className="block text-xs font-bold text-slate-700 mb-1">Question Type</label><select value={qForm.type} onChange={e => setQForm({...qForm, type: e.target.value as QuestionType})} className={inputClass}><option value="mcq" className="bg-white text-slate-900">Multiple Choice</option><option value="short" className="bg-white text-slate-900">Short Answer (Auto-graded)</option><option value="long" className="bg-white text-slate-900">Long Answer (Manual)</option></select></div>
+                          <div><label className="block text-xs font-bold text-slate-700 mb-1">Question Text</label><textarea value={qForm.text} onChange={e => setQForm({...qForm, text: e.target.value})} className={inputClass} rows={3} placeholder="Enter question..." /></div>
                           
                           {qForm.type === "mcq" && (
                             <div className="space-y-2">
@@ -404,13 +404,13 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                           )}
 
                           {qForm.type === "short" && (
-                            <div><label className="block text-xs font-bold text-slate-300 mb-1">Expected Answer (Case Insensitive)</label><input value={qForm.expectedAnswer} onChange={e => setQForm({...qForm, expectedAnswer: e.target.value})} className={inputClass} placeholder="e.g. Paris" /></div>
+                            <div><label className="block text-xs font-bold text-slate-700 mb-1">Expected Answer (Case Insensitive)</label><input value={qForm.expectedAnswer} onChange={e => setQForm({...qForm, expectedAnswer: e.target.value})} className={inputClass} placeholder="e.g. Paris" /></div>
                           )}
 
                           <div className="grid grid-cols-2 gap-3">
-                            <div><label className="block text-xs font-bold text-slate-300 mb-1">Marks</label><input type="number" value={qForm.marks} onChange={e => setQForm({...qForm, marks: e.target.value})} className={inputClass} min="1" /></div>
+                            <div><label className="block text-xs font-bold text-slate-700 mb-1">Marks</label><input type="number" value={qForm.marks} onChange={e => setQForm({...qForm, marks: e.target.value})} className={inputClass} min="1" /></div>
                           </div>
-                          <div><label className="block text-xs font-bold text-slate-300 mb-1">Hint / Note (Optional)</label><input value={qForm.hint} onChange={e => setQForm({...qForm, hint: e.target.value})} className={inputClass} placeholder="Shown in results..." /></div>
+                          <div><label className="block text-xs font-bold text-slate-700 mb-1">Hint / Note (Optional)</label><input value={qForm.hint} onChange={e => setQForm({...qForm, hint: e.target.value})} className={inputClass} placeholder="Shown in results..." /></div>
                           
                           <button type="button" onClick={addQuestion} className="w-full py-2 bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold rounded-xl hover:bg-amber-500/25 transition-all">
                             {editingQuestion ? "Update Question" : "Add Question"}

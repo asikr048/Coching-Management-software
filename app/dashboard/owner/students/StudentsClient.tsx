@@ -578,19 +578,19 @@ export default function StudentsClient({
               value={batchFilter} 
               onChange={e => setBatchFilter(e.target.value)}
               className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-400 focus:outline-none text-white min-w-[150px]">
-              <option value="" className="bg-slate-900 text-white">All Batches</option>
+              <option value="" className="bg-white text-slate-900">All Batches</option>
               {batches.map(b => (
-                <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>
+                <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>
               ))}
             </select>
             <select 
               value={sortOption} 
               onChange={e => setSortOption(e.target.value as SortOption)}
               className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-400 focus:outline-none text-white min-w-[180px]">
-              <option value="default" className="bg-slate-900 text-white">Default Sort</option>
-              <option value="due" className="bg-slate-900 text-white">Due Payment (Highest)</option>
-              <option value="performance" className="bg-slate-900 text-white">Best Performance</option>
-              <option value="recent" className="bg-slate-900 text-white">Recently Enrolled</option>
+              <option value="default" className="bg-white text-slate-900">Default Sort</option>
+              <option value="due" className="bg-white text-slate-900">Due Payment (Highest)</option>
+              <option value="performance" className="bg-white text-slate-900">Best Performance</option>
+              <option value="recent" className="bg-white text-slate-900">Recently Enrolled</option>
             </select>
           </div>
 
@@ -764,7 +764,7 @@ export default function StudentsClient({
                       <td className="px-4 py-4 text-right relative">
                         <button 
                           onClick={() => setOpenDropdown(openDropdown === student.id ? null : student.id)}
-                          className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
                         >
                           <MoreVertical className="w-5 h-5" />
                         </button>
@@ -850,7 +850,7 @@ export default function StudentsClient({
       {/* 1. REQUEST DELETION MODAL (DUAL APPROVAL)  */}
       {/* ========================================== */}
       {requestDeleteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-200 text-white">
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <h3 className="font-extrabold text-slate-900 flex items-center gap-2">
@@ -899,7 +899,7 @@ export default function StudentsClient({
 
               {/* Deletion Reason (Required) */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Reason for Deletion <span className="text-red-400">*</span>
                 </label>
                 <textarea 
@@ -942,7 +942,7 @@ export default function StudentsClient({
       {/* 2. DELETION QUEUE & APPROVAL MANAGER MODAL */}
       {/* ========================================== */}
       {queueModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] text-white">
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
@@ -1298,7 +1298,7 @@ export default function StudentsClient({
       {/* 3. SECOND APPROVER MODAL                   */}
       {/* ========================================== */}
       {secondApproverModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4 border border-slate-200 text-white">
             <h3 className="font-extrabold text-slate-900 flex items-center gap-2 text-base">
               <Lock className="w-5 h-5 text-amber-400" />
@@ -1308,7 +1308,7 @@ export default function StudentsClient({
               The Two-Person Rule strictly requires sign-off from a <strong>second distinct administrator or staff member</strong>. You cannot sign as both 1st and 2nd approver.
             </p>
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Second Approver Name / Co-Signer <span className="text-red-400">*</span>
               </label>
               <input 

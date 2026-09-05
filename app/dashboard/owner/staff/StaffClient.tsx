@@ -265,8 +265,7 @@ export default function StaffClient({
     }
   }
 
-  const inputClass =
-    "w-full px-3.5 py-2.5 border border-slate-700 bg-slate-950 rounded-xl text-sm text-white placeholder:text-slate-600 focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
+  const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
   const assignableRoles = getAssignableRoles()
   const canAddStaff = myRole === "owner" || myRole === "super_manager"
 
@@ -512,13 +511,13 @@ export default function StaffClient({
 
       {/* Add Staff Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-[#0f172a] text-slate-100 rounded-3xl w-full max-w-lg p-6 shadow-2xl border border-slate-700 my-8">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white text-slate-900 rounded-3xl w-full max-w-lg p-6 shadow-2xl border border-slate-200/90 my-8">
             <div className="flex items-center justify-between mb-4 border-b border-slate-200 pb-3">
               <h3 className="text-lg font-bold flex items-center gap-2 text-slate-900">
                 <UserCheck className="w-5 h-5 text-amber-400" /> Add Staff Member
               </h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-white rounded-lg">
+              <button onClick={() => setShowModal(false)} className="p-1 text-slate-400 hover:text-slate-700 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -526,7 +525,7 @@ export default function StaffClient({
             <form onSubmit={handleCreate} className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Full Name *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Full Name *</label>
                   <input
                     required
                     value={form.name}
@@ -536,7 +535,7 @@ export default function StaffClient({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Email *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Email *</label>
                   <input
                     type="email"
                     required
@@ -547,7 +546,7 @@ export default function StaffClient({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Phone</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Phone</label>
                   <input
                     value={form.phone}
                     onChange={e => update("phone", e.target.value)}
@@ -556,7 +555,7 @@ export default function StaffClient({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Role *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Role *</label>
                   <select
                     value={form.role}
                     onChange={e => update("role", e.target.value)}
@@ -570,7 +569,7 @@ export default function StaffClient({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Subject / Designation</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Subject / Designation</label>
                   <input
                     value={form.subject}
                     onChange={e => update("subject", e.target.value)}
@@ -579,7 +578,7 @@ export default function StaffClient({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Monthly Salary (৳)</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Monthly Salary (৳)</label>
                   <input
                     type="number"
                     value={form.salary}
@@ -588,7 +587,7 @@ export default function StaffClient({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Temporary Password *</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Temporary Password *</label>
                   <input
                     type="password"
                     required
@@ -644,7 +643,7 @@ export default function StaffClient({
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 text-xs"
+                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-100 text-xs text-slate-600"
                 >
                   Cancel
                 </button>
@@ -669,8 +668,8 @@ export default function StaffClient({
 
       {/* Edit Staff Branch Permissions Modal */}
       {branchModalStaff && (
-        <div className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0f172a] text-slate-100 rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-700">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white text-slate-900 rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-200/90">
             <div className="flex items-center justify-between mb-4 border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center justify-center font-bold text-xs">
@@ -683,7 +682,7 @@ export default function StaffClient({
               </div>
               <button
                 onClick={() => setBranchModalStaff(null)}
-                className="p-1 text-slate-400 hover:text-white rounded-lg"
+                className="p-1 text-slate-400 hover:text-slate-700 rounded-lg"
               >
                 <X className="w-5 h-5" />
               </button>

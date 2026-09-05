@@ -173,15 +173,15 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
 
           {/* Add account modal */}
           {showAddAccount && (
-            <div className="fixed inset-0 bg-slate-50 backdrop-blur-md flex items-center justify-center z-50 p-4">
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
               <div className="bg-white rounded-3xl w-full text-slate-900 max-w-md p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-black text-slate-900">Add Payment Number</h3>
-                  <button onClick={() => setShowAddAccount(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
+                  <button onClick={() => setShowAddAccount(false)} className="p-1 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
                 </div>
                 <form onSubmit={addAccount} className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Payment Method *</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Payment Method *</label>
                     <select value={accMethod} onChange={e => setAccMethod(e.target.value)} className={inputClass}>
                       <option value="bkash">bKash</option>
                       <option value="nagad">Nagad</option>
@@ -190,11 +190,11 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Account Number *</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Account Number *</label>
                     <input required value={accNumber} onChange={e => setAccNumber(e.target.value)} className={inputClass} placeholder="01XXXXXXXXX" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Account Name</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Account Name</label>
                     <input value={accName} onChange={e => setAccName(e.target.value)} className={inputClass} placeholder="e.g. MedhaShiree Official" />
                   </div>
                   <div className="flex gap-3 pt-2">

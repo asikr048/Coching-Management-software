@@ -1256,7 +1256,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "compose"
               ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+              : "text-slate-400 hover:text-slate-900 hover:bg-slate-100/80"
           }`}
         >
           <Send className="w-4 h-4" /> Send Bulk SMS
@@ -1267,7 +1267,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "gateway"
               ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+              : "text-slate-400 hover:text-slate-900 hover:bg-slate-100/80"
           }`}
         >
           <Settings className="w-4 h-4" /> Gateway & API Settings
@@ -1279,7 +1279,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "logs"
               ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
-              : "text-slate-400 hover:text-white hover:bg-slate-800/80"
+              : "text-slate-400 hover:text-slate-900 hover:bg-slate-100/80"
           }`}
         >
           <History className="w-4 h-4" /> Delivery Logs ({logs.length})
@@ -1467,7 +1467,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
                   {/* Exam Selector Dropdown */}
                   <div>
-                    <label className="block text-xs font-bold text-slate-400 mb-1">Select Exam:</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Select Exam:</label>
                     <select
                       value={selectedExamId}
                       onChange={(e) => setSelectedExamId(e.target.value)}
@@ -1775,7 +1775,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Quick Template Picker */}
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Load Quick Template:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Load Quick Template:</label>
                 <div className="grid grid-cols-2 gap-2">
                   {templates.map((t, i) => (
                     <button
@@ -1837,7 +1837,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Message Textarea */}
               <div>
-                <label className="block text-xs font-bold text-slate-400 mb-1.5">Message Content *</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Message Content *</label>
                 <textarea
                   ref={messageTextareaRef}
                   required
@@ -1961,7 +1961,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 1-Click Provider Templates */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-2">1-Click Provider Presets:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-2">1-Click Provider Presets:</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <button
                     type="button"
@@ -1996,7 +1996,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 1. API Key */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   1. Provider API Key *
                 </label>
                 <div className="relative">
@@ -2020,7 +2020,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 2. HTTP Call Type Selection */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   2. HTTP Call Type / Request Method *
                 </label>
                 <div className="grid grid-cols-3 gap-3">
@@ -2055,7 +2055,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 3. Base Endpoint URL */}
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   3. Base Gateway Endpoint URL *
                 </label>
                 <div className="relative">
@@ -2367,7 +2367,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </h3>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">Test Recipient Phone</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Test Recipient Phone</label>
                 <input
                   type="text"
                   value={testPhone}
@@ -2494,7 +2494,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
       {/* CONFIRM BULK SEND MODAL */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-150 text-white">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
@@ -2556,7 +2556,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
       {/* SENDING PROGRESS MODAL */}
       {sending && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-slate-200 text-white">
             <Loader2 className="w-10 h-10 text-amber-400 animate-spin mx-auto" />
             <div>

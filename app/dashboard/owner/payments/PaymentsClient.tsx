@@ -714,7 +714,7 @@ export default function PaymentsClient({
     }
   }
 
-  const inputClass = "w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white bg-slate-950 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all shadow-sm"
+  const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
 
   // Financial access guard
   if (!hasAccess) {
@@ -821,7 +821,7 @@ export default function PaymentsClient({
             <button 
               type="button"
               onClick={() => { setSelectedStudent(null); setPayingDue(null) }} 
-              className="p-2 hover:bg-slate-800 rounded-xl transition-colors text-slate-400 hover:text-white"
+              className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400 hover:text-white"
               title="Clear Selection"
             >
               <X className="w-5 h-5" />
@@ -1173,7 +1173,7 @@ export default function PaymentsClient({
 
       {/* Record Payment Modal (Searchable Student Entry) */}
       {showRecordModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl w-full text-slate-900 max-w-lg shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 text-white">
             {/* Modal Header */}
             <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white flex items-center justify-between">
@@ -1189,7 +1189,7 @@ export default function PaymentsClient({
               <button 
                 type="button"
                 onClick={() => setShowRecordModal(false)} 
-                className="p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors"
+                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1388,7 +1388,7 @@ export default function PaymentsClient({
 
       {/* Edit / Change Due Modal */}
       {editingDue && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl w-full text-slate-900 max-w-md shadow-2xl overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-200 text-white">
             <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -1403,7 +1403,7 @@ export default function PaymentsClient({
               <button 
                 type="button"
                 onClick={() => setEditingDue(null)} 
-                className="p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors"
+                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1456,14 +1456,14 @@ export default function PaymentsClient({
 
       {/* Instant Printable & Downloadable PDF Receipt Modal */}
       {receiptModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
           <div className="bg-white rounded-3xl w-full text-slate-900 max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-200 text-white">
             {/* Modal Header */}
             <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-5 text-white text-center relative">
               <button 
                 type="button"
                 onClick={() => setReceiptModal(null)}
-                className="absolute right-4 top-4 p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors"
+                className="absolute right-4 top-4 p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1554,7 +1554,7 @@ export default function PaymentsClient({
               <button
                 type="button"
                 onClick={() => setReceiptModal(null)}
-                className="w-full py-2 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 text-xs transition-colors"
+                className="w-full py-2 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-100 text-xs text-slate-600 transition-colors"
               >
                 Close
               </button>
@@ -1565,7 +1565,7 @@ export default function PaymentsClient({
 
       {/* Payment Gateway Numbers Modal (Owner Configurable) */}
       {showGatewayModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 backdrop-blur-md">
           <div className="bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 text-white">
             <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-200 p-6 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -1580,7 +1580,7 @@ export default function PaymentsClient({
               <button
                 type="button"
                 onClick={() => setShowGatewayModal(false)}
-                className="p-1.5 hover:bg-slate-800 rounded-xl transition-colors text-slate-400 hover:text-white cursor-pointer"
+                className="p-1.5 hover:bg-slate-100 rounded-xl transition-colors text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>

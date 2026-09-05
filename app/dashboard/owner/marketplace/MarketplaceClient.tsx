@@ -212,7 +212,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
 
       {/* Buy Course Modal */}
       {buyModal && (
-        <div className="fixed inset-0 bg-slate-50 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full text-slate-900 max-w-lg shadow-2xl border border-slate-200 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
             {/* Header */}
             <div className="flex items-center justify-between p-5 border-b border-slate-200">
@@ -220,7 +220,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                 <h3 className="text-lg font-black text-slate-900">Buy Course</h3>
                 <p className="text-sm text-slate-400">{buyModal.title} — <strong className="text-amber-400 font-bold">{formatCurrency(buyModal.discount_price || buyModal.price)}</strong></p>
               </div>
-              <button onClick={closeBuy} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"><X className="w-5 h-5" /></button>
+              <button onClick={closeBuy} className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="p-5">
@@ -302,18 +302,18 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Amount (৳)</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Amount (৳)</label>
                     <input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${inputClass} font-bold`} />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Payment Method</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Payment Method</label>
                     <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className={inputClass}>
                       <option value="cash">Cash</option><option value="bkash">bKash</option><option value="nagad">Nagad</option><option value="card">Card</option><option value="bank">Bank Transfer</option>
                     </select>
                   </div>
 
                   <div className="flex gap-3 pt-2">
-                    <button onClick={() => setStep("select")} className="flex-1 py-2.5 border border-slate-200 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">← Back</button>
+                    <button onClick={() => setStep("select")} className="flex-1 py-2.5 border border-slate-200 text-slate-300 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-bold transition-colors cursor-pointer">← Back</button>
                     <button onClick={handleBuy} disabled={loading} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer">
                       {loading ? <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> : <Check className="w-4 h-4 text-slate-950" />}
                       {loading ? "Processing..." : `Pay ${formatCurrency(parseFloat(paidAmount) || 0)}`}
@@ -357,7 +357,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                     <button onClick={handlePrint} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer">
                       <Printer className="w-4 h-4" /> Print Receipt
                     </button>
-                    <button onClick={closeBuy} className="flex-1 py-2.5 border border-slate-200 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">
+                    <button onClick={closeBuy} className="flex-1 py-2.5 border border-slate-200 text-slate-300 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-bold transition-colors cursor-pointer">
                       Done
                     </button>
                   </div>
