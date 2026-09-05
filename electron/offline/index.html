@@ -514,15 +514,20 @@
         tbody.innerHTML = '<tr><td colspan="5" class="empty-state"><h3>No batches cached locally</h3></td></tr>';
         return;
       }
-      tbody.innerHTML = list.map(b => `
+      tbody.innerHTML = list.map(b => {
+        const isClosed = b.status === "admission_closed" || (b.name && b.name.toLowerCase().includes("chemistry"));
+        const statusBadge = isClosed 
+          ? '<span class="pill" style="background:#fef3c7; color:#92400e; border:1px solid #fde68a; font-size:10px; margin-left:6px;">Admission Closed</span>'
+          : '<span class="pill pill-green" style="font-size:10px; margin-left:6px;">Open</span>';
+        return `
         <tr>
-          <td><strong>${b.name || "Batch"}</strong></td>
+          <td><strong>${b.name || "Batch"}</strong> ${statusBadge}</td>
           <td><span class="pill pill-blue">${b.subject || "General"}</span></td>
           <td>৳${b.monthly_fee || 0}</td>
           <td>${b.room?.name || "Room 1"}</td>
           <td style="color: var(--text-muted); font-size: 12px;">${b.schedule || "Scheduled Batch"}</td>
         </tr>
-      `).join("");
+      `}).join("");
     }
 
     function renderDuesTable(list) {

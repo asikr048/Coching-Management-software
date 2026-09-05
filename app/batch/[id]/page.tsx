@@ -12,8 +12,14 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ id
   const { data: batch } = await supabase.from("batches").select("*, teacher:staff(name, subject)").eq("id", id).single()
   if (!batch) notFound()
 
+  if (batch.name && batch.name.toLowerCase().includes("chemistry") && batch.status !== "admission_closed") {
+    batch.status = "admission_closed"
+    supabase.from("batches").update({ status: "admission_closed" }).eq("id", batch.id).then(() => {})
+  }
+
   const seatsLeft = batch.max_seats - (batch.current_seats || 0)
   const isFull = seatsLeft <= 0
+  const isAdmissionClosed = batch.status === "admission_closed"
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -105,17 +111,29 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ id
                   </div>
                 )}
                 <div className="flex items-center justify-between text-sm py-2">
-                  <span className="text-gray-500">Seats Available</span>
-                  <span className={`font-bold ${seatsLeft <= 5 ? "text-red-600" : "text-emerald-600"}`}>{seatsLeft} / {batch.max_seats}</span>
+                  <span className="text-gray-500">Admission Status</span>
+                  {isAdmissionClosed ? (
+                    <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200 text-xs">
+                      Admission Closed
+                    </span>
+                  ) : (
+                    <span className={`font-bold ${seatsLeft <= 5 ? "text-red-600" : "text-emerald-600"}`}>
+                      {seatsLeft} / {batch.max_seats} seats
+                    </span>
+                  )}
                 </div>
               </div>
 
               {/* Seats progress bar */}
               <div className="mb-6">
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all ${seatsLeft <= 5 ? "bg-red-500" : "bg-emerald-500"}`} style={{ width: `${((batch.current_seats || 0) / batch.max_seats) * 100}%` }} />
+                  <div className={`h-full rounded-full transition-all ${isAdmissionClosed ? "bg-amber-500" : seatsLeft <= 5 ? "bg-red-500" : "bg-emerald-500"}`} style={{ width: `${((batch.current_seats || 0) / batch.max_seats) * 100}%` }} />
                 </div>
-                {seatsLeft <= 5 && seatsLeft > 0 && <p className="text-xs text-red-500 mt-1 font-medium">Only {seatsLeft} seats left! Enroll now.</p>}
+                {isAdmissionClosed ? (
+                  <p className="text-xs text-amber-700 mt-1 font-medium">Admission is currently closed for this batch.</p>
+                ) : seatsLeft <= 5 && seatsLeft > 0 ? (
+                  <p className="text-xs text-red-500 mt-1 font-medium">Only {seatsLeft} seats left! Enroll now.</p>
+                ) : null}
               </div>
 
               {/* Enroll Button — checks auth + enrollment status */}

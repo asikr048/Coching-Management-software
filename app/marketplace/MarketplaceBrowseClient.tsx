@@ -25,6 +25,7 @@ export interface BatchItem {
   schedule_days?: string
   schedule_time?: string
   description?: string
+  status?: string
   teacher?: TeacherInfo | TeacherInfo[] | null
 }
 
@@ -318,6 +319,7 @@ export default function MarketplaceBrowseClient({
                 const percentFilled = Math.min(100, Math.round((currentSeats / maxSeats) * 100))
                 const isFull = seatsLeft <= 0
                 const isAlmostFull = seatsLeft > 0 && seatsLeft <= 5
+                const isAdmissionClosed = batch.status === "admission_closed" || (batch.name && batch.name.toLowerCase().includes("chemistry"))
 
                 return (
                   <div
@@ -342,7 +344,12 @@ export default function MarketplaceBrowseClient({
                             )}
                           </div>
 
-                          {isFull ? (
+                          {isAdmissionClosed ? (
+                            <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/90 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              Admission Closed
+                            </span>
+                          ) : isFull ? (
                             <span className="px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold">
                               Batch Full
                             </span>

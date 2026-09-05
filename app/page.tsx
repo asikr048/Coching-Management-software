@@ -43,7 +43,16 @@ export default function HomePage() {
       } catch {}
       try {
         const { data: b } = await supabase.from("batches").select("*, teacher:staff(name)").eq("is_active", true).order("created_at", { ascending: false })
-        if (b) setBatches(b)
+        if (b) {
+          const mapped = b.map((item: any) => {
+            if (item.name && item.name.toLowerCase().includes("chemistry") && item.status !== "admission_closed") {
+              item.status = "admission_closed"
+              supabase.from("batches").update({ status: "admission_closed" }).eq("id", item.id).then(() => {})
+            }
+            return item
+          })
+          setBatches(mapped)
+        }
       } catch {}
       try {
         const { data: c } = await supabase.from("courses").select("*, teacher:staff(name)").eq("status", "published").order("total_sales", { ascending: false }).limit(6)
@@ -301,13 +310,20 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {batches.map(batch => {
               const seatsLeft = batch.max_seats - (batch.current_seats || 0)
+              const isClosed = batch.status === "admission_closed" || (batch.name && batch.name.toLowerCase().includes("chemistry"))
               return (
                 <Link key={batch.id} href={`/batch/${batch.id}`} className="group bg-white rounded-2xl border border-gray-200 overflow-hidden hover:border-indigo-300 hover:shadow-xl hover:shadow-indigo-100/50 transition-all duration-300">
                   <div className="h-1.5 bg-gradient-to-r from-indigo-500 via-violet-500 to-purple-500" />
                   <div className="p-6">
                     <div className="flex items-start justify-between mb-4">
                       <div><h3 className="text-lg font-bold text-gray-900 group-hover:text-indigo-700 transition-colors">{batch.name}</h3><p className="text-sm text-gray-500 mt-0.5">{batch.subject || "General"} &bull; {batch.class_level || "All Levels"}</p></div>
-                      <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${seatsLeft <= 5 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>{seatsLeft} left</span>
+                      {isClosed ? (
+                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          Admission Closed
+                        </span>
+                      ) : (
+                        <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${seatsLeft <= 5 ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-600"}`}>{seatsLeft} left</span>
+                      )}
                     </div>
                     <div className="space-y-2 mb-5">
                       <div className="flex items-center gap-2 text-sm text-gray-600"><Users className="w-4 h-4 text-gray-400" />{batch.teacher?.name || "Expert Teacher"}</div>

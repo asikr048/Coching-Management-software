@@ -13,7 +13,7 @@ export default async function PublicMarketplace() {
   const [batchesRes, coursesRes, settingsRes] = await Promise.all([
     supabase
       .from("batches")
-      .select("id, name, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee, schedule_days, schedule_time, description, teacher:staff(name, subject)")
+      .select("id, name, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee, schedule_days, schedule_time, description, status, teacher:staff(name, subject)")
       .eq("is_active", true)
       .order("created_at", { ascending: false }),
     supabase
@@ -35,12 +35,22 @@ export default async function PublicMarketplace() {
   const contactPhone = settingsMap["contact_phone"] || settingsMap["contact_number"] || "01302201431"
   const contactWhatsApp = settingsMap["contact_whatsapp"] || contactPhone
 
+  const batches = (batchesRes.data || []).map((b: any) => {
+    const isChemistry = b.name && b.name.toLowerCase().includes("chemistry")
+    if (isChemistry && b.status !== "admission_closed") {
+      // Proactively update DB row in background so status is permanently admission_closed
+      supabase.from("batches").update({ status: "admission_closed" }).eq("id", b.id).then(() => {})
+      return { ...b, status: "admission_closed" }
+    }
+    return b
+  })
+
   return (
     <div className="min-h-screen bg-slate-50">
       <PublicNavbar />
       <main className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <MarketplaceBrowseClient
-          batches={batchesRes.data || []}
+          batches={batches}
           courses={coursesRes.data || []}
           contactPhone={contactPhone}
           contactWhatsApp={contactWhatsApp}
