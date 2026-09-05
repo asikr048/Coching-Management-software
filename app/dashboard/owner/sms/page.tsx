@@ -33,6 +33,9 @@ import {
   PhoneCall,
   Link2,
   Copy,
+  Trophy,
+  GripVertical,
+  Award,
 } from "lucide-react"
 
 interface Student {
@@ -145,12 +148,26 @@ export default function SmsPage() {
   // ==========================================
   // AUDIENCE TARGET SELECTION STATE
   // ==========================================
-  // "all" | "batch" | "due" | "custom_picker" | "direct_numbers" | "csv"
-  const [targetType, setTargetType] = useState<"all" | "batch" | "due" | "custom_picker" | "direct_numbers" | "csv">("all")
+  // "all" | "batch" | "due" | "exam_result" | "custom_picker" | "direct_numbers" | "csv"
+  const [targetType, setTargetType] = useState<"all" | "batch" | "due" | "exam_result" | "custom_picker" | "direct_numbers" | "csv">("all")
   const [targetPhoneType, setTargetPhoneType] = useState<"guardian" | "student" | "both">("guardian")
 
   // Batch Filter
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([])
+
+  // Exam Result Target State
+  const [exams, setExams] = useState<any[]>([])
+  const [selectedExamId, setSelectedExamId] = useState<string>("")
+  const [examDetails, setExamDetails] = useState<any | null>(null)
+  const [examStudentResults, setExamStudentResults] = useState<Array<{
+    student: Student
+    obtained_marks: number | string | null
+    grade?: string
+    rank?: number | null
+  }>>([])
+  const [selectedExamStudentIds, setSelectedExamStudentIds] = useState<string[]>([])
+  const [loadingExamData, setLoadingExamData] = useState(false)
+  const [examSearchQuery, setExamSearchQuery] = useState("")
 
   // Custom Student Picker Filter & Checkbox Selection
   const [pickerSearchQuery, setPickerSearchQuery] = useState("")
@@ -212,6 +229,17 @@ export default function SmsPage() {
 
     async function loadAll() {
       try {
+        // 0. Exams
+        try {
+          const examsRes = await supabase
+            .from("exams")
+            .select("id, title, subject, total_marks, pass_marks, exam_date, batch_id, batch:batches(name)")
+            .order("created_at", { ascending: false })
+          if (examsRes.data) setExams(examsRes.data)
+        } catch (e) {
+          console.warn("Exams load issue:", e)
+        }
+
         // 1. Batches
         const batchesRes = await supabase.from("batches").select("id, name, current_seats, subject")
         if (batchesRes.data) setBatches(batchesRes.data)
@@ -313,13 +341,118 @@ export default function SmsPage() {
     loadAll()
   }, [supabase])
 
-  // Check if navigating from Students page with pre-selected students
+  // Load Exam Result details for SMS
+  async function loadExamResultDetails(examId: string) {
+    if (!examId) return
+    setLoadingExamData(true)
+    try {
+      // 1. Fetch exam
+      const { data: ex, error: exErr } = await supabase
+        .from("exams")
+        .select("id, title, subject, total_marks, pass_marks, exam_date, batch_id, batch:batches(name)")
+        .eq("id", examId)
+        .single()
+      if (exErr) throw exErr
+      setExamDetails(ex)
+      setSelectedExamId(examId)
+
+      // 2. Fetch results for this exam
+      const { data: results, error: resErr } = await supabase
+        .from("exam_results")
+        .select("student_id, obtained_marks, grade, rank")
+        .eq("exam_id", examId)
+      if (resErr) throw resErr
+
+      const resultsMap = new Map<string, { obtained_marks: number | string | null; grade?: string; rank?: number | null }>()
+      for (const r of results || []) {
+        resultsMap.set(r.student_id, {
+          obtained_marks: r.obtained_marks,
+          grade: r.grade,
+          rank: r.rank,
+        })
+      }
+
+      // 3. Fetch students of this batch
+      let examStudents: Student[] = []
+      if (ex.batch_id) {
+        const { data: enrollRes } = await supabase
+          .from("enrollments")
+          .select("student_id, student:students(id, name, student_id, phone, guardian_phone, guardian_name, is_active)")
+          .eq("batch_id", ex.batch_id)
+
+        if (enrollRes) {
+          examStudents = enrollRes
+            .map((en: any) => en.student)
+            .filter((s: any) => s && s.is_active !== false)
+        }
+      }
+
+      // Fallback: If no batch enrolled or results have other students
+      for (const r of results || []) {
+        if (!examStudents.some((s) => s.id === r.student_id)) {
+          const { data: sData } = await supabase
+            .from("students")
+            .select("id, name, student_id, phone, guardian_phone, guardian_name, is_active")
+            .eq("id", r.student_id)
+            .maybeSingle()
+          if (sData && sData.is_active !== false) examStudents.push(sData)
+        }
+      }
+
+      // Combine students with their results
+      const combined = examStudents.map((s) => {
+        const res = resultsMap.get(s.id)
+        return {
+          student: s,
+          obtained_marks: res ? res.obtained_marks : null,
+          grade: res ? res.grade : undefined,
+          rank: res ? res.rank : null,
+        }
+      })
+
+      // Sort by rank ascending (or obtained_marks descending)
+      combined.sort((a, b) => {
+        const ma = typeof a.obtained_marks === "number" ? a.obtained_marks : parseFloat(String(a.obtained_marks || "-1"))
+        const mb = typeof b.obtained_marks === "number" ? b.obtained_marks : parseFloat(String(b.obtained_marks || "-1"))
+        return mb - ma
+      })
+
+      setExamStudentResults(combined)
+      // All students selected by default!
+      const allIds = combined.map((c) => c.student.id)
+      setSelectedExamStudentIds(allIds)
+
+      // Set default exam result SMS template
+      const defaultExamMsg = `Dear Parent, your child {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks (Grade: {{grade}}, Rank: {{rank}}) in {{exam_title}} exam. - Prottasha Coaching`
+      setMessage((prev) => (!prev.trim() || prev.includes("pending fee") || prev.includes("routine this week") || prev.includes("closed on the upcoming") ? defaultExamMsg : prev))
+
+      toast.success(`✓ Loaded "${ex.title}" (${allIds.length} students selected)`, {
+        description: "Review marks below or drag {{number}} into your message.",
+      })
+    } catch (err: any) {
+      console.error("Error loading exam result details for SMS:", err)
+      toast.error(err.message || "Failed to load exam student results")
+    } finally {
+      setLoadingExamData(false)
+    }
+  }
+
+  // Check if navigating from Students page or Exams page
   useEffect(() => {
     try {
-      const stored = sessionStorage.getItem("sms_selected_student_ids")
       const searchParams = new URLSearchParams(window.location.search)
       const targetParam = searchParams.get("target")
+      const examIdParam = searchParams.get("exam_id")
 
+      if (targetParam === "exam_result" && examIdParam) {
+        setActiveTab("compose")
+        setTargetType("exam_result")
+        setSelectedExamId(examIdParam)
+        loadExamResultDetails(examIdParam)
+        return
+      }
+
+      const stored = sessionStorage.getItem("sms_selected_student_ids")
       let idsToSelect: string[] = []
       if (stored) {
         try {
@@ -597,6 +730,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
     studentId?: string
     batchName?: string
     dueAmount?: number
+    obtainedMarks?: number | string
+    totalMarks?: number | string
+    grade?: string
+    rank?: number | string
+    examTitle?: string
   }
 
   // Parse Direct Custom Numbers Textarea
@@ -760,6 +898,43 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
     } else if (targetType === "custom_picker") {
       const selected = students.filter((s) => customSelectedStudentIds.includes(s.id))
       selected.forEach((s) => addStudentPhones(s))
+    } else if (targetType === "exam_result") {
+      const selected = examStudentResults.filter((item) => selectedExamStudentIds.includes(item.student.id))
+      for (const item of selected) {
+        const s = item.student
+        const phonesToAdd: string[] = []
+        if (targetPhoneType === "guardian" || targetPhoneType === "both") {
+          if (s.guardian_phone) phonesToAdd.push(s.guardian_phone)
+        }
+        if (targetPhoneType === "student" || targetPhoneType === "both") {
+          if (s.phone) phonesToAdd.push(s.phone)
+        }
+        if (phonesToAdd.length === 0) {
+          if (s.guardian_phone) phonesToAdd.push(s.guardian_phone)
+          else if (s.phone) phonesToAdd.push(s.phone)
+        }
+
+        const markVal = item.obtained_marks !== null && item.obtained_marks !== undefined ? item.obtained_marks : "Absent"
+        const totMarks = examDetails?.total_marks ?? 100
+        const gradeVal = item.grade || "-"
+        const rankVal = item.rank ? `#${item.rank}` : "-"
+        const exTitle = examDetails?.title || "Exam"
+        const bName = examDetails?.batch?.name || ""
+
+        for (const ph of phonesToAdd) {
+          list.push({
+            phone: ph,
+            name: s.name,
+            studentId: s.student_id,
+            batchName: bName,
+            obtainedMarks: markVal,
+            totalMarks: totMarks,
+            grade: gradeVal,
+            rank: rankVal,
+            examTitle: exTitle,
+          })
+        }
+      }
     } else if (targetType === "direct_numbers") {
       parsedDirectNumbers.forEach((num, idx) => {
         list.push({
@@ -787,7 +962,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       seen.add(clean)
       return true
     })
-  }, [targetType, targetPhoneType, students, batches, enrollments, selectedBatchIds, dues, customSelectedStudentIds, parsedDirectNumbers, csvRecipients])
+  }, [targetType, targetPhoneType, students, batches, enrollments, selectedBatchIds, dues, customSelectedStudentIds, parsedDirectNumbers, csvRecipients, examStudentResults, selectedExamStudentIds, examDetails])
 
   // Message length & SMS Parts
   const smsStats = useMemo(() => {
@@ -823,20 +998,24 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
   // Pre-made Templates
   const templates = [
     {
+      label: "Exam Result Notice",
+      text: "Dear Parent, your child {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks (Grade: {{grade}}, Rank: {{rank}}) in {{exam_title}} exam. - Prottasha Coaching",
+    },
+    {
       label: "Fee Due Reminder",
-      text: "Dear Parent, your child {{name}} (ID: {{student_id}}) has a pending fee due of {{due_amount}}. Please complete payment at the earliest. - MedhaShiree",
+      text: "Dear Parent, your child {{name}} (ID: {{student_id}}) has a pending fee due of {{due_amount}}. Please complete payment at the earliest. - Prottasha Coaching",
     },
     {
       label: "Exam Schedule",
-      text: "Dear Parent, the upcoming exam for {{name}} in {{batch}} is scheduled for next week. Please ensure regular attendance and preparation. - MedhaShiree",
+      text: "Dear Parent, the upcoming exam for {{name}} in {{batch}} is scheduled for next week. Please ensure regular attendance and preparation. - Prottasha Coaching",
     },
     {
       label: "Class Notice",
-      text: "Dear Parent, please note that classes for {{batch}} will follow a special routine this week. Thank you. - MedhaShiree",
+      text: "Dear Parent, please note that classes for {{batch}} will follow a special routine this week. Thank you. - Prottasha Coaching",
     },
     {
       label: "General Notice",
-      text: "Notice: Academic activities will remain closed on the upcoming public holiday. Regular classes will resume on Sunday. - MedhaShiree",
+      text: "Notice: Academic activities will remain closed on the upcoming public holiday. Regular classes will resume on Sunday. - Prottasha Coaching",
     },
   ]
 
@@ -848,6 +1027,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       studentId: "MS-00007",
       batchName: "Physics 10 AM",
       dueAmount: 2500,
+      obtainedMarks: 85,
+      totalMarks: 100,
+      grade: "A+",
+      rank: "#1",
+      examTitle: "Physics First Term Exam",
     }
     let res = message
     res = res.replace(/\{\{name\}\}/gi, sample.name || "Student Name")
@@ -855,6 +1039,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
     res = res.replace(/\{\{batch\}\}/gi, sample.batchName || "Batch Name")
     res = res.replace(/\{\{due_amount\}\}/gi, sample.dueAmount ? `৳${sample.dueAmount}` : "৳2,500")
     res = res.replace(/\{\{date\}\}/gi, new Date().toLocaleDateString("en-GB"))
+    res = res.replace(/\{\{number\}\}/gi, String(sample.obtainedMarks ?? "85"))
+    res = res.replace(/\{\{marks\}\}/gi, String(sample.obtainedMarks ?? "85"))
+    res = res.replace(/\{\{total_marks\}\}/gi, String(sample.totalMarks ?? "100"))
+    res = res.replace(/\{\{grade\}\}/gi, sample.grade ?? "A+")
+    res = res.replace(/\{\{rank\}\}/gi, String(sample.rank ?? "#1"))
+    res = res.replace(/\{\{exam_title\}\}/gi, sample.examTitle || "Physics Exam")
+    res = res.replace(/\{\{exam_name\}\}/gi, sample.examTitle || "Physics Exam")
     return res
   }, [message, resolvedRecipients])
 
@@ -894,6 +1085,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           customMsg = customMsg.replace(/\{\{batch\}\}/gi, rec.batchName || "")
           customMsg = customMsg.replace(/\{\{due_amount\}\}/gi, rec.dueAmount ? `৳${rec.dueAmount}` : "")
           customMsg = customMsg.replace(/\{\{date\}\}/gi, new Date().toLocaleDateString("en-GB"))
+          customMsg = customMsg.replace(/\{\{number\}\}/gi, rec.obtainedMarks !== undefined ? String(rec.obtainedMarks) : "")
+          customMsg = customMsg.replace(/\{\{marks\}\}/gi, rec.obtainedMarks !== undefined ? String(rec.obtainedMarks) : "")
+          customMsg = customMsg.replace(/\{\{total_marks\}\}/gi, rec.totalMarks !== undefined ? String(rec.totalMarks) : "")
+          customMsg = customMsg.replace(/\{\{grade\}\}/gi, rec.grade || "")
+          customMsg = customMsg.replace(/\{\{rank\}\}/gi, rec.rank ? String(rec.rank) : "")
+          customMsg = customMsg.replace(/\{\{exam_title\}\}/gi, rec.examTitle || "")
+          customMsg = customMsg.replace(/\{\{exam_name\}\}/gi, rec.examTitle || "")
 
           return {
             phone: rec.phone,
@@ -1041,12 +1239,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </div>
 
               {/* Target Mode Navigation */}
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+              <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
                 {[
                   { id: "all", label: "All Active", icon: Users },
                   { id: "batch", label: "Batch-wise", icon: Layers },
+                  { id: "exam_result", label: "Exam Results", icon: Trophy },
                   { id: "due", label: "Due Fees", icon: AlertTriangle },
-                  { id: "custom_picker", label: "Custom Student Picker", icon: Search },
+                  { id: "custom_picker", label: "Student Picker", icon: Search },
                   { id: "direct_numbers", label: "Custom Numbers", icon: PhoneCall },
                   { id: "csv", label: "Custom CSV", icon: Upload },
                 ].map((mode) => {
@@ -1153,6 +1352,204 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       )
                     })}
                   </div>
+                </div>
+              )}
+
+              {/* SUB-PANEL: Exam Results */}
+              {targetType === "exam_result" && (
+                <div className="space-y-3">
+                  {/* Exam Selector Dropdown */}
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 mb-1">
+                      Choose Exam to Send Results For:
+                    </label>
+                    <select
+                      value={selectedExamId}
+                      onChange={(e) => {
+                        const id = e.target.value
+                        setSelectedExamId(id)
+                        loadExamResultDetails(id)
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:border-indigo-600 shadow-sm cursor-pointer"
+                    >
+                      <option value="">-- Select an Exam --</option>
+                      {exams.map((ex) => (
+                        <option key={ex.id} value={ex.id}>
+                          {ex.title} {ex.batch?.name ? `(${ex.batch.name})` : ""} • Total: {ex.total_marks} marks
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {loadingExamData ? (
+                    <div className="p-8 text-center bg-gray-50 rounded-xl border border-gray-200 text-gray-500 text-xs">
+                      <Loader2 className="w-5 h-5 animate-spin mx-auto text-indigo-600 mb-2" />
+                      Loading exam student results...
+                    </div>
+                  ) : !examDetails ? (
+                    <div className="p-6 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500 text-xs">
+                      Please select an exam from the dropdown above to load its students and scores.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {/* Exam Header Info Banner */}
+                      <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200 rounded-xl space-y-1.5 shadow-xs">
+                        <div className="flex items-center justify-between flex-wrap gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <Trophy className="w-4 h-4 text-emerald-600" />
+                            <span className="font-black text-xs text-gray-900">{examDetails.title}</span>
+                          </div>
+                          <span className="px-2 py-0.5 bg-white/90 text-emerald-800 border border-emerald-200 rounded-md text-[10px] font-bold">
+                            Total: {examDetails.total_marks} marks (Pass: {examDetails.pass_marks})
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-600 flex items-center gap-2 flex-wrap">
+                          <span>Batch: <strong>{examDetails.batch?.name || "All Enrolled"}</strong></span>
+                          <span>•</span>
+                          <span>Enrolled: <strong>{examStudentResults.length}</strong> students</span>
+                          <span>•</span>
+                          <span className="text-emerald-700 font-semibold">
+                            With Marks: <strong>{examStudentResults.filter((r) => r.obtained_marks !== null).length}</strong>
+                          </span>
+                        </p>
+                      </div>
+
+                      {/* Filter Search and Quick Select Actions */}
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={examSearchQuery}
+                            onChange={(e) => setExamSearchQuery(e.target.value)}
+                            placeholder="Filter student by name, roll/ID, or phone..."
+                            className="w-full pl-8 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600 shadow-xs"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between text-xs px-1 text-[11px]">
+                          <span className="text-gray-500">
+                            Selected: <strong className="text-indigo-600 font-bold">{selectedExamStudentIds.length}</strong> of {examStudentResults.length}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedExamStudentIds(examStudentResults.map((r) => r.student.id))}
+                              className="text-indigo-600 font-bold hover:underline cursor-pointer"
+                            >
+                              Select All
+                            </button>
+                            <span>•</span>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedExamStudentIds([])}
+                              className="text-gray-500 font-bold hover:underline cursor-pointer"
+                            >
+                              Deselect All
+                            </button>
+                            <span>•</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const withMarks = examStudentResults.filter((r) => r.obtained_marks !== null && r.obtained_marks !== undefined).map((r) => r.student.id)
+                                setSelectedExamStudentIds(withMarks)
+                              }}
+                              className="text-emerald-600 font-bold hover:underline cursor-pointer"
+                            >
+                              Only with Marks
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Students List */}
+                      <div className="max-h-56 overflow-y-auto space-y-1.5 border border-gray-200 rounded-xl p-2 bg-gray-50/50 divide-y divide-gray-100">
+                        {examStudentResults
+                          .filter((item) => {
+                            if (!examSearchQuery.trim()) return true
+                            const q = examSearchQuery.toLowerCase()
+                            return (
+                              item.student.name.toLowerCase().includes(q) ||
+                              item.student.student_id.toLowerCase().includes(q) ||
+                              (item.student.phone || "").includes(q) ||
+                              (item.student.guardian_phone || "").includes(q)
+                            )
+                          })
+                          .map((item) => {
+                            const isChecked = selectedExamStudentIds.includes(item.student.id)
+                            const markText = item.obtained_marks !== null && item.obtained_marks !== undefined ? String(item.obtained_marks) : "Absent"
+                            return (
+                              <div
+                                key={item.student.id}
+                                className={`pt-1.5 first:pt-0 flex items-center justify-between p-2 rounded-lg transition-colors ${
+                                  isChecked ? "bg-white border border-indigo-100 shadow-xs" : "hover:bg-white/60 opacity-60"
+                                }`}
+                              >
+                                <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 mr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedExamStudentIds([...selectedExamStudentIds, item.student.id])
+                                      } else {
+                                        setSelectedExamStudentIds(selectedExamStudentIds.filter((id) => id !== item.student.id))
+                                      }
+                                    }}
+                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0"
+                                  />
+                                  <div className="truncate">
+                                    <p className="text-xs font-bold text-gray-900 truncate">{item.student.name}</p>
+                                    <p className="text-[10px] text-gray-500 font-mono truncate">
+                                      {item.student.student_id} • 📞 {item.student.guardian_phone || item.student.phone || "No phone"}
+                                    </p>
+                                  </div>
+                                </label>
+
+                                {/* Draggable Mark Badge */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <div
+                                    draggable
+                                    onDragStart={(e) => {
+                                      e.dataTransfer.setData("text/plain", markText)
+                                    }}
+                                    onClick={() => insertMergeTag(markText)}
+                                    title="Drag or click to insert this student's score"
+                                    className={`px-2 py-0.5 rounded-lg border font-mono font-bold text-xs flex items-center gap-1 cursor-grab active:cursor-grabbing shadow-2xs transition-all ${
+                                      item.obtained_marks !== null && item.obtained_marks !== undefined
+                                        ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                                        : "bg-gray-100 text-gray-500 border-gray-200"
+                                    }`}
+                                  >
+                                    <GripVertical className="w-3 h-3 text-emerald-600" />
+                                    <span>{markText}</span>
+                                    <span className="text-[9px] text-gray-400 font-sans font-normal">/{examDetails.total_marks}</span>
+                                  </div>
+
+                                  {item.grade && (
+                                    <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
+                                      {item.grade}
+                                    </span>
+                                  )}
+                                  {item.rank && (
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
+                                      #{item.rank}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                      </div>
+
+                      <p className="text-[11px] text-indigo-700 bg-indigo-50/60 p-2 rounded-lg border border-indigo-100 flex items-center gap-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                        <span>
+                          <strong>Dynamic Marks:</strong> Drag the <code className="font-mono font-bold bg-white px-1 py-0.5 rounded border border-indigo-200 text-indigo-800">{"{{number}}"}</code> tag into the message box on the right. It will automatically be replaced with each student&apos;s individual score!
+                        </span>
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1389,41 +1786,75 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Merge Tag Chips */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-gray-700">Click to Insert Dynamic Tag:</label>
-                  <span className="text-[11px] text-gray-400">Replaced automatically per recipient</span>
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                  <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                    Dynamic Merge Tags (Drag or Click):
+                  </label>
+                  <span className="text-[11px] text-gray-500">Drag or click to insert token into message</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { tag: "{{name}}", label: "Student Name" },
-                    { tag: "{{student_id}}", label: "Student ID" },
-                    { tag: "{{batch}}", label: "Batch Name" },
-                    { tag: "{{due_amount}}", label: "Due (৳)" },
-                    { tag: "{{date}}", label: "Date" },
+                    { tag: "{{number}}", label: "Marks / Score", desc: "Student's marks in exam", highlight: true },
+                    { tag: "{{total_marks}}", label: "Total Marks", desc: "Exam total marks" },
+                    { tag: "{{grade}}", label: "Grade", desc: "Student's grade (e.g. A+)" },
+                    { tag: "{{rank}}", label: "Rank", desc: "Student's merit rank" },
+                    { tag: "{{exam_title}}", label: "Exam Title", desc: "Exam name" },
+                    { tag: "{{name}}", label: "Student Name", desc: "Student full name" },
+                    { tag: "{{student_id}}", label: "Student ID", desc: "Student roll/ID" },
+                    { tag: "{{batch}}", label: "Batch Name", desc: "Batch title" },
+                    { tag: "{{due_amount}}", label: "Due (৳)", desc: "Outstanding due fee" },
+                    { tag: "{{date}}", label: "Date", desc: "Today's date" },
                   ].map((item) => (
                     <button
                       key={item.tag}
                       type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData("text/plain", item.tag)
+                      }}
                       onClick={() => insertMergeTag(item.tag)}
-                      className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer flex items-center gap-1"
+                      title={`Drag into message or click to insert (${item.desc})`}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-grab active:cursor-grabbing flex items-center gap-1 shadow-2xs ${
+                        item.highlight
+                          ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-2 border-emerald-300 ring-2 ring-emerald-100/50"
+                          : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200"
+                      }`}
                     >
+                      <GripVertical className={`w-3 h-3 ${item.highlight ? "text-emerald-600" : "text-indigo-400"}`} />
                       <span>{item.tag}</span>
-                      <span className="text-[10px] text-indigo-500 font-sans font-normal">({item.label})</span>
+                      <span className={`text-[10px] font-sans font-normal ${item.highlight ? "text-emerald-700 font-semibold" : "text-indigo-500"}`}>
+                        ({item.label})
+                      </span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Message Textarea */}
+              {/* Message Textarea with Drag and Drop */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">Message Content *</label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-gray-700">Message Content *</label>
+                  <span className="text-[11px] text-gray-400">Supports dropping tags & student marks</span>
+                </div>
                 <textarea
                   ref={messageTextareaRef}
                   required
                   rows={5}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Type your SMS here or select a template above... (e.g. Dear Parent, your child {{name}} has class at 10 AM)"
+                  onDragOver={(e) => {
+                    e.preventDefault()
+                    e.dataTransfer.dropEffect = "copy"
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                    const droppedText = e.dataTransfer.getData("text/plain")
+                    if (droppedText) {
+                      insertMergeTag(droppedText)
+                    }
+                  }}
+                  placeholder="Type your SMS here or select a template above... (e.g. Dear Parent, your child {{name}} has obtained {{number}}/{{total_marks}} in {{exam_title}})"
                   className="w-full p-3.5 bg-white border-2 border-gray-200 rounded-xl text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
                 />
 

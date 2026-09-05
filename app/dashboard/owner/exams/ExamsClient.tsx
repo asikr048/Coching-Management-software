@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Plus, X, Loader2, FileText, Trophy, Clock, CheckCircle, GripVertical, Trash2, Edit2, PlayCircle, Eye, Globe } from "lucide-react"
+import { Plus, X, Loader2, FileText, Trophy, Clock, CheckCircle, GripVertical, Trash2, Edit2, PlayCircle, Eye, Globe, MessageSquare } from "lucide-react"
 import { formatDate, cn } from "@/lib/utils"
 import Link from "next/link"
 
@@ -278,22 +278,30 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
               )}
             </div>
 
-            <div className="pt-3 border-t border-gray-100 flex items-center justify-between mt-auto">
+            <div className="pt-3 border-t border-gray-100 flex flex-col gap-2 mt-auto">
               {exam.is_online ? (
                 <div className="flex flex-wrap items-center gap-2 w-full">
                   {!exam.is_published && (
-                    <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-sm py-1.5 px-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium">
+                    <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-1.5 px-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium">
                       {publishing === exam.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />} Publish
                     </button>
                   )}
-                  <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-sm py-1.5 px-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">
+                  <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-1.5 px-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">
                     <Eye className="w-3.5 h-3.5" /> Questions
+                  </Link>
+                  <Link href={`/dashboard/owner/sms?target=exam_result&exam_id=${exam.id}`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-1.5 px-3 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg font-semibold transition-colors">
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600" /> Send Result SMS
                   </Link>
                 </div>
               ) : (
-                <Link href={`/dashboard/owner/exams/${exam.id}`} className="w-full flex justify-center items-center gap-2 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100 transition-colors">
-                  <Trophy className="w-4 h-4" /> Enter Results
-                </Link>
+                <div className="grid grid-cols-2 gap-2 w-full">
+                  <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex justify-center items-center gap-1.5 py-2 px-2.5 bg-indigo-50 text-indigo-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-indigo-100 transition-colors">
+                    <Trophy className="w-3.5 h-3.5" /> Enter Results
+                  </Link>
+                  <Link href={`/dashboard/owner/sms?target=exam_result&exam_id=${exam.id}`} className="flex justify-center items-center gap-1.5 py-2 px-2.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-xs sm:text-sm font-semibold transition-colors">
+                    <MessageSquare className="w-3.5 h-3.5 text-emerald-600" /> Send Result SMS
+                  </Link>
+                </div>
               )}
             </div>
           </div>

@@ -23,6 +23,7 @@ import {
   Lock,
   Eye,
   EyeOff,
+  MessageSquare,
 } from "lucide-react"
 import { getGrade } from "@/lib/utils"
 
@@ -604,7 +605,13 @@ export default function ExamResultsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <Link
+            href={`/dashboard/owner/sms?target=exam_result&exam_id=${exam.id}`}
+            className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm shadow-md shadow-emerald-100 transition-all cursor-pointer"
+          >
+            <MessageSquare className="w-4 h-4" /> Send Result SMS
+          </Link>
           <button
             onClick={handleSaveAll}
             disabled={loading}
