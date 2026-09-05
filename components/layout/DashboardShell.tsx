@@ -17,7 +17,7 @@ export default function DashboardShell({
 
   return (
     <BranchProvider>
-      <div className="flex h-screen bg-gray-50 overflow-hidden">
+      <div className="flex h-screen bg-[#090d16] text-slate-100 overflow-hidden selection:bg-amber-500 selection:text-black">
         {/* Sidebar (Desktop Persistent + Mobile Drawer) */}
         <DashboardSidebar
           role={staff.role}
@@ -26,8 +26,8 @@ export default function DashboardShell({
           onMobileClose={() => setMobileMenuOpen(false)}
         />
 
-        {/* Main App Layout */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Main App Layout with Luxury Slate & Royal Ambient Backdrop */}
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-gradient-to-br from-[#090d16] via-[#0f172a] to-[#111827]">
           <DashboardHeader
             user={staff}
             onMenuToggle={() => setMobileMenuOpen(prev => !prev)}

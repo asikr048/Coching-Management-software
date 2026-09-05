@@ -63,39 +63,39 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
     <div className="space-y-8">
       {/* Today's Summary */}
       <section>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <CalendarDays className="w-5 h-5 text-indigo-600" /> Today's Overview ({formatDate(todayDate)})
+        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <CalendarDays className="w-5 h-5 text-amber-400" /> Today's Attendance Overview ({formatDate(todayDate)})
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center">
-            <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-2"><Users className="w-5 h-5" /></div>
-            <p className="text-2xl font-bold text-gray-900">{totalMarked}</p>
-            <p className="text-xs text-gray-500 font-medium">Total Marked</p>
+          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-amber-500/30 transition-all">
+            <div className="w-10 h-10 bg-slate-800 text-amber-400 rounded-xl flex items-center justify-center mb-2 border border-slate-700/60"><Users className="w-5 h-5" /></div>
+            <p className="text-2xl font-black text-white">{totalMarked}</p>
+            <p className="text-xs text-slate-400 font-medium">Total Marked</p>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center">
-            <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-2"><UserCheck className="w-5 h-5" /></div>
-            <p className="text-2xl font-bold text-gray-900">{presentCount}</p>
-            <p className="text-xs text-gray-500 font-medium">Present</p>
+          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-emerald-500/30 transition-all">
+            <div className="w-10 h-10 bg-emerald-950/60 text-emerald-400 rounded-xl flex items-center justify-center mb-2 border border-emerald-500/30"><UserCheck className="w-5 h-5" /></div>
+            <p className="text-2xl font-black text-emerald-400">{presentCount}</p>
+            <p className="text-xs text-slate-400 font-medium">Present</p>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center">
-            <div className="w-10 h-10 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mb-2"><Clock className="w-5 h-5" /></div>
-            <p className="text-2xl font-bold text-gray-900">{lateCount}</p>
-            <p className="text-xs text-gray-500 font-medium">Late</p>
+          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-amber-500/30 transition-all">
+            <div className="w-10 h-10 bg-amber-950/60 text-amber-400 rounded-xl flex items-center justify-center mb-2 border border-amber-500/30"><Clock className="w-5 h-5" /></div>
+            <p className="text-2xl font-black text-amber-300">{lateCount}</p>
+            <p className="text-xs text-slate-400 font-medium">Late</p>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center">
-            <div className="w-10 h-10 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-2"><UserX className="w-5 h-5" /></div>
-            <p className="text-2xl font-bold text-gray-900">{absentCount}</p>
-            <p className="text-xs text-gray-500 font-medium">Absent</p>
+          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-red-500/30 transition-all">
+            <div className="w-10 h-10 bg-red-950/60 text-red-400 rounded-xl flex items-center justify-center mb-2 border border-red-500/30"><UserX className="w-5 h-5" /></div>
+            <p className="text-2xl font-black text-red-400">{absentCount}</p>
+            <p className="text-xs text-slate-400 font-medium">Absent</p>
           </div>
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col items-center justify-center">
-            <div className="w-10 h-10 bg-gray-100 text-gray-600 rounded-full flex items-center justify-center mb-2"><UserX className="w-5 h-5" /></div>
-            <p className="text-2xl font-bold text-gray-900">{excusedCount}</p>
-            <p className="text-xs text-gray-500 font-medium">Excused</p>
+          <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex flex-col items-center justify-center hover:border-slate-700 transition-all">
+            <div className="w-10 h-10 bg-slate-800 text-slate-300 rounded-xl flex items-center justify-center mb-2 border border-slate-700/60"><UserX className="w-5 h-5" /></div>
+            <p className="text-2xl font-black text-slate-300">{excusedCount}</p>
+            <p className="text-xs text-slate-400 font-medium">Excused</p>
           </div>
-          <div className="bg-gradient-to-br from-indigo-500 to-violet-600 p-4 rounded-xl shadow-sm flex flex-col items-center justify-center text-white">
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center mb-2"><Activity className="w-5 h-5" /></div>
-            <p className="text-2xl font-bold">{presentRate}%</p>
-            <p className="text-xs text-indigo-100 font-medium">Attendance Rate</p>
+          <div className="bg-gradient-to-br from-amber-500/20 via-slate-900 to-amber-600/20 p-4 rounded-2xl border border-amber-500/40 shadow-xl flex flex-col items-center justify-center text-white backdrop-blur-md">
+            <div className="w-10 h-10 bg-amber-500/20 rounded-xl flex items-center justify-center mb-2 text-amber-300 border border-amber-500/30"><Activity className="w-5 h-5" /></div>
+            <p className="text-2xl font-black text-amber-300">{presentRate}%</p>
+            <p className="text-xs text-amber-400/90 font-medium">Attendance Rate</p>
           </div>
         </div>
       </section>
@@ -103,36 +103,36 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Batchwise Breakdown */}
         <section>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-600" /> Batchwise Breakdown
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <Users className="w-5 h-5 text-amber-400" /> Batchwise Breakdown
           </h3>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Batch Name</th>
-                    <th className="px-4 py-3 font-medium text-right">Enrolled</th>
-                    <th className="px-4 py-3 font-medium text-right">Present</th>
-                    <th className="px-4 py-3 font-medium text-right">Absent</th>
-                    <th className="px-4 py-3 font-medium text-right">Rate %</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs">Batch Name</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Enrolled</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Present</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Absent</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Rate %</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-800/70">
                   {batchBreakdown.length > 0 ? batchBreakdown.map(b => (
-                    <tr key={b.id} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{b.name}</td>
-                      <td className="px-4 py-3 text-right text-gray-600">{b.enrolled}</td>
-                      <td className="px-4 py-3 text-right text-emerald-600 font-medium">{b.present}</td>
-                      <td className="px-4 py-3 text-right text-red-600 font-medium">{b.absent}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${b.rate >= 80 ? 'bg-emerald-100 text-emerald-800' : b.rate >= 50 ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'}`}>
+                    <tr key={b.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="px-4 py-3.5 font-bold text-white">{b.name}</td>
+                      <td className="px-4 py-3.5 text-right text-slate-400 font-mono">{b.enrolled}</td>
+                      <td className="px-4 py-3.5 text-right text-emerald-400 font-bold font-mono">{b.present}</td>
+                      <td className="px-4 py-3.5 text-right text-red-400 font-bold font-mono">{b.absent}</td>
+                      <td className="px-4 py-3.5 text-right">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${b.rate >= 80 ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : b.rate >= 50 ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' : 'bg-red-500/15 text-red-300 border-red-500/30'}`}>
                           {b.rate}%
                         </span>
                       </td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No attendance marked for today yet.</td></tr>
+                    <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">No attendance marked for today yet.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -142,34 +142,34 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
 
         {/* Attendance Trends */}
         <section>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-indigo-600" /> Last 7 Days Trend
+          <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-amber-400" /> Last 7 Days Trend
           </h3>
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                <thead className="bg-slate-950/80 border-b border-slate-800 text-slate-400">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Date</th>
-                    <th className="px-4 py-3 font-medium text-right">Total Marked</th>
-                    <th className="px-4 py-3 font-medium text-right">Present</th>
-                    <th className="px-4 py-3 font-medium text-right">Absent</th>
-                    <th className="px-4 py-3 font-medium text-right">Rate %</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs">Date</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Total Marked</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Present</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Absent</th>
+                    <th className="px-4 py-3.5 font-bold uppercase tracking-wider text-xs text-right">Rate %</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-800/70">
                   {trendsArray.length > 0 ? trendsArray.map(t => (
-                    <tr key={t.date} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{formatDate(t.date)}</td>
-                      <td className="px-4 py-3 text-right text-gray-600">{t.total}</td>
-                      <td className="px-4 py-3 text-right text-emerald-600">{t.present}</td>
-                      <td className="px-4 py-3 text-right text-red-600">{t.absent}</td>
-                      <td className="px-4 py-3 text-right font-medium">
-                        <span className={`${t.rate >= 80 ? 'text-emerald-600' : t.rate >= 50 ? 'text-orange-600' : 'text-red-600'}`}>{t.rate}%</span>
+                    <tr key={t.date} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="px-4 py-3.5 font-semibold text-slate-200">{formatDate(t.date)}</td>
+                      <td className="px-4 py-3.5 text-right text-slate-400 font-mono">{t.total}</td>
+                      <td className="px-4 py-3.5 text-right text-emerald-400 font-bold font-mono">{t.present}</td>
+                      <td className="px-4 py-3.5 text-right text-red-400 font-bold font-mono">{t.absent}</td>
+                      <td className="px-4 py-3.5 text-right font-mono">
+                        <span className={`font-bold ${t.rate >= 80 ? 'text-emerald-400' : t.rate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{t.rate}%</span>
                       </td>
                     </tr>
                   )) : (
-                    <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-500">No attendance data for the last 7 days.</td></tr>
+                    <tr><td colSpan={5} className="px-4 py-10 text-center text-slate-500">No attendance data for the last 7 days.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -180,55 +180,55 @@ export default function AttendanceClient({ todayAttendance, batches, recentAtten
 
       {/* Leaderboard Section */}
       <section>
-        <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Activity className="w-5 h-5 text-indigo-600" /> Student Attendance Leaderboard
+        <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+          <Activity className="w-5 h-5 text-amber-400" /> Student Attendance Leaderboard
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-emerald-50 border-b border-emerald-100 px-4 py-3 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-emerald-600" />
-              <h4 className="font-semibold text-emerald-900">Top 10 Best Attendance</h4>
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+            <div className="bg-emerald-950/40 border-b border-emerald-500/20 px-4 py-3.5 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
+              <h4 className="font-bold text-emerald-300">Top 10 Best Attendance</h4>
             </div>
             <div className="p-0">
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-slate-800/70">
                 {top10.length > 0 ? top10.map((s, idx) => (
-                  <li key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
+                  <li key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-slate-800/40 transition-colors">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-gray-400 w-5">{idx + 1}.</span>
-                      <span className="font-medium text-gray-900">{s.name}</span>
+                      <span className="text-sm font-bold text-slate-500 font-mono w-5">{idx + 1}.</span>
+                      <span className="font-bold text-white">{s.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-500">{s.total} classes</span>
-                      <span className="inline-flex items-center justify-center px-2 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-md min-w-[3rem]">{s.rate}%</span>
+                      <span className="text-xs text-slate-400">{s.total} classes</span>
+                      <span className="inline-flex items-center justify-center px-2.5 py-1 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-xs font-bold rounded-lg min-w-[3rem] font-mono">{s.rate}%</span>
                     </div>
                   </li>
                 )) : (
-                  <li className="px-4 py-6 text-center text-gray-500 text-sm">Not enough data to calculate leaderboard.</li>
+                  <li className="px-4 py-8 text-center text-slate-500 text-sm">Not enough data to calculate leaderboard.</li>
                 )}
               </ul>
             </div>
           </div>
           
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-red-50 border-b border-red-100 px-4 py-3 flex items-center gap-2">
-              <TrendingDown className="w-5 h-5 text-red-600" />
-              <h4 className="font-semibold text-red-900">Bottom 10 Worst Attendance</h4>
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+            <div className="bg-red-950/40 border-b border-red-500/20 px-4 py-3.5 flex items-center gap-2">
+              <TrendingDown className="w-5 h-5 text-red-400" />
+              <h4 className="font-bold text-red-300">Bottom 10 Worst Attendance</h4>
             </div>
             <div className="p-0">
-              <ul className="divide-y divide-gray-100">
+              <ul className="divide-y divide-slate-800/70">
                 {bottom10.length > 0 ? bottom10.map((s, idx) => (
-                  <li key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-gray-50">
+                  <li key={idx} className="px-4 py-3 flex items-center justify-between hover:bg-slate-800/40 transition-colors">
                     <div className="flex items-center gap-3">
-                      <span className="text-sm font-bold text-gray-400 w-5">{idx + 1}.</span>
-                      <span className="font-medium text-gray-900">{s.name}</span>
+                      <span className="text-sm font-bold text-slate-500 font-mono w-5">{idx + 1}.</span>
+                      <span className="font-bold text-white">{s.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-xs text-gray-500">{s.total} classes</span>
-                      <span className="inline-flex items-center justify-center px-2 py-1 bg-red-100 text-red-700 text-xs font-bold rounded-md min-w-[3rem]">{s.rate}%</span>
+                      <span className="text-xs text-slate-400">{s.total} classes</span>
+                      <span className="inline-flex items-center justify-center px-2.5 py-1 bg-red-500/15 text-red-300 border border-red-500/30 text-xs font-bold rounded-lg min-w-[3rem] font-mono">{s.rate}%</span>
                     </div>
                   </li>
                 )) : (
-                  <li className="px-4 py-6 text-center text-gray-500 text-sm">Not enough data to calculate leaderboard.</li>
+                  <li className="px-4 py-8 text-center text-slate-500 text-sm">Not enough data to calculate leaderboard.</li>
                 )}
               </ul>
             </div>

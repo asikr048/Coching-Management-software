@@ -209,15 +209,15 @@ export default function BatchesClient({
     return current === filterStatus
   })
 
-  const ic = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
-  const lbl = "block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5"
+  const ic = "w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white bg-slate-950 focus:outline-none focus:border-amber-400 placeholder:text-slate-500 transition-all shadow-sm"
+  const lbl = "block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5"
 
   return (
     <div className="space-y-6">
       {/* Top action & filter bar */}
-      <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         {/* Filters */}
-        <div className="flex flex-wrap items-center gap-1.5 bg-gray-100/80 p-1 rounded-xl">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
           {filterTabs.map(tab => {
             const active = filterStatus === tab.key
             return (
@@ -225,14 +225,14 @@ export default function BatchesClient({
                 key={tab.key}
                 type="button"
                 onClick={() => setFilterStatus(tab.key)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                   active 
-                    ? "bg-white text-indigo-700 shadow-sm font-bold" 
-                    : "text-gray-600 hover:text-gray-900 hover:bg-white/50"
+                    ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs" 
+                    : "text-slate-400 hover:text-white hover:bg-slate-800"
                 }`}
               >
                 {tab.label}
-                <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] ${active ? "bg-indigo-100 text-indigo-800" : "text-gray-400"}`}>
+                <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] ${active ? "bg-amber-500/20 text-amber-300" : "text-slate-500"}`}>
                   {tab.key === "All" ? batches.length : batches.filter(b => (b.status || "ongoing") === tab.key).length}
                 </span>
               </button>
@@ -244,7 +244,7 @@ export default function BatchesClient({
         <button
           type="button"
           onClick={openCreateModal}
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-100 hover:shadow-lg transition-all"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all"
         >
           <Plus className="w-4 h-4" /> Create New Batch
         </button>
@@ -263,7 +263,7 @@ export default function BatchesClient({
           return (
             <div 
               key={batch.id} 
-              className="bg-white rounded-2xl border border-gray-200/90 shadow-sm hover:shadow-xl hover:border-indigo-200 transition-all duration-300 flex flex-col justify-between overflow-hidden group"
+              className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl hover:border-amber-500/40 hover:shadow-2xl transition-all duration-300 flex flex-col justify-between overflow-hidden group"
             >
               {/* Header color accent */}
               <div className={`h-1.5 w-full ${
@@ -271,21 +271,21 @@ export default function BatchesClient({
                   ? "bg-gradient-to-r from-emerald-400 to-teal-500" 
                   : currentStatus === "admission_closed" 
                   ? "bg-gradient-to-r from-amber-400 to-orange-500" 
-                  : "bg-gray-300"
+                  : "bg-slate-700"
               }`} />
 
               <div className="p-5 space-y-4">
                 {/* Header row: title, subject, status selector */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-start gap-2.5 flex-1 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0 text-indigo-600 group-hover:scale-105 transition-transform">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0 text-amber-400 group-hover:scale-105 transition-transform">
                       <BookOpen className="w-5 h-5" />
                     </div>
                     <div className="min-w-0">
-                      <h3 className="font-bold text-gray-900 text-base truncate leading-tight group-hover:text-indigo-600 transition-colors">
+                      <h3 className="font-bold text-white text-base truncate leading-tight group-hover:text-amber-400 transition-colors">
                         {batch.name}
                       </h3>
-                      <p className="text-xs font-medium text-gray-500 mt-0.5 truncate">
+                      <p className="text-xs font-medium text-slate-400 mt-0.5 truncate">
                         {batch.subject || "General"} {batch.class_level ? `• ${batch.class_level}` : ""}
                       </p>
                     </div>
@@ -296,28 +296,34 @@ export default function BatchesClient({
                     <select
                       value={currentStatus}
                       onChange={(e) => handleStatusChange(batch.id, e.target.value)}
-                      className={`text-[11px] font-bold py-1 pl-2.5 pr-6 rounded-lg border appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400 transition-all ${statusColors[currentStatus]}`}
+                      className={`text-[11px] font-bold py-1 pl-2.5 pr-6 rounded-lg border appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-400 transition-all ${
+                        currentStatus === "ongoing"
+                          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                          : currentStatus === "admission_closed"
+                          ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                          : "bg-slate-800 text-slate-400 border-slate-700"
+                      }`}
                     >
-                      <option value="ongoing">Admission Ongoing</option>
-                      <option value="admission_closed">Admission Closed</option>
-                      <option value="finished">Finished</option>
+                      <option value="ongoing" className="bg-slate-900 text-white">Admission Ongoing</option>
+                      <option value="admission_closed" className="bg-slate-900 text-white">Admission Closed</option>
+                      <option value="finished" className="bg-slate-900 text-white">Finished</option>
                     </select>
                     <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
                   </div>
                 </div>
 
                 {/* Seats progress bar */}
-                <div className="space-y-1.5 bg-slate-50/80 p-3 rounded-xl border border-slate-100">
+                <div className="space-y-1.5 bg-slate-950/80 p-3 rounded-xl border border-slate-800">
                   <div className="flex items-center justify-between text-xs font-semibold">
-                    <span className="flex items-center gap-1.5 text-gray-700">
-                      <Users className="w-3.5 h-3.5 text-indigo-500" />
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      <Users className="w-3.5 h-3.5 text-amber-400" />
                       {batch.current_seats} / {batch.max_seats} Enrolled
                     </span>
-                    <span className={`text-[11px] ${seatsLeft <= 5 && seatsLeft > 0 ? "text-red-600 font-bold" : "text-gray-500"}`}>
+                    <span className={`text-[11px] ${seatsLeft <= 5 && seatsLeft > 0 ? "text-red-400 font-bold" : "text-slate-400"}`}>
                       {seatsLeft === 0 ? "Full" : `${seatsLeft} seats left`}
                     </span>
                   </div>
-                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
                     <div 
                       className={`h-full rounded-full transition-all duration-500 ${
                         pct >= 90 ? "bg-red-500" : pct >= 70 ? "bg-amber-500" : "bg-emerald-500"
@@ -329,30 +335,30 @@ export default function BatchesClient({
 
                 {/* Details list */}
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div className="bg-gray-50/60 p-2.5 rounded-xl border border-gray-100">
-                    <p className="text-[10px] text-gray-400 font-medium">Monthly Fee</p>
-                    <p className="font-extrabold text-indigo-700 text-sm">{formatCurrency(batch.monthly_fee)}</p>
+                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                    <p className="text-[10px] text-slate-400 font-medium">Monthly Fee</p>
+                    <p className="font-extrabold text-amber-400 text-sm">{formatCurrency(batch.monthly_fee)}</p>
                   </div>
-                  <div className="bg-gray-50/60 p-2.5 rounded-xl border border-gray-100">
-                    <p className="text-[10px] text-gray-400 font-medium">Admission Fee</p>
-                    <p className="font-bold text-gray-800 text-sm">{batch.admission_fee > 0 ? formatCurrency(batch.admission_fee) : "Free"}</p>
+                  <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800">
+                    <p className="text-[10px] text-slate-400 font-medium">Admission Fee</p>
+                    <p className="font-bold text-slate-200 text-sm">{batch.admission_fee > 0 ? formatCurrency(batch.admission_fee) : "Free"}</p>
                   </div>
                 </div>
 
                 {/* Teacher & Schedule */}
-                <div className="space-y-1.5 text-xs text-gray-600">
+                <div className="space-y-1.5 text-xs text-slate-300">
                   <div className="flex items-center gap-1.5">
-                    <UserCheck className="w-3.5 h-3.5 text-gray-400" />
-                    <span>Teacher: <b className="text-gray-800">{batch.teacher?.name || "Unassigned"}</b></span>
+                    <UserCheck className="w-3.5 h-3.5 text-slate-500" />
+                    <span>Teacher: <b className="text-white">{batch.teacher?.name || "Unassigned"}</b></span>
                   </div>
                   {(batch.schedule_days || batch.schedule_time) && (
-                    <div className="flex items-center gap-1.5 text-indigo-700 font-medium bg-indigo-50/60 px-2.5 py-1.5 rounded-lg border border-indigo-100/60 text-[11px]">
-                      <Calendar className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                    <div className="flex items-center gap-1.5 text-amber-300 font-medium bg-amber-500/10 px-2.5 py-1.5 rounded-lg border border-amber-500/20 text-[11px]">
+                      <Calendar className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       <span className="truncate">{batch.schedule_days} {batch.schedule_time ? `• ${batch.schedule_time}` : ""}</span>
                     </div>
                   )}
                   {totalDue > 0 && (
-                    <div className="flex items-center justify-between text-xs text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/80 font-bold">
+                    <div className="flex items-center justify-between text-xs text-red-400 bg-red-500/10 px-2.5 py-1 rounded-lg border border-red-500/25 font-bold">
                       <span>Total Pending Dues:</span>
                       <span>{formatCurrency(totalDue)}</span>
                     </div>
@@ -361,10 +367,10 @@ export default function BatchesClient({
               </div>
 
               {/* Bottom Actions */}
-              <div className="px-5 py-3 bg-gray-50/80 border-t border-gray-100 flex items-center justify-between gap-2">
+              <div className="px-5 py-3 bg-slate-950/60 border-t border-slate-800 flex items-center justify-between gap-2">
                 <Link
                   href={`/batch/${batch.id}`}
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-indigo-600 transition-colors"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-amber-400 transition-colors"
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> Public View
                 </Link>
@@ -373,7 +379,7 @@ export default function BatchesClient({
                   <button
                     type="button"
                     onClick={() => openEditModal(batch)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-all"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-amber-300 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 rounded-lg transition-all"
                   >
                     <Edit3 className="w-3.5 h-3.5" /> Edit Info
                   </button>
@@ -381,10 +387,10 @@ export default function BatchesClient({
                     type="button"
                     disabled={deletingId === batch.id}
                     onClick={() => handleDelete(batch)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                     title="Delete Batch"
                   >
-                    {deletingId === batch.id ? <Loader2 className="w-4 h-4 animate-spin text-red-500" /> : <Trash2 className="w-4 h-4" />}
+                    {deletingId === batch.id ? <Loader2 className="w-4 h-4 animate-spin text-red-400" /> : <Trash2 className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
@@ -393,13 +399,13 @@ export default function BatchesClient({
         })}
 
         {filteredBatches.length === 0 && (
-          <div className="col-span-full bg-white rounded-2xl border-2 border-dashed border-gray-200 py-16 text-center">
-            <BookOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-600 font-bold text-base">No batches found</p>
-            <p className="text-gray-400 text-xs mt-1">Try switching tabs or create a new batch.</p>
+          <div className="col-span-full bg-slate-900/90 backdrop-blur-md rounded-2xl border-2 border-dashed border-slate-800 py-16 text-center shadow-xl">
+            <BookOpen className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+            <p className="text-white font-bold text-base">No batches found</p>
+            <p className="text-slate-400 text-xs mt-1">Try switching tabs or create a new batch.</p>
             <button
               onClick={openCreateModal}
-              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors"
+              className="mt-4 inline-flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 rounded-xl text-xs font-bold hover:scale-[1.02] shadow-md shadow-amber-500/20 transition-all"
             >
               <Plus className="w-3.5 h-3.5" /> Create Batch
             </button>
@@ -409,19 +415,19 @@ export default function BatchesClient({
 
       {/* Create / Edit Batch Modal */}
       {(showCreateModal || editingBatch) && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden border border-slate-800 text-white animate-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 p-5 text-white flex items-center justify-between shrink-0">
+            <div className="bg-gradient-to-r from-slate-950 via-[#0f172a] to-slate-900 p-5 text-white flex items-center justify-between shrink-0 border-b border-slate-800">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 backdrop-blur-md rounded-xl flex items-center justify-center border border-white/20">
-                  {editingBatch ? <Edit3 className="w-5 h-5 text-white" /> : <Plus className="w-5 h-5 text-white" />}
+                <div className="w-10 h-10 bg-amber-500/10 border border-amber-500/25 rounded-xl flex items-center justify-center text-amber-400">
+                  {editingBatch ? <Edit3 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold">
+                  <h3 className="text-lg font-extrabold text-white">
                     {editingBatch ? `Edit Batch: ${editingBatch.name}` : "Create New Batch"}
                   </h3>
-                  <p className="text-xs text-indigo-100">
+                  <p className="text-xs text-amber-400/90 font-medium">
                     {editingBatch ? "Update schedule, fees, teacher, room, or admission status" : "Set up a new coaching program batch for students"}
                   </p>
                 </div>
@@ -429,7 +435,7 @@ export default function BatchesClient({
               <button 
                 type="button"
                 onClick={() => { setShowCreateModal(false); setEditingBatch(null) }} 
-                className="p-1.5 text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-colors"
+                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -440,8 +446,8 @@ export default function BatchesClient({
               {/* Section 1: Basic Information */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-indigo-600"></span>
-                  <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider">General Information</h4>
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">General Information</h4>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   <div className="md:col-span-2">
@@ -459,17 +465,11 @@ export default function BatchesClient({
                     <select 
                       value={form.status} 
                       onChange={e => updateForm("status", e.target.value)} 
-                      className={`${ic} font-bold ${
-                        form.status === "ongoing" 
-                          ? "text-emerald-700 bg-emerald-50/50" 
-                          : form.status === "admission_closed" 
-                          ? "text-amber-700 bg-amber-50/50" 
-                          : "text-gray-700 bg-gray-50"
-                      }`}
+                      className={`${ic} font-bold`}
                     >
-                      <option value="ongoing">Admission Ongoing</option>
-                      <option value="admission_closed">Admission Closed</option>
-                      <option value="finished">Finished</option>
+                      <option value="ongoing" className="bg-slate-900 text-white">Admission Ongoing</option>
+                      <option value="admission_closed" className="bg-slate-900 text-white">Admission Closed</option>
+                      <option value="finished" className="bg-slate-900 text-white">Finished</option>
                     </select>
                   </div>
                   <div>
@@ -505,10 +505,10 @@ export default function BatchesClient({
               </div>
 
               {/* Section 2: Teacher & Room Allocation */}
-              <div className="pt-2 border-t border-gray-100">
+              <div className="pt-2 border-t border-slate-800">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-purple-600"></span>
-                  <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider">Teacher & Classroom</h4>
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Teacher & Classroom</h4>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   <div>
@@ -518,9 +518,9 @@ export default function BatchesClient({
                       onChange={e => updateForm("teacher_id", e.target.value)} 
                       className={ic}
                     >
-                      <option value="">-- No Teacher Assigned --</option>
+                      <option value="" className="bg-slate-900 text-white">-- No Teacher Assigned --</option>
                       {teachers.map(t => (
-                        <option key={t.id} value={t.id}>
+                        <option key={t.id} value={t.id} className="bg-slate-900 text-white">
                           {t.name} {t.subject ? `(${t.subject})` : ""}
                         </option>
                       ))}
@@ -533,9 +533,9 @@ export default function BatchesClient({
                       onChange={e => updateForm("room_id", e.target.value)} 
                       className={ic}
                     >
-                      <option value="">-- Select Classroom --</option>
+                      <option value="" className="bg-slate-900 text-white">-- Select Classroom --</option>
                       {rooms.map(r => (
-                        <option key={r.id} value={r.id}>
+                        <option key={r.id} value={r.id} className="bg-slate-900 text-white">
                           {r.name} ({r.capacity} seats capacity)
                         </option>
                       ))}
@@ -545,10 +545,10 @@ export default function BatchesClient({
               </div>
 
               {/* Section 3: Pricing & Fees */}
-              <div className="pt-2 border-t border-gray-100">
+              <div className="pt-2 border-t border-slate-800">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
-                  <h4 className="text-xs font-bold text-emerald-900 uppercase tracking-wider">Fee Structure</h4>
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Fee Structure</h4>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
                   <div>
@@ -559,7 +559,7 @@ export default function BatchesClient({
                       required 
                       value={form.monthly_fee} 
                       onChange={e => updateForm("monthly_fee", e.target.value)} 
-                      className={`${ic} font-bold text-indigo-700`} 
+                      className={`${ic} font-extrabold text-amber-400`} 
                       placeholder="0" 
                     />
                   </div>
@@ -581,19 +581,19 @@ export default function BatchesClient({
                       onChange={e => updateForm("fee_type", e.target.value)} 
                       className={ic}
                     >
-                      <option value="monthly">Monthly</option>
-                      <option value="quarterly">Quarterly</option>
-                      <option value="one_time">One-Time Complete Course</option>
+                      <option value="monthly" className="bg-slate-900 text-white">Monthly</option>
+                      <option value="quarterly" className="bg-slate-900 text-white">Quarterly</option>
+                      <option value="one_time" className="bg-slate-900 text-white">One-Time Complete Course</option>
                     </select>
                   </div>
                 </div>
               </div>
 
               {/* Section 4: Schedule */}
-              <div className="pt-2 border-t border-gray-100">
+              <div className="pt-2 border-t border-slate-800">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-                  <h4 className="text-xs font-bold text-blue-900 uppercase tracking-wider">Class Schedule & Timings</h4>
+                  <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                  <h4 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Class Schedule & Timings</h4>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
                   <div>
@@ -618,7 +618,7 @@ export default function BatchesClient({
               </div>
 
               {/* Section 5: Public Description */}
-              <div className="pt-2 border-t border-gray-100">
+              <div className="pt-2 border-t border-slate-800">
                 <label className={lbl}>Public Description (Shown on Website & Portal)</label>
                 <textarea 
                   value={form.description} 
@@ -630,18 +630,18 @@ export default function BatchesClient({
               </div>
 
               {/* Sticky bottom submit bar */}
-              <div className="pt-3 border-t border-gray-200 flex items-center justify-end gap-3 sticky bottom-0 bg-white">
+              <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-3 sticky bottom-0 bg-slate-900">
                 <button 
                   type="button" 
                   onClick={() => { setShowCreateModal(false); setEditingBatch(null) }} 
-                  className="px-5 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors"
+                  className="px-5 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 hover:text-white text-sm transition-colors"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
                   disabled={loading} 
-                  className="px-6 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold shadow-md shadow-indigo-100 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
+                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50 hover:scale-[1.02]"
                 >
                   {loading ? (
                     <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>

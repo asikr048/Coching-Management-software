@@ -8,7 +8,10 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-gray-900">Settings</h2><p className="text-sm text-gray-500 mt-1">Manage system configuration, payment accounts, and approvers</p></div>
+      <div>
+        <h2 className="text-2xl font-black text-white tracking-tight">Settings</h2>
+        <p className="text-sm text-slate-400 mt-1">Manage system configuration, payment accounts, and approvers</p>
+      </div>
       <SettingsClient myRole={staff?.role || "manager"} />
     </div>
   )

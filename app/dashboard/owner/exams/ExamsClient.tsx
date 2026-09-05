@@ -220,154 +220,154 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
     }
   }
 
-  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+  const inputClass = "w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400 bg-slate-950 placeholder:text-slate-500 transition-all shadow-sm"
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex p-1 bg-gray-100 rounded-lg">
+          <div className="flex p-1 bg-slate-950 border border-slate-800 rounded-xl">
             {["all", "published", "draft", "online"].map(t => (
-              <button key={t} onClick={() => setStatusFilter(t as any)} className={cn("px-4 py-1.5 text-sm font-medium rounded-md capitalize", statusFilter === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900")}>
+              <button key={t} onClick={() => setStatusFilter(t as any)} className={cn("px-4 py-1.5 text-xs sm:text-sm font-bold rounded-lg capitalize transition-all", statusFilter === t ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs" : "text-slate-400 hover:text-white")}>
                 {t}
               </button>
             ))}
           </div>
-          <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)} className={inputClass + " w-48"}>
-            <option value="all">All Batches</option>
-            {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+          <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)} className={inputClass + " w-48 font-semibold"}>
+            <option value="all" className="bg-slate-900 text-white">All Batches</option>
+            {batches.map(b => <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>)}
           </select>
         </div>
 
-        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700">
+        <button onClick={() => setShowModal(true)} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all">
           <Plus className="w-4 h-4" /> Create Exam
         </button>
       </div>
 
       {/* Exam Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredExams.map(exam => (
-          <div key={exam.id} className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow flex flex-col h-full">
+          <div key={exam.id} className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 p-5 shadow-xl transition-all flex flex-col h-full">
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
-                <div className={cn("p-2 rounded-lg", exam.is_online ? "bg-blue-50" : "bg-purple-50")}>
-                  {exam.is_online ? <Globe className="w-5 h-5 text-blue-600" /> : <FileText className="w-5 h-5 text-purple-600" />}
+                <div className={cn("p-2 rounded-xl border", exam.is_online ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20")}>
+                  {exam.is_online ? <Globe className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
                 </div>
                 <div>
-                  <p className="font-semibold text-gray-900 text-sm">{exam.title}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{exam.batch?.name || "All Batches"} • {exam.subject || "No Subject"}</p>
+                  <p className="font-bold text-white text-base leading-snug">{exam.title}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{exam.batch?.name || "All Batches"} • {exam.subject || "No Subject"}</p>
                 </div>
               </div>
               <div className="flex flex-col gap-1 items-end">
-                <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border", exam.is_published ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-yellow-50 text-yellow-700 border-yellow-200")}>
+                <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", exam.is_published ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : "bg-amber-500/15 text-amber-300 border-amber-500/30")}>
                   {exam.is_published ? "Published" : "Draft"}
                 </span>
-                {exam.is_online && <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">ONLINE</span>}
+                {exam.is_online && <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-md font-extrabold">ONLINE</span>}
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mt-3 mb-4 bg-gray-50 p-3 rounded-lg flex-grow">
-              <div className="flex flex-col"><span className="text-xs text-gray-400">Total Marks</span><span className="font-medium text-gray-900">{exam.total_marks}</span></div>
-              <div className="flex flex-col"><span className="text-xs text-gray-400">Date</span><span className="font-medium text-gray-900">{exam.exam_date ? formatDate(exam.exam_date) : "TBD"}</span></div>
+            <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-4 bg-slate-950/80 p-3 rounded-xl border border-slate-800 flex-grow">
+              <div className="flex flex-col"><span className="text-[11px] text-slate-400 font-medium">Total Marks</span><span className="font-bold text-amber-400 text-sm">{exam.total_marks}</span></div>
+              <div className="flex flex-col"><span className="text-[11px] text-slate-400 font-medium">Date</span><span className="font-semibold text-slate-200 text-sm">{exam.exam_date ? formatDate(exam.exam_date) : "TBD"}</span></div>
               {exam.is_online && (
                 <>
-                  <div className="flex flex-col"><span className="text-xs text-gray-400">Duration</span><span className="font-medium text-gray-900">{exam.time_limit_minutes} min</span></div>
-                  <div className="flex flex-col"><span className="text-xs text-gray-400">Questions</span><span className="font-medium text-gray-900">{exam.exam_questions?.[0]?.count || 0}</span></div>
+                  <div className="flex flex-col"><span className="text-[11px] text-slate-400 font-medium">Duration</span><span className="font-semibold text-slate-200 text-sm">{exam.time_limit_minutes} min</span></div>
+                  <div className="flex flex-col"><span className="text-[11px] text-slate-400 font-medium">Questions</span><span className="font-semibold text-slate-200 text-sm">{exam.exam_questions?.[0]?.count || 0}</span></div>
                 </>
               )}
             </div>
 
-            <div className="pt-3 border-t border-gray-100 flex flex-col gap-2 mt-auto">
+            <div className="pt-3 border-t border-slate-800 flex flex-col gap-2 mt-auto">
               <div className="flex items-center gap-2 w-full">
                 {exam.is_online ? (
                   <>
                     {!exam.is_published && (
-                      <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-1.5 px-3 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 font-medium">
+                      <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 font-bold transition-colors">
                         {publishing === exam.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />} Publish
                       </button>
                     )}
-                    <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-1.5 px-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium">
+                    <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-slate-800 text-slate-200 hover:text-white rounded-xl hover:bg-slate-700 font-bold transition-colors border border-slate-700">
                       <Eye className="w-3.5 h-3.5" /> Questions
                     </Link>
                   </>
                 ) : (
-                  <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex-1 flex justify-center items-center gap-2 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-xs sm:text-sm font-medium hover:bg-indigo-100 transition-colors">
-                    <Trophy className="w-4 h-4" /> Enter Results
+                  <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex-1 flex justify-center items-center gap-2 py-2 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/25 transition-colors">
+                    <Trophy className="w-4 h-4 text-amber-400" /> Enter Results
                   </Link>
                 )}
               </div>
               <Link
                 href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-                className="w-full flex justify-center items-center gap-1.5 py-1.5 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-xs font-bold transition-all hover:shadow-sm"
+                className="w-full flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 rounded-xl text-xs font-bold transition-all shadow-sm"
               >
-                <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Send Result SMS
+                <MessageSquare className="w-3.5 h-3.5 text-purple-400" /> Send Result SMS
               </Link>
             </div>
           </div>
         ))}
-        {filteredExams.length === 0 && <div className="col-span-full text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 text-gray-500">No exams match your filters.</div>}
+        {filteredExams.length === 0 && <div className="col-span-full text-center py-16 bg-slate-900/90 rounded-2xl border border-dashed border-slate-800 text-slate-400 shadow-xl">No exams match your filters.</div>}
       </div>
 
       {/* Analytics Section */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Exam Analytics</h3>
-        <p className="text-sm text-gray-500">Analytics overview will appear here once more results are recorded.</p>
-        <div className="mt-4 grid grid-cols-3 gap-4">
-          <div className="bg-gray-50 p-4 rounded-lg"><p className="text-sm text-gray-500">Total Exams</p><p className="text-2xl font-bold text-gray-900">{exams.length}</p></div>
-          <div className="bg-gray-50 p-4 rounded-lg"><p className="text-sm text-gray-500">Published</p><p className="text-2xl font-bold text-emerald-600">{exams.filter(e=>e.is_published).length}</p></div>
-          <div className="bg-gray-50 p-4 rounded-lg"><p className="text-sm text-gray-500">Online Exams</p><p className="text-2xl font-bold text-blue-600">{exams.filter(e=>e.is_online).length}</p></div>
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 text-white shadow-xl">
+        <h3 className="text-lg font-extrabold text-white mb-1">Exam Analytics</h3>
+        <p className="text-xs text-amber-400/90 font-medium">Performance summary and publication status</p>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800"><p className="text-xs text-slate-400 font-medium">Total Exams</p><p className="text-2xl font-extrabold text-white mt-1">{exams.length}</p></div>
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800"><p className="text-xs text-slate-400 font-medium">Published</p><p className="text-2xl font-extrabold text-emerald-400 mt-1">{exams.filter(e=>e.is_published).length}</p></div>
+          <div className="bg-slate-950 p-4 rounded-xl border border-slate-800"><p className="text-xs text-slate-400 font-medium">Online Exams</p><p className="text-2xl font-extrabold text-blue-400 mt-1">{exams.filter(e=>e.is_online).length}</p></div>
         </div>
       </div>
 
       {/* Create Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-4xl shadow-2xl my-8 flex flex-col max-h-[90vh]">
-            <div className="flex items-center justify-between p-5 border-b border-gray-100 shrink-0">
-              <h3 className="text-lg font-bold text-gray-900">Create New Exam</h3>
-              <button onClick={() => setShowModal(false)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-900 rounded-3xl w-full max-w-4xl shadow-2xl my-8 flex flex-col max-h-[90vh] border border-slate-800 text-white">
+            <div className="flex items-center justify-between p-5 border-b border-slate-800 shrink-0 bg-slate-950/60">
+              <h3 className="text-lg font-extrabold text-white">Create New Exam</h3>
+              <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"><X className="w-5 h-5" /></button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-5">
-              <div className="flex gap-2 p-1 bg-gray-100 rounded-lg w-fit mb-6">
-                <button onClick={() => setExamMode("offline")} className={cn("px-4 py-2 text-sm font-medium rounded-md", examMode === "offline" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600")}>Offline Exam</button>
-                <button onClick={() => setExamMode("online")} className={cn("px-4 py-2 text-sm font-medium rounded-md", examMode === "online" ? "bg-white text-gray-900 shadow-sm" : "text-gray-600")}>Online Exam</button>
+              <div className="flex gap-2 p-1 bg-slate-950 border border-slate-800 rounded-xl w-fit mb-6">
+                <button onClick={() => setExamMode("offline")} className={cn("px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all", examMode === "offline" ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs" : "text-slate-400 hover:text-white")}>Offline Exam</button>
+                <button onClick={() => setExamMode("online")} className={cn("px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all", examMode === "online" ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs" : "text-slate-400 hover:text-white")}>Online Exam</button>
               </div>
 
               <form id="examForm" onSubmit={handleCreate} className="space-y-6">
                 {/* Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Exam Title *</label><input required value={form.title} onChange={e => update("title", e.target.value)} className={inputClass} placeholder="e.g., Monthly Test - Physics" /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Batch</label><select value={form.batch_id} onChange={e => update("batch_id", e.target.value)} className={inputClass}><option value="">All Batches</option>{batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Subject</label><input value={form.subject} onChange={e => update("subject", e.target.value)} className={inputClass} /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Exam Date</label><input type="date" value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} /></div>
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Exam Title *</label><input required value={form.title} onChange={e => update("title", e.target.value)} className={inputClass} placeholder="e.g., Monthly Test - Physics" /></div>
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Batch</label><select value={form.batch_id} onChange={e => update("batch_id", e.target.value)} className={inputClass}><option value="" className="bg-slate-900 text-white">All Batches</option>{batches.map(b => <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>)}</select></div>
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Subject</label><input value={form.subject} onChange={e => update("subject", e.target.value)} className={inputClass} /></div>
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Exam Date</label><input type="date" value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} /></div>
                   
-                  {examMode === "offline" && <div><label className="block text-sm font-medium text-gray-700 mb-1">Total Marks</label><input type="number" required value={form.total_marks} onChange={e => update("total_marks", e.target.value)} className={inputClass} /></div>}
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Pass Marks</label><input type="number" required value={form.pass_marks} onChange={e => update("pass_marks", e.target.value)} className={inputClass} /></div>
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label><input type="number" required value={form.duration_minutes} onChange={e => update("duration_minutes", e.target.value)} className={inputClass} /></div>
+                  {examMode === "offline" && <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Total Marks</label><input type="number" required value={form.total_marks} onChange={e => update("total_marks", e.target.value)} className={inputClass} /></div>}
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Pass Marks</label><input type="number" required value={form.pass_marks} onChange={e => update("pass_marks", e.target.value)} className={inputClass} /></div>
+                  <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Duration (minutes)</label><input type="number" required value={form.duration_minutes} onChange={e => update("duration_minutes", e.target.value)} className={inputClass} /></div>
                   
                   {examMode === "online" && (
                     <div className="col-span-1 md:col-span-2">
-                      <label className="flex items-center gap-2 text-sm text-gray-900 cursor-pointer">
-                        <input type="checkbox" checked={form.show_results_immediately} onChange={e => update("show_results_immediately", e.target.checked)} className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" />
+                      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
+                        <input type="checkbox" checked={form.show_results_immediately} onChange={e => update("show_results_immediately", e.target.checked)} className="w-4 h-4 text-amber-500 rounded border-slate-700 bg-slate-950 focus:ring-amber-400" />
                         Show results immediately to students after submission
                       </label>
                     </div>
                   )}
 
                   {/* Batch Marks Visibility Option */}
-                  <div className="col-span-1 md:col-span-2 bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-100">
-                    <label className="flex items-start gap-3 text-sm text-gray-900 cursor-pointer select-none">
+                  <div className="col-span-1 md:col-span-2 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                    <label className="flex items-start gap-3 text-sm text-slate-200 cursor-pointer select-none">
                       <input 
                         type="checkbox" 
                         checked={form.show_all_results} 
                         onChange={e => update("show_all_results", e.target.checked)} 
-                        className="w-4 h-4 mt-0.5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer" 
+                        className="w-4 h-4 mt-0.5 text-amber-500 rounded border-slate-700 bg-slate-950 focus:ring-amber-400 cursor-pointer" 
                       />
                       <div>
-                        <span className="font-semibold text-gray-900">Show marks & merit list to all students in batch (Default)</span>
-                        <p className="text-xs text-gray-500 mt-0.5">
+                        <span className="font-bold text-white">Show marks & merit list to all students in batch (Default)</span>
+                        <p className="text-xs text-slate-400 mt-0.5">
                           When checked, all students in this batch can view everyone&apos;s marks. If deselected, each student will only see their own marks privately.
                         </p>
                       </div>
@@ -377,26 +377,26 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
 
                 {/* Question Builder */}
                 {examMode === "online" && (
-                  <div className="mt-8 border-t border-gray-200 pt-6">
+                  <div className="mt-8 border-t border-slate-800 pt-6">
                     <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-lg font-bold text-gray-900">Question Builder</h4>
-                      <div className="text-sm font-medium bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full">Total Marks: {computedTotal}</div>
+                      <h4 className="text-base font-bold text-white">Question Builder</h4>
+                      <div className="text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full">Total Marks: {computedTotal}</div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                       {/* Left: Add Form */}
-                      <div className="lg:col-span-2 bg-gray-50 p-4 rounded-xl border border-gray-200">
-                        <h5 className="font-semibold text-gray-800 mb-4">{editingQuestion ? "Edit Question" : "Add Question"}</h5>
+                      <div className="lg:col-span-2 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                        <h5 className="font-bold text-white text-sm mb-4">{editingQuestion ? "Edit Question" : "Add Question"}</h5>
                         <div className="space-y-4">
-                          <div><label className="block text-xs font-medium text-gray-700 mb-1">Question Type</label><select value={qForm.type} onChange={e => setQForm({...qForm, type: e.target.value as QuestionType})} className={inputClass}><option value="mcq">Multiple Choice</option><option value="short">Short Answer (Auto-graded)</option><option value="long">Long Answer (Manual)</option></select></div>
-                          <div><label className="block text-xs font-medium text-gray-700 mb-1">Question Text</label><textarea value={qForm.text} onChange={e => setQForm({...qForm, text: e.target.value})} className={inputClass} rows={3} placeholder="Enter question..." /></div>
+                          <div><label className="block text-xs font-bold text-slate-300 mb-1">Question Type</label><select value={qForm.type} onChange={e => setQForm({...qForm, type: e.target.value as QuestionType})} className={inputClass}><option value="mcq" className="bg-slate-900 text-white">Multiple Choice</option><option value="short" className="bg-slate-900 text-white">Short Answer (Auto-graded)</option><option value="long" className="bg-slate-900 text-white">Long Answer (Manual)</option></select></div>
+                          <div><label className="block text-xs font-bold text-slate-300 mb-1">Question Text</label><textarea value={qForm.text} onChange={e => setQForm({...qForm, text: e.target.value})} className={inputClass} rows={3} placeholder="Enter question..." /></div>
                           
                           {qForm.type === "mcq" && (
                             <div className="space-y-2">
-                              <label className="block text-xs font-medium text-gray-700">Options & Correct Answer</label>
+                              <label className="block text-xs font-bold text-slate-300">Options & Correct Answer</label>
                               {[1,2,3,4].map(num => (
                                 <div key={num} className="flex items-center gap-2">
-                                  <input type="radio" name="correctOpt" checked={qForm.correctOption === (num-1).toString()} onChange={() => setQForm({...qForm, correctOption: (num-1).toString()})} className="text-indigo-600" />
+                                  <input type="radio" name="correctOpt" checked={qForm.correctOption === (num-1).toString()} onChange={() => setQForm({...qForm, correctOption: (num-1).toString()})} className="text-amber-500" />
                                   <input value={(qForm as any)[`opt${num}`]} onChange={e => setQForm({...qForm, [`opt${num}`]: e.target.value})} placeholder={`Option ${num}`} className={cn(inputClass, "py-1.5 text-sm")} />
                                 </div>
                               ))}
@@ -404,15 +404,15 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                           )}
 
                           {qForm.type === "short" && (
-                            <div><label className="block text-xs font-medium text-gray-700 mb-1">Expected Answer (Case Insensitive)</label><input value={qForm.expectedAnswer} onChange={e => setQForm({...qForm, expectedAnswer: e.target.value})} className={inputClass} placeholder="e.g. Paris" /></div>
+                            <div><label className="block text-xs font-bold text-slate-300 mb-1">Expected Answer (Case Insensitive)</label><input value={qForm.expectedAnswer} onChange={e => setQForm({...qForm, expectedAnswer: e.target.value})} className={inputClass} placeholder="e.g. Paris" /></div>
                           )}
 
                           <div className="grid grid-cols-2 gap-3">
-                            <div><label className="block text-xs font-medium text-gray-700 mb-1">Marks</label><input type="number" value={qForm.marks} onChange={e => setQForm({...qForm, marks: e.target.value})} className={inputClass} min="1" /></div>
+                            <div><label className="block text-xs font-bold text-slate-300 mb-1">Marks</label><input type="number" value={qForm.marks} onChange={e => setQForm({...qForm, marks: e.target.value})} className={inputClass} min="1" /></div>
                           </div>
-                          <div><label className="block text-xs font-medium text-gray-700 mb-1">Hint / Note (Optional)</label><input value={qForm.hint} onChange={e => setQForm({...qForm, hint: e.target.value})} className={inputClass} placeholder="Shown in results..." /></div>
+                          <div><label className="block text-xs font-bold text-slate-300 mb-1">Hint / Note (Optional)</label><input value={qForm.hint} onChange={e => setQForm({...qForm, hint: e.target.value})} className={inputClass} placeholder="Shown in results..." /></div>
                           
-                          <button type="button" onClick={addQuestion} className="w-full py-2 bg-indigo-100 text-indigo-700 font-semibold rounded-lg hover:bg-indigo-200">
+                          <button type="button" onClick={addQuestion} className="w-full py-2 bg-amber-500/15 text-amber-300 border border-amber-500/30 font-bold rounded-xl hover:bg-amber-500/25 transition-all">
                             {editingQuestion ? "Update Question" : "Add Question"}
                           </button>
                         </div>
@@ -421,33 +421,33 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
                       {/* Right: Question List */}
                       <div className="lg:col-span-3 space-y-3">
                         {questions.length === 0 ? (
-                          <div className="h-full flex items-center justify-center border-2 border-dashed border-gray-200 rounded-xl p-8 text-center text-gray-400">
+                          <div className="h-full flex items-center justify-center border-2 border-dashed border-slate-800 rounded-xl p-8 text-center text-slate-500">
                             No questions added yet.<br/>Use the form to add questions to this exam.
                           </div>
                         ) : (
                           questions.map((q, idx) => (
-                            <div key={q.id} className="bg-white border border-gray-200 p-4 rounded-xl flex gap-3 group relative hover:border-indigo-300">
-                              <div className="mt-1 cursor-grab text-gray-400"><GripVertical className="w-5 h-5" /></div>
+                            <div key={q.id} className="bg-slate-950 border border-slate-800 p-4 rounded-xl flex gap-3 group relative hover:border-amber-500/40">
+                              <div className="mt-1 cursor-grab text-slate-500"><GripVertical className="w-5 h-5" /></div>
                               <div className="flex-1">
                                 <div className="flex justify-between items-start mb-2">
-                                  <h6 className="font-medium text-gray-900 text-sm">Q{idx + 1}. {q.question_text}</h6>
-                                  <span className="shrink-0 ml-2 px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs font-medium">{q.marks} Marks</span>
+                                  <h6 className="font-bold text-white text-sm">Q{idx + 1}. {q.question_text}</h6>
+                                  <span className="shrink-0 ml-2 px-2 py-0.5 bg-slate-900 text-amber-300 border border-slate-800 rounded text-xs font-mono">{q.marks} Marks</span>
                                 </div>
                                 {q.question_type === "mcq" && (
                                   <div className="grid grid-cols-2 gap-1.5 mt-2">
                                     {q.options?.map((opt, i) => (
-                                      <div key={i} className={cn("text-xs px-2 py-1 rounded border", q.correct_answer === opt ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-gray-50 border-gray-100 text-gray-600")}>
+                                      <div key={i} className={cn("text-xs px-2.5 py-1.5 rounded-lg border", q.correct_answer === opt ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300 font-bold" : "bg-slate-900 border-slate-800 text-slate-300")}>
                                         {String.fromCharCode(65+i)}. {opt}
                                       </div>
                                     ))}
                                   </div>
                                 )}
-                                {q.question_type === "short" && <div className="text-xs text-gray-600 mt-1 bg-gray-50 p-2 rounded">Expected: <strong>{q.correct_answer}</strong></div>}
-                                {q.hint_note && <div className="text-xs text-indigo-600 mt-2 bg-indigo-50 p-1.5 rounded inline-block">Hint: {q.hint_note}</div>}
+                                {q.question_type === "short" && <div className="text-xs text-slate-300 mt-1 bg-slate-900 p-2 rounded-lg border border-slate-800">Expected: <strong className="text-amber-300">{q.correct_answer}</strong></div>}
+                                {q.hint_note && <div className="text-xs text-amber-300 mt-2 bg-amber-500/10 border border-amber-500/20 p-1.5 rounded-lg inline-block">Hint: {q.hint_note}</div>}
                               </div>
                               <div className="flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button type="button" onClick={() => editQ(q)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-4 h-4" /></button>
-                                <button type="button" onClick={() => removeQ(q.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                                <button type="button" onClick={() => editQ(q)} className="p-1.5 text-blue-400 hover:bg-slate-800 rounded"><Edit2 className="w-4 h-4" /></button>
+                                <button type="button" onClick={() => removeQ(q.id)} className="p-1.5 text-red-400 hover:bg-slate-800 rounded"><Trash2 className="w-4 h-4" /></button>
                               </div>
                             </div>
                           ))
@@ -459,9 +459,9 @@ export default function ExamsClient({ exams: initial, batches }: { exams: ExamRo
               </form>
             </div>
             
-            <div className="flex justify-end gap-3 p-5 border-t border-gray-100 bg-gray-50 rounded-b-2xl shrink-0">
-              <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-white">Cancel</button>
-              <button form="examForm" type="submit" disabled={loading || (examMode === "online" && questions.length === 0)} className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2">
+            <div className="flex justify-end gap-3 p-5 border-t border-slate-800 bg-slate-950/60 rounded-b-3xl shrink-0">
+              <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 hover:text-white transition-colors">Cancel</button>
+              <button form="examForm" type="submit" disabled={loading || (examMode === "online" && questions.length === 0)} className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all">
                 {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : "Save Exam"}
               </button>
             </div>

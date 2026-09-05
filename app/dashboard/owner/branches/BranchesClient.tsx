@@ -3,8 +3,8 @@ import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import {
   Landmark, Plus, Search, MapPin, Phone, Mail, MessageSquare,
-  User, Shield, Edit2, Trash2, CheckCircle2, XCircle, Users,
-  BookOpen, Calendar, ExternalLink, Sliders, Globe
+  User, Shield, Edit2, CheckCircle2, XCircle, Users,
+  BookOpen, Sparkles
 } from "lucide-react"
 import type { Branch } from "@/lib/supabase/types"
 
@@ -132,8 +132,11 @@ export default function BranchesClient({
         sms_gateway_config: formData.sms_api_key.trim()
           ? {
               api_key: formData.sms_api_key.trim(),
+              apiKey: formData.sms_api_key.trim(),
               sender_id: formData.sms_sender_id.trim() || undefined,
+              senderId: formData.sms_sender_id.trim() || undefined,
               api_url: formData.sms_api_url.trim() || undefined,
+              urlTemplate: formData.sms_api_url.trim() || undefined,
             }
           : null,
       }
@@ -204,83 +207,83 @@ export default function BranchesClient({
     <div className="space-y-6">
       {/* Top Metrics Banner */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-3">
+          <div className="w-11 h-11 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <Landmark className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-500">Total Branches</p>
-            <p className="text-xl font-bold text-gray-900">{branches.length}</p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Branches</p>
+            <p className="text-xl font-extrabold text-white mt-0.5">{branches.length}</p>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center flex-shrink-0">
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-3">
+          <div className="w-11 h-11 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-500">Active Branches</p>
-            <p className="text-xl font-bold text-gray-900">{activeBranches}</p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Branches</p>
+            <p className="text-xl font-extrabold text-white mt-0.5">{activeBranches}</p>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-3">
+          <div className="w-11 h-11 bg-sky-500/15 text-sky-400 border border-sky-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-500">All Students</p>
-            <p className="text-xl font-bold text-gray-900">{totalStudents}</p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">All Students</p>
+            <p className="text-xl font-extrabold text-white mt-0.5">{totalStudents}</p>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center flex-shrink-0">
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl flex items-center gap-3">
+          <div className="w-11 h-11 bg-purple-500/15 text-purple-400 border border-purple-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
             <BookOpen className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-500">All Batches</p>
-            <p className="text-xl font-bold text-gray-900">{totalBatches}</p>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">All Batches</p>
+            <p className="text-xl font-extrabold text-white mt-0.5">{totalBatches}</p>
           </div>
         </div>
       </div>
 
       {/* Control Bar: Search & Add */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
         <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search by branch name, location, director, or manager..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-gray-200 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+            className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-700 bg-slate-950/80 text-white placeholder:text-slate-500 focus:outline-hidden focus:border-amber-400 focus:ring-1 focus:ring-amber-400/20"
           />
         </div>
 
         {isOwnerOrSuper && (
           <button
             onClick={openCreateModal}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition-colors shadow-xs"
+            className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-extrabold transition-all shadow-md shadow-amber-500/20 hover:scale-[1.02]"
           >
             <Plus className="w-4 h-4" />
-            Add New Branch
+            Add New Branch (শাখা যোগ)
           </button>
         )}
       </div>
 
       {/* Branch Cards Grid */}
       {filteredBranches.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-dashed border-gray-300 p-12 text-center">
-          <Landmark className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <h3 className="text-base font-semibold text-gray-800">No branches found</h3>
-          <p className="text-sm text-gray-500 mt-1">
+        <div className="bg-slate-900/80 rounded-2xl border border-dashed border-slate-800 p-12 text-center">
+          <Landmark className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+          <h3 className="text-base font-bold text-white">No branches found</h3>
+          <p className="text-xs text-slate-400 mt-1">
             {search ? "No branch matches your search term." : "Start by adding your first coaching branch."}
           </p>
           {isOwnerOrSuper && !search && (
             <button
               onClick={openCreateModal}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium"
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold rounded-xl text-xs"
             >
               <Plus className="w-4 h-4" /> Add Branch
             </button>
@@ -299,33 +302,33 @@ export default function BranchesClient({
             return (
               <div
                 key={branch.id}
-                className="bg-white rounded-2xl border border-gray-200/90 hover:border-indigo-200 transition-all p-5 shadow-xs flex flex-col justify-between"
+                className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 transition-all p-5 shadow-xl flex flex-col justify-between"
               >
                 <div>
                   {/* Top Bar with Badges */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <h3 className="text-lg font-bold text-gray-900 truncate">{branch.name}</h3>
+                        <h3 className="text-lg font-extrabold text-white truncate">{branch.name}</h3>
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             branch.is_active
-                              ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              : "bg-gray-100 text-gray-600 border border-gray-200"
+                              ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                              : "bg-slate-800 text-slate-400 border border-slate-700"
                           }`}
                         >
                           {branch.is_active ? "Active" : "Inactive"}
                         </span>
                         {branch.established_year && (
-                          <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md font-medium border border-indigo-100">
+                          <span className="text-xs bg-amber-500/15 text-amber-300 px-2 py-0.5 rounded-md font-bold border border-amber-500/30">
                             Est. {branch.established_year}
                           </span>
                         )}
                       </div>
 
                       {branch.location && (
-                        <p className="text-xs text-gray-600 flex items-center gap-1 mt-1.5 font-medium">
-                          <MapPin className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                        <p className="text-xs text-slate-300 flex items-center gap-1 mt-1.5 font-medium">
+                          <MapPin className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
                           <span>{branch.location}</span>
                         </p>
                       )}
@@ -335,7 +338,7 @@ export default function BranchesClient({
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <button
                           onClick={() => openEditModal(branch)}
-                          className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
                           title="Edit Branch"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -344,8 +347,8 @@ export default function BranchesClient({
                           onClick={() => handleToggleActive(branch)}
                           className={`p-1.5 rounded-lg transition-colors ${
                             branch.is_active
-                              ? "text-emerald-600 hover:bg-emerald-50"
-                              : "text-gray-400 hover:bg-gray-100"
+                              ? "text-emerald-400 hover:bg-emerald-500/15"
+                              : "text-slate-500 hover:bg-slate-800"
                           }`}
                           title={branch.is_active ? "Deactivate branch" : "Activate branch"}
                         >
@@ -361,57 +364,57 @@ export default function BranchesClient({
 
                   {/* Description */}
                   {branch.description && (
-                    <p className="text-xs text-gray-600 line-clamp-2 mb-4 bg-gray-50/70 p-2.5 rounded-xl border border-gray-100">
+                    <p className="text-xs text-slate-300 line-clamp-2 mb-4 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800/80">
                       {branch.description}
                     </p>
                   )}
 
                   {/* Operational Metrics Pill */}
-                  <div className="grid grid-cols-3 gap-2 py-2.5 px-3 bg-gray-50/80 rounded-xl mb-4 text-center border border-gray-100">
+                  <div className="grid grid-cols-3 gap-2 py-2.5 px-3 bg-slate-950/70 rounded-xl mb-4 text-center border border-slate-800/90">
                     <div>
-                      <p className="text-sm font-bold text-indigo-700">{branchStudents}</p>
-                      <p className="text-[11px] text-gray-500">Students</p>
+                      <p className="text-sm font-extrabold text-amber-400">{branchStudents}</p>
+                      <p className="text-[11px] text-slate-400">Students</p>
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-indigo-700">{branchBatches}</p>
-                      <p className="text-[11px] text-gray-500">Batches</p>
+                      <p className="text-sm font-extrabold text-amber-400">{branchBatches}</p>
+                      <p className="text-[11px] text-slate-400">Batches</p>
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-indigo-700">{branchStaff}</p>
-                      <p className="text-[11px] text-gray-500">Staff Assigned</p>
+                      <p className="text-sm font-extrabold text-amber-400">{branchStaff}</p>
+                      <p className="text-[11px] text-slate-400">Staff Assigned</p>
                     </div>
                   </div>
 
                   {/* Director & Manager Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs mb-3">
-                    <div className="bg-white border border-gray-100 p-2.5 rounded-xl shadow-2xs">
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                        <Shield className="w-3 h-3 text-indigo-500" /> Branch Director
+                    <div className="bg-slate-950/60 border border-slate-800/90 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <Shield className="w-3 h-3 text-amber-400" /> Branch Director
                       </p>
-                      <p className="font-bold text-gray-800 mt-0.5">
+                      <p className="font-bold text-white mt-0.5">
                         {branch.branch_director || "Not assigned"}
                       </p>
                       {branch.director_phone && (
                         <a
                           href={`tel:${branch.director_phone}`}
-                          className="text-[11px] text-indigo-600 hover:underline flex items-center gap-1 mt-0.5"
+                          className="text-[11px] text-amber-400 hover:underline flex items-center gap-1 mt-0.5 font-medium"
                         >
                           <Phone className="w-3 h-3" /> {branch.director_phone}
                         </a>
                       )}
                     </div>
 
-                    <div className="bg-white border border-gray-100 p-2.5 rounded-xl shadow-2xs">
-                      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                        <User className="w-3 h-3 text-emerald-500" /> Branch Manager
+                    <div className="bg-slate-950/60 border border-slate-800/90 p-2.5 rounded-xl">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <User className="w-3 h-3 text-emerald-400" /> Branch Manager
                       </p>
-                      <p className="font-bold text-gray-800 mt-0.5">
+                      <p className="font-bold text-white mt-0.5">
                         {branch.manager || "Not assigned"}
                       </p>
                       {branch.manager_phone && (
                         <a
                           href={`tel:${branch.manager_phone}`}
-                          className="text-[11px] text-emerald-600 hover:underline flex items-center gap-1 mt-0.5"
+                          className="text-[11px] text-emerald-400 hover:underline flex items-center gap-1 mt-0.5 font-medium"
                         >
                           <Phone className="w-3 h-3" /> {branch.manager_phone}
                         </a>
@@ -421,26 +424,26 @@ export default function BranchesClient({
                 </div>
 
                 {/* Contacts & SMS Gateway Footer */}
-                <div className="pt-3 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2 text-xs">
-                  <div className="flex items-center gap-3 text-gray-500">
+                <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2 text-xs">
+                  <div className="flex items-center gap-3 text-slate-400">
                     {branch.contact_info?.phone && (
                       <span className="flex items-center gap-1" title="Helpline">
-                        <Phone className="w-3.5 h-3.5 text-gray-400" /> {branch.contact_info.phone}
+                        <Phone className="w-3.5 h-3.5 text-amber-400" /> {branch.contact_info.phone}
                       </span>
                     )}
                     {branch.contact_info?.email && (
                       <span className="flex items-center gap-1" title="Email">
-                        <Mail className="w-3.5 h-3.5 text-gray-400" /> {branch.contact_info.email}
+                        <Mail className="w-3.5 h-3.5 text-amber-400" /> {branch.contact_info.email}
                       </span>
                     )}
                   </div>
 
                   <div className="flex items-center gap-2">
                     <span
-                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md font-medium ${
+                      className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md font-bold ${
                         hasCustomSms
-                          ? "bg-purple-50 text-purple-700 border border-purple-200"
-                          : "bg-gray-100 text-gray-600"
+                          ? "bg-purple-500/15 text-purple-300 border border-purple-500/30"
+                          : "bg-slate-800 text-slate-400"
                       }`}
                       title={
                         hasCustomSms
@@ -461,25 +464,25 @@ export default function BranchesClient({
 
       {/* Add / Edit Branch Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-100 my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-indigo-50/70 to-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md overflow-y-auto">
+          <div className="bg-[#0f172a] text-slate-100 w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-700 my-8 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/80">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-slate-950 flex items-center justify-center shadow-md font-bold">
                   <Landmark className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900 text-base">
+                  <h3 className="font-extrabold text-white text-base">
                     {editingBranch ? "Edit Branch" : "Add New Branch (শাখা যোগ করুন)"}
                   </h3>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-amber-400/90 font-medium">
                     Configure branch identity, leadership, contact helpline, and SMS routing
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
               >
                 ✕
               </button>
@@ -487,7 +490,7 @@ export default function BranchesClient({
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[78vh] overflow-y-auto">
               {error && (
-                <div className="p-3 bg-red-50 text-red-700 text-xs rounded-xl border border-red-200">
+                <div className="p-3 bg-rose-500/15 text-rose-300 text-xs rounded-xl border border-rose-500/30">
                   {error}
                 </div>
               )}
@@ -495,7 +498,7 @@ export default function BranchesClient({
               {/* Branch Primary Identity */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
                     Branch Name (শাখার নাম) *
                   </label>
                   <input
@@ -504,12 +507,12 @@ export default function BranchesClient({
                     placeholder="e.g. মেধা শিরী কোচিং (নাচোল শাখা)"
                     value={formData.name}
                     onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-700 bg-slate-950 rounded-xl text-white placeholder:text-slate-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
                     Established Year (প্রতিষ্ঠিত সাল)
                   </label>
                   <input
@@ -517,13 +520,13 @@ export default function BranchesClient({
                     placeholder="e.g. 2018 বা ২০১৮"
                     value={formData.established_year}
                     onChange={e => setFormData({ ...formData, established_year: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    className="w-full px-3 py-2 text-sm border border-slate-700 bg-slate-950 rounded-xl text-white placeholder:text-slate-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1">
                   Location / Full Address (ঠিকানা / অবস্থান)
                 </label>
                 <input
@@ -531,12 +534,12 @@ export default function BranchesClient({
                   placeholder="e.g. নাচোল বাসস্ট্যান্ড সংলগ্ন, চাঁপাইনবাবগঞ্জ"
                   value={formData.location}
                   onChange={e => setFormData({ ...formData, location: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full px-3 py-2 text-sm border border-slate-700 bg-slate-950 rounded-xl text-white placeholder:text-slate-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">
+                <label className="block text-xs font-bold text-slate-300 mb-1">
                   Branch Description (শাখার বর্ণনা ও সুবিধাসমূহ)
                 </label>
                 <textarea
@@ -544,18 +547,18 @@ export default function BranchesClient({
                   placeholder="Describe campus features, classrooms, facilities, programs offered..."
                   value={formData.description}
                   onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                  className="w-full px-3 py-2 text-sm border border-slate-700 bg-slate-950 rounded-xl text-white placeholder:text-slate-600 focus:border-amber-400 focus:ring-1 focus:ring-amber-400"
                 />
               </div>
 
               {/* Leadership Information */}
-              <div className="bg-gray-50/70 p-3.5 rounded-xl border border-gray-200/80 space-y-3">
-                <p className="text-xs font-bold text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-indigo-600" /> Branch Leadership
+              <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
+                <p className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-amber-400" /> Branch Leadership
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Branch Director (শাখা পরিচালক)
                     </label>
                     <input
@@ -563,11 +566,11 @@ export default function BranchesClient({
                       placeholder="Director full name"
                       value={formData.branch_director}
                       onChange={e => setFormData({ ...formData, branch_director: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-700 rounded-xl bg-slate-900 text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Director Phone (পরিচালকের ফোন)
                     </label>
                     <input
@@ -575,11 +578,11 @@ export default function BranchesClient({
                       placeholder="017xxxxxxxx"
                       value={formData.director_phone}
                       onChange={e => setFormData({ ...formData, director_phone: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-700 rounded-xl bg-slate-900 text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Branch Manager (শাখা ব্যবস্থাপক)
                     </label>
                     <input
@@ -587,11 +590,11 @@ export default function BranchesClient({
                       placeholder="Manager full name"
                       value={formData.manager}
                       onChange={e => setFormData({ ...formData, manager: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-700 rounded-xl bg-slate-900 text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Manager Phone (ব্যবস্থাপকের ফোন)
                     </label>
                     <input
@@ -599,20 +602,20 @@ export default function BranchesClient({
                       placeholder="017xxxxxxxx"
                       value={formData.manager_phone}
                       onChange={e => setFormData({ ...formData, manager_phone: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-700 rounded-xl bg-slate-900 text-white"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Contact Information (For Homepage & Invoices) */}
-              <div className="bg-gray-50/70 p-3.5 rounded-xl border border-gray-200/80 space-y-3">
-                <p className="text-xs font-bold text-gray-900 uppercase tracking-wider flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-emerald-600" /> Helpline & Public Contacts
+              {/* Contact Information */}
+              <div className="bg-slate-950/80 p-4 rounded-2xl border border-slate-800 space-y-3">
+                <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-emerald-400" /> Helpline & Public Contacts
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Office Helpline Phone
                     </label>
                     <input
@@ -620,11 +623,11 @@ export default function BranchesClient({
                       placeholder="017xxxxxxxx"
                       value={formData.phone}
                       onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-700 rounded-xl bg-slate-900 text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Branch Email
                     </label>
                     <input
@@ -632,11 +635,11 @@ export default function BranchesClient({
                       placeholder="branch@medhashiree.edu.bd"
                       value={formData.email}
                       onChange={e => setFormData({ ...formData, email: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-700 rounded-xl bg-slate-900 text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       WhatsApp Number
                     </label>
                     <input
@@ -644,25 +647,25 @@ export default function BranchesClient({
                       placeholder="017xxxxxxxx"
                       value={formData.whatsapp}
                       onChange={e => setFormData({ ...formData, whatsapp: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-700 rounded-xl bg-slate-900 text-white"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Dedicated SMS Gateway Configuration */}
-              <div className="bg-purple-50/50 p-3.5 rounded-xl border border-purple-200/70 space-y-3">
+              <div className="bg-purple-950/40 p-4 rounded-2xl border border-purple-800/60 space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-bold text-purple-950 uppercase tracking-wider flex items-center gap-1.5">
-                    <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Dedicated SMS Gateway (Optional)
+                  <p className="text-xs font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <MessageSquare className="w-3.5 h-3.5 text-purple-400" /> Dedicated SMS Gateway (Optional)
                   </p>
-                  <span className="text-[10px] text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full font-medium">
+                  <span className="text-[10px] text-purple-300 bg-purple-900/60 px-2 py-0.5 rounded-full font-semibold border border-purple-700/60">
                     Leave blank to use Global Gateway
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Branch SMS API Key
                     </label>
                     <input
@@ -670,11 +673,11 @@ export default function BranchesClient({
                       placeholder="Custom API Key"
                       value={formData.sms_api_key}
                       onChange={e => setFormData({ ...formData, sms_api_key: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-purple-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-purple-800/80 rounded-xl bg-slate-950 text-white"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">
+                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">
                       Branch Sender ID / Masking
                     </label>
                     <input
@@ -682,7 +685,7 @@ export default function BranchesClient({
                       placeholder="e.g. MedhaShiree or 88096..."
                       value={formData.sms_sender_id}
                       onChange={e => setFormData({ ...formData, sms_sender_id: e.target.value })}
-                      className="w-full px-3 py-1.5 text-xs sm:text-sm border border-purple-200 rounded-lg bg-white"
+                      className="w-full px-3 py-2 text-xs sm:text-sm border border-purple-800/80 rounded-xl bg-slate-950 text-white"
                     />
                   </div>
                 </div>
@@ -695,26 +698,26 @@ export default function BranchesClient({
                   id="is_active"
                   checked={formData.is_active}
                   onChange={e => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer"
+                  className="rounded text-amber-500 focus:ring-amber-400 w-4 h-4 cursor-pointer accent-amber-500"
                 />
-                <label htmlFor="is_active" className="text-xs font-semibold text-gray-700 cursor-pointer">
+                <label htmlFor="is_active" className="text-xs font-bold text-slate-300 cursor-pointer">
                   Branch is operational and active (সক্রিয় শাখা)
                 </label>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
                   disabled={saving}
-                  className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+                  className="px-4 py-2.5 text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-colors shadow-xs disabled:opacity-50"
+                  className="px-6 py-2.5 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 rounded-xl transition-all shadow-md shadow-amber-500/20 disabled:opacity-50"
                 >
                   {saving ? "Saving..." : editingBranch ? "Save Changes" : "Create Branch"}
                 </button>

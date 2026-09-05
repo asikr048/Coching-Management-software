@@ -9,28 +9,42 @@ export default async function ExpensesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold text-gray-900">Expenses</h2><p className="text-sm text-gray-500 mt-1">Track center expenses</p></div>
-        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-2"><p className="text-xs text-orange-500">Total Expenses</p><p className="text-lg font-bold text-orange-700">{formatCurrency(total)}</p></div>
+        <div>
+          <h2 className="text-2xl font-bold text-white tracking-tight">Expenses</h2>
+          <p className="text-sm text-slate-400 mt-1">Track operational expenditures & coaching overheads</p>
+        </div>
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl px-5 py-2.5 backdrop-blur-md">
+          <p className="text-xs text-amber-400/90 font-medium uppercase tracking-wider">Total Expenses</p>
+          <p className="text-xl font-black text-amber-300">{formatCurrency(total)}</p>
+        </div>
       </div>
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
         <table className="w-full">
-          <thead><tr className="bg-gray-50 border-b border-gray-200">
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Category</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Description</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Amount</th>
-            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-          </tr></thead>
-          <tbody className="divide-y divide-gray-100">
-            {(!expenses || expenses.length === 0) ? <tr><td colSpan={4} className="text-center py-12 text-gray-400">No expenses recorded</td></tr> :
+          <thead>
+            <tr className="bg-slate-950/80 border-b border-slate-800">
+              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Category</th>
+              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Description</th>
+              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Amount</th>
+              <th className="px-5 py-3.5 text-left text-xs font-bold text-slate-400 uppercase tracking-wider">Date</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/70">
+            {(!expenses || expenses.length === 0) ? (
+              <tr><td colSpan={4} className="text-center py-14 text-slate-500 text-sm">No expenses recorded yet</td></tr>
+            ) : (
               expenses.map(e => (
-                <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 capitalize">{e.category}</span></td>
-                  <td className="px-4 py-3 text-sm text-gray-700">{e.description || "-"}</td>
-                  <td className="px-4 py-3 text-sm font-semibold text-orange-700">{formatCurrency(e.amount)}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500">{formatDate(e.expense_date)}</td>
+                <tr key={e.id} className="hover:bg-slate-800/40 transition-colors">
+                  <td className="px-5 py-3.5">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-800/80 text-amber-300 border border-slate-700/80 capitalize">
+                      {e.category}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-sm text-slate-300">{e.description || "—"}</td>
+                  <td className="px-5 py-3.5 text-sm font-bold text-amber-400">{formatCurrency(e.amount)}</td>
+                  <td className="px-5 py-3.5 text-sm text-slate-400">{formatDate(e.expense_date)}</td>
                 </tr>
               ))
-            }
+            )}
           </tbody>
         </table>
       </div>

@@ -19,7 +19,12 @@ interface StaffMember {
 }
 
 const methodLabels: Record<string, string> = { bkash: "bKash", nagad: "Nagad", rocket: "Rocket", upay: "Upay" }
-const methodColors: Record<string, string> = { bkash: "text-pink-600 bg-pink-50 border-pink-200", nagad: "text-orange-600 bg-orange-50 border-orange-200", rocket: "text-purple-600 bg-purple-50 border-purple-200", upay: "text-blue-600 bg-blue-50 border-blue-200" }
+const methodColors: Record<string, string> = {
+  bkash: "text-pink-400 bg-pink-500/10 border-pink-500/30",
+  nagad: "text-orange-400 bg-orange-500/10 border-orange-500/30",
+  rocket: "text-purple-400 bg-purple-500/10 border-purple-500/30",
+  upay: "text-blue-400 bg-blue-500/10 border-blue-500/30"
+}
 
 export default function SettingsClient({ myRole }: { myRole: string }) {
   const supabase = createClient()
@@ -106,58 +111,58 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
     toast.success("Approver removed")
   }
 
-  const inputClass = "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+  const inputClass = "w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all"
   const approverIds = approvers.map(a => a.staff_id)
   const availableStaff = allStaff.filter(s => !approverIds.includes(s.id))
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>
+  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-amber-500" /></div>
 
   return (
     <div className="max-w-3xl space-y-6">
       {/* General Settings */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="font-semibold text-gray-800 mb-4 flex items-center gap-2"><Settings className="w-5 h-5" /> General Settings</h3>
-        <div className="space-y-3 text-sm text-gray-600">
-          <p>Center Name: <strong>MedhaShiree</strong></p>
-          <p>Default Fee Due Day: <strong>10th of every month</strong></p>
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+        <h3 className="font-black text-white text-base mb-4 flex items-center gap-2"><Settings className="w-5 h-5 text-amber-400" /> General Settings</h3>
+        <div className="space-y-3 text-sm text-slate-300">
+          <p>Center Name: <strong className="text-white font-bold">MedhaShiree</strong></p>
+          <p>Default Fee Due Day: <strong className="text-white font-bold">10th of every month</strong></p>
         </div>
       </div>
 
       {/* Payment Accounts — Owner only */}
       {isOwner && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-800 flex items-center gap-2"><Smartphone className="w-5 h-5 text-indigo-600" /> Payment Accounts</h3>
-            <button onClick={() => setShowAddAccount(true)} className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700">
+            <h3 className="font-black text-white text-base flex items-center gap-2"><Smartphone className="w-5 h-5 text-amber-400" /> Payment Accounts</h3>
+            <button onClick={() => setShowAddAccount(true)} className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer">
               <Plus className="w-3.5 h-3.5" /> Add Number
             </button>
           </div>
-          <p className="text-xs text-gray-500 mb-4">These payment numbers will be shown to students when they make a payment. Students will send money to these numbers.</p>
+          <p className="text-xs text-slate-400 mb-4">These payment numbers will be shown to students when they make a payment. Students will send money to these numbers.</p>
 
           {accounts.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-8 text-slate-500">
               <Phone className="w-8 h-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">No payment accounts added yet.</p>
-              <p className="text-xs">Add bKash, Nagad, Rocket, or Upay numbers for students to pay.</p>
+              <p className="text-sm font-medium">No payment accounts added yet.</p>
+              <p className="text-xs text-slate-500">Add bKash, Nagad, Rocket, or Upay numbers for students to pay.</p>
             </div>
           ) : (
             <div className="space-y-2">
               {accounts.map(acc => (
-                <div key={acc.id} className={`flex items-center justify-between p-3 rounded-lg border ${acc.is_active ? "bg-white border-gray-200" : "bg-gray-50 border-gray-200 opacity-60"}`}>
+                <div key={acc.id} className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${acc.is_active ? "bg-slate-950 border-slate-800" : "bg-slate-950/50 border-slate-800/60 opacity-60"}`}>
                   <div className="flex items-center gap-3">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${methodColors[acc.method] || "text-gray-600 bg-gray-50 border-gray-200"}`}>
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${methodColors[acc.method] || "text-slate-400 bg-slate-800 border-slate-700"}`}>
                       {methodLabels[acc.method] || acc.method}
                     </span>
                     <div>
-                      <p className="font-mono font-semibold text-gray-800">{acc.account_number}</p>
-                      {acc.account_name && <p className="text-xs text-gray-500">{acc.account_name}</p>}
+                      <p className="font-mono font-bold text-white text-sm">{acc.account_number}</p>
+                      {acc.account_name && <p className="text-xs text-slate-400">{acc.account_name}</p>}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => toggleAccount(acc.id, acc.is_active)} className="p-1 hover:bg-gray-100 rounded" title={acc.is_active ? "Disable" : "Enable"}>
-                      {acc.is_active ? <ToggleRight className="w-5 h-5 text-emerald-500" /> : <ToggleLeft className="w-5 h-5 text-gray-400" />}
+                    <button onClick={() => toggleAccount(acc.id, acc.is_active)} className="p-1 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer" title={acc.is_active ? "Disable" : "Enable"}>
+                      {acc.is_active ? <ToggleRight className="w-6 h-6 text-emerald-400" /> : <ToggleLeft className="w-6 h-6 text-slate-600" />}
                     </button>
-                    <button onClick={() => deleteAccount(acc.id)} className="p-1 hover:bg-red-50 rounded text-red-400 hover:text-red-600">
+                    <button onClick={() => deleteAccount(acc.id)} className="p-1.5 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400 transition-colors cursor-pointer" title="Delete Account">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -168,15 +173,15 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
 
           {/* Add account modal */}
           {showAddAccount && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-              <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+              <div className="bg-slate-900 rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-800 animate-in fade-in zoom-in-95">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold">Add Payment Number</h3>
-                  <button onClick={() => setShowAddAccount(false)} className="p-1 hover:bg-gray-100 rounded"><X className="w-5 h-5" /></button>
+                  <h3 className="text-lg font-black text-white">Add Payment Number</h3>
+                  <button onClick={() => setShowAddAccount(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"><X className="w-5 h-5" /></button>
                 </div>
                 <form onSubmit={addAccount} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method *</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Payment Method *</label>
                     <select value={accMethod} onChange={e => setAccMethod(e.target.value)} className={inputClass}>
                       <option value="bkash">bKash</option>
                       <option value="nagad">Nagad</option>
@@ -185,17 +190,17 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Account Number *</label>
                     <input required value={accNumber} onChange={e => setAccNumber(e.target.value)} className={inputClass} placeholder="01XXXXXXXXX" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Account Name</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Account Name</label>
                     <input value={accName} onChange={e => setAccName(e.target.value)} className={inputClass} placeholder="e.g. MedhaShiree Official" />
                   </div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={() => setShowAddAccount(false)} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">Cancel</button>
-                    <button type="submit" disabled={addingAcc} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:bg-indigo-400 flex items-center justify-center gap-2">
-                      {addingAcc ? <><Loader2 className="w-4 h-4 animate-spin" /> Adding...</> : "Add Account"}
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setShowAddAccount(false)} className="flex-1 py-2.5 border border-slate-800 text-slate-300 rounded-xl font-bold hover:bg-slate-800 hover:text-white transition-colors cursor-pointer">Cancel</button>
+                    <button type="submit" disabled={addingAcc} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-40 flex items-center justify-center gap-2 transition-all cursor-pointer">
+                      {addingAcc ? <><Loader2 className="w-4 h-4 animate-spin text-slate-950" /> Adding...</> : "Add Account"}
                     </button>
                   </div>
                 </form>
@@ -207,23 +212,23 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
 
       {/* Payment Approvers — Owner only */}
       {isOwner && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2"><Shield className="w-5 h-5 text-amber-600" /> Payment Approvers</h3>
-          <p className="text-xs text-gray-500 mb-4">Staff members who can approve or reject student payment submissions. Owners and Super Managers can always approve.</p>
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+          <h3 className="font-black text-white text-base mb-2 flex items-center gap-2"><Shield className="w-5 h-5 text-amber-400" /> Payment Approvers</h3>
+          <p className="text-xs text-slate-400 mb-4">Staff members who can approve or reject student payment submissions. Owners and Super Managers can always approve.</p>
 
           {/* Current approvers */}
           {approvers.length > 0 && (
             <div className="space-y-2 mb-4">
               {approvers.map(app => (
-                <div key={app.id} className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg border border-emerald-200">
+                <div key={app.id} className="flex items-center justify-between p-3.5 bg-slate-950 rounded-xl border border-slate-800">
                   <div className="flex items-center gap-3">
-                    <UserCheck className="w-5 h-5 text-emerald-600" />
+                    <UserCheck className="w-5 h-5 text-emerald-400" />
                     <div>
-                      <p className="font-semibold text-gray-800 text-sm">{app.staff?.name || "Unknown"}</p>
-                      <p className="text-xs text-gray-500">{app.staff?.email} • {app.staff?.role}</p>
+                      <p className="font-bold text-white text-sm">{app.staff?.name || "Unknown"}</p>
+                      <p className="text-xs text-slate-400">{app.staff?.email} • {app.staff?.role}</p>
                     </div>
                   </div>
-                  <button onClick={() => removeApprover(app.id)} className="p-1.5 hover:bg-red-50 rounded text-red-400 hover:text-red-600" title="Remove">
+                  <button onClick={() => removeApprover(app.id)} className="p-1.5 hover:bg-rose-500/10 rounded-lg text-slate-500 hover:text-rose-400 transition-colors cursor-pointer" title="Remove">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -239,17 +244,17 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                 <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
               ))}
             </select>
-            <button onClick={addApprover} disabled={!selectedStaff || addingApprover} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:bg-emerald-400 flex items-center gap-1">
-              {addingApprover ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add
+            <button onClick={addApprover} disabled={!selectedStaff || addingApprover} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 disabled:opacity-40 flex items-center gap-1.5 transition-all cursor-pointer shrink-0">
+              {addingApprover ? <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> : <Plus className="w-4 h-4" />} Add
             </button>
           </div>
         </div>
       )}
 
       {/* Supabase Connection */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
-        <h3 className="font-semibold text-gray-800 mb-4">Supabase Connection</h3>
-        <p className="text-sm text-gray-500">Configure your Supabase URL and keys in the <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs">.env.local</code> file.</p>
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
+        <h3 className="font-black text-white text-base mb-2">Supabase Connection</h3>
+        <p className="text-sm text-slate-400">Configure your Supabase URL and keys in the <code className="bg-slate-950 border border-slate-800 text-amber-400 px-1.5 py-0.5 rounded text-xs font-mono">.env.local</code> file.</p>
       </div>
     </div>
   )

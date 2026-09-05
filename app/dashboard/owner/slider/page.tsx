@@ -29,10 +29,10 @@ export default async function SliderPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+        <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
           Homepage Content Editor (ওয়েবসাইট ও কনটেন্ট সম্পাদক)
         </h1>
-        <p className="text-sm text-gray-500 mt-1">
+        <p className="text-sm text-amber-400/90 font-medium mt-1">
           Manage Hero image slider, Notice Board, Student Achievements, Educational Blogs, and Institutional Branding.
         </p>
       </div>

@@ -369,13 +369,13 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <h2 className="text-xl sm:text-2xl font-black text-gray-900 flex items-center gap-2 sm:gap-2.5">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-center text-indigo-600 shadow-xs flex-shrink-0">
+          <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2 sm:gap-2.5">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-center text-amber-400 shadow-sm flex-shrink-0">
               <GitMerge className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <span>Referral Management</span>
           </h2>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
             Track and reward all enrollment referrals — sortable by name, date, and commission
           </p>
         </div>
@@ -383,9 +383,9 @@ export default function ReferralsClient({ initialReferrals }: Props) {
         <div className="flex items-center gap-2">
           <button
             onClick={exportCSV}
-            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 rounded-xl text-xs sm:text-sm font-semibold shadow-xs transition-all hover:border-gray-300 active:scale-98"
+            className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 rounded-xl text-xs sm:text-sm font-bold shadow-sm transition-all hover:border-slate-600 active:scale-98 cursor-pointer"
           >
-            <Download className="w-4 h-4 text-gray-500" />
+            <Download className="w-4 h-4 text-amber-400" />
             <span>Export CSV</span>
           </button>
         </div>
@@ -393,79 +393,79 @@ export default function ReferralsClient({ initialReferrals }: Props) {
 
       {/* Stat Cards - Responsive Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
-        <div className="bg-white rounded-2xl border border-gray-100 p-3.5 sm:p-4 shadow-xs">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-xs font-bold uppercase text-gray-400 truncate">Total Referrals</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-indigo-50 rounded-lg flex items-center justify-center text-indigo-600 flex-shrink-0">
+            <span className="text-[10px] sm:text-xs font-bold uppercase text-slate-400 truncate">Total Referrals</span>
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-amber-400 flex-shrink-0">
               <GitMerge className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <p className="text-xl sm:text-2xl font-black text-gray-900 mt-1.5 sm:mt-2">{stats.totalCount}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5 truncate">{stats.uniqueReferrers} unique referrers</p>
+          <p className="text-xl sm:text-2xl font-black text-white mt-1.5 sm:mt-2">{stats.totalCount}</p>
+          <p className="text-[11px] text-slate-500 mt-0.5 truncate">{stats.uniqueReferrers} unique referrers</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 p-3.5 sm:p-4 shadow-xs">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-xs font-bold uppercase text-amber-500 truncate">Pending Payout</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-amber-50 rounded-lg flex items-center justify-center text-amber-600 flex-shrink-0">
+            <span className="text-[10px] sm:text-xs font-bold uppercase text-amber-400 truncate">Pending Payout</span>
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-amber-400 flex-shrink-0">
               <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <p className="text-xl sm:text-2xl font-black text-amber-600 mt-1.5 sm:mt-2">{formatCurrency(stats.pendingCommission)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5 truncate">{stats.pendingCount + stats.approvedCount} pending</p>
+          <p className="text-xl sm:text-2xl font-black text-amber-400 mt-1.5 sm:mt-2">{formatCurrency(stats.pendingCommission)}</p>
+          <p className="text-[11px] text-slate-500 mt-0.5 truncate">{stats.pendingCount + stats.approvedCount} pending</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 p-3.5 sm:p-4 shadow-xs">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-xs font-bold uppercase text-emerald-600 truncate">Paid Out</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600 flex-shrink-0">
+            <span className="text-[10px] sm:text-xs font-bold uppercase text-emerald-400 truncate">Paid Out</span>
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-emerald-400 flex-shrink-0">
               <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <p className="text-xl sm:text-2xl font-black text-emerald-600 mt-1.5 sm:mt-2">{formatCurrency(stats.paidCommission)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5 truncate">{stats.paidCount} paid referrals</p>
+          <p className="text-xl sm:text-2xl font-black text-emerald-400 mt-1.5 sm:mt-2">{formatCurrency(stats.paidCommission)}</p>
+          <p className="text-[11px] text-slate-500 mt-0.5 truncate">{stats.paidCount} paid referrals</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 p-3.5 sm:p-4 shadow-xs">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-xs font-bold uppercase text-purple-600 truncate">Total Commission</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-purple-50 rounded-lg flex items-center justify-center text-purple-600 flex-shrink-0">
+            <span className="text-[10px] sm:text-xs font-bold uppercase text-purple-400 truncate">Total Commission</span>
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-purple-400 flex-shrink-0">
               <DollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <p className="text-xl sm:text-2xl font-black text-purple-700 mt-1.5 sm:mt-2">{formatCurrency(stats.totalCommission)}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5 truncate">10% standard rate</p>
+          <p className="text-xl sm:text-2xl font-black text-purple-400 mt-1.5 sm:mt-2">{formatCurrency(stats.totalCommission)}</p>
+          <p className="text-[11px] text-slate-500 mt-0.5 truncate">10% standard rate</p>
         </div>
 
-        <div className="bg-white rounded-2xl border border-gray-100 p-3.5 sm:p-4 shadow-xs col-span-2 sm:col-span-1">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3.5 sm:p-4 shadow-xl col-span-2 sm:col-span-1">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] sm:text-xs font-bold uppercase text-blue-600 truncate">Active Referrers</span>
-            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-blue-50 rounded-lg flex items-center justify-center text-blue-600 flex-shrink-0">
+            <span className="text-[10px] sm:text-xs font-bold uppercase text-blue-400 truncate">Active Referrers</span>
+            <div className="w-6 h-6 sm:w-7 sm:h-7 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-center text-blue-400 flex-shrink-0">
               <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <p className="text-xl sm:text-2xl font-black text-blue-600 mt-1.5 sm:mt-2">{stats.uniqueReferrers}</p>
-          <p className="text-[11px] text-gray-400 mt-0.5 truncate">Students & Promoters</p>
+          <p className="text-xl sm:text-2xl font-black text-blue-400 mt-1.5 sm:mt-2">{stats.uniqueReferrers}</p>
+          <p className="text-[11px] text-slate-500 mt-0.5 truncate">Students & Promoters</p>
         </div>
       </div>
 
       {/* Control Bar: Search, Status Filter & Sorting */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-3 sm:p-4 shadow-xs space-y-3">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-3 sm:p-4 shadow-xl space-y-3">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
           {/* Search input */}
           <div className="relative flex-1 min-w-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search referral name, student, ID, phone..."
-              className="w-full pl-9 sm:pl-10 pr-8 py-2 sm:py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+              className="w-full pl-9 sm:pl-10 pr-8 py-2 sm:py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 bg-slate-950"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 cursor-pointer"
                 aria-label="Clear search"
               >
                 <X className="w-3.5 h-3.5" />
@@ -475,14 +475,14 @@ export default function ReferralsClient({ initialReferrals }: Props) {
 
           {/* Sort Dropdown */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            <div className="flex items-center gap-1 px-2.5 py-2 border border-gray-200 rounded-xl bg-gray-50 text-[11px] sm:text-xs font-semibold text-gray-600">
-              <ArrowUpDown className="w-3.5 h-3.5 text-gray-500" />
+            <div className="flex items-center gap-1 px-2.5 py-2 border border-slate-700 rounded-xl bg-slate-950 text-[11px] sm:text-xs font-semibold text-slate-400">
+              <ArrowUpDown className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden xs:inline">Sort:</span>
             </div>
             <select
               value={sortBy}
               onChange={e => setSortBy(e.target.value as SortField)}
-              className="flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm font-semibold text-gray-800 border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer shadow-xs"
+              className="flex-1 sm:flex-none px-3 py-2 text-xs sm:text-sm font-semibold text-white border border-slate-700 rounded-xl bg-slate-950 focus:outline-none focus:border-amber-400 cursor-pointer shadow-sm"
             >
               <option value="time_desc">🕒 Date: Newest</option>
               <option value="time_asc">🕒 Date: Oldest</option>
@@ -497,7 +497,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
         </div>
 
         {/* Status Filter Tabs - Scrollable on mobile */}
-        <div className="flex items-center justify-between gap-2 pt-2 border-t border-gray-100 flex-wrap">
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800 flex-wrap">
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none w-full sm:w-auto">
             {(
               [
@@ -510,16 +510,16 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               <button
                 key={tab.key}
                 onClick={() => setStatusFilter(tab.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap flex-shrink-0 cursor-pointer ${
                   statusFilter === tab.key
-                    ? "bg-indigo-600 text-white shadow-xs"
-                    : "bg-gray-50 hover:bg-gray-100 text-gray-600 border border-gray-200"
+                    ? "bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20"
+                    : "bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 hover:text-white"
                 }`}
               >
                 <span>{tab.label}</span>
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
-                    statusFilter === tab.key ? "bg-white/25 text-white" : "bg-gray-200 text-gray-700"
+                    statusFilter === tab.key ? "bg-slate-950/25 text-slate-950" : "bg-slate-800 text-slate-300"
                   }`}
                 >
                   {tab.count}
@@ -528,7 +528,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
             ))}
           </div>
 
-          <span className="text-[11px] text-gray-400 font-medium ml-auto">
+          <span className="text-[11px] text-slate-500 font-medium ml-auto">
             Showing {filteredAndSorted.length} of {referrals.length}
           </span>
         </div>
@@ -537,12 +537,12 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       {/* MOBILE CARDS VIEW (block on mobile, hidden on tablet/desktop) */}
       <div className="block md:hidden space-y-3">
         {filteredAndSorted.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center space-y-2">
-            <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-xl flex items-center justify-center mx-auto">
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-8 text-center space-y-2">
+            <div className="w-10 h-10 bg-amber-500/10 text-amber-400 rounded-xl flex items-center justify-center mx-auto border border-amber-500/20">
               <GitMerge className="w-5 h-5" />
             </div>
-            <p className="font-bold text-gray-800 text-sm">No referrals found</p>
-            <p className="text-xs text-gray-400">
+            <p className="font-bold text-slate-300 text-sm">No referrals found</p>
+            <p className="text-xs text-slate-500">
               {searchQuery ? `No matches for "${searchQuery}"` : "Referrals will show up here automatically."}
             </p>
           </div>
@@ -550,34 +550,34 @@ export default function ReferralsClient({ initialReferrals }: Props) {
           filteredAndSorted.map((r, idx) => (
             <div
               key={r.id}
-              className="bg-white rounded-2xl border border-gray-200 p-4 shadow-xs space-y-3 hover:border-indigo-200 transition-all"
+              className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-4 shadow-xl space-y-3 hover:border-slate-700 transition-all"
             >
               {/* Card Header: Referrer + Status */}
-              <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-gray-100">
+              <div className="flex items-start justify-between gap-2 pb-2.5 border-b border-slate-800">
                 <div className="flex items-center gap-2 min-w-0">
                   <div
                     className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 text-xs font-black ${
-                      r.is_matched_student ? "bg-indigo-100 text-indigo-700" : "bg-purple-100 text-purple-700"
+                      r.is_matched_student ? "bg-amber-500/15 text-amber-300 border border-amber-500/30" : "bg-purple-500/15 text-purple-300 border border-purple-500/30"
                     }`}
                   >
                     {r.referrer_name.charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-bold text-sm text-gray-900 truncate">{r.referrer_name}</span>
+                      <span className="font-bold text-sm text-white truncate">{r.referrer_name}</span>
                       <span
                         className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
                           r.is_matched_student
-                            ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                            : "bg-amber-50 text-amber-700 border border-amber-200"
+                            ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                            : "bg-purple-500/15 text-purple-300 border border-purple-500/30"
                         }`}
                       >
                         {r.is_matched_student ? "Student" : "Written"}
                       </span>
                     </div>
                     {r.is_matched_student && r.referrer_student_id && (
-                      <p className="text-[11px] text-gray-500">
-                        ID: <span className="font-mono font-semibold text-gray-700">{r.referrer_student_id}</span>
+                      <p className="text-[11px] text-slate-400">
+                        ID: <span className="font-mono font-semibold text-slate-300">{r.referrer_student_id}</span>
                         {r.referrer_phone && <span className="ml-1">• {r.referrer_phone}</span>}
                       </p>
                     )}
@@ -587,17 +587,17 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                 {/* Status pill */}
                 <div className="flex-shrink-0">
                   {r.status === "paid" ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                       <CheckCircle2 className="w-3 h-3" />
                       Paid
                     </span>
                   ) : r.status === "approved" ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30">
                       <Check className="w-3 h-3" />
                       Approved
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
                       <Clock className="w-3 h-3" />
                       Pending
                     </span>
@@ -608,41 +608,41 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               {/* Card Details Grid */}
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {/* Enrolled Student */}
-                <div className="bg-gray-50/70 p-2.5 rounded-xl">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase block">Enrolled Student</span>
+                <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Enrolled Student</span>
                   <Link
                     href={`/dashboard/owner/students/${r.referee_id}`}
-                    className="font-bold text-gray-900 hover:text-indigo-600 flex items-center gap-1 mt-0.5 truncate"
+                    className="font-bold text-white hover:text-amber-400 flex items-center gap-1 mt-0.5 truncate transition-colors"
                   >
                     <span className="truncate">{r.referee_name}</span>
-                    <ExternalLink className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                    <ExternalLink className="w-3 h-3 text-slate-500 flex-shrink-0" />
                   </Link>
-                  <p className="text-[11px] text-gray-500 font-mono mt-0.5">{r.referee_student_id}</p>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">{r.referee_student_id}</p>
                 </div>
 
                 {/* Batch Enrolled */}
-                <div className="bg-gray-50/70 p-2.5 rounded-xl">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase block">Batch</span>
-                  <p className="font-bold text-gray-900 mt-0.5 truncate">{r.batch_name || "General"}</p>
+                <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Batch</span>
+                  <p className="font-bold text-white mt-0.5 truncate">{r.batch_name || "General"}</p>
                   {r.batch_fee ? (
-                    <p className="text-[11px] text-gray-500 mt-0.5">{formatCurrency(r.batch_fee)}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{formatCurrency(r.batch_fee)}</p>
                   ) : null}
                 </div>
 
                 {/* Commission */}
-                <div className="bg-indigo-50/50 border border-indigo-100 p-2.5 rounded-xl">
-                  <span className="text-[10px] font-bold text-indigo-600 uppercase block">Commission</span>
-                  <p className="font-black text-sm text-gray-900 mt-0.5">
+                <div className="bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
+                  <span className="text-[10px] font-bold text-amber-400 uppercase block">Commission</span>
+                  <p className="font-black text-sm text-white mt-0.5 font-mono">
                     {formatCurrency(r.commission_amount || 0)}
                   </p>
-                  <p className="text-[10px] text-indigo-500 font-semibold">{r.commission_rate || 10}% rate</p>
+                  <p className="text-[10px] text-amber-400/80 font-semibold">{r.commission_rate || 10}% rate</p>
                 </div>
 
                 {/* Date */}
-                <div className="bg-gray-50/70 p-2.5 rounded-xl">
-                  <span className="text-[10px] font-bold text-gray-400 uppercase block">Date</span>
-                  <p className="font-semibold text-gray-800 mt-0.5">{formatDate(r.created_at)}</p>
-                  <p className="text-[10px] text-gray-400">
+                <div className="bg-slate-950 border border-slate-800/80 p-2.5 rounded-xl">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase block">Date</span>
+                  <p className="font-semibold text-slate-300 mt-0.5">{formatDate(r.created_at)}</p>
+                  <p className="text-[10px] text-slate-500">
                     {new Date(r.created_at).toLocaleTimeString("en-US", {
                       hour: "2-digit",
                       minute: "2-digit",
@@ -653,8 +653,8 @@ export default function ReferralsClient({ initialReferrals }: Props) {
 
               {/* Notes if any */}
               {r.notes && (
-                <div className="bg-amber-50/50 border border-amber-100 rounded-xl px-2.5 py-1.5 text-[11px] text-amber-800">
-                  <strong>Note:</strong> {r.notes}
+                <div className="bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5 text-[11px] text-slate-300">
+                  <strong className="text-amber-400">Note:</strong> {r.notes}
                 </div>
               )}
 
@@ -664,7 +664,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                   <button
                     disabled={saving}
                     onClick={() => updateStatus(r, "approved")}
-                    className="flex-1 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl transition-colors text-center"
+                    className="flex-1 py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-xs font-bold rounded-xl transition-colors text-center cursor-pointer"
                   >
                     Approve
                   </button>
@@ -678,7 +678,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                       setPayMethod("bKash")
                       setPayNotes(r.notes || "")
                     }}
-                    className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1"
+                    className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 text-xs font-black rounded-xl shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-1 cursor-pointer"
                   >
                     <DollarSign className="w-3.5 h-3.5" />
                     <span>Pay Commission</span>
@@ -691,9 +691,9 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                     setEditAmount(String(r.commission_amount || 0))
                     setEditNotes(r.notes || "")
                   }}
-                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl transition-colors flex items-center gap-1"
+                  className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
                 >
-                  <Edit3 className="w-3.5 h-3.5" />
+                  <Edit3 className="w-3.5 h-3.5 text-amber-400" />
                   <span>Edit</span>
                 </button>
 
@@ -701,7 +701,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                   <button
                     disabled={saving}
                     onClick={() => updateStatus(r, "approved")}
-                    className="px-3 py-2 text-gray-500 hover:text-amber-600 text-xs font-medium rounded-xl hover:bg-gray-100 transition-colors"
+                    className="px-3 py-2 text-slate-400 hover:text-amber-400 text-xs font-medium rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
                   >
                     Revert
                   </button>
@@ -713,11 +713,11 @@ export default function ReferralsClient({ initialReferrals }: Props) {
       </div>
 
       {/* DESKTOP / TABLET TABLE VIEW (hidden on mobile, visible on md+) */}
-      <div className="hidden md:block bg-white rounded-2xl border border-gray-200 shadow-xs overflow-hidden">
+      <div className="hidden md:block bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left min-w-[760px]">
             <thead>
-              <tr className="bg-gradient-to-r from-gray-50 to-indigo-50/20 border-b border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+              <tr className="bg-slate-950 border-b border-slate-800 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="px-4 py-3.5 w-12 text-center">#</th>
                 <th className="px-4 py-3.5">Referrer / Written Name</th>
                 <th className="px-4 py-3.5">Referred Student</th>
@@ -728,16 +728,16 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                 <th className="px-4 py-3.5 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
+            <tbody className="divide-y divide-slate-800/60 text-sm">
               {filteredAndSorted.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="text-center py-16">
                     <div className="max-w-xs mx-auto text-center space-y-2">
-                      <div className="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto">
+                      <div className="w-12 h-12 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-2xl flex items-center justify-center mx-auto">
                         <GitMerge className="w-6 h-6" />
                       </div>
-                      <p className="font-bold text-gray-800">No referrals found</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="font-bold text-slate-300">No referrals found</p>
+                      <p className="text-xs text-slate-500">
                         {searchQuery
                           ? `No referrals matched "${searchQuery}"`
                           : "Referrals written when students enroll will show up here automatically."}
@@ -748,9 +748,9 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               ) : (
                 filteredAndSorted.map((r, idx) => {
                   return (
-                    <tr key={r.id} className="hover:bg-indigo-50/30 transition-colors">
+                    <tr key={r.id} className="hover:bg-slate-800/40 transition-colors">
                       {/* Index */}
-                      <td className="px-4 py-3.5 text-center text-xs font-bold text-gray-400">
+                      <td className="px-4 py-3.5 text-center text-xs font-bold text-slate-500">
                         {idx + 1}
                       </td>
 
@@ -760,21 +760,21 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                           <div
                             className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 text-xs font-black ${
                               r.is_matched_student
-                                ? "bg-indigo-100 text-indigo-700"
-                                : "bg-purple-100 text-purple-700"
+                                ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                                : "bg-purple-500/15 text-purple-300 border border-purple-500/30"
                             }`}
                           >
                             {r.referrer_name.charAt(0).toUpperCase()}
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="font-bold text-gray-900">{r.referrer_name}</span>
+                              <span className="font-bold text-white">{r.referrer_name}</span>
                               {r.is_matched_student ? (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">
                                   Student Referrer
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-500/15 text-purple-300 border border-purple-500/30">
                                   Written Referrer
                                 </span>
                               )}
@@ -782,8 +782,8 @@ export default function ReferralsClient({ initialReferrals }: Props) {
 
                             {/* Details if matched */}
                             {r.is_matched_student && r.referrer_student_id && (
-                              <p className="text-xs text-gray-500 mt-0.5">
-                                ID: <span className="font-mono text-gray-700 font-semibold">{r.referrer_student_id}</span>
+                              <p className="text-xs text-slate-400 mt-0.5">
+                                ID: <span className="font-mono text-slate-300 font-semibold">{r.referrer_student_id}</span>
                                 {r.referrer_phone && <span className="ml-1.5">• {r.referrer_phone}</span>}
                               </p>
                             )}
@@ -791,7 +791,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                             {/* Written name info if different */}
                             {r.written_referral_name &&
                               r.written_referral_name.toLowerCase() !== r.referrer_name.toLowerCase() && (
-                                <p className="text-[11px] text-gray-400 mt-0.5">
+                                <p className="text-[11px] text-slate-500 mt-0.5">
                                   Written code/name: &quot;{r.written_referral_name}&quot;
                                 </p>
                               )}
@@ -804,13 +804,13 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                         <div>
                           <Link
                             href={`/dashboard/owner/students/${r.referee_id}`}
-                            className="font-bold text-gray-900 hover:text-indigo-600 transition-colors flex items-center gap-1 group"
+                            className="font-bold text-white hover:text-amber-400 transition-colors flex items-center gap-1 group"
                           >
                             <span>{r.referee_name}</span>
-                            <ExternalLink className="w-3 h-3 text-gray-400 group-hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <ExternalLink className="w-3 h-3 text-slate-500 group-hover:text-amber-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </Link>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            ID: <span className="font-mono text-gray-700 font-medium">{r.referee_student_id}</span>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            ID: <span className="font-mono text-slate-300 font-medium">{r.referee_student_id}</span>
                             {r.referee_phone && <span className="ml-1.5">• {r.referee_phone}</span>}
                           </p>
                         </div>
@@ -820,27 +820,27 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                       <td className="px-4 py-3.5">
                         {r.batch_name ? (
                           <div>
-                            <span className="font-semibold text-gray-800 text-xs px-2 py-0.5 bg-gray-100 rounded-md">
+                            <span className="font-semibold text-slate-300 text-xs px-2 py-0.5 bg-slate-800 border border-slate-700 rounded-md">
                               {r.batch_name}
                             </span>
                             {r.batch_fee ? (
-                              <p className="text-[11px] text-gray-400 mt-0.5">
+                              <p className="text-[11px] text-slate-500 mt-0.5">
                                 Fee: {formatCurrency(r.batch_fee)}
                               </p>
                             ) : null}
                           </div>
                         ) : (
-                          <span className="text-xs text-gray-400 italic">General Enrollment</span>
+                          <span className="text-xs text-slate-500 italic">General Enrollment</span>
                         )}
                       </td>
 
                       {/* Date & Time */}
                       <td className="px-4 py-3.5">
                         <div>
-                          <p className="text-xs font-semibold text-gray-800">
+                          <p className="text-xs font-semibold text-slate-300">
                             {formatDate(r.created_at)}
                           </p>
-                          <p className="text-[11px] text-gray-400">
+                          <p className="text-[11px] text-slate-500">
                             {new Date(r.created_at).toLocaleTimeString("en-US", {
                               hour: "2-digit",
                               minute: "2-digit",
@@ -853,10 +853,10 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
                           <div>
-                            <p className="font-black text-gray-900 text-sm">
+                            <p className="font-black text-white text-sm font-mono">
                               {formatCurrency(r.commission_amount || 0)}
                             </p>
-                            <p className="text-[10px] text-gray-400 font-semibold">
+                            <p className="text-[10px] text-amber-400 font-semibold">
                               {r.commission_rate || 10}% rate
                             </p>
                           </div>
@@ -867,7 +867,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                               setEditNotes(r.notes || "")
                             }}
                             title="Edit commission or notes"
-                            className="p-1 rounded-md text-gray-400 hover:text-indigo-600 hover:bg-gray-100 transition-colors"
+                            className="p-1 rounded-md text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors cursor-pointer"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
@@ -878,24 +878,24 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                       <td className="px-4 py-3.5">
                         <div>
                           {r.status === "paid" ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 whitespace-nowrap">
                               <CheckCircle2 className="w-3 h-3" />
                               Paid
                             </span>
                           ) : r.status === "approved" ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/15 text-blue-400 border border-blue-500/30 whitespace-nowrap">
                               <Check className="w-3 h-3" />
                               Approved
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap">
                               <Clock className="w-3 h-3" />
                               Pending
                             </span>
                           )}
 
                           {r.paid_at && (
-                            <p className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">
+                            <p className="text-[10px] text-slate-500 mt-0.5 whitespace-nowrap">
                               {formatDate(r.paid_at)} {r.payment_method ? `• ${r.payment_method}` : ""}
                             </p>
                           )}
@@ -909,7 +909,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                             <button
                               disabled={saving}
                               onClick={() => updateStatus(r, "approved")}
-                              className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition-colors"
+                              className="px-2.5 py-1 bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 text-xs font-bold rounded-lg transition-colors cursor-pointer"
                               title="Approve referral commission"
                             >
                               Approve
@@ -924,7 +924,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                                 setPayMethod("bKash")
                                 setPayNotes(r.notes || "")
                               }}
-                              className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+                              className="px-2.5 py-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 text-xs font-black rounded-lg transition-all flex items-center gap-1 shadow-md shadow-amber-500/20 cursor-pointer"
                               title="Mark commission as paid"
                             >
                               <DollarSign className="w-3 h-3" />
@@ -936,7 +936,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                             <button
                               disabled={saving}
                               onClick={() => updateStatus(r, "approved")}
-                              className="px-2 py-1 text-gray-400 hover:text-amber-600 text-xs font-medium rounded-lg hover:bg-gray-100 transition-colors"
+                              className="px-2 py-1 text-slate-400 hover:text-amber-400 text-xs font-medium rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
                               title="Revert to approved"
                             >
                               Revert
@@ -955,42 +955,42 @@ export default function ReferralsClient({ initialReferrals }: Props) {
 
       {/* Pay Out Modal - Mobile Responsive Bottom Sheet / Center Dialog */}
       {payingItem && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-gray-100 space-y-4 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-800 space-y-4 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                <div className="w-8 h-8 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl flex items-center justify-center">
                   <CreditCard className="w-4 h-4" />
                 </div>
-                <h3 className="text-base font-bold text-gray-900">Record Commission Payout</h3>
+                <h3 className="text-base font-bold text-white">Record Commission Payout</h3>
               </div>
               <button
                 onClick={() => setPayingItem(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-emerald-50/70 border border-emerald-100 rounded-2xl p-4 text-center">
-              <p className="text-xs text-emerald-700 font-semibold uppercase">Commission Amount</p>
-              <p className="text-2xl sm:text-3xl font-black text-emerald-700 mt-1">
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-center">
+              <p className="text-xs text-amber-400 font-semibold uppercase tracking-wider">Commission Amount</p>
+              <p className="text-2xl sm:text-3xl font-black text-amber-300 mt-1 font-mono">
                 {formatCurrency(payingItem.commission_amount)}
               </p>
-              <p className="text-xs text-emerald-600 mt-1">
-                Paying to: <strong>{payingItem.referrer_name}</strong>
+              <p className="text-xs text-slate-300 mt-1">
+                Paying to: <strong className="text-white">{payingItem.referrer_name}</strong>
               </p>
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">
                   Payment Method
                 </label>
                 <select
                   value={payMethod}
                   onChange={e => setPayMethod(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm font-semibold text-gray-900 bg-white focus:ring-2 focus:ring-emerald-400 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm font-semibold text-white bg-slate-950 focus:border-amber-400 focus:outline-none"
                 >
                   <option value="bKash">bKash</option>
                   <option value="Nagad">Nagad</option>
@@ -1001,7 +1001,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">
                   Transaction / Payout Notes (Optional)
                 </label>
                 <input
@@ -1009,7 +1009,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                   value={payNotes}
                   onChange={e => setPayNotes(e.target.value)}
                   placeholder="e.g. TrxID: 9X738KA or Handed over by Manager"
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:ring-2 focus:ring-emerald-400 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white bg-slate-950 focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
             </div>
@@ -1018,7 +1018,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               <button
                 type="button"
                 onClick={() => setPayingItem(null)}
-                className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors text-center"
+                className="px-4 py-2.5 rounded-xl border border-slate-700 text-sm font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors text-center cursor-pointer"
               >
                 Cancel
               </button>
@@ -1031,7 +1031,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                     notes: payNotes,
                   })
                 }
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold shadow-md shadow-emerald-200 transition-all flex items-center justify-center gap-1.5"
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 rounded-xl text-sm font-black shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {saving ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
@@ -1047,41 +1047,41 @@ export default function ReferralsClient({ initialReferrals }: Props) {
 
       {/* Edit Commission Modal - Mobile Responsive */}
       {editingItem && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-gray-100 space-y-4 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 rounded-t-3xl sm:rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-slate-800 space-y-4 animate-in fade-in slide-in-from-bottom-6 sm:zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto text-white">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                <div className="w-8 h-8 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-xl flex items-center justify-center">
                   <Edit3 className="w-4 h-4" />
                 </div>
-                <h3 className="text-base font-bold text-gray-900">Edit Referral Commission</h3>
+                <h3 className="text-base font-bold text-white">Edit Referral Commission</h3>
               </div>
               <button
                 onClick={() => setEditingItem(null)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg"
+                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-gray-50 rounded-xl p-3 text-xs text-gray-600 space-y-1">
+            <div className="bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-300 space-y-1">
               <p>
-                <strong>Referrer:</strong> {editingItem.referrer_name}
+                <strong className="text-amber-400">Referrer:</strong> {editingItem.referrer_name}
               </p>
               <p>
-                <strong>Referred Student:</strong> {editingItem.referee_name} (
+                <strong className="text-amber-400">Referred Student:</strong> {editingItem.referee_name} (
                 {editingItem.referee_student_id})
               </p>
               {editingItem.batch_name && (
                 <p>
-                  <strong>Batch:</strong> {editingItem.batch_name}
+                  <strong className="text-amber-400">Batch:</strong> {editingItem.batch_name}
                 </p>
               )}
             </div>
 
             <div className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">
                   Commission Amount (BDT ৳) *
                 </label>
                 <input
@@ -1089,12 +1089,12 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                   value={editAmount}
                   onChange={e => setEditAmount(e.target.value)}
                   placeholder="e.g. 500"
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-gray-900 bg-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm font-bold text-white bg-slate-950 focus:border-amber-400 focus:outline-none font-mono"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1.5">
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1.5">
                   Notes
                 </label>
                 <textarea
@@ -1102,7 +1102,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                   onChange={e => setEditNotes(e.target.value)}
                   rows={3}
                   placeholder="Add details, promoter terms, or custom note..."
-                  className="w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:ring-2 focus:ring-indigo-400 focus:outline-none"
+                  className="w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white bg-slate-950 focus:border-amber-400 focus:outline-none placeholder:text-slate-500 resize-none"
                 />
               </div>
             </div>
@@ -1111,7 +1111,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
-                className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm font-bold text-gray-600 hover:bg-gray-50 transition-colors text-center"
+                className="px-4 py-2.5 rounded-xl border border-slate-700 text-sm font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 transition-colors text-center cursor-pointer"
               >
                 Cancel
               </button>
@@ -1119,7 +1119,7 @@ export default function ReferralsClient({ initialReferrals }: Props) {
                 type="button"
                 disabled={saving}
                 onClick={handleSaveEdit}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-bold shadow-md shadow-indigo-200 transition-all flex items-center justify-center gap-1.5"
+                className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 text-slate-950 rounded-xl text-sm font-black shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {saving ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />

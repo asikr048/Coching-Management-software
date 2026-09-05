@@ -10,7 +10,7 @@ export default async function ReceptionEnrollPage() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="mb-5"><h2 className="text-2xl font-bold text-gray-900">New Enrollment</h2><p className="text-sm text-gray-500 mt-1">Register or enroll existing student in a batch.</p></div>
+      <div className="mb-5"><h2 className="text-2xl font-black text-white tracking-tight">New Enrollment</h2><p className="text-sm text-slate-400 mt-1">Register or enroll existing student in a batch.</p></div>
       <NewStudentForm batches={batchesRes.data || []} students={studentsRes.data || []} />
     </div>
   )

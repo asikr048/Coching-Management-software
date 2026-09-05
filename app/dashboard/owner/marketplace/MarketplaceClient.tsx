@@ -153,81 +153,103 @@ export default function MarketplaceClient({ courses, students: initialStudents }
     win.print()
   }
 
-  const inputClass = "w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+  const inputClass = "w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all"
 
   return (
     <div>
       {/* Course Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {courses.map(c => (
-          <div key={c.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-            <div className="h-32 bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center"><ShoppingBag className="w-10 h-10 text-white/50" /></div>
-            <div className="p-4">
-              <div className="flex items-start justify-between">
-                <div><p className="font-semibold text-gray-800">{c.title}</p><p className="text-xs text-gray-500 mt-0.5">by {getTeacherName(c.teacher)}</p></div>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${c.status === "published" ? "bg-emerald-100 text-emerald-700" : c.status === "pending_review" ? "bg-yellow-100 text-yellow-700" : "bg-gray-100 text-gray-600"}`}>{c.status}</span>
+          <div key={c.id} className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 overflow-hidden shadow-xl hover:border-amber-500/30 transition-all">
+            <div className="h-32 bg-gradient-to-r from-amber-500/10 via-slate-800 to-amber-600/10 border-b border-slate-800 flex items-center justify-center">
+              <ShoppingBag className="w-10 h-10 text-amber-400/40" />
+            </div>
+            <div className="p-5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-black text-white text-base">{c.title}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">by {getTeacherName(c.teacher)}</p>
+                </div>
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border shrink-0 ${
+                  c.status === "published" 
+                    ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" 
+                    : c.status === "pending_review" 
+                    ? "bg-amber-500/15 text-amber-300 border border-amber-500/30" 
+                    : "bg-slate-800 text-slate-400 border border-slate-700"
+                }`}>
+                  {c.status}
+                </span>
               </div>
-              {c.description && <p className="text-xs text-gray-500 mt-2 line-clamp-2">{c.description}</p>}
-              <div className="flex items-center justify-between mt-3">
-                <div className="flex items-center gap-1"><Star className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400" /><span className="text-sm text-gray-600">{c.rating || 0} ({c.rating_count || 0})</span></div>
+              {c.description && <p className="text-xs text-slate-400 mt-2 line-clamp-2 leading-relaxed">{c.description}</p>}
+              <div className="flex items-center justify-between mt-3.5">
+                <div className="flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                  <span className="text-sm font-semibold text-slate-300">{c.rating || 0} ({c.rating_count || 0})</span>
+                </div>
                 <div className="text-right">
                   {c.discount_price && c.discount_price < c.price ? (
-                    <><span className="text-xs text-gray-400 line-through mr-1">{formatCurrency(c.price)}</span><span className="font-bold text-indigo-600">{formatCurrency(c.discount_price)}</span></>
+                    <>
+                      <span className="text-xs text-slate-500 line-through mr-1.5">{formatCurrency(c.price)}</span>
+                      <span className="font-black text-amber-400 text-base">{formatCurrency(c.discount_price)}</span>
+                    </>
                   ) : (
-                    <span className="font-bold text-indigo-600">{formatCurrency(c.price)}</span>
+                    <span className="font-black text-amber-400 text-base">{formatCurrency(c.price)}</span>
                   )}
                 </div>
               </div>
-              <p className="text-xs text-gray-400 mt-2">{c.total_sales || 0} sales • {c.level || "All levels"}</p>
-              <button onClick={() => openBuy(c)} className="w-full mt-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+              <p className="text-xs text-slate-500 mt-2">{c.total_sales || 0} sales • {c.level || "All levels"}</p>
+              <button 
+                onClick={() => openBuy(c)} 
+                className="w-full mt-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
                 <CreditCard className="w-4 h-4" /> Buy Course
               </button>
             </div>
           </div>
         ))}
-        {courses.length === 0 && <div className="col-span-full text-center py-12 text-gray-400">No courses yet.</div>}
+        {courses.length === 0 && <div className="col-span-full text-center py-16 text-slate-500 font-medium">No courses available in the marketplace yet.</div>}
       </div>
 
       {/* Buy Course Modal */}
       {buyModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-3xl w-full max-w-lg shadow-2xl border border-slate-800 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95">
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+            <div className="flex items-center justify-between p-5 border-b border-slate-800">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Buy Course</h3>
-                <p className="text-sm text-gray-500">{buyModal.title} — {formatCurrency(buyModal.discount_price || buyModal.price)}</p>
+                <h3 className="text-lg font-black text-white">Buy Course</h3>
+                <p className="text-sm text-slate-400">{buyModal.title} — <strong className="text-amber-400 font-bold">{formatCurrency(buyModal.discount_price || buyModal.price)}</strong></p>
               </div>
-              <button onClick={closeBuy} className="p-1.5 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+              <button onClick={closeBuy} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="p-5">
               {/* Step 1: Select Student */}
               {step === "select" && (
                 <div className="space-y-4">
-                  <p className="text-sm font-semibold text-gray-700">Step 1: Select or Create Student</p>
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Step 1: Select or Create Student</p>
 
                   {!isNewStudent && !selectedStudent && (
                     <>
                       <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student by name, ID, or phone..."
-                          className="w-full pl-10 pr-4 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white" />
+                          className="w-full pl-10 pr-4 py-2.5 text-sm text-white placeholder:text-slate-500 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 bg-slate-950" />
                         {filteredStudents.length > 0 && (
-                          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white rounded-xl border border-gray-200 shadow-lg max-h-48 overflow-y-auto">
+                          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-slate-900 rounded-xl border border-slate-800 shadow-2xl max-h-48 overflow-y-auto divide-y divide-slate-800">
                             {filteredStudents.map(s => (
                               <button key={s.id} onClick={() => { setSelectedStudent(s); setSearch("") }}
-                                className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-sm flex items-center justify-between border-b border-gray-50 last:border-0">
-                                <div><p className="font-medium text-gray-800">{s.name}</p><p className="text-xs text-gray-500">{s.student_id} {s.phone ? `• ${s.phone}` : ""}</p></div>
+                                className="w-full text-left px-4 py-2.5 hover:bg-slate-800 text-sm flex items-center justify-between transition-colors cursor-pointer">
+                                <div><p className="font-bold text-white">{s.name}</p><p className="text-xs text-slate-400"><span className="text-amber-400 font-mono">{s.student_id}</span> {s.phone ? `• ${s.phone}` : ""}</p></div>
                               </button>
                             ))}
                           </div>
                         )}
                       </div>
                       <div className="text-center">
-                        <span className="text-xs text-gray-400">or</span>
+                        <span className="text-xs text-slate-500">or</span>
                       </div>
-                      <button onClick={() => setIsNewStudent(true)} className="w-full py-2.5 border-2 border-dashed border-indigo-300 text-indigo-600 rounded-xl text-sm font-semibold hover:bg-indigo-50 flex items-center justify-center gap-2">
+                      <button onClick={() => setIsNewStudent(true)} className="w-full py-2.5 border-2 border-dashed border-amber-500/40 text-amber-400 rounded-xl text-sm font-bold hover:bg-amber-500/10 flex items-center justify-center gap-2 transition-colors cursor-pointer">
                         <UserPlus className="w-4 h-4" /> Create New Student
                       </button>
                     </>
@@ -235,21 +257,21 @@ export default function MarketplaceClient({ courses, students: initialStudents }
 
                   {/* Selected student card */}
                   {selectedStudent && !isNewStudent && (
-                    <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-xl border border-indigo-200">
+                    <div className="flex items-center justify-between p-3.5 bg-amber-500/10 rounded-xl border border-amber-500/30">
                       <div>
-                        <p className="text-sm font-semibold text-indigo-800">{selectedStudent.name}</p>
-                        <p className="text-xs text-indigo-600">{selectedStudent.student_id} {selectedStudent.phone ? `• ${selectedStudent.phone}` : ""}</p>
+                        <p className="text-sm font-bold text-white">{selectedStudent.name}</p>
+                        <p className="text-xs text-amber-400 font-mono font-bold">{selectedStudent.student_id} {selectedStudent.phone ? `• ${selectedStudent.phone}` : ""}</p>
                       </div>
-                      <button onClick={() => setSelectedStudent(null)} className="text-xs text-red-500 hover:text-red-700 font-medium">Change</button>
+                      <button onClick={() => setSelectedStudent(null)} className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer">Change</button>
                     </div>
                   )}
 
                   {/* New student form */}
                   {isNewStudent && (
-                    <div className="space-y-3 p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <div className="space-y-3 p-4 bg-slate-950 rounded-xl border border-slate-800">
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-gray-700 flex items-center gap-1"><UserPlus className="w-4 h-4" /> New Student</p>
-                        <button onClick={() => setIsNewStudent(false)} className="text-xs text-red-500 font-medium">Cancel</button>
+                        <p className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1"><UserPlus className="w-4 h-4 text-amber-400" /> New Student</p>
+                        <button onClick={() => setIsNewStudent(false)} className="text-xs text-rose-400 hover:text-rose-300 font-bold cursor-pointer">Cancel</button>
                       </div>
                       <input value={newForm.name} onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))} placeholder="Student Name *" className={inputClass} />
                       <div className="grid grid-cols-2 gap-3">
@@ -261,7 +283,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                   )}
 
                   {(selectedStudent || isNewStudent) && (
-                    <button onClick={() => setStep("payment")} className="w-full py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700">
+                    <button onClick={() => setStep("payment")} className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-black shadow-lg shadow-amber-500/20 transition-all cursor-pointer">
                       Next → Payment
                     </button>
                   )}
@@ -271,29 +293,29 @@ export default function MarketplaceClient({ courses, students: initialStudents }
               {/* Step 2: Payment */}
               {step === "payment" && (
                 <div className="space-y-4">
-                  <p className="text-sm font-semibold text-gray-700">Step 2: Payment</p>
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-wider">Step 2: Payment</p>
 
-                  <div className="p-3 bg-indigo-50 rounded-xl text-sm">
-                    <div className="flex justify-between"><span className="text-gray-600">Course</span><span className="font-semibold text-gray-800">{buyModal.title}</span></div>
-                    <div className="flex justify-between mt-1"><span className="text-gray-600">Student</span><span className="font-semibold text-gray-800">{selectedStudent?.name || newForm.name}</span></div>
-                    <div className="flex justify-between mt-1"><span className="text-gray-600">Price</span><span className="font-bold text-indigo-700">{formatCurrency(buyModal.discount_price || buyModal.price)}</span></div>
+                  <div className="p-3.5 bg-slate-950 rounded-xl border border-slate-800 text-sm space-y-1">
+                    <div className="flex justify-between"><span className="text-slate-400">Course</span><span className="font-bold text-white">{buyModal.title}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Student</span><span className="font-bold text-white">{selectedStudent?.name || newForm.name}</span></div>
+                    <div className="flex justify-between pt-1 border-t border-slate-800"><span className="text-slate-400">Price</span><span className="font-black text-amber-400">{formatCurrency(buyModal.discount_price || buyModal.price)}</span></div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (৳)</label>
-                    <input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${inputClass} font-semibold`} />
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Amount (৳)</label>
+                    <input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${inputClass} font-bold`} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                    <label className="block text-xs font-bold text-slate-300 mb-1.5">Payment Method</label>
                     <select value={payMethod} onChange={e => setPayMethod(e.target.value)} className={inputClass}>
                       <option value="cash">Cash</option><option value="bkash">bKash</option><option value="nagad">Nagad</option><option value="card">Card</option><option value="bank">Bank Transfer</option>
                     </select>
                   </div>
 
                   <div className="flex gap-3 pt-2">
-                    <button onClick={() => setStep("select")} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50">← Back</button>
-                    <button onClick={handleBuy} disabled={loading} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2">
-                      {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    <button onClick={() => setStep("select")} className="flex-1 py-2.5 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">← Back</button>
+                    <button onClick={handleBuy} disabled={loading} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-black shadow-lg shadow-amber-500/20 disabled:opacity-50 flex items-center justify-center gap-2 transition-all cursor-pointer">
+                      {loading ? <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> : <Check className="w-4 h-4 text-slate-950" />}
                       {loading ? "Processing..." : `Pay ${formatCurrency(parseFloat(paidAmount) || 0)}`}
                     </button>
                   </div>
@@ -304,14 +326,14 @@ export default function MarketplaceClient({ courses, students: initialStudents }
               {step === "receipt" && receipt && (
                 <div className="space-y-4">
                   <div className="text-center mb-2">
-                    <div className="w-14 h-14 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-2"><Check className="w-7 h-7 text-emerald-600" /></div>
-                    <p className="text-lg font-bold text-gray-900">Purchase Successful!</p>
+                    <div className="w-14 h-14 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full flex items-center justify-center mx-auto mb-2"><Check className="w-7 h-7" /></div>
+                    <p className="text-lg font-black text-white">Purchase Successful!</p>
                   </div>
 
-                  <div ref={receiptRef} className="border border-gray-200 rounded-xl p-5 bg-gray-50 space-y-2">
-                    <div className="text-center border-b border-dashed border-gray-300 pb-3 mb-3">
-                      <p className="font-bold text-gray-800">MedhaShiree</p>
-                      <p className="text-xs text-gray-500">Course Purchase Receipt</p>
+                  <div ref={receiptRef} className="border border-slate-800 rounded-2xl p-5 bg-slate-950 space-y-2">
+                    <div className="text-center border-b border-dashed border-slate-800 pb-3 mb-3">
+                      <p className="font-black text-amber-400">MedhaShiree</p>
+                      <p className="text-xs text-slate-400">Course Purchase Receipt</p>
                     </div>
                     {[
                       ["Receipt #", receipt.receipt_number],
@@ -321,21 +343,21 @@ export default function MarketplaceClient({ courses, students: initialStudents }
                       ["Course", receipt.course],
                       ["Method", receipt.method.toUpperCase()],
                     ].map(([label, value]) => (
-                      <div key={label} className="flex justify-between text-sm">
-                        <span className="text-gray-500">{label}</span>
-                        <span className="font-medium text-gray-800">{value}</span>
+                      <div key={label} className="flex justify-between text-xs">
+                        <span className="text-slate-400">{label}</span>
+                        <span className="font-bold text-white">{value}</span>
                       </div>
                     ))}
-                    <div className="border-t border-dashed border-gray-300 pt-3 mt-3 text-center">
-                      <p className="text-lg font-bold text-emerald-700">Total: {formatCurrency(receipt.amount)}</p>
+                    <div className="border-t border-dashed border-slate-800 pt-3 mt-3 text-center">
+                      <p className="text-lg font-black text-amber-400">Total: {formatCurrency(receipt.amount)}</p>
                     </div>
                   </div>
 
                   <div className="flex gap-3">
-                    <button onClick={handlePrint} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2">
+                    <button onClick={handlePrint} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer">
                       <Printer className="w-4 h-4" /> Print Receipt
                     </button>
-                    <button onClick={closeBuy} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50">
+                    <button onClick={closeBuy} className="flex-1 py-2.5 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl font-bold transition-colors cursor-pointer">
                       Done
                     </button>
                   </div>

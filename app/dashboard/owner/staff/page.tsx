@@ -22,8 +22,10 @@ export default async function StaffPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Staff Management (কর্মী ও শিক্ষক ব্যবস্থাপনা)</h2>
-        <p className="text-sm text-gray-500 mt-1">
+        <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          Staff Management (কর্মী ও শিক্ষক ব্যবস্থাপনা)
+        </h2>
+        <p className="text-sm text-amber-400/90 font-medium mt-1">
           Manage teachers, receptionists, accountants, managers, multi-branch access, and financial permissions.
         </p>
       </div>

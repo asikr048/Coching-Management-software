@@ -542,22 +542,22 @@ export default function ExamResultsPage() {
 
   if (fetching) {
     return (
-      <div className="flex flex-col items-center justify-center h-80 text-gray-400 gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        <p className="text-sm font-medium text-gray-500">Loading exam & student list...</p>
+      <div className="flex flex-col items-center justify-center h-80 text-slate-400 gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+        <p className="text-sm font-medium text-slate-400">Loading exam & student list...</p>
       </div>
     )
   }
 
   if (!exam) {
     return (
-      <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
+      <div className="text-center py-16 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl">
         <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
-        <h3 className="text-lg font-bold text-gray-900">Exam not found</h3>
-        <p className="text-sm text-gray-500 mt-1 mb-6">The requested test may have been moved or deleted.</p>
+        <h3 className="text-lg font-bold text-white">Exam not found</h3>
+        <p className="text-sm text-slate-400 mt-1 mb-6">The requested test may have been moved or deleted.</p>
         <Link
           href={backUrl}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all"
         >
           <ArrowLeft className="w-4 h-4" /> Return to Exams
         </Link>
@@ -573,34 +573,34 @@ export default function ExamResultsPage() {
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
       {/* Top Navigation & Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/90 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex items-start gap-4">
           <Link
             href={backUrl}
-            className="p-2.5 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-600 hover:text-gray-900 transition-colors shrink-0 mt-0.5"
+            className="p-2.5 rounded-xl border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors shrink-0 mt-0.5"
             title="Back to Exams"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-                <Trophy className="w-6 h-6 text-amber-500" />
+              <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                <Trophy className="w-6 h-6 text-amber-400" />
                 {exam.title}
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/60">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 {exam.subject || "General"}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-1.5 flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-gray-700">{exam.batch?.name || "All Enrolled Batches"}</span>
+            <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-slate-200">{exam.batch?.name || "All Enrolled Batches"}</span>
               <span>•</span>
               <span>
-                Total: <strong className="text-gray-800 font-bold">{exam.total_marks}</strong> marks
+                Total: <strong className="text-amber-400 font-bold">{exam.total_marks}</strong> marks
               </span>
               <span>•</span>
               <span>
-                Pass mark: <strong className="text-emerald-700 font-bold">{exam.pass_marks}</strong>
+                Pass mark: <strong className="text-emerald-400 font-bold">{exam.pass_marks}</strong>
               </span>
             </p>
           </div>
@@ -609,18 +609,18 @@ export default function ExamResultsPage() {
         <div className="flex items-center gap-3 shrink-0">
           <Link
             href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:from-purple-700 hover:to-indigo-700 active:scale-[0.98] shadow-md shadow-purple-100 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 rounded-xl font-bold text-sm hover:border-amber-500/50 active:scale-[0.98] shadow-md transition-all cursor-pointer"
           >
             <MessageSquare className="w-4 h-4" /> Send Result SMS
           </Link>
           <button
             onClick={handleSaveAll}
             disabled={loading}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 active:scale-[0.98] shadow-md shadow-indigo-100 disabled:bg-indigo-400 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm active:scale-[0.98] shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer"
           >
             {loading ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Saving All...
+                <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> Saving All...
               </>
             ) : (
               <>
@@ -634,36 +634,36 @@ export default function ExamResultsPage() {
       {/* Batch Marks Visibility Option Card */}
       <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
         showAllResults 
-          ? "bg-gradient-to-r from-emerald-50 via-teal-50/40 to-white border-emerald-200 shadow-sm" 
-          : "bg-gradient-to-r from-amber-50 via-orange-50/40 to-white border-amber-200 shadow-sm"
+          ? "bg-slate-900/90 backdrop-blur-md border-emerald-500/30 shadow-xl" 
+          : "bg-slate-900/90 backdrop-blur-md border-amber-500/30 shadow-xl"
       }`}>
         <div className="flex items-start gap-3.5">
           <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
-            showAllResults ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"
+            showAllResults ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
           }`}>
             {showAllResults ? <Users className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
           </div>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-sm sm:text-base font-bold text-gray-900">
+              <h2 className="text-sm sm:text-base font-bold text-white">
                 Batch Marks Visibility & Merit List
               </h2>
               <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
                 showAllResults 
-                  ? "bg-emerald-100 text-emerald-800 border-emerald-300" 
-                  : "bg-amber-100 text-amber-800 border-amber-300"
+                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" 
+                  : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
               }`}>
                 {showAllResults ? "Public to Batch (Default)" : "Private (Own Marks Only)"}
               </span>
             </div>
-            <p className="text-xs text-gray-600 mt-1 max-w-2xl leading-relaxed">
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
               {showAllResults ? (
                 <>
-                  <strong className="font-semibold text-emerald-800">Default:</strong> All enrolled students in this batch can view everyone&apos;s scores, percentages, and the batch merit list.
+                  <strong className="font-semibold text-emerald-400">Default:</strong> All enrolled students in this batch can view everyone&apos;s scores, percentages, and the batch merit list.
                 </>
               ) : (
                 <>
-                  <strong className="font-semibold text-amber-800">Deselected:</strong> Each student will <strong className="underline">only see their own marks</strong> privately on their profile. Other students&apos; marks and numbers are hidden.
+                  <strong className="font-semibold text-amber-400">Deselected:</strong> Each student will <strong className="underline">only see their own marks</strong> privately on their profile. Other students&apos; marks and numbers are hidden.
                 </>
               )}
             </p>
@@ -679,18 +679,18 @@ export default function ExamResultsPage() {
               onChange={(e) => handleToggleShowAllResults(e.target.checked)}
               className="sr-only peer"
             />
-            <div className="w-12 h-6.5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-emerald-600"></div>
-            <span className="ml-3 text-xs font-bold text-gray-800 min-w-[140px]">
+            <div className="w-12 h-6.5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-950 after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-slate-800 after:border after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-emerald-500"></div>
+            <span className="ml-3 text-xs font-bold text-slate-300 min-w-[140px]">
               {updatingVisibility ? (
-                <span className="flex items-center gap-1.5 text-gray-500">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" /> Saving setting...
+                <span className="flex items-center gap-1.5 text-slate-400">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> Saving setting...
                 </span>
               ) : showAllResults ? (
-                <span className="text-emerald-700 flex items-center gap-1">
+                <span className="text-emerald-400 flex items-center gap-1">
                   <Eye className="w-3.5 h-3.5" /> All Marks Visible
                 </span>
               ) : (
-                <span className="text-amber-700 flex items-center gap-1">
+                <span className="text-amber-400 flex items-center gap-1">
                   <EyeOff className="w-3.5 h-3.5" /> Private Only
                 </span>
               )}
@@ -701,63 +701,63 @@ export default function ExamResultsPage() {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-xl flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 font-medium">Total Students</p>
-            <p className="text-lg font-bold text-gray-900">{stats.total}</p>
+            <p className="text-xs text-slate-400 font-medium">Total Students</p>
+            <p className="text-lg font-black text-white">{stats.total}</p>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-xl flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 font-medium">Marks Entered</p>
-            <p className="text-lg font-bold text-gray-900">
-              {stats.count} <span className="text-xs font-normal text-gray-500">/ {stats.total}</span>
+            <p className="text-xs text-slate-400 font-medium">Marks Entered</p>
+            <p className="text-lg font-black text-white">
+              {stats.count} <span className="text-xs font-normal text-slate-400">/ {stats.total}</span>
             </p>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-xl flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 font-medium">Average Mark</p>
-            <p className="text-lg font-bold text-gray-900">
-              {stats.avg} <span className="text-xs font-normal text-gray-500">/{exam.total_marks}</span>
+            <p className="text-xs text-slate-400 font-medium">Average Mark</p>
+            <p className="text-lg font-black text-white">
+              {stats.avg} <span className="text-xs font-normal text-slate-400">/{exam.total_marks}</span>
             </p>
           </div>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+        <div className="bg-slate-900/90 backdrop-blur-md p-4 rounded-xl border border-slate-800 shadow-xl flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
             <Award className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-gray-500 font-medium">Highest / Pass Rate</p>
-            <p className="text-lg font-bold text-gray-900">
-              {stats.highest} <span className="text-xs font-normal text-gray-500">({stats.passRate}%)</span>
+            <p className="text-xs text-slate-400 font-medium">Highest / Pass Rate</p>
+            <p className="text-lg font-black text-white">
+              {stats.highest} <span className="text-xs font-normal text-slate-400">({stats.passRate}%)</span>
             </p>
           </div>
         </div>
       </div>
 
       {/* QUICK SEARCH & ENTER MARK SECTION */}
-      <div className="bg-gradient-to-r from-indigo-50/70 via-purple-50/50 to-blue-50/70 p-5 rounded-2xl border-2 border-indigo-200/80 shadow-sm">
+      <div className="bg-slate-900/90 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-indigo-600 text-white shadow-sm">
+            <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-sm">
               <Sparkles className="w-4 h-4" />
             </span>
-            <h2 className="text-base font-black text-gray-900">Quick Mark Entry (Search & Enter)</h2>
+            <h2 className="text-base font-black text-white">Quick Mark Entry (Search & Enter)</h2>
           </div>
-          <span className="text-xs text-indigo-700 bg-indigo-100/70 px-2.5 py-0.5 rounded-full font-medium hidden sm:inline-block">
+          <span className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-medium hidden sm:inline-block">
             Keyboard shortcut: Type name/ID → Select → Type mark → Press Enter ↵
           </span>
         </div>
@@ -765,11 +765,11 @@ export default function ExamResultsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
           {/* Student Search Box */}
           <div className="lg:col-span-6 relative" ref={searchContainerRef}>
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">
               1. Search Student (by Name, ID, or Roll)
             </label>
             <div className="relative">
-              <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 ref={searchInputRef}
                 type="text"
@@ -788,7 +788,7 @@ export default function ExamResultsPage() {
                   }
                 }}
                 placeholder="Type student name (e.g. Asik) or ID (e.g. MS-86053)..."
-                className="w-full pl-10 pr-9 py-2.5 bg-white border-2 border-indigo-200 rounded-xl text-sm font-semibold text-gray-900 placeholder:text-gray-400 placeholder:font-normal focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 shadow-sm"
+                className="w-full pl-10 pr-9 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-semibold text-white placeholder:text-slate-500 placeholder:font-normal focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10 shadow-sm"
               />
               {studentSearchQuery && (
                 <button
@@ -797,7 +797,7 @@ export default function ExamResultsPage() {
                     setStudentSearchQuery("")
                     searchInputRef.current?.focus()
                   }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 rounded-full"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 rounded-full cursor-pointer"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -806,9 +806,9 @@ export default function ExamResultsPage() {
 
             {/* Dropdown Suggestions */}
             {isSearchDropdownOpen && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl border border-gray-200 shadow-xl max-h-64 overflow-y-auto z-50 divide-y divide-gray-100">
+              <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-900 rounded-xl border border-slate-800 shadow-2xl max-h-64 overflow-y-auto z-50 divide-y divide-slate-800">
                 {filteredSearchStudents.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-gray-500 font-medium">
+                  <div className="p-4 text-center text-xs text-slate-500 font-medium">
                     No matching enrolled student found
                   </div>
                 ) : (
@@ -825,17 +825,17 @@ export default function ExamResultsPage() {
                         key={s.id}
                         onClick={() => handleSelectStudent(s)}
                         className={`px-3.5 py-2.5 flex items-center justify-between cursor-pointer transition-colors ${
-                          isSelected ? "bg-indigo-50/80" : "hover:bg-gray-50"
+                          isSelected ? "bg-amber-500/10 border-l-2 border-amber-400" : "hover:bg-slate-800/80"
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-xs flex items-center justify-center shrink-0">
                             {s.name?.charAt(0).toUpperCase() || "S"}
                           </div>
                           <div className="truncate">
-                            <p className="text-xs font-bold text-gray-900 truncate">{s.name}</p>
-                            <p className="text-[11px] text-gray-500 font-mono flex items-center gap-1.5">
-                              <span className="font-semibold text-indigo-600">{s.student_id}</span>
+                            <p className="text-xs font-bold text-white truncate">{s.name}</p>
+                            <p className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5">
+                              <span className="font-semibold text-amber-400">{s.student_id}</span>
                               {s.phone && <span>• {s.phone}</span>}
                             </p>
                           </div>
@@ -843,11 +843,11 @@ export default function ExamResultsPage() {
 
                         <div className="shrink-0 ml-2 text-right">
                           {hasMark ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                               <Check className="w-3 h-3" /> {markToShow}/{exam.total_marks} ({gradeToShow})
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-gray-100 text-gray-500">
+                            <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
                               Pending
                             </span>
                           )}
@@ -861,21 +861,21 @@ export default function ExamResultsPage() {
           </div>
 
           {/* Enter Mark & Action Box */}
-          <div className="lg:col-span-6 bg-white p-3.5 rounded-xl border border-indigo-200/90 shadow-sm">
-            <label className="block text-xs font-bold text-gray-700 mb-1.5">
+          <div className="lg:col-span-6 bg-slate-950 p-3.5 rounded-xl border border-slate-800 shadow-sm">
+            <label className="block text-xs font-bold text-slate-300 mb-1.5">
               2. Enter Mark & Save (Auto-saves to database)
             </label>
 
             {selectedStudent ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2 bg-indigo-50/60 p-2.5 rounded-lg border border-indigo-100">
+                <div className="flex items-center justify-between gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-indigo-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0">
                       {selectedStudent.name?.charAt(0).toUpperCase()}
                     </div>
                     <div className="truncate">
-                      <p className="text-xs font-black text-gray-900 truncate">{selectedStudent.name}</p>
-                      <p className="text-[11px] text-indigo-700 font-mono font-bold">
+                      <p className="text-xs font-black text-white truncate">{selectedStudent.name}</p>
+                      <p className="text-[11px] text-amber-400 font-mono font-bold">
                         ID: {selectedStudent.student_id}
                       </p>
                     </div>
@@ -887,7 +887,7 @@ export default function ExamResultsPage() {
                       setQuickMarkInput("")
                       searchInputRef.current?.focus()
                     }}
-                    className="text-xs text-gray-400 hover:text-gray-600 p-1 rounded-md cursor-pointer"
+                    className="text-xs text-slate-400 hover:text-white p-1 rounded-md cursor-pointer"
                     title="Deselect student"
                   >
                     <X className="w-4 h-4" />
@@ -920,21 +920,23 @@ export default function ExamResultsPage() {
                         }
                       }}
                       placeholder={`0 - ${exam.total_marks}`}
-                      className="w-full pl-3.5 pr-14 py-2 bg-white border-2 border-indigo-500 rounded-xl text-base font-black text-gray-900 focus:outline-none focus:ring-4 focus:ring-indigo-100 shadow-sm"
+                      className="w-full pl-3.5 pr-14 py-2 bg-slate-900 border-2 border-amber-500/70 rounded-xl text-base font-black text-white focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 shadow-sm"
                     />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">
+                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
                       /{exam.total_marks}
                     </span>
                   </div>
 
                   {hasValidQuickMark && (
                     <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-black">
+                      <span className="px-2 py-1 bg-amber-500/15 border border-amber-500/30 text-amber-400 rounded-lg text-xs font-black">
                         {quickGradePreview}
                       </span>
                       <span
-                        className={`px-2 py-1 rounded-lg text-xs font-bold ${
-                          isQuickPass ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                        className={`px-2 py-1 rounded-lg text-xs font-bold border ${
+                          isQuickPass 
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" 
+                            : "bg-rose-500/15 text-rose-400 border-rose-500/30"
                         }`}
                       >
                         {isQuickPass ? "Pass" : "Fail"}
@@ -945,10 +947,10 @@ export default function ExamResultsPage() {
                   <button
                     type="submit"
                     disabled={savingQuickMark || !quickMarkInput}
-                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 transition-all flex items-center gap-1.5 disabled:bg-gray-300 disabled:shadow-none cursor-pointer shrink-0"
+                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:shadow-none cursor-pointer shrink-0"
                   >
                     {savingQuickMark ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
                     ) : (
                       <>
                         <Check className="w-4 h-4" /> Save Mark
@@ -960,13 +962,13 @@ export default function ExamResultsPage() {
             ) : (
               <div
                 onClick={() => searchInputRef.current?.focus()}
-                className="py-4 px-3 border border-dashed border-gray-300 rounded-xl bg-gray-50/60 text-center cursor-pointer hover:bg-indigo-50/40 hover:border-indigo-300 transition-colors"
+                className="py-4 px-3 border border-dashed border-slate-800 rounded-xl bg-slate-900/50 text-center cursor-pointer hover:bg-slate-900 hover:border-amber-500/40 transition-colors"
               >
-                <p className="text-xs font-semibold text-gray-600">
+                <p className="text-xs font-semibold text-slate-300">
                   Select a student on the left to quickly enter mark
                 </p>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  Click here or press <kbd className="px-1.5 py-0.5 bg-gray-200 text-gray-700 rounded text-[10px]">Enter</kbd> in search box
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Click here or press <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 text-slate-300 rounded text-[10px]">Enter</kbd> in search box
                 </p>
               </div>
             )}
@@ -975,23 +977,23 @@ export default function ExamResultsPage() {
       </div>
 
       {/* TABLE SECTION WITH LIVE SEARCH & FILTERS */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
         {/* Table Filter Controls */}
-        <div className="p-4 border-b border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-gray-50/60">
+        <div className="p-4 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-950/60">
           <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={tableSearchQuery}
               onChange={(e) => setTableSearchQuery(e.target.value)}
               placeholder="Filter list by student name or roll number..."
-              className="w-full pl-9 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 shadow-sm"
+              className="w-full pl-9 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 shadow-sm"
             />
             {tableSearchQuery && (
               <button
                 type="button"
                 onClick={() => setTableSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -1012,10 +1014,10 @@ export default function ExamResultsPage() {
                 key={tab.key}
                 type="button"
                 onClick={() => setStatusFilter(tab.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   statusFilter === tab.key
-                    ? "bg-indigo-600 text-white shadow-sm"
-                    : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                    ? "bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20"
+                    : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-800"
                 }`}
               >
                 {tab.label}
@@ -1028,7 +1030,7 @@ export default function ExamResultsPage() {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase tracking-wider text-[11px] font-bold">
+              <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[11px] font-bold">
                 <th className="px-4 py-3 w-12 text-center">#</th>
                 <th className="px-4 py-3">Student Name</th>
                 <th className="px-4 py-3">Student ID</th>
@@ -1038,7 +1040,7 @@ export default function ExamResultsPage() {
                 <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
+            <tbody className="divide-y divide-slate-800/60 text-sm">
               {tableStudents.map((s, idx) => {
                 const saved = savedResults[s.id]
                 const draftVal = draftMarks[s.id] ?? ""
@@ -1054,28 +1056,28 @@ export default function ExamResultsPage() {
                     key={s.id}
                     className={`transition-colors ${
                       isSelectedInQuick
-                        ? "bg-indigo-50/70"
+                        ? "bg-amber-500/10 border-l-2 border-amber-400"
                         : isJustSaved
-                        ? "bg-emerald-50/50"
+                        ? "bg-emerald-500/15"
                         : hasEntered
-                        ? "hover:bg-emerald-50/30"
-                        : "hover:bg-gray-50"
+                        ? "hover:bg-slate-800/40"
+                        : "hover:bg-slate-800/20"
                     }`}
                   >
-                    <td className="px-4 py-3 text-xs text-gray-400 font-mono text-center">{idx + 1}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500 font-mono text-center">{idx + 1}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-100 to-purple-100 text-indigo-700 font-bold text-xs flex items-center justify-center shrink-0">
+                        <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-xs flex items-center justify-center shrink-0">
                           {s.name?.charAt(0).toUpperCase() || "S"}
                         </div>
                         <div>
-                          <p className="text-xs font-bold text-gray-900">{s.name}</p>
-                          {s.phone && <p className="text-[11px] text-gray-400 font-medium">{s.phone}</p>}
+                          <p className="text-xs font-bold text-white">{s.name}</p>
+                          {s.phone && <p className="text-[11px] text-slate-400 font-medium">{s.phone}</p>}
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-1 rounded bg-gray-100 text-gray-700 font-mono text-xs font-bold">
+                      <span className="px-2 py-1 rounded bg-slate-950 border border-slate-800 text-amber-400 font-mono text-xs font-bold">
                         {s.student_id}
                       </span>
                     </td>
@@ -1102,10 +1104,10 @@ export default function ExamResultsPage() {
                           }}
                           className={`w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all ${
                             isJustSaved
-                              ? "border-emerald-500 bg-emerald-100/70 text-emerald-950 ring-2 ring-emerald-300"
+                              ? "border-emerald-500 bg-emerald-500/20 text-emerald-300 ring-2 ring-emerald-500/30"
                               : hasEntered
-                              ? "border-emerald-300 bg-emerald-50/40 text-emerald-950 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-200"
-                              : "border-gray-200 bg-white text-gray-900 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100"
+                              ? "border-emerald-500/40 bg-slate-950 text-emerald-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
+                              : "border-slate-800 bg-slate-950 text-white focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
                           } focus:outline-none shadow-sm`}
                           placeholder="—"
                         />
@@ -1113,12 +1115,12 @@ export default function ExamResultsPage() {
                           type="submit"
                           disabled={savingRowStudentId === s.id}
                           title="Save mark (Enter ↵ / Return on phone)"
-                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                          className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
                         >
                           {savingRowStudentId === s.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
                           ) : isJustSaved ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
                           ) : (
                             <Save className="w-3.5 h-3.5" />
                           )}
@@ -1128,37 +1130,37 @@ export default function ExamResultsPage() {
                     <td className="px-4 py-3 text-center">
                       {gradeToDisplay ? (
                         <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black ${
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black border ${
                             gradeToDisplay === "A+" || gradeToDisplay === "A"
-                              ? "bg-emerald-100 text-emerald-800"
+                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
                               : gradeToDisplay === "F"
-                              ? "bg-rose-100 text-rose-800"
-                              : "bg-indigo-100 text-indigo-800"
+                              ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                              : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
                           }`}
                         >
                           {gradeToDisplay}
                         </span>
                       ) : (
-                        <span className="text-gray-300 text-xs">—</span>
+                        <span className="text-slate-600 text-xs">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {isJustSaved ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700 animate-pulse">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse">
                           <Check className="w-3 h-3" /> Saved ✓
                         </span>
                       ) : hasEntered ? (
                         <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                             passed
-                              ? "bg-emerald-100 text-emerald-700"
-                              : "bg-rose-100 text-rose-700"
+                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                              : "bg-rose-500/15 text-rose-400 border-rose-500/30"
                           }`}
                         >
                           {passed ? "Pass" : "Fail"}
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-gray-100 text-gray-500">
+                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
                           Pending
                         </span>
                       )}
@@ -1168,7 +1170,7 @@ export default function ExamResultsPage() {
                         <button
                           type="button"
                           onClick={() => handleSelectStudent(s)}
-                          className="px-2 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                          className="px-2 py-1 text-xs font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
                           title="Quick edit mark"
                         >
                           Quick Edit
@@ -1177,7 +1179,7 @@ export default function ExamResultsPage() {
                           <button
                             type="button"
                             onClick={() => clearStudentMark(s.id, s.name)}
-                            className="p-1 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                             title="Clear mark"
                           >
                             <X className="w-3.5 h-3.5" />
@@ -1191,9 +1193,9 @@ export default function ExamResultsPage() {
 
               {tableStudents.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center py-12 text-gray-400">
+                  <td colSpan={7} className="text-center py-12 text-slate-500">
                     <p className="text-sm font-semibold">No students found matching your criteria</p>
-                    <p className="text-xs text-gray-400 mt-1">Try clearing your search query or filters</p>
+                    <p className="text-xs text-slate-500 mt-1">Try clearing your search query or filters</p>
                   </td>
                 </tr>
               )}
@@ -1202,13 +1204,13 @@ export default function ExamResultsPage() {
         </div>
 
         {/* Footer info */}
-        <div className="p-3.5 bg-gray-50 border-t border-gray-200 flex items-center justify-between text-xs text-gray-500">
+        <div className="p-3.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <span>
-            Showing <strong className="text-gray-800">{tableStudents.length}</strong> of{" "}
-            <strong className="text-gray-800">{students.length}</strong> students
+            Showing <strong className="text-white">{tableStudents.length}</strong> of{" "}
+            <strong className="text-white">{students.length}</strong> students
           </span>
           <span>
-            Marks entered: <strong className="text-indigo-600">{stats.count}</strong> / {stats.total}
+            Marks entered: <strong className="text-amber-400">{stats.count}</strong> / {stats.total}
           </span>
         </div>
       </div>

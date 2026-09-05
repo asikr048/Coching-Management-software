@@ -10,7 +10,10 @@ export default async function MarketplacePage() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-gray-900">Course Marketplace</h2><p className="text-sm text-gray-500 mt-1">Manage courses and sell to students</p></div>
+      <div>
+        <h2 className="text-2xl font-black text-white tracking-tight">Course Marketplace</h2>
+        <p className="text-sm text-slate-400 mt-1">Manage courses and sell to students</p>
+      </div>
       <MarketplaceClient courses={coursesRes.data || []} students={studentsRes.data || []} />
     </div>
   )

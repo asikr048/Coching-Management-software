@@ -8,7 +8,7 @@ export default async function ReceptionStudentsPage() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-gray-900">Students</h2><p className="text-sm text-gray-500 mt-1">{students?.length || 0} total students</p></div>
+      <div><h2 className="text-2xl font-black text-white tracking-tight">Students</h2><p className="text-sm text-slate-400 mt-1">{students?.length || 0} total students</p></div>
       <StudentsClient students={students || []} batches={batches || []} />
     </div>
   )

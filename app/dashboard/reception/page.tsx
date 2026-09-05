@@ -17,7 +17,7 @@ export default async function ReceptionDashboard() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-gray-900">Reception Dashboard</h2><p className="text-gray-500 text-sm mt-1">Welcome! Manage daily operations.</p></div>
+      <div><h2 className="text-2xl font-black text-white tracking-tight">Reception Dashboard</h2><p className="text-slate-400 text-sm mt-1">Welcome! Manage daily operations.</p></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard title="Active Students" value={students.count || 0} icon={Users} color="indigo" />
         <StatsCard title="Today Present" value={todayPresent} icon={UserCheck} color="emerald" />
@@ -26,13 +26,13 @@ export default async function ReceptionDashboard() {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         {[
-          { href: "/dashboard/reception/enroll", label: "New Enrollment", color: "indigo" },
-          { href: "/dashboard/reception/payments", label: "Collect Fee", color: "emerald" },
-          { href: "/dashboard/reception/attendance", label: "Mark Attendance", color: "blue" },
-          { href: "/dashboard/reception/biometric", label: "Biometric Entry", color: "purple" },
-          { href: "/dashboard/reception/students", label: "View Students", color: "orange" },
+          { href: "/dashboard/reception/enroll", label: "New Enrollment" },
+          { href: "/dashboard/reception/payments", label: "Collect Fee" },
+          { href: "/dashboard/reception/attendance", label: "Mark Attendance" },
+          { href: "/dashboard/reception/biometric", label: "Biometric Entry" },
+          { href: "/dashboard/reception/students", label: "View Students" },
         ].map(a => (
-          <Link key={a.href} href={a.href} className="p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md hover:border-indigo-300 transition-all text-center text-sm font-medium text-gray-700 hover:text-indigo-700">{a.label}</Link>
+          <Link key={a.href} href={a.href} className="p-4 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 hover:bg-slate-800/60 shadow-lg transition-all text-center text-sm font-bold text-slate-300 hover:text-amber-400">{a.label}</Link>
         ))}
       </div>
     </div>

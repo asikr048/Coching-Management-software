@@ -714,15 +714,15 @@ export default function PaymentsClient({
     }
   }
 
-  const inputClass = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all shadow-sm"
+  const inputClass = "w-full px-3.5 py-2.5 border border-slate-700 rounded-xl text-sm text-white bg-slate-950 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all shadow-sm"
 
   // Financial access guard
   if (!hasAccess) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-2xl p-8 text-center shadow-sm">
+      <div className="bg-slate-900/90 border border-red-500/30 rounded-2xl p-8 text-center shadow-xl backdrop-blur-md">
         <ShieldAlert className="w-12 h-12 text-red-400 mx-auto mb-3" />
-        <h3 className="text-lg font-bold text-red-700 mb-1">Financial Access Required</h3>
-        <p className="text-sm text-red-600">You don&apos;t have financial access to record payments. Contact the Owner.</p>
+        <h3 className="text-lg font-bold text-red-400 mb-1">Financial Access Required</h3>
+        <p className="text-sm text-slate-400">You don&apos;t have financial access to record payments. Contact the Owner.</p>
       </div>
     )
   }
@@ -730,9 +730,9 @@ export default function PaymentsClient({
   return (
     <div className="space-y-6">
       {/* Top Search & Record Payment Toolbar */}
-      <div className="bg-white rounded-2xl border border-gray-200/80 p-4 shadow-sm flex flex-col sm:flex-row gap-3">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             value={searchQuery}
             onChange={e => { 
@@ -741,12 +741,12 @@ export default function PaymentsClient({
               setPayingDue(null) 
             }}
             placeholder="Search student by name, student ID (MS-XXXXX), or phone..."
-            className="w-full pl-10 pr-4 py-2.5 text-sm text-gray-900 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-slate-50/50 hover:bg-white focus:bg-white transition-all"
+            className="w-full pl-10 pr-4 py-2.5 text-sm text-white border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-950 placeholder:text-slate-500 hover:border-slate-600 transition-all"
           />
 
           {/* Search dropdown results */}
           {filteredStudents.length > 0 && !selectedStudent && (
-            <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-white rounded-2xl border border-gray-200 shadow-xl max-h-72 overflow-y-auto divide-y divide-gray-50">
+            <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-slate-900 rounded-2xl border border-slate-800 shadow-2xl max-h-72 overflow-y-auto divide-y divide-slate-800">
               {filteredStudents.map(s => {
                 const sDues = dues.filter(d => d.student_id === s.id)
                 const totalDue = sDues.reduce((sum, d) => sum + Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)), 0)
@@ -755,20 +755,20 @@ export default function PaymentsClient({
                     key={s.id} 
                     type="button"
                     onClick={() => handleSelectStudent(s)}
-                    className="w-full text-left px-4 py-3 hover:bg-emerald-50 flex items-center justify-between transition-colors"
+                    className="w-full text-left px-4 py-3 hover:bg-slate-800/80 flex items-center justify-between transition-colors"
                   >
                     <div>
-                      <p className="text-sm font-bold text-gray-800">{s.name}</p>
-                      <p className="text-xs text-gray-500 font-mono mt-0.5">
-                        {s.student_id} {s.phone ? `• ${s.phone}` : ""}
+                      <p className="text-sm font-bold text-white">{s.name}</p>
+                      <p className="text-xs text-slate-400 font-mono mt-0.5">
+                        <span className="text-amber-400 font-semibold">{s.student_id}</span> {s.phone ? `• ${s.phone}` : ""}
                       </p>
                     </div>
                     {totalDue > 0 ? (
-                      <span className="text-xs font-bold text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-lg">
+                      <span className="text-xs font-bold text-red-400 bg-red-950/40 border border-red-800/50 px-2.5 py-1 rounded-lg">
                         Due: {formatCurrency(totalDue)}
                       </span>
                     ) : (
-                      <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg">
+                      <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 px-2.5 py-1 rounded-lg">
                         Clear
                       </span>
                     )}
@@ -782,15 +782,15 @@ export default function PaymentsClient({
         <button 
           type="button"
           onClick={() => setShowGatewayModal(true)} 
-          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-sm font-bold shadow-md shadow-purple-100 hover:shadow-lg transition-all whitespace-nowrap cursor-pointer"
+          className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-900/30 hover:shadow-xl transition-all whitespace-nowrap cursor-pointer"
         >
-          <Smartphone className="w-4 h-4" /> Payment Numbers (bKash/Nagad/Rocket)
+          <Smartphone className="w-4 h-4" /> Payment Numbers (bKash/Nagad)
         </button>
 
         <button 
           type="button"
           onClick={openRecordModal} 
-          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-sm font-bold shadow-md shadow-emerald-100 hover:shadow-lg transition-all whitespace-nowrap cursor-pointer"
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-lg shadow-amber-500/20 hover:shadow-xl transition-all whitespace-nowrap cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Record Payment
         </button>
@@ -798,21 +798,21 @@ export default function PaymentsClient({
 
       {/* Selected Student Hub: Dues, Due Modifier, & Payment History */}
       {selectedStudent && (
-        <div className="bg-white rounded-3xl border border-emerald-200 shadow-lg overflow-hidden space-y-5 animate-in fade-in zoom-in-98 duration-150">
+        <div className="bg-slate-900/95 rounded-3xl border border-amber-500/30 shadow-2xl overflow-hidden space-y-5 animate-in fade-in zoom-in-98 duration-150 backdrop-blur-md">
           {/* Student Header Bar */}
-          <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-700 p-5 text-white flex items-center justify-between">
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-amber-500/30 p-5 text-white flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/20 font-bold text-lg">
-                <User className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center font-bold text-lg text-amber-400 shadow-inner">
+                <User className="w-6 h-6 text-amber-400" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-bold text-xl">{selectedStudent.name}</h3>
-                  <span className="px-2.5 py-0.5 rounded-full bg-white/20 text-white font-mono text-xs font-semibold border border-white/20">
+                  <h3 className="font-bold text-xl text-white">{selectedStudent.name}</h3>
+                  <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-xs font-semibold border border-amber-500/30">
                     {selectedStudent.student_id}
                   </span>
                 </div>
-                <p className="text-xs text-emerald-100 mt-0.5">
+                <p className="text-xs text-slate-400 mt-0.5">
                   {selectedStudent.phone ? `Phone: ${selectedStudent.phone}` : "No phone"} 
                   {selectedStudent.guardian_phone ? ` • Guardian: ${selectedStudent.guardian_phone}` : ""}
                 </p>
@@ -821,7 +821,7 @@ export default function PaymentsClient({
             <button 
               type="button"
               onClick={() => { setSelectedStudent(null); setPayingDue(null) }} 
-              className="p-2 hover:bg-white/20 rounded-xl transition-colors text-white"
+              className="p-2 hover:bg-slate-800 rounded-xl transition-colors text-slate-400 hover:text-white"
               title="Clear Selection"
             >
               <X className="w-5 h-5" />
@@ -834,16 +834,16 @@ export default function PaymentsClient({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-red-500"></span>
-                  <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
+                  <h4 className="text-sm font-bold text-white uppercase tracking-wider">
                     Pending Dues ({studentDues.length})
                   </h4>
                 </div>
-                <span className="text-xs text-gray-500">Click a due to collect payment or modify its terms</span>
+                <span className="text-xs text-slate-400">Click a due to collect payment or modify its terms</span>
               </div>
 
               {studentDues.length === 0 ? (
-                <div className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-4 flex items-center gap-2.5 text-emerald-800 text-sm font-semibold">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div className="bg-emerald-950/40 border border-emerald-800/50 rounded-2xl p-4 flex items-center gap-2.5 text-emerald-300 text-sm font-semibold">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                   No outstanding dues for {selectedStudent.name}! All fee payments are up to date.
                 </div>
               ) : (
@@ -856,19 +856,19 @@ export default function PaymentsClient({
                         key={d.id} 
                         className={`p-4 rounded-2xl border transition-all relative ${
                           isSelected 
-                            ? "border-emerald-500 bg-emerald-50/70 shadow-md ring-2 ring-emerald-200" 
-                            : "border-gray-200 bg-white hover:border-emerald-300 hover:shadow-sm"
+                            ? "border-amber-500 bg-amber-500/10 shadow-lg ring-2 ring-amber-500/30 text-white" 
+                            : "border-slate-800 bg-slate-950/80 hover:border-amber-500/40 hover:shadow-md text-white"
                         }`}
                       >
                         <div className="flex items-start justify-between">
                           <div className="cursor-pointer flex-1" onClick={() => selectDueToPay(d)}>
-                            <p className="font-bold text-gray-900 text-sm">{getBatchName(d.batch)}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                              Month: <b className="text-gray-700">{d.due_month}</b> • Deadline: <span className="text-amber-700 font-medium">{formatDate(d.due_date)}</span>
+                            <p className="font-bold text-white text-sm">{getBatchName(d.batch)}</p>
+                            <p className="text-xs text-slate-400 mt-0.5">
+                              Month: <b className="text-slate-200">{d.due_month}</b> • Deadline: <span className="text-amber-400 font-medium">{formatDate(d.due_date)}</span>
                             </p>
                             <div className="mt-2 flex items-baseline gap-2">
-                              <span className="text-base font-extrabold text-red-600">{formatCurrency(outstanding)}</span>
-                              <span className="text-xs text-gray-400">total due: {formatCurrency(d.due_amount)}</span>
+                              <span className="text-base font-extrabold text-red-400">{formatCurrency(outstanding)}</span>
+                              <span className="text-xs text-slate-500">total due: {formatCurrency(d.due_amount)}</span>
                             </div>
                           </div>
 
@@ -877,7 +877,7 @@ export default function PaymentsClient({
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); openEditDue(d) }}
-                              className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors"
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-400 hover:text-indigo-300 bg-indigo-950/50 hover:bg-indigo-900/60 px-2.5 py-1 rounded-lg border border-indigo-800/50 transition-colors"
                               title="Modify due amount or deadline"
                             >
                               <Edit2 className="w-3 h-3" /> Change Due
@@ -888,8 +888,8 @@ export default function PaymentsClient({
                               onClick={() => selectDueToPay(d)}
                               className={`text-[11px] font-bold px-3 py-1 rounded-lg transition-colors ${
                                 isSelected 
-                                  ? "bg-emerald-600 text-white" 
-                                  : "bg-gray-100 text-gray-700 hover:bg-emerald-600 hover:text-white"
+                                  ? "bg-amber-500 text-slate-950" 
+                                  : "bg-slate-800 text-slate-200 hover:bg-amber-500 hover:text-slate-950"
                               }`}
                             >
                               {isSelected ? "Selected ✓" : "Pay Due"}
@@ -905,16 +905,16 @@ export default function PaymentsClient({
 
             {/* Pay Selected Due Form (when due clicked) */}
             {payingDue && (
-              <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-4 space-y-3">
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-sm font-bold text-emerald-900">
-                    <DollarSign className="w-4 h-4 text-emerald-600" />
+                  <div className="flex items-center gap-2 text-sm font-bold text-amber-400">
+                    <DollarSign className="w-4 h-4 text-amber-400" />
                     Pay Due for {getBatchName(payingDue.batch)} ({payingDue.due_month})
                   </div>
                   <button 
                     type="button" 
                     onClick={() => setPayingDue(null)}
-                    className="text-xs text-gray-400 hover:text-gray-600 font-bold"
+                    className="text-xs text-slate-400 hover:text-slate-200 font-bold"
                   >
                     Cancel Selection ✕
                   </button>
@@ -922,16 +922,16 @@ export default function PaymentsClient({
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Pay Amount (৳)</label>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Pay Amount (৳)</label>
                     <input 
-                      type="number" 
+                       type="number" 
                       value={form.amount} 
                       onChange={e => update("amount", e.target.value)} 
-                      className={`${inputClass} font-bold text-emerald-800`} 
+                      className={`${inputClass} font-bold text-emerald-400`} 
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Discount (৳)</label>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Discount (৳)</label>
                     <input 
                       type="number" 
                       value={form.discount} 
@@ -940,7 +940,7 @@ export default function PaymentsClient({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">Method</label>
+                    <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Method</label>
                     <select 
                       value={form.payment_method} 
                       onChange={e => update("payment_method", e.target.value)} 
@@ -959,7 +959,7 @@ export default function PaymentsClient({
                       type="button"
                       onClick={() => handlePay()} 
                       disabled={loading} 
-                      className="w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl text-sm font-bold hover:from-emerald-700 hover:to-teal-700 disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-md shadow-emerald-200 transition-all"
+                      className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 rounded-xl text-sm font-bold hover:from-amber-600 hover:to-amber-700 disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-lg shadow-amber-500/20 transition-all"
                     >
                       {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                       {loading ? "Processing..." : `Record & Get PDF`}
@@ -968,9 +968,9 @@ export default function PaymentsClient({
                 </div>
 
                 {form.payment_method === "referral" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-purple-50/80 rounded-2xl border border-purple-200 animate-in fade-in duration-150">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-purple-950/30 rounded-2xl border border-purple-800/50 animate-in fade-in duration-150">
                     <div>
-                      <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                      <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider mb-1">
                         Referral Name / Student ID *
                       </label>
                       <input 
@@ -979,11 +979,11 @@ export default function PaymentsClient({
                         placeholder="e.g. Tanvir Ahmed (MS-10023)"
                         value={form.referral_name} 
                         onChange={e => update("referral_name", e.target.value)} 
-                        className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-medium text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                        className="w-full px-3 py-2 bg-slate-900 border border-purple-700/60 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-purple-500" 
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                      <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider mb-1">
                         Reason for Referral Payment *
                       </label>
                       <input 
@@ -992,7 +992,7 @@ export default function PaymentsClient({
                         placeholder="e.g. Referral reward / discount / bonus adjustment"
                         value={form.referral_reason} 
                         onChange={e => update("referral_reason", e.target.value)} 
-                        className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-medium text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                        className="w-full px-3 py-2 bg-slate-900 border border-purple-700/60 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-purple-500" 
                       />
                     </div>
                   </div>
@@ -1004,19 +1004,19 @@ export default function PaymentsClient({
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <span className="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
-                <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wider">
+                <h4 className="text-sm font-bold text-white uppercase tracking-wider">
                   Payment History of {selectedStudent.name} ({studentPayments.length})
                 </h4>
               </div>
 
               {studentPayments.length === 0 ? (
-                <div className="text-center py-6 text-gray-400 text-xs border border-dashed border-gray-200 rounded-2xl">
+                <div className="text-center py-6 text-slate-500 text-xs border border-dashed border-slate-800 rounded-2xl bg-slate-950/40">
                   No payment records found for this student.
                 </div>
               ) : (
-                <div className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                <div className="border border-slate-800 rounded-2xl overflow-hidden shadow-lg bg-slate-950">
                   <table className="w-full text-left text-xs">
-                    <thead className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase font-semibold">
+                    <thead className="bg-slate-900 border-b border-slate-800 text-slate-400 uppercase font-semibold">
                       <tr>
                         <th className="px-3.5 py-2.5">Receipt #</th>
                         <th className="px-3.5 py-2.5">Batch</th>
@@ -1027,14 +1027,14 @@ export default function PaymentsClient({
                         <th className="px-3.5 py-2.5 text-right">Receipt</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-slate-800/80">
                       {studentPayments.map(p => (
-                        <tr key={p.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-3.5 py-2.5 font-mono font-bold text-indigo-700">{p.receipt_number}</td>
-                          <td className="px-3.5 py-2.5 font-medium text-gray-800">{p.batch?.name || "—"}</td>
-                          <td className="px-3.5 py-2.5 font-bold text-emerald-700">
+                        <tr key={p.id} className="hover:bg-slate-900/50 transition-colors">
+                          <td className="px-3.5 py-2.5 font-mono font-bold text-amber-400">{p.receipt_number}</td>
+                          <td className="px-3.5 py-2.5 font-medium text-slate-200">{p.batch?.name || "—"}</td>
+                          <td className="px-3.5 py-2.5 font-bold text-emerald-400">
                             {formatCurrency(p.total_paid)}
-                            {p.discount > 0 && <span className="text-[10px] text-gray-400 block font-normal">disc: {formatCurrency(p.discount)}</span>}
+                            {p.discount > 0 && <span className="text-[10px] text-slate-500 block font-normal">disc: {formatCurrency(p.discount)}</span>}
                           </td>
                           <td className="px-3.5 py-2.5">
                             {(() => {
@@ -1042,34 +1042,34 @@ export default function PaymentsClient({
                               const refInfo = parseReferralNotes(p.notes)
                               return isRef ? (
                                 <div className="space-y-0.5">
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 uppercase border border-purple-200 inline-block">
+                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-950/60 text-purple-300 uppercase border border-purple-800 inline-block">
                                     Referral
                                   </span>
                                   {refInfo.referral_name && (
-                                    <p className="text-[10px] font-bold text-purple-900 leading-tight">
+                                    <p className="text-[10px] font-bold text-purple-300 leading-tight">
                                       Ref: {refInfo.referral_name}
                                     </p>
                                   )}
                                   {refInfo.referral_reason && (
-                                    <p className="text-[9px] text-purple-700 italic leading-tight">
+                                    <p className="text-[9px] text-purple-400 italic leading-tight">
                                       {refInfo.referral_reason}
                                     </p>
                                   )}
                                 </div>
                               ) : (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 uppercase border border-blue-100">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-950/60 text-blue-300 uppercase border border-blue-800/60">
                                   {p.payment_method}
                                 </span>
                               )
                             })()}
                           </td>
-                          <td className="px-3.5 py-2.5 capitalize text-gray-600">{p.payment_for}</td>
-                          <td className="px-3.5 py-2.5 text-gray-500">{formatDateTime(p.paid_at)}</td>
+                          <td className="px-3.5 py-2.5 capitalize text-slate-300">{p.payment_for}</td>
+                          <td className="px-3.5 py-2.5 text-slate-400">{formatDateTime(p.paid_at)}</td>
                           <td className="px-3.5 py-2.5 text-right">
                             <button
                               type="button"
                               onClick={() => printExistingReceipt(p)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 transition-all text-[11px]"
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold border border-slate-700 transition-all text-[11px]"
                             >
                               <Printer className="w-3.5 h-3.5" /> PDF
                             </button>
@@ -1086,18 +1086,18 @@ export default function PaymentsClient({
       )}
 
       {/* Global Payments History Table */}
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden space-y-3">
-        <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden space-y-3">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div>
-            <h3 className="font-bold text-gray-900 text-base">Recent Payments Log</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Showing last 100 payments recorded across all batches</p>
+            <h3 className="font-bold text-white text-base">Recent Payments Log</h3>
+            <p className="text-xs text-slate-400 mt-0.5">Showing last 100 payments recorded across all batches</p>
           </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-gray-50/80 border-b border-gray-200 text-xs font-bold text-gray-600 uppercase tracking-wider">
+              <tr className="bg-slate-950/80 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
                 <th className="px-4 py-3">Receipt</th>
                 <th className="px-4 py-3">Student</th>
                 <th className="px-4 py-3">Batch</th>
@@ -1108,21 +1108,21 @@ export default function PaymentsClient({
                 <th className="px-4 py-3 text-right">Print / Save</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 text-sm">
+            <tbody className="divide-y divide-slate-800/80 text-sm">
               {payments.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-12 text-gray-400">No payments recorded yet</td></tr>
+                <tr><td colSpan={8} className="text-center py-12 text-slate-500">No payments recorded yet</td></tr>
               ) : (
                 payments.map(p => (
-                  <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="px-4 py-3 font-mono text-xs font-bold text-indigo-600">{p.receipt_number}</td>
+                  <tr key={p.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="px-4 py-3 font-mono text-xs font-bold text-amber-400">{p.receipt_number}</td>
                     <td className="px-4 py-3">
-                      <p className="font-bold text-gray-800 text-sm">{p.student?.name}</p>
-                      <span className="text-xs font-mono text-gray-400">{p.student?.student_id}</span>
+                      <p className="font-bold text-white text-sm">{p.student?.name}</p>
+                      <span className="text-xs font-mono text-slate-400">{p.student?.student_id}</span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{p.batch?.name || "—"}</td>
-                    <td className="px-4 py-3 font-extrabold text-emerald-700">
+                    <td className="px-4 py-3 text-sm text-slate-300">{p.batch?.name || "—"}</td>
+                    <td className="px-4 py-3 font-extrabold text-emerald-400">
                       {formatCurrency(p.total_paid)}
-                      {p.discount > 0 && <span className="text-xs text-gray-400 block font-normal">disc: {formatCurrency(p.discount)}</span>}
+                      {p.discount > 0 && <span className="text-xs text-slate-500 block font-normal">disc: {formatCurrency(p.discount)}</span>}
                     </td>
                     <td className="px-4 py-3">
                       {(() => {
@@ -1130,34 +1130,34 @@ export default function PaymentsClient({
                         const refInfo = parseReferralNotes(p.notes)
                         return isRef ? (
                           <div className="space-y-0.5">
-                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase inline-block">
+                            <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-950/60 text-purple-300 border border-purple-800/60 uppercase inline-block">
                               Referral
                             </span>
                             {refInfo.referral_name && (
-                              <p className="text-xs font-bold text-purple-900">
+                              <p className="text-xs font-bold text-purple-300">
                                 By: {refInfo.referral_name}
                               </p>
                             )}
                             {refInfo.referral_reason && (
-                              <p className="text-[11px] text-purple-700 italic">
+                              <p className="text-[11px] text-purple-400 italic">
                                 Reason: {refInfo.referral_reason}
                               </p>
                             )}
                           </div>
                         ) : (
-                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-100 uppercase">
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-950/60 text-blue-300 border border-blue-800/60 uppercase">
                             {p.payment_method}
                           </span>
                         )
                       })()}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 capitalize">{p.payment_for}</td>
-                    <td className="px-4 py-3 text-xs text-gray-500">{formatDateTime(p.paid_at)}</td>
+                    <td className="px-4 py-3 text-sm text-slate-300 capitalize">{p.payment_for}</td>
+                    <td className="px-4 py-3 text-xs text-slate-400">{formatDateTime(p.paid_at)}</td>
                     <td className="px-4 py-3 text-right">
                       <button 
                         type="button"
                         onClick={() => printExistingReceipt(p)}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 border border-transparent hover:border-indigo-200 rounded-xl transition-all"
+                        className="p-2 text-slate-300 hover:text-amber-400 hover:bg-slate-800 border border-slate-700 rounded-xl transition-all"
                         title="Print / Download PDF"
                       >
                         <Printer className="w-4 h-4" />
@@ -1173,23 +1173,23 @@ export default function PaymentsClient({
 
       {/* Record Payment Modal (Searchable Student Entry) */}
       {showRecordModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-800 animate-in zoom-in-95 duration-200 text-white">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-700 p-5 text-white flex items-center justify-between">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-5 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center border border-white/20">
-                  <CreditCard className="w-5 h-5 text-white" />
+                <div className="w-9 h-9 bg-amber-500/20 rounded-xl flex items-center justify-center border border-amber-500/30 text-amber-400">
+                  <CreditCard className="w-5 h-5 text-amber-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base">Record Payment</h3>
-                  <p className="text-xs text-emerald-100">Search student and record counter payment</p>
+                  <h3 className="font-bold text-base text-white">Record Payment</h3>
+                  <p className="text-xs text-slate-400">Search student and record counter payment</p>
                 </div>
               </div>
               <button 
                 type="button"
                 onClick={() => setShowRecordModal(false)} 
-                className="p-1.5 hover:bg-white/10 rounded-xl text-white/80 hover:text-white transition-colors"
+                className="p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1199,45 +1199,45 @@ export default function PaymentsClient({
             <form onSubmit={handlePay} className="p-6 space-y-4">
               {/* Searchable Student Field */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                   Search & Select Student *
                 </label>
                 
                 {modalSelectedStudent ? (
-                  <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <div className="flex items-center justify-between p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-xl">
                     <div>
-                      <p className="text-sm font-bold text-emerald-900">{modalSelectedStudent.name}</p>
-                      <p className="text-xs text-emerald-600 font-mono">{modalSelectedStudent.student_id} {modalSelectedStudent.phone ? `• ${modalSelectedStudent.phone}` : ""}</p>
+                      <p className="text-sm font-bold text-emerald-300">{modalSelectedStudent.name}</p>
+                      <p className="text-xs text-emerald-400 font-mono">{modalSelectedStudent.student_id} {modalSelectedStudent.phone ? `• ${modalSelectedStudent.phone}` : ""}</p>
                     </div>
                     <button 
                       type="button" 
                       onClick={() => { setModalSelectedStudent(null); update("student_id", "") }}
-                      className="text-red-500 hover:text-red-700 font-bold text-xs"
+                      className="text-red-400 hover:text-red-300 font-bold text-xs"
                     >
                       Change ✕
                     </button>
                   </div>
                 ) : (
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       value={modalSearchQuery}
                       onChange={e => setModalSearchQuery(e.target.value)}
                       placeholder="Type student name or ID..."
-                      className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      className="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
                       autoFocus
                     />
                     {modalFilteredStudents.length > 0 && (
-                      <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white rounded-xl border border-gray-200 shadow-xl max-h-48 overflow-y-auto divide-y divide-gray-50">
+                      <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-900 rounded-xl border border-slate-800 shadow-2xl max-h-48 overflow-y-auto divide-y divide-slate-800">
                         {modalFilteredStudents.map(s => (
                           <button
                             type="button"
                             key={s.id}
                             onClick={() => handleModalSelectStudent(s)}
-                            className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50 text-sm flex items-center justify-between"
+                            className="w-full text-left px-3.5 py-2.5 hover:bg-slate-800 text-sm flex items-center justify-between"
                           >
-                            <span className="font-bold text-gray-800">{s.name}</span>
-                            <span className="text-xs text-gray-400 font-mono">{s.student_id}</span>
+                            <span className="font-bold text-white">{s.name}</span>
+                            <span className="text-xs text-amber-400 font-mono">{s.student_id}</span>
                           </button>
                         ))}
                       </div>
@@ -1248,7 +1248,7 @@ export default function PaymentsClient({
 
               {/* Batch selection */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Batch / Program</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Batch / Program</label>
                 <select 
                   value={form.batch_id} 
                   onChange={e => { 
@@ -1270,18 +1270,18 @@ export default function PaymentsClient({
               {/* Amount & Discount */}
               <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Amount (৳) *</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Amount (৳) *</label>
                   <input 
                     type="number" 
                     required 
                     value={form.amount} 
                     onChange={e => update("amount", e.target.value)} 
-                    className={`${inputClass} font-bold text-emerald-800 text-base`} 
+                    className={`${inputClass} font-bold text-emerald-400 text-base`} 
                     placeholder="0"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Discount (৳)</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Discount (৳)</label>
                   <input 
                     type="number" 
                     value={form.discount} 
@@ -1294,16 +1294,16 @@ export default function PaymentsClient({
 
               {/* Total Summary preview */}
               {form.amount && (
-                <div className="p-3 bg-emerald-50/80 rounded-xl border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center justify-between">
-                  <span>Net Payable Amount:</span>
-                  <span className="text-base">{formatCurrency(Math.max(0, parseFloat(form.amount || "0") - parseFloat(form.discount || "0")))}</span>
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs font-bold text-amber-400 flex items-center justify-between">
+                  <span className="text-slate-400">Net Payable Amount:</span>
+                  <span className="text-base text-amber-400">{formatCurrency(Math.max(0, parseFloat(form.amount || "0") - parseFloat(form.discount || "0")))}</span>
                 </div>
               )}
 
               {/* Payment Method & Type */}
               <div className="grid grid-cols-2 gap-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Payment Method</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Payment Method</label>
                   <select 
                     value={form.payment_method} 
                     onChange={e => update("payment_method", e.target.value)} 
@@ -1318,7 +1318,7 @@ export default function PaymentsClient({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Payment For</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Payment For</label>
                   <select 
                     value={form.payment_for} 
                     onChange={e => update("payment_for", e.target.value)} 
@@ -1334,9 +1334,9 @@ export default function PaymentsClient({
               </div>
 
               {form.payment_method === "referral" && (
-                <div className="p-3.5 bg-purple-50/90 rounded-2xl border border-purple-200 space-y-3 animate-in fade-in duration-150">
+                <div className="p-3.5 bg-purple-950/30 rounded-2xl border border-purple-800/50 space-y-3 animate-in fade-in duration-150">
                   <div>
-                    <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider mb-1">
                       Referral Student Name / ID *
                     </label>
                     <input 
@@ -1345,11 +1345,11 @@ export default function PaymentsClient({
                       placeholder="e.g. Tanvir Ahmed (MS-10023)"
                       value={form.referral_name} 
                       onChange={e => update("referral_name", e.target.value)} 
-                      className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-medium text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                      className="w-full px-3 py-2 bg-slate-900 border border-purple-700/60 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-purple-500" 
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-purple-900 uppercase tracking-wider mb-1">
+                    <label className="block text-xs font-bold text-purple-300 uppercase tracking-wider mb-1">
                       Reason for Referral Payment *
                     </label>
                     <input 
@@ -1358,7 +1358,7 @@ export default function PaymentsClient({
                       placeholder="e.g. Referral reward / discount for student enrollment"
                       value={form.referral_reason} 
                       onChange={e => update("referral_reason", e.target.value)} 
-                      className="w-full px-3 py-2 bg-white border border-purple-300 rounded-xl text-xs font-medium text-purple-900 focus:outline-none focus:ring-2 focus:ring-purple-500" 
+                      className="w-full px-3 py-2 bg-slate-900 border border-purple-700/60 rounded-xl text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-purple-500" 
                     />
                   </div>
                 </div>
@@ -1369,14 +1369,14 @@ export default function PaymentsClient({
                 <button 
                   type="button" 
                   onClick={() => setShowRecordModal(false)} 
-                  className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors"
+                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 text-sm transition-colors"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
                   disabled={loading || (!form.student_id && !modalSelectedStudent)} 
-                  className="flex-1 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-bold shadow-md shadow-emerald-200 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-40"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-40"
                 >
                   {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Recording...</> : "Record & Get PDF"}
                 </button>
@@ -1388,22 +1388,22 @@ export default function PaymentsClient({
 
       {/* Edit / Change Due Modal */}
       {editingDue && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-200">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 text-white flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden border border-slate-800 animate-in zoom-in-95 duration-200 text-white">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-5 text-white flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center border border-white/20">
-                  <Edit2 className="w-4 h-4 text-white" />
+                <div className="w-9 h-9 bg-indigo-500/20 border border-indigo-500/30 rounded-xl flex items-center justify-center text-indigo-400">
+                  <Edit2 className="w-4 h-4 text-indigo-400" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base">Change Student Due</h3>
-                  <p className="text-xs text-indigo-100">{getBatchName(editingDue.batch)} ({editingDue.due_month})</p>
+                  <h3 className="font-bold text-base text-white">Change Student Due</h3>
+                  <p className="text-xs text-slate-400">{getBatchName(editingDue.batch)} ({editingDue.due_month})</p>
                 </div>
               </div>
               <button 
                 type="button"
                 onClick={() => setEditingDue(null)} 
-                className="p-1.5 hover:bg-white/10 rounded-xl text-white/80 hover:text-white transition-colors"
+                className="p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1411,20 +1411,20 @@ export default function PaymentsClient({
 
             <form onSubmit={handleSaveDueEdit} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Due Amount (৳)</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Due Amount (৳)</label>
                 <input 
                   type="number" 
                   min="0"
                   required
                   value={editDueAmount} 
                   onChange={e => setEditDueAmount(e.target.value)} 
-                  className={`${inputClass} font-bold text-indigo-700 text-base`} 
+                  className={`${inputClass} font-bold text-amber-400 text-base`} 
                 />
-                <p className="text-[11px] text-gray-400 mt-1">Already paid towards this due: {formatCurrency(editingDue.paid_amount || 0)}</p>
+                <p className="text-[11px] text-slate-500 mt-1">Already paid towards this due: {formatCurrency(editingDue.paid_amount || 0)}</p>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Deadline / Due Date</label>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Deadline / Due Date</label>
                 <input 
                   type="date" 
                   value={editDueDate} 
@@ -1437,14 +1437,14 @@ export default function PaymentsClient({
                 <button 
                   type="button" 
                   onClick={() => setEditingDue(null)} 
-                  className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors"
+                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 text-sm transition-colors"
                 >
                   Cancel
                 </button>
                 <button 
                   type="submit" 
                   disabled={dueUpdating} 
-                  className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl font-bold shadow-md shadow-indigo-100 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
+                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 text-sm transition-all disabled:opacity-50"
                 >
                   {dueUpdating ? <><Loader2 className="w-4 h-4 animate-spin" /> Updating...</> : "Update Due"}
                 </button>
@@ -1456,31 +1456,31 @@ export default function PaymentsClient({
 
       {/* Instant Printable & Downloadable PDF Receipt Modal */}
       {receiptModal && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-gray-100">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-in fade-in duration-150">
+          <div className="bg-slate-900 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-800 text-white">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-emerald-600 to-teal-600 p-5 text-white text-center relative">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-5 text-white text-center relative">
               <button 
                 type="button"
                 onClick={() => setReceiptModal(null)}
-                className="absolute right-4 top-4 p-1.5 hover:bg-white/10 rounded-xl text-white transition-colors"
+                className="absolute right-4 top-4 p-1.5 hover:bg-slate-800 rounded-xl text-slate-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
-              <div className="w-11 h-11 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
-                <Check className="w-6 h-6 text-white" />
+              <div className="w-11 h-11 bg-amber-500/20 border border-amber-500/30 rounded-2xl flex items-center justify-center mx-auto mb-2 text-amber-400">
+                <Check className="w-6 h-6 text-amber-400" />
               </div>
-              <h3 className="text-lg font-bold">Payment Receipt Ready</h3>
-              <p className="text-xs text-emerald-100">Print receipt or download PDF for student records</p>
+              <h3 className="text-lg font-bold text-white">Payment Receipt Ready</h3>
+              <p className="text-xs text-slate-400">Print receipt or download PDF for student records</p>
             </div>
 
-            {/* Slip Preview */}
+            {/* Slip Preview (Optimized clean background for crystal clear print & PDF capture) */}
             <div className="p-6 space-y-4">
-              <div ref={receiptRef} className="border border-emerald-100 rounded-2xl p-4 bg-slate-50 space-y-3">
+              <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-4 bg-white text-slate-900 space-y-3 shadow-inner">
                 <div className="text-center border-b border-dashed border-gray-300 pb-2.5">
-                  <h4 className="font-extrabold text-emerald-900 text-sm">MedhaShiree Coaching</h4>
+                  <h4 className="font-extrabold text-slate-900 text-sm">MedhaShiree Coaching</h4>
                   <p className="text-[10px] text-gray-500">Official Fee Payment Receipt</p>
-                  <span className="inline-block bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 font-mono">
+                  <span className="inline-block bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 font-mono">
                     {receiptModal.receipt_number}
                   </span>
                 </div>
@@ -1489,7 +1489,7 @@ export default function PaymentsClient({
                   <div className="flex justify-between"><span className="text-gray-500">Student Name:</span><span className="font-bold text-gray-800">{receiptModal.student_name}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Student ID:</span><span className="font-mono text-gray-700">{receiptModal.student_id}</span></div>
                   {receiptModal.student_phone && <div className="flex justify-between"><span className="text-gray-500">Phone:</span><span className="text-gray-700">{receiptModal.student_phone}</span></div>}
-                  <div className="flex justify-between"><span className="text-gray-500">Program / Batch:</span><span className="font-semibold text-emerald-800">{receiptModal.batch_name}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Program / Batch:</span><span className="font-semibold text-slate-800">{receiptModal.batch_name}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Payment For:</span><span className="text-gray-700 capitalize">{receiptModal.payment_for} Fee</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Method:</span><span className="font-medium text-gray-700">{receiptModal.payment_method}</span></div>
                   {receiptModal.referral_name && (
@@ -1538,14 +1538,14 @@ export default function PaymentsClient({
                 <button
                   type="button"
                   onClick={handlePrintReceipt}
-                  className="py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-1.5 text-xs shadow-md shadow-indigo-100 transition-all"
+                  className="py-2.5 bg-slate-800 border border-slate-700 text-white rounded-xl font-bold hover:bg-slate-700 flex items-center justify-center gap-1.5 text-xs shadow-md transition-all"
                 >
                   <Printer className="w-4 h-4" /> Print Receipt
                 </button>
                 <button
                   type="button"
                   onClick={handleDownloadPDF}
-                  className="py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 flex items-center justify-center gap-1.5 text-xs shadow-md shadow-emerald-100 transition-all"
+                  className="py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-lg shadow-amber-500/20 transition-all"
                 >
                   <Download className="w-4 h-4" /> Save PDF
                 </button>
@@ -1554,7 +1554,7 @@ export default function PaymentsClient({
               <button
                 type="button"
                 onClick={() => setReceiptModal(null)}
-                className="w-full py-2 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 text-xs transition-colors"
+                className="w-full py-2 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 text-xs transition-colors"
               >
                 Close
               </button>
@@ -1565,22 +1565,22 @@ export default function PaymentsClient({
 
       {/* Payment Gateway Numbers Modal (Owner Configurable) */}
       {showGatewayModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-100 animate-in fade-in zoom-in-95">
-            <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 p-6 text-white flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md">
+          <div className="bg-slate-900 rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-800 animate-in fade-in zoom-in-95 text-white">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border-b border-slate-800 p-6 text-white flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-md">
-                  <Smartphone className="w-5 h-5 text-white" />
+                <div className="w-10 h-10 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center text-purple-300">
+                  <Smartphone className="w-5 h-5 text-purple-300" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-lg">Payment Gateway Numbers</h3>
-                  <p className="text-xs text-purple-100">Shown to students on batch &amp; course checkout pages</p>
+                  <h3 className="font-bold text-lg text-white">Payment Gateway Numbers</h3>
+                  <p className="text-xs text-slate-400">Shown to students on batch &amp; course checkout pages</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowGatewayModal(false)}
-                className="p-1.5 hover:bg-white/20 rounded-xl transition-colors text-white cursor-pointer"
+                className="p-1.5 hover:bg-slate-800 rounded-xl transition-colors text-slate-400 hover:text-white cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1588,136 +1588,136 @@ export default function PaymentsClient({
 
             <form onSubmit={handleSaveGatewayNumbers} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
               {/* bKash */}
-              <div className="p-4 rounded-2xl border border-pink-200 bg-pink-50/30 space-y-2.5">
+              <div className="p-4 rounded-2xl border border-pink-900/40 bg-pink-950/20 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-pink-700 flex items-center gap-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-pink-400 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-pink-500"></span>
                     bKash Number &amp; Account
                   </span>
-                  <span className="text-[10px] font-semibold text-pink-600 bg-pink-100/80 px-2 py-0.5 rounded-md">Dial *247#</span>
+                  <span className="text-[10px] font-semibold text-pink-300 bg-pink-900/40 px-2 py-0.5 rounded-md border border-pink-800/40">Dial *247#</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Number *</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Account Number *</label>
                     <input
                       type="text"
                       required
                       value={gatewayNumbers.bkash}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, bkash: e.target.value }))}
                       placeholder="01XXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm font-mono border border-pink-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 text-gray-900"
+                      className="w-full px-3 py-2 text-sm font-mono border border-pink-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-pink-500 text-white placeholder:text-slate-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Type</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Account Type</label>
                     <input
                       type="text"
                       value={gatewayNumbers.bkash_type}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, bkash_type: e.target.value }))}
                       placeholder="e.g. Send Money (Personal)"
-                      className="w-full px-3 py-2 text-xs border border-pink-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-pink-500 text-gray-900"
+                      className="w-full px-3 py-2 text-xs border border-pink-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-pink-500 text-white placeholder:text-slate-500"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Nagad */}
-              <div className="p-4 rounded-2xl border border-orange-200 bg-orange-50/30 space-y-2.5">
+              <div className="p-4 rounded-2xl border border-orange-900/40 bg-orange-950/20 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-orange-700 flex items-center gap-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-orange-400 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-orange-500"></span>
                     Nagad Number &amp; Account
                   </span>
-                  <span className="text-[10px] font-semibold text-orange-600 bg-orange-100/80 px-2 py-0.5 rounded-md">Dial *167#</span>
+                  <span className="text-[10px] font-semibold text-orange-300 bg-orange-900/40 px-2 py-0.5 rounded-md border border-orange-800/40">Dial *167#</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Number *</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Account Number *</label>
                     <input
                       type="text"
                       required
                       value={gatewayNumbers.nagad}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, nagad: e.target.value }))}
                       placeholder="01XXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm font-mono border border-orange-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-900"
+                      className="w-full px-3 py-2 text-sm font-mono border border-orange-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-orange-500 text-white placeholder:text-slate-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Type</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Account Type</label>
                     <input
                       type="text"
                       value={gatewayNumbers.nagad_type}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, nagad_type: e.target.value }))}
                       placeholder="e.g. Send Money (Personal)"
-                      className="w-full px-3 py-2 text-xs border border-orange-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 text-gray-900"
+                      className="w-full px-3 py-2 text-xs border border-orange-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-orange-500 text-white placeholder:text-slate-500"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Rocket */}
-              <div className="p-4 rounded-2xl border border-purple-200 bg-purple-50/30 space-y-2.5">
+              <div className="p-4 rounded-2xl border border-purple-900/40 bg-purple-950/20 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-purple-500"></span>
                     Rocket Number &amp; Account
                   </span>
-                  <span className="text-[10px] font-semibold text-purple-600 bg-purple-100/80 px-2 py-0.5 rounded-md">Dial *322#</span>
+                  <span className="text-[10px] font-semibold text-purple-300 bg-purple-900/40 px-2 py-0.5 rounded-md border border-purple-800/40">Dial *322#</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Number *</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Account Number *</label>
                     <input
                       type="text"
                       required
                       value={gatewayNumbers.rocket}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, rocket: e.target.value }))}
                       placeholder="01XXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm font-mono border border-purple-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                      className="w-full px-3 py-2 text-sm font-mono border border-purple-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder:text-slate-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Type</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Account Type</label>
                     <input
                       type="text"
                       value={gatewayNumbers.rocket_type}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, rocket_type: e.target.value }))}
                       placeholder="e.g. Send Money (Personal)"
-                      className="w-full px-3 py-2 text-xs border border-purple-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-gray-900"
+                      className="w-full px-3 py-2 text-xs border border-purple-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-purple-500 text-white placeholder:text-slate-500"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Upay */}
-              <div className="p-4 rounded-2xl border border-teal-200 bg-teal-50/30 space-y-2.5">
+              <div className="p-4 rounded-2xl border border-teal-900/40 bg-teal-950/20 space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider text-teal-700 flex items-center gap-1.5">
+                  <span className="text-xs font-bold uppercase tracking-wider text-teal-400 flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-teal-500"></span>
                     Upay Number &amp; Account
                   </span>
-                  <span className="text-[10px] font-semibold text-teal-600 bg-teal-100/80 px-2 py-0.5 rounded-md">Dial *268#</span>
+                  <span className="text-[10px] font-semibold text-teal-300 bg-teal-900/40 px-2 py-0.5 rounded-md border border-teal-800/40">Dial *268#</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Number *</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Account Number *</label>
                     <input
                       type="text"
                       required
                       value={gatewayNumbers.upay}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, upay: e.target.value }))}
                       placeholder="01XXXXXXXXX"
-                      className="w-full px-3 py-2 text-sm font-mono border border-teal-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900"
+                      className="w-full px-3 py-2 text-sm font-mono border border-teal-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white placeholder:text-slate-500"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-gray-600 mb-1">Account Type</label>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">Account Type</label>
                     <input
                       type="text"
                       value={gatewayNumbers.upay_type}
                       onChange={e => setGatewayNumbers(prev => ({ ...prev, upay_type: e.target.value }))}
                       placeholder="e.g. Send Money (Personal)"
-                      className="w-full px-3 py-2 text-xs border border-teal-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900"
+                      className="w-full px-3 py-2 text-xs border border-teal-900/60 rounded-xl bg-slate-950 focus:outline-none focus:ring-2 focus:ring-teal-500 text-white placeholder:text-slate-500"
                     />
                   </div>
                 </div>
@@ -1727,14 +1727,14 @@ export default function PaymentsClient({
                 <button
                   type="button"
                   onClick={() => setShowGatewayModal(false)}
-                  className="flex-1 py-3 border border-gray-200 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 transition-colors text-sm cursor-pointer"
+                  className="flex-1 py-3 border border-slate-700 rounded-xl text-slate-300 font-semibold hover:bg-slate-800 transition-colors text-sm cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={savingGateways}
-                  className="flex-1 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold shadow-md shadow-purple-200 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                  className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold shadow-lg shadow-amber-500/20 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   {savingGateways ? (
                     <>

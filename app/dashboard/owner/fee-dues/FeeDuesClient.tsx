@@ -270,97 +270,99 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Fee Dues</h2>
-          <p className="text-sm text-gray-500 mt-1">{filtered.length} pending · {overdueCount} overdue</p>
+          <h2 className="text-2xl font-bold text-white tracking-tight">Fee Dues</h2>
+          <p className="text-sm text-slate-400 mt-1">{filtered.length} pending receivables · {overdueCount} overdue</p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-2">
-            <p className="text-xs text-red-500">Total Outstanding</p>
-            <p className="text-lg font-bold text-red-700">{formatCurrency(totalOutstanding)}</p>
+          <div className="bg-red-500/15 border border-red-500/30 rounded-2xl px-5 py-2.5 backdrop-blur-md">
+            <p className="text-xs text-red-400 font-medium uppercase tracking-wider">Total Outstanding</p>
+            <p className="text-xl font-black text-red-300">{formatCurrency(totalOutstanding)}</p>
           </div>
-          <button onClick={downloadCSV} className="flex items-center gap-2 px-3 py-2 text-sm border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-700">
-            <Download className="w-4 h-4" /> CSV
+          <button onClick={downloadCSV} className="flex items-center gap-2 px-4 py-2.5 text-sm border border-slate-700 bg-slate-900/90 hover:bg-slate-800 text-slate-200 rounded-xl font-semibold shadow-sm transition-all cursor-pointer">
+            <Download className="w-4 h-4 text-amber-400" /> Export CSV
           </button>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap gap-3">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-4 shadow-xl flex flex-wrap gap-3">
         <div className="flex-1 min-w-48 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student name or ID..."
-            className="w-full pl-9 pr-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student name or student ID (MS-...)"
+            className="w-full pl-10 pr-3 py-2.5 text-sm text-white bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 placeholder:text-slate-500 transition-all" />
         </div>
         <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
-          className="px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="px-3.5 py-2.5 text-sm text-white bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 cursor-pointer">
           <option value="">All Batches</option>
           {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value as "date" | "amount")}
-          className="px-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          className="px-3.5 py-2.5 text-sm text-white bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 cursor-pointer">
           <option value="date">Sort by Due Date</option>
           <option value="amount">Sort by Amount (highest)</option>
         </select>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead><tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Student</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Batch</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Month</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Due</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Paid</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Outstanding</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Due Date</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Actions</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-100">
+            <thead>
+              <tr className="bg-slate-950/80 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <th className="px-4 py-3.5 text-left">Student</th>
+                <th className="px-4 py-3.5 text-left">Batch</th>
+                <th className="px-4 py-3.5 text-left">Month</th>
+                <th className="px-4 py-3.5 text-left">Due</th>
+                <th className="px-4 py-3.5 text-left">Paid</th>
+                <th className="px-4 py-3.5 text-left">Outstanding</th>
+                <th className="px-4 py-3.5 text-left">Due Date</th>
+                <th className="px-4 py-3.5 text-left">Status</th>
+                <th className="px-4 py-3.5 text-left">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/70 text-sm">
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-12 text-gray-400">No pending dues found</td></tr>
+                <tr><td colSpan={9} className="text-center py-14 text-slate-500 text-sm">No pending dues found</td></tr>
               ) : filtered.map(d => {
                 const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
                 const overdue = new Date(d.due_date) < new Date()
                 const isExpanded = expandedDueId === d.id
                 return (
                   <Fragment key={d.id}>
-                    <tr className={`transition-colors ${overdue ? "bg-red-50/50" : isExpanded ? "bg-emerald-50/40 font-medium" : "hover:bg-gray-50"}`}>
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium text-gray-800">{d.student?.name}</p>
-                        <p className="text-xs text-gray-400 font-mono">{d.student?.student_id}</p>
+                    <tr className={`transition-colors ${overdue ? "bg-red-950/30" : isExpanded ? "bg-amber-500/10 font-medium" : "hover:bg-slate-800/40"}`}>
+                      <td className="px-4 py-3.5">
+                        <p className="font-bold text-white">{d.student?.name}</p>
+                        <p className="text-xs text-amber-400/80 font-mono mt-0.5">{d.student?.student_id}</p>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{d.batch?.name}</td>
-                      <td className="px-4 py-3 text-sm text-gray-600">{getMonthLabel(d.due_month)}</td>
-                      <td className="px-4 py-3 text-sm">{formatCurrency(d.due_amount)}</td>
-                      <td className="px-4 py-3 text-sm text-emerald-600 font-semibold">{formatCurrency(d.paid_amount || 0)}</td>
-                      <td className="px-4 py-3 text-sm font-bold text-red-600">{formatCurrency(outstanding)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
+                      <td className="px-4 py-3.5 text-slate-300 font-medium">{d.batch?.name}</td>
+                      <td className="px-4 py-3.5 text-slate-300">{getMonthLabel(d.due_month)}</td>
+                      <td className="px-4 py-3.5 text-slate-400">{formatCurrency(d.due_amount)}</td>
+                      <td className="px-4 py-3.5 text-emerald-400 font-bold">{formatCurrency(d.paid_amount || 0)}</td>
+                      <td className="px-4 py-3.5 text-base font-black text-rose-400">{formatCurrency(outstanding)}</td>
+                      <td className="px-4 py-3.5 text-slate-300">
                         {formatDate(d.due_date)}
-                        {overdue && <AlertCircle className="w-3 h-3 text-red-500 inline ml-1" />}
+                        {overdue && <AlertCircle className="w-3.5 h-3.5 text-rose-400 inline ml-1.5" />}
                       </td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                          d.status === "partial" ? "bg-yellow-100 text-yellow-700" : "bg-red-100 text-red-700"
+                      <td className="px-4 py-3.5">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                          d.status === "partial" ? "bg-amber-500/15 text-amber-300 border-amber-500/30" : "bg-rose-500/15 text-rose-300 border-rose-500/30"
                         }`}>{d.status}</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3.5">
                         <div className="flex items-center gap-1.5">
                           {hasFinancialAccess ? (
                             <>
                               <button onClick={() => { setExtendModal(d); setNewDate(d.due_date) }} title="Extend due date"
-                                className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors"><Calendar className="w-3.5 h-3.5" /></button>
+                                className="p-2 hover:bg-slate-800 rounded-lg text-blue-400 transition-colors cursor-pointer"><Calendar className="w-4 h-4" /></button>
                               <button onClick={() => setReduceModal(d)} title="Reduce due"
-                                className="p-1.5 hover:bg-orange-50 rounded-lg text-orange-600 transition-colors"><DollarSign className="w-3.5 h-3.5" /></button>
+                                className="p-2 hover:bg-slate-800 rounded-lg text-amber-400 transition-colors cursor-pointer"><DollarSign className="w-4 h-4" /></button>
                               <button
                                 onClick={() => togglePayExpand(d)}
                                 title={isExpanded ? "Close payment panel" : "Pay / Settle Due (Enter amount)"}
-                                className={`px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                                   isExpanded
-                                    ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300"
-                                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                    ? "bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-400/40"
+                                    : "bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30"
                                 }`}
                               >
                                 <CheckCircle className="w-3.5 h-3.5" />
@@ -373,51 +375,51 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                               </button>
                             </>
                           ) : (
-                            <span className="text-xs text-gray-400 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5" /> No access</span>
+                            <span className="text-xs text-slate-500 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Locked</span>
                           )}
                           <button onClick={() => { setSmsModal(d); setSmsMessage(`Dear Parent, fee of ${formatCurrency(outstanding)} for ${d.student?.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`) }} title="Send SMS reminder"
-                            className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-600 transition-colors"><MessageSquare className="w-3.5 h-3.5" /></button>
+                            className="p-2 hover:bg-slate-800 rounded-lg text-purple-400 transition-colors cursor-pointer"><MessageSquare className="w-4 h-4" /></button>
                         </div>
                       </td>
                     </tr>
 
                     {/* Expandable Detailed Payment Drawer */}
                     {isExpanded && (
-                      <tr className="bg-gradient-to-r from-emerald-50/70 via-indigo-50/40 to-emerald-50/70 border-y-2 border-emerald-200/90">
+                      <tr className="bg-slate-950/90 border-y border-amber-500/30">
                         <td colSpan={9} className="p-3 sm:p-5">
-                          <div className="bg-white rounded-2xl border border-emerald-200 p-5 shadow-lg space-y-4 max-w-4xl mx-auto">
+                          <div className="bg-slate-900 rounded-2xl border border-slate-800 p-5 shadow-2xl space-y-4 max-w-4xl mx-auto">
                             {/* Top Summary Banner */}
-                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
                               <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-black">
-                                  <CreditCard className="w-5 h-5 text-emerald-700" />
+                                <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-black border border-amber-500/30">
+                                  <CreditCard className="w-5 h-5 text-amber-300" />
                                 </div>
                                 <div>
-                                  <h4 className="text-sm font-black text-gray-900 flex items-center gap-2">
+                                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
                                     Record Payment for {d.student?.name}
-                                    <span className="font-mono text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md font-bold">
+                                    <span className="font-mono text-xs text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md font-bold">
                                       {d.student?.student_id}
                                     </span>
                                   </h4>
-                                  <p className="text-xs text-gray-500 mt-0.5">
-                                    Batch: <strong className="text-gray-700">{d.batch?.name}</strong> • Month:{" "}
-                                    <strong className="text-gray-700">{getMonthLabel(d.due_month)}</strong>
+                                  <p className="text-xs text-slate-400 mt-0.5">
+                                    Batch: <strong className="text-slate-200">{d.batch?.name}</strong> • Month:{" "}
+                                    <strong className="text-slate-200">{getMonthLabel(d.due_month)}</strong>
                                   </p>
                                 </div>
                               </div>
 
                               <div className="flex items-center gap-2 flex-wrap">
-                                <div className="px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-200 text-right">
-                                  <span className="text-[10px] text-gray-500 uppercase block font-semibold">Total Due</span>
-                                  <strong className="text-xs font-bold text-gray-900">{formatCurrency(d.due_amount)}</strong>
+                                <div className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-right">
+                                  <span className="text-[10px] text-slate-400 uppercase block font-bold">Total Due</span>
+                                  <strong className="text-xs font-bold text-white">{formatCurrency(d.due_amount)}</strong>
                                 </div>
-                                <div className="px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-right">
-                                  <span className="text-[10px] text-emerald-600 uppercase block font-semibold">Already Paid</span>
-                                  <strong className="text-xs font-bold text-emerald-700">{formatCurrency(d.paid_amount || 0)}</strong>
+                                <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-right">
+                                  <span className="text-[10px] text-emerald-400 uppercase block font-bold">Already Paid</span>
+                                  <strong className="text-xs font-bold text-emerald-300">{formatCurrency(d.paid_amount || 0)}</strong>
                                 </div>
-                                <div className="px-3 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-right">
-                                  <span className="text-[10px] text-rose-600 uppercase block font-semibold">Outstanding</span>
-                                  <strong className="text-xs font-black text-rose-700">{formatCurrency(outstanding)}</strong>
+                                <div className="px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-right">
+                                  <span className="text-[10px] text-rose-400 uppercase block font-bold">Outstanding</span>
+                                  <strong className="text-xs font-black text-rose-400">{formatCurrency(outstanding)}</strong>
                                 </div>
                               </div>
                             </div>
@@ -427,11 +429,11 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                               {/* Pay Amount */}
                               <div>
                                 <div className="flex items-center justify-between mb-1">
-                                  <label className="font-bold text-gray-700">Pay Amount (৳) *</label>
+                                  <label className="font-bold text-slate-300">Pay Amount (৳) *</label>
                                   <button
                                     type="button"
                                     onClick={() => setPayForm((f) => ({ ...f, amount: String(outstanding) }))}
-                                    className="text-[10px] font-bold text-emerald-700 hover:underline cursor-pointer"
+                                    className="text-[10px] font-bold text-amber-400 hover:underline cursor-pointer"
                                   >
                                     Pay Full (৳{outstanding})
                                   </button>
@@ -443,17 +445,17 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                                   value={payForm.amount}
                                   onChange={(e) => setPayForm((f) => ({ ...f, amount: e.target.value }))}
                                   placeholder="e.g. 1000"
-                                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl font-bold text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl font-bold text-sm text-white focus:outline-none focus:border-amber-400 shadow-sm"
                                 />
                               </div>
 
                               {/* Payment Method */}
                               <div>
-                                <label className="block font-bold text-gray-700 mb-1">Payment Method *</label>
+                                <label className="block font-bold text-slate-300 mb-1">Payment Method *</label>
                                 <select
                                   value={payForm.payment_method}
                                   onChange={(e) => setPayForm((f) => ({ ...f, payment_method: e.target.value }))}
-                                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl font-semibold text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl font-semibold text-xs text-white focus:outline-none focus:border-amber-400 shadow-sm cursor-pointer"
                                 >
                                   <option value="cash">Cash (নগদ)</option>
                                   <option value="bkash">bKash (বিকাশ)</option>
@@ -466,12 +468,12 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
                               {/* Payment Date */}
                               <div>
-                                <label className="block font-bold text-gray-700 mb-1">Payment Date</label>
+                                <label className="block font-bold text-slate-300 mb-1">Payment Date</label>
                                 <input
                                   type="date"
                                   value={payForm.payment_date}
                                   onChange={(e) => setPayForm((f) => ({ ...f, payment_date: e.target.value }))}
-                                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl font-medium text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl font-medium text-xs text-white focus:outline-none focus:border-amber-400 shadow-sm"
                                 />
                               </div>
 
@@ -479,25 +481,25 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                               {payForm.payment_method === "referral" && (
                                 <>
                                   <div>
-                                    <label className="block font-bold text-purple-900 mb-1">Referral Student Name / ID *</label>
+                                    <label className="block font-bold text-purple-300 mb-1">Referral Student Name / ID *</label>
                                     <input
                                       type="text"
                                       required
                                       value={payForm.referral_name}
                                       onChange={(e) => setPayForm((f) => ({ ...f, referral_name: e.target.value }))}
                                       placeholder="e.g. Shakib (MS-12345)"
-                                      className="w-full px-3 py-2 bg-purple-50/50 border border-purple-300 rounded-xl font-medium text-xs text-purple-950 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                      className="w-full px-3 py-2 bg-slate-950 border border-purple-500/40 rounded-xl font-medium text-xs text-purple-200 focus:outline-none focus:border-purple-400"
                                     />
                                   </div>
                                   <div className="sm:col-span-2">
-                                    <label className="block font-bold text-purple-900 mb-1">Referral Reason / Note *</label>
+                                    <label className="block font-bold text-purple-300 mb-1">Referral Reason / Note *</label>
                                     <input
                                       type="text"
                                       required
                                       value={payForm.referral_reason}
                                       onChange={(e) => setPayForm((f) => ({ ...f, referral_reason: e.target.value }))}
                                       placeholder="e.g. Referred 2 new students for Chemistry batch"
-                                      className="w-full px-3 py-2 bg-purple-50/50 border border-purple-300 rounded-xl font-medium text-xs text-purple-950 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                      className="w-full px-3 py-2 bg-slate-950 border border-purple-500/40 rounded-xl font-medium text-xs text-purple-200 focus:outline-none focus:border-purple-400"
                                     />
                                   </div>
                                 </>
@@ -505,14 +507,14 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
                               {/* Discount / Fee Waiver */}
                               <div>
-                                <label className="block font-bold text-gray-700 mb-1">Fee Waiver / Discount (৳)</label>
+                                <label className="block font-bold text-slate-300 mb-1">Fee Waiver / Discount (৳)</label>
                                 <input
                                   type="number"
                                   min="0"
                                   value={payForm.discount}
                                   onChange={(e) => setPayForm((f) => ({ ...f, discount: e.target.value }))}
                                   placeholder="0"
-                                  className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-amber-400 shadow-sm"
                                 />
                               </div>
 
@@ -525,35 +527,35 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
                                 if (remaining > 0) {
                                   return (
-                                    <div className="sm:col-span-2 p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                    <div className="sm:col-span-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                                       <div>
-                                        <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
-                                          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                                        <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                                          <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
                                           Partial Payment: Remaining due of{" "}
-                                          <strong className="text-red-700 font-black">৳{remaining.toLocaleString("en-BD")}</strong> will
+                                          <strong className="text-rose-400 font-black">৳{remaining.toLocaleString("en-BD")}</strong> will
                                           remain as partial due!
                                         </span>
-                                        <span className="text-[11px] text-amber-700 block mt-0.5">
+                                        <span className="text-[11px] text-amber-400/80 block mt-0.5">
                                           This row will stay in Fee Dues with status partial and the remaining balance.
                                         </span>
                                       </div>
                                       <div className="shrink-0 w-full sm:w-auto">
-                                        <label className="block text-[10px] font-bold uppercase text-amber-800 mb-0.5">
+                                        <label className="block text-[10px] font-bold uppercase text-amber-400 mb-0.5">
                                           Next Due Date:
                                         </label>
                                         <input
                                           type="date"
                                           value={payForm.next_due_date}
                                           onChange={(e) => setPayForm((f) => ({ ...f, next_due_date: e.target.value }))}
-                                          className="px-2.5 py-1.5 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-gray-900 focus:outline-none"
+                                          className="px-2.5 py-1.5 bg-slate-950 border border-amber-500/40 rounded-lg text-xs font-semibold text-white focus:outline-none"
                                         />
                                       </div>
                                     </div>
                                   )
                                 } else if (totalCredit >= outstanding && outstanding > 0) {
                                   return (
-                                    <div className="sm:col-span-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800">
-                                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                                    <div className="sm:col-span-2 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center gap-2 text-emerald-300">
+                                      <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
                                       <span className="text-xs font-bold">
                                         ✓ Full Payment: This due will be completely settled and cleared from pending dues.
                                       </span>
@@ -565,12 +567,12 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                             </div>
 
                             {/* Action Buttons */}
-                            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-gray-100">
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-800">
                               <button
                                 type="button"
                                 onClick={() => waiveEntireDue(d)}
                                 disabled={submittingPayment || actionLoading}
-                                className="text-xs text-rose-600 hover:text-rose-800 hover:underline font-bold cursor-pointer"
+                                className="text-xs text-rose-400 hover:text-rose-300 hover:underline font-bold cursor-pointer"
                               >
                                 Waive Entire Remaining Balance (100% Waiver)
                               </button>
@@ -579,7 +581,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                                 <button
                                   type="button"
                                   onClick={() => setExpandedDueId(null)}
-                                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-xs font-bold hover:bg-gray-50 transition-colors cursor-pointer"
+                                  className="px-4 py-2 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-800 transition-colors cursor-pointer"
                                 >
                                   Cancel
                                 </button>
@@ -587,7 +589,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                                   type="button"
                                   onClick={() => handleRecordPayment(d)}
                                   disabled={submittingPayment || !payForm.amount || parseFloat(payForm.amount) <= 0}
-                                  className="px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-100 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
                                 >
                                   {submittingPayment ? (
                                     <>
@@ -612,24 +614,24 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
           </table>
         </div>
       </div>
-      <p className="text-xs text-gray-400 text-center">Showing {filtered.length} of {dues.length} dues</p>
+      <p className="text-xs text-slate-500 text-center">Showing {filtered.length} of {dues.length} dues</p>
 
       {/* Extend Due Date Modal */}
       {extendModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 shadow-2xl text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Extend Due Date</h3>
-              <button onClick={() => setExtendModal(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+              <h3 className="font-bold text-white text-base">Extend Due Date</h3>
+              <button onClick={() => setExtendModal(null)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-sm text-gray-500 mb-3">Student: <strong>{extendModal.student?.name}</strong></p>
-            <p className="text-sm text-gray-500 mb-4">Current: <strong>{formatDate(extendModal.due_date)}</strong></p>
-            <label className="block text-sm font-medium text-gray-700 mb-1">New Due Date</label>
+            <p className="text-sm text-slate-400 mb-1">Student: <strong className="text-white">{extendModal.student?.name}</strong></p>
+            <p className="text-sm text-slate-400 mb-4">Current: <strong className="text-amber-400">{formatDate(extendModal.due_date)}</strong></p>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">New Due Date</label>
             <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)}
-              className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4" />
+              className="w-full px-3.5 py-2.5 text-sm text-white bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 mb-5" />
             <div className="flex gap-3">
-              <button onClick={() => setExtendModal(null)} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">Cancel</button>
-              <button onClick={extendDueDate} disabled={actionLoading} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center justify-center gap-2">
+              <button onClick={() => setExtendModal(null)} className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 transition-colors">Cancel</button>
+              <button onClick={extendDueDate} disabled={actionLoading} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 transition-all">
                 {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />} Extend
               </button>
             </div>
@@ -639,20 +641,20 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
       {/* Reduce Due Modal */}
       {reduceModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-sm p-6 shadow-2xl text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Reduce Due Amount</h3>
-              <button onClick={() => setReduceModal(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+              <h3 className="font-bold text-white text-base">Reduce Due Amount</h3>
+              <button onClick={() => setReduceModal(null)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-sm text-gray-500 mb-1">Student: <strong>{reduceModal.student?.name}</strong></p>
-            <p className="text-sm text-gray-500 mb-4">Current Due: <strong className="text-red-600">{formatCurrency(reduceModal.due_amount - (reduceModal.paid_amount || 0))}</strong></p>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Reduce By (৳)</label>
+            <p className="text-sm text-slate-400 mb-1">Student: <strong className="text-white">{reduceModal.student?.name}</strong></p>
+            <p className="text-sm text-slate-400 mb-4">Current Due: <strong className="text-rose-400 font-bold">{formatCurrency(reduceModal.due_amount - (reduceModal.paid_amount || 0))}</strong></p>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">Reduce By (৳)</label>
             <input type="number" value={reduceAmount} onChange={e => setReduceAmount(e.target.value)} min="1" max={reduceModal.due_amount - (reduceModal.paid_amount || 0)}
-              className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4" placeholder="Amount to reduce" />
+              className="w-full px-3.5 py-2.5 text-sm text-white bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 mb-5" placeholder="Amount to reduce" />
             <div className="flex gap-3">
-              <button onClick={() => setReduceModal(null)} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">Cancel</button>
-              <button onClick={reduceDue} disabled={actionLoading || !reduceAmount} className="flex-1 py-2.5 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-50 flex items-center justify-center gap-2">
+              <button onClick={() => setReduceModal(null)} className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 transition-colors">Cancel</button>
+              <button onClick={reduceDue} disabled={actionLoading || !reduceAmount} className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 transition-all">
                 {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />} Reduce
               </button>
             </div>
@@ -662,20 +664,20 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
       {/* SMS Reminder Modal */}
       {smsModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md p-6 shadow-2xl text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900">Send SMS Reminder</h3>
-              <button onClick={() => setSmsModal(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+              <h3 className="font-bold text-white text-base">Send SMS Reminder</h3>
+              <button onClick={() => setSmsModal(null)} className="p-1 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><X className="w-5 h-5" /></button>
             </div>
-            <p className="text-sm text-gray-500 mb-1">To: <strong>{smsModal.student?.name}</strong></p>
-            <p className="text-sm text-gray-400 mb-4">Phone: {smsModal.student?.guardian_phone || smsModal.student?.phone || "N/A"}</p>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+            <p className="text-sm text-slate-400 mb-1">To: <strong className="text-white">{smsModal.student?.name}</strong></p>
+            <p className="text-sm text-slate-400 mb-4">Phone: <span className="font-mono text-amber-300">{smsModal.student?.guardian_phone || smsModal.student?.phone || "N/A"}</span></p>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-1.5">Message</label>
             <textarea value={smsMessage} onChange={e => setSmsMessage(e.target.value)} rows={4}
-              className="w-full px-3 py-2.5 text-sm text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4" />
+              className="w-full px-3.5 py-2.5 text-sm text-white bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 mb-5" />
             <div className="flex gap-3">
-              <button onClick={() => setSmsModal(null)} className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50">Cancel</button>
-              <button onClick={() => { toast.success("SMS sent (mock)!"); setSmsModal(null) }} className="flex-1 py-2.5 bg-purple-600 text-white rounded-lg font-medium hover:bg-purple-700 flex items-center justify-center gap-2">
+              <button onClick={() => setSmsModal(null)} className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 transition-colors">Cancel</button>
+              <button onClick={() => { toast.success("SMS sent (mock)!"); setSmsModal(null) }} className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-purple-500/20 transition-all">
                 <MessageSquare className="w-4 h-4" /> Send SMS
               </button>
             </div>

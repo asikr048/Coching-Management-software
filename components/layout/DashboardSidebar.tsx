@@ -8,13 +8,13 @@ import {
   BarChart3, UserCheck, MessageSquare, Settings, ChevronLeft,
   ChevronRight, Package, Trophy, Fingerprint, ShoppingBag,
   DollarSign, GitMerge, Home, FileText, ImageIcon, Shield, ClipboardList,
-  X, Globe, Landmark
+  X, Globe, Landmark, Sparkles
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
 
 const ownerNav = [
   { href: "/dashboard/owner", icon: LayoutDashboard, label: "Dashboard", exact: true },
-  { href: "/dashboard/owner/branches", icon: Landmark, label: "Branches" },
+  { href: "/dashboard/owner/branches", icon: Landmark, label: "Branches (শাখা)" },
   { href: "/dashboard/owner/students", icon: Users, label: "Students" },
   { href: "/dashboard/owner/batches", icon: BookOpen, label: "Batches" },
   { href: "/dashboard/owner/payments", icon: CreditCard, label: "Payments" },
@@ -67,16 +67,6 @@ const navByRole: Record<string, typeof ownerNav> = {
   course_teacher: teacherNav,
 }
 
-const roleColors: Record<string, string> = {
-  owner: "from-indigo-900 to-indigo-800",
-  super_manager: "from-amber-900 to-amber-800",
-  manager: "from-teal-900 to-teal-800",
-  receptionist: "from-emerald-900 to-emerald-800",
-  teacher: "from-blue-900 to-blue-800",
-  accountant: "from-purple-900 to-purple-800",
-  course_teacher: "from-blue-900 to-blue-800",
-}
-
 interface Props {
   role: Role
   name: string
@@ -88,22 +78,31 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const nav = navByRole[role] || ownerNav
-  const gradient = roleColors[role] || "from-indigo-900 to-indigo-800"
 
   const sidebarContent = (isMobileView: boolean) => (
     <>
-      <div className="flex items-center justify-between p-4 border-b border-white/10">
-        <div className="flex items-center gap-2">
-          <GraduationCap className="w-7 h-7 text-white flex-shrink-0" />
+      {/* Brand Header */}
+      <div className="flex items-center justify-between p-4 border-b border-slate-800/80 bg-slate-950/40">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20 flex-shrink-0">
+            <GraduationCap className="w-5 h-5 font-bold" />
+          </div>
           {(!collapsed || isMobileView) && (
-            <span className="font-bold text-base truncate">MedhaShiree</span>
+            <div className="min-w-0">
+              <span className="font-extrabold text-base text-white tracking-tight leading-none block">
+                MedhaShiree
+              </span>
+              <span className="text-[10px] font-bold text-amber-400 tracking-wider uppercase mt-0.5 block">
+                Coaching Portal
+              </span>
+            </div>
           )}
         </div>
 
         {isMobileView ? (
           <button
             onClick={onMobileClose}
-            className="p-1.5 rounded-lg hover:bg-white/10 transition-colors text-white/80 hover:text-white"
+            className="p-1.5 rounded-lg hover:bg-slate-800 transition-colors text-slate-400 hover:text-white"
             aria-label="Close menu"
           >
             <X className="w-5 h-5" />
@@ -111,7 +110,7 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
         ) : (
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="p-1 rounded-lg hover:bg-white/10 transition-colors ml-auto flex-shrink-0"
+            className="p-1.5 rounded-lg hover:bg-slate-800 transition-colors ml-auto flex-shrink-0 text-slate-400 hover:text-amber-400"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           >
             {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
@@ -119,20 +118,28 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
         )}
       </div>
 
+      {/* User Mini Profile */}
       {(!collapsed || isMobileView) && (
-        <div className="px-4 py-3 border-b border-white/10">
-          <p className="text-xs text-white/50 uppercase tracking-wider">
-            {role === "super_manager"
-              ? "Super Manager"
-              : role === "course_teacher"
-              ? "Course Teacher"
-              : role.charAt(0).toUpperCase() + role.slice(1)}
-          </p>
-          <p className="font-medium text-white truncate text-sm">{name}</p>
+        <div className="p-3 mx-2 my-2.5 bg-slate-900/80 rounded-xl border border-slate-800/90 shadow-xs">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+              {role === "super_manager"
+                ? "Super Manager"
+                : role === "course_teacher"
+                ? "Course Teacher"
+                : role.charAt(0).toUpperCase() + role.slice(1)}
+            </p>
+            <span className="text-[9px] bg-slate-800 text-slate-400 px-1.5 py-0.2 rounded font-mono">
+              Live
+            </span>
+          </div>
+          <p className="font-bold text-white truncate text-xs sm:text-sm mt-0.5">{name}</p>
         </div>
       )}
 
-      <nav className="flex-1 p-2 space-y-0.5 overflow-y-auto">
+      {/* Nav Items with Gold Accents */}
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {nav.map(item => {
           const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href)
           return (
@@ -143,29 +150,35 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
                 if (isMobileView && onMobileClose) onMobileClose()
               }}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm",
+                "flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-xs sm:text-sm font-medium",
                 isActive
-                  ? "bg-white/20 text-white font-semibold shadow-sm"
-                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  ? "bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border-l-4 border-amber-400 text-amber-300 font-bold shadow-md shadow-amber-500/5"
+                  : "text-slate-400 hover:bg-slate-800/70 hover:text-white"
               )}
             >
-              <item.icon className="w-4 h-4 flex-shrink-0" />
+              <item.icon
+                className={cn(
+                  "w-4 h-4 flex-shrink-0 transition-colors",
+                  isActive ? "text-amber-400" : "text-slate-400 group-hover:text-white"
+                )}
+              />
               {(!collapsed || isMobileView) && <span className="truncate">{item.label}</span>}
             </Link>
           )
         })}
       </nav>
 
-      <div className="p-2 border-t border-white/10">
+      {/* Bottom Home Button */}
+      <div className="p-2 border-t border-slate-800/80 bg-slate-950/40">
         <Link
           href="/"
           onClick={() => {
             if (isMobileView && onMobileClose) onMobileClose()
           }}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-white/60 hover:bg-white/10 hover:text-white transition-all text-sm"
+          className="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-amber-300 transition-all text-xs sm:text-sm font-semibold"
         >
-          <Home className="w-4 h-4 flex-shrink-0" />
-          {(!collapsed || isMobileView) && <span>Home</span>}
+          <Home className="w-4 h-4 flex-shrink-0 text-amber-400" />
+          {(!collapsed || isMobileView) && <span>Public Homepage</span>}
         </Link>
       </div>
     </>
@@ -176,16 +189,15 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
       {/* Mobile Drawer Backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/70 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-200"
           onClick={onMobileClose}
         />
       )}
 
-      {/* Mobile Drawer (Slide in from Left) */}
+      {/* Mobile Drawer */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 w-72 md:hidden flex flex-col h-full bg-gradient-to-b text-white shadow-2xl transition-transform duration-300 ease-in-out",
-          gradient,
+          "fixed inset-y-0 left-0 z-50 w-72 md:hidden flex flex-col h-full bg-[#0a0f1d] border-r border-slate-800 text-white shadow-2xl transition-transform duration-300 ease-in-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -195,8 +207,7 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
       {/* Desktop Persistent Sidebar */}
       <aside
         className={cn(
-          "hidden md:flex flex-col h-full transition-all duration-300 bg-gradient-to-b text-white shadow-xl flex-shrink-0",
-          gradient,
+          "hidden md:flex flex-col h-full transition-all duration-300 bg-[#0a0f1d] border-r border-slate-800 text-white shadow-xl flex-shrink-0",
           collapsed ? "w-16" : "w-64"
         )}
       >

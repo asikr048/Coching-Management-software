@@ -18,7 +18,7 @@ export default async function AccountantDashboard() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-gray-900">Accountant Dashboard</h2><p className="text-gray-500 text-sm mt-1">Financial overview</p></div>
+      <div><h2 className="text-2xl font-black text-white tracking-tight">Accountant Dashboard</h2><p className="text-slate-400 text-sm mt-1">Financial overview</p></div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard title="Monthly Revenue" value={formatCurrency(rev)} icon={CreditCard} color="emerald" />
         <StatsCard title="Monthly Expenses" value={formatCurrency(exp)} icon={DollarSign} color="orange" />
@@ -32,7 +32,7 @@ export default async function AccountantDashboard() {
           { href: "/dashboard/accountant/expenses", label: "Expenses" },
           { href: "/dashboard/accountant/reports", label: "Reports" },
         ].map(a => (
-          <Link key={a.href} href={a.href} className="p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md hover:border-indigo-300 transition-all text-center text-sm font-medium text-gray-700 hover:text-indigo-700">{a.label}</Link>
+          <Link key={a.href} href={a.href} className="p-4 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 hover:bg-slate-800/60 shadow-lg transition-all text-center text-sm font-bold text-slate-300 hover:text-amber-400">{a.label}</Link>
         ))}
       </div>
     </div>

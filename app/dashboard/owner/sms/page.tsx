@@ -1215,16 +1215,16 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-20">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/90 backdrop-blur-md p-5 rounded-2xl border border-slate-800 shadow-xl">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-100 shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-inner shrink-0">
             <MessageSquare className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-2">
               Bulk SMS Management
             </h1>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               Visual SMS Gateway builder and multi-mode student audience targeting
             </p>
           </div>
@@ -1233,16 +1233,16 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         {/* Gateway Status Badge */}
         <div className="flex items-center gap-3">
           {isGatewayReady ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 text-xs font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               Gateway Connected & Active
             </div>
           ) : (
             <button
               onClick={() => setActiveTab("gateway")}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-950/40 text-amber-300 border border-amber-800/50 text-xs font-bold hover:bg-amber-900/50 transition-colors cursor-pointer"
             >
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
               Configure Gateway API Key
             </button>
           )}
@@ -1250,13 +1250,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-800 pb-2">
         <button
           onClick={() => setActiveTab("compose")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "compose"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/80"
           }`}
         >
           <Send className="w-4 h-4" /> Send Bulk SMS
@@ -1266,20 +1266,20 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           onClick={() => setActiveTab("gateway")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "gateway"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/80"
           }`}
         >
           <Settings className="w-4 h-4" /> Gateway & API Settings
-          {!isGatewayReady && <span className="w-2 h-2 rounded-full bg-amber-500" />}
+          {!isGatewayReady && <span className="w-2 h-2 rounded-full bg-amber-400" />}
         </button>
 
         <button
           onClick={() => setActiveTab("logs")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "logs"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-lg shadow-amber-500/20"
+              : "text-slate-400 hover:text-white hover:bg-slate-800/80"
           }`}
         >
           <History className="w-4 h-4" /> Delivery Logs ({logs.length})
@@ -1293,13 +1293,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Target Audience Selector */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <h2 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-indigo-600" />
+            <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h2 className="text-sm font-black text-white flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-400" />
                   1. Select Target Audience
                 </h2>
-                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg">
+                <span className="text-xs font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 rounded-lg">
                   {resolvedRecipients.length} Recipient{resolvedRecipients.length !== 1 ? "s" : ""}
                 </span>
               </div>
@@ -1324,11 +1324,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       onClick={() => setTargetType(mode.id as any)}
                       className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-center transition-all cursor-pointer ${
                         isActive
-                          ? "border-indigo-600 bg-indigo-50/80 text-indigo-900 font-black shadow-sm"
-                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 font-medium"
+                          ? "border-amber-500 bg-amber-500/15 text-amber-300 font-black shadow-sm"
+                          : "border-slate-800 bg-slate-950 text-slate-400 hover:bg-slate-800/60 font-medium hover:text-slate-200"
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${isActive ? "text-indigo-600" : "text-gray-400"}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? "text-amber-400" : "text-slate-500"}`} />
                       <span className="text-[10px] leading-tight font-bold">{mode.label}</span>
                     </button>
                   )
@@ -1337,8 +1337,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Phone Target Selector (Guardian vs Student) */}
               {targetType !== "csv" && targetType !== "direct_numbers" && (
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/80 flex items-center justify-between gap-3">
-                  <span className="text-xs font-bold text-gray-700">Send To:</span>
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
+                  <span className="text-xs font-bold text-slate-400">Send To:</span>
                   <div className="flex items-center gap-2">
                     {[
                       { id: "guardian", label: "Guardian Phone" },
@@ -1351,8 +1351,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         onClick={() => setTargetPhoneType(opt.id as any)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                           targetPhoneType === opt.id
-                            ? "bg-indigo-600 text-white shadow-sm"
-                            : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+                            ? "bg-amber-500 text-slate-950 shadow-sm"
+                            : "bg-slate-900 text-slate-400 hover:bg-slate-800 border border-slate-800"
                         }`}
                       >
                         {opt.label}
@@ -1364,9 +1364,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* SUB-PANEL: All Active */}
               {targetType === "all" && (
-                <div className="p-4 bg-indigo-50/40 rounded-xl border border-indigo-100 text-center space-y-1">
-                  <p className="text-xs font-bold text-gray-800">Targeting All Active Enrolled Students</p>
-                  <p className="text-[11px] text-gray-500">
+                <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800 text-center space-y-1">
+                  <p className="text-xs font-bold text-slate-200">Targeting All Active Enrolled Students</p>
+                  <p className="text-[11px] text-slate-400">
                     Total {students.length} active students enrolled in coaching.
                   </p>
                 </div>
@@ -1376,19 +1376,19 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {targetType === "batch" && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-gray-700">Choose Batches:</p>
+                    <p className="text-xs font-bold text-slate-400">Choose Batches:</p>
                     <button
                       type="button"
                       onClick={() => {
                         if (selectedBatchIds.length === batches.length) setSelectedBatchIds([])
                         else setSelectedBatchIds(batches.map((b) => b.id))
                       }}
-                      className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                      className="text-[11px] font-bold text-amber-400 hover:underline cursor-pointer"
                     >
                       {selectedBatchIds.length === batches.length ? "Deselect All" : "Select All Batches"}
                     </button>
                   </div>
-                  <div className="max-h-48 overflow-y-auto space-y-1.5 border border-gray-200 rounded-xl p-2.5 bg-gray-50/50">
+                  <div className="max-h-48 overflow-y-auto space-y-1.5 border border-slate-800 rounded-xl p-2.5 bg-slate-950/60">
                     {batches.map((b) => {
                       const isChecked = selectedBatchIds.includes(b.id)
                       const count = enrollments.filter((e) => e.batch_id === b.id).length
@@ -1396,7 +1396,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         <label
                           key={b.id}
                           className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                            isChecked ? "bg-indigo-50 border border-indigo-200" : "hover:bg-white"
+                            isChecked ? "bg-slate-800/80 border border-amber-500/40" : "hover:bg-slate-900"
                           }`}
                         >
                           <div className="flex items-center gap-2.5">
@@ -1407,11 +1407,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                 if (e.target.checked) setSelectedBatchIds([...selectedBatchIds, b.id])
                                 else setSelectedBatchIds(selectedBatchIds.filter((id) => id !== b.id))
                               }}
-                              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
+                              className="w-4 h-4 text-amber-500 rounded border-slate-700 bg-slate-900 focus:ring-amber-400 cursor-pointer"
                             />
-                            <span className="text-xs font-bold text-gray-900">{b.name}</span>
+                            <span className="text-xs font-bold text-white">{b.name}</span>
                           </div>
-                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 font-mono font-bold">
+                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-slate-400 font-mono font-bold">
                             {count} Students
                           </span>
                         </label>
@@ -1424,25 +1424,25 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* SUB-PANEL: Due Fees */}
               {targetType === "due" && (
                 <div className="space-y-3">
-                  <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl flex items-start gap-2.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-amber-900">
+                  <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-amber-300">
                       <p className="font-bold">Students with Outstanding Dues ({dues.length})</p>
-                      <p className="text-[11px] text-amber-800 mt-0.5">
-                        Use <code className="px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">{"{{due_amount}}"}</code> in your message to automatically insert each student's exact owed amount!
+                      <p className="text-[11px] text-amber-400/80 mt-0.5">
+                        Use <code className="px-1 py-0.5 bg-amber-900/60 rounded font-mono font-bold text-amber-200">{"{{due_amount}}"}</code> in your message to automatically insert each student's exact owed amount!
                       </p>
                     </div>
                   </div>
-                  <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-white">
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-800/80 border border-slate-800 rounded-xl bg-slate-950">
                     {dues.map((d) => (
                       <div key={d.id} className="p-2.5 flex items-center justify-between text-xs">
                         <div>
-                          <p className="font-bold text-gray-900">{d.student?.name || "Student"}</p>
-                          <p className="text-[11px] text-gray-500 font-mono">
-                            {d.student?.student_id} • Month: {d.due_month}
+                          <p className="font-bold text-white">{d.student?.name || "Student"}</p>
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            <span className="text-amber-400">{d.student?.student_id}</span> • Month: {d.due_month}
                           </p>
                         </div>
-                        <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md font-bold text-xs">
+                        <span className="px-2 py-0.5 bg-rose-950/50 text-rose-300 border border-rose-800/50 rounded-md font-bold text-xs">
                           ৳{d.due_amount}
                         </span>
                       </div>
@@ -1454,24 +1454,24 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* SUB-PANEL: Exam Results */}
               {targetType === "exam_result" && (
                 <div className="space-y-3">
-                  <div className="p-3 bg-purple-50/80 border border-purple-200/80 rounded-xl flex items-start gap-2.5">
-                    <Trophy className="w-5 h-5 text-purple-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-purple-900 flex-1">
+                  <div className="p-3 bg-purple-950/30 border border-purple-800/40 rounded-xl flex items-start gap-2.5">
+                    <Trophy className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-purple-300 flex-1">
                       <p className="font-bold">Exam Results SMS Dispatch</p>
-                      <p className="text-[11px] text-purple-800 mt-0.5">
+                      <p className="text-[11px] text-purple-400/80 mt-0.5">
                         Deliver individual student exam marks, grade, and merit rank directly to students and guardians.
-                        Drag <code className="px-1 py-0.5 bg-purple-100 rounded font-mono font-bold">{"{{number}}"}</code> token into your message!
+                        Drag <code className="px-1 py-0.5 bg-purple-900/60 rounded font-mono font-bold text-purple-200">{"{{number}}"}</code> token into your message!
                       </p>
                     </div>
                   </div>
 
                   {/* Exam Selector Dropdown */}
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Select Exam:</label>
+                    <label className="block text-xs font-bold text-slate-400 mb-1">Select Exam:</label>
                     <select
                       value={selectedExamId}
                       onChange={(e) => setSelectedExamId(e.target.value)}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:border-indigo-600 shadow-sm"
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-amber-400 shadow-sm"
                     >
                       <option value="">-- Choose an Exam --</option>
                       {exams.map((ex) => (
@@ -1483,30 +1483,30 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   </div>
 
                   {loadingExamData ? (
-                    <div className="p-6 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
-                      <Loader2 className="w-4 h-4 animate-spin text-purple-600" />
+                    <div className="p-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
                       Loading students and results for this exam...
                     </div>
                   ) : selectedExamId && examStudents.length > 0 ? (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-xs px-1">
-                        <span className="text-gray-600 font-medium">
-                          Total Students: <strong className="text-purple-700">{examStudents.length}</strong> • Selected:{" "}
-                          <strong className="text-indigo-600">{selectedExamStudentIds.length}</strong>
+                        <span className="text-slate-400 font-medium">
+                          Total Students: <strong className="text-purple-400">{examStudents.length}</strong> • Selected:{" "}
+                          <strong className="text-amber-400">{selectedExamStudentIds.length}</strong>
                         </span>
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             onClick={() => setSelectedExamStudentIds(examStudents.map((s) => s.id))}
-                            className="text-indigo-600 font-bold hover:underline cursor-pointer"
+                            className="text-amber-400 font-bold hover:underline cursor-pointer"
                           >
                             Select All
                           </button>
-                          <span>•</span>
+                          <span className="text-slate-600">•</span>
                           <button
                             type="button"
                             onClick={() => setSelectedExamStudentIds([])}
-                            className="text-rose-600 font-bold hover:underline cursor-pointer"
+                            className="text-rose-400 font-bold hover:underline cursor-pointer"
                           >
                             Deselect All
                           </button>
@@ -1514,7 +1514,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       </div>
 
                       {/* Student Table with Draggable Number Badges */}
-                      <div className="max-h-60 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-white shadow-inner">
+                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-800/80 border border-slate-800 rounded-xl bg-slate-950 shadow-inner">
                         {examStudents.map((s) => {
                           const isSelected = selectedExamStudentIds.includes(s.id)
                           const selectedEx = exams.find((e) => e.id === selectedExamId)
@@ -1522,7 +1522,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                             <div
                               key={s.id}
                               className={`p-2.5 flex items-center justify-between gap-2 transition-colors ${
-                                isSelected ? "bg-purple-50/40" : "opacity-60 hover:bg-gray-50"
+                                isSelected ? "bg-slate-900/80" : "opacity-60 hover:bg-slate-900/40"
                               }`}
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
@@ -1533,19 +1533,19 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                     if (e.target.checked) setSelectedExamStudentIds([...selectedExamStudentIds, s.id])
                                     else setSelectedExamStudentIds(selectedExamStudentIds.filter((id) => id !== s.id))
                                   }}
-                                  className="w-4 h-4 text-purple-600 rounded border-gray-300 focus:ring-purple-500 cursor-pointer shrink-0"
+                                  className="w-4 h-4 text-amber-500 rounded border-slate-700 bg-slate-900 focus:ring-amber-400 cursor-pointer shrink-0"
                                 />
                                 <div className="truncate">
-                                  <p className="text-xs font-bold text-gray-900 truncate flex items-center gap-1.5">
+                                  <p className="text-xs font-bold text-white truncate flex items-center gap-1.5">
                                     {s.name}
                                     {s.rank && (
-                                      <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 text-[10px] font-mono font-bold">
+                                      <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold">
                                         #{s.rank}
                                       </span>
                                     )}
                                   </p>
-                                  <p className="text-[11px] text-gray-500 font-mono">
-                                    <span className="font-semibold text-indigo-600">{s.student_id}</span> • G:{" "}
+                                  <p className="text-[11px] text-slate-400 font-mono">
+                                    <span className="font-semibold text-amber-400">{s.student_id}</span> • G:{" "}
                                     {s.guardian_phone || "N/A"} • S: {s.phone || "N/A"}
                                   </p>
                                 </div>
@@ -1560,14 +1560,14 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                     toast.info(`Dragging {{number}} token for ${s.name}`)
                                   }}
                                   onClick={() => insertMergeTag("{{number}}")}
-                                  className="px-2 py-1 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 font-mono font-bold text-[11px] cursor-grab active:cursor-grabbing flex items-center gap-1 shadow-sm transition-all select-none"
+                                  className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono font-bold text-[11px] cursor-grab active:cursor-grabbing flex items-center gap-1 shadow-sm transition-all select-none"
                                   title="Drag this marks token into the message box (or click to insert)"
                                 >
-                                  <GripVertical className="w-3 h-3 text-amber-600" />
+                                  <GripVertical className="w-3 h-3 text-amber-400" />
                                   {s.obtainedMarks !== null ? `${s.obtainedMarks}/${selectedEx?.total_marks || 100}` : "N/A"}
                                 </span>
                                 {s.grade && (
-                                  <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-950/40 text-emerald-300 border border-emerald-800/40 text-[10px] font-bold">
                                     {s.grade}
                                   </span>
                                 )}
@@ -1578,11 +1578,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       </div>
                     </div>
                   ) : selectedExamId ? (
-                    <div className="p-4 text-center text-xs text-gray-500 bg-gray-50 rounded-xl">
+                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-800">
                       No active students found in this exam's batch.
                     </div>
                   ) : (
-                    <div className="p-4 text-center text-xs text-gray-500 bg-gray-50 rounded-xl">
+                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-800">
                       Please select an exam above to load students and marks.
                     </div>
                   )}
@@ -1594,19 +1594,19 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
-                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
                         value={pickerSearchQuery}
                         onChange={(e) => setPickerSearchQuery(e.target.value)}
                         placeholder="Search student name, ID, or phone..."
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600 shadow-sm"
+                        className="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 shadow-sm"
                       />
                     </div>
                     <select
                       value={pickerBatchFilter}
                       onChange={(e) => setPickerBatchFilter(e.target.value)}
-                      className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none focus:border-indigo-600 shadow-sm"
+                      className="px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-bold text-white focus:outline-none focus:border-amber-400 shadow-sm"
                     >
                       <option value="all">All Batches</option>
                       {batches.map((b) => (
@@ -1618,9 +1618,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   </div>
 
                   <div className="flex items-center justify-between text-xs px-1">
-                    <span className="text-gray-500 font-medium">
+                    <span className="text-slate-400 font-medium">
                       Showing {filteredStudentsInPicker.length} • Selected:{" "}
-                      <strong className="text-indigo-600 font-bold">{customSelectedStudentIds.length}</strong>
+                      <strong className="text-amber-400 font-bold">{customSelectedStudentIds.length}</strong>
                     </span>
                     <div className="flex items-center gap-2">
                       <button
@@ -1629,29 +1629,29 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           const visibleIds = filteredStudentsInPicker.map((s) => s.id)
                           setCustomSelectedStudentIds(Array.from(new Set([...customSelectedStudentIds, ...visibleIds])))
                         }}
-                        className="text-indigo-600 font-bold hover:underline cursor-pointer"
+                        className="text-amber-400 font-bold hover:underline cursor-pointer"
                       >
                         Select All Filtered
                       </button>
-                      <span>•</span>
+                      <span className="text-slate-600">•</span>
                       <button
                         type="button"
                         onClick={() => setCustomSelectedStudentIds([])}
-                        className="text-rose-600 font-bold hover:underline cursor-pointer"
+                        className="text-rose-400 font-bold hover:underline cursor-pointer"
                       >
                         Clear Selection
                       </button>
                     </div>
                   </div>
 
-                  <div className="max-h-56 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-white shadow-inner">
+                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-800/80 border border-slate-800 rounded-xl bg-slate-950 shadow-inner">
                     {filteredStudentsInPicker.map((s) => {
                       const isSelected = customSelectedStudentIds.includes(s.id)
                       return (
                         <label
                           key={s.id}
                           className={`p-2.5 flex items-center justify-between cursor-pointer transition-colors ${
-                            isSelected ? "bg-indigo-50/70" : "hover:bg-gray-50"
+                            isSelected ? "bg-slate-900/80" : "hover:bg-slate-900/40"
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
@@ -1662,12 +1662,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                 if (e.target.checked) setCustomSelectedStudentIds([...customSelectedStudentIds, s.id])
                                 else setCustomSelectedStudentIds(customSelectedStudentIds.filter((id) => id !== s.id))
                               }}
-                              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0"
+                              className="w-4 h-4 text-amber-500 rounded border-slate-700 bg-slate-900 focus:ring-amber-400 cursor-pointer shrink-0"
                             />
                             <div className="truncate">
-                              <p className="text-xs font-bold text-gray-900 truncate">{s.name}</p>
-                              <p className="text-[11px] text-gray-500 font-mono">
-                                <span className="font-semibold text-indigo-600">{s.student_id}</span> • G:{" "}
+                              <p className="text-xs font-bold text-white truncate">{s.name}</p>
+                              <p className="text-[11px] text-slate-400 font-mono">
+                                <span className="font-semibold text-amber-400">{s.student_id}</span> • G:{" "}
                                 {s.guardian_phone || "N/A"} • S: {s.phone || "N/A"}
                               </p>
                             </div>
@@ -1676,7 +1676,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       )
                     })}
                     {filteredStudentsInPicker.length === 0 && (
-                      <div className="p-6 text-center text-xs text-gray-400">No matching students found.</div>
+                      <div className="p-6 text-center text-xs text-slate-500">No matching students found.</div>
                     )}
                   </div>
                 </div>
@@ -1686,10 +1686,10 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {targetType === "direct_numbers" && (
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-700">
+                    <label className="text-xs font-bold text-slate-400">
                       Paste / Type Custom Phone Numbers:
                     </label>
-                    <span className="text-xs font-bold text-indigo-600">
+                    <span className="text-xs font-bold text-amber-400">
                       {parsedDirectNumbers.length} Valid Numbers
                     </span>
                   </div>
@@ -1698,11 +1698,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     value={directNumbersText}
                     onChange={(e) => setDirectNumbersText(e.target.value)}
                     placeholder="Enter phone numbers separated by comma, space, or newline...&#10;e.g.&#10;01800000000&#10;01711111111&#10;01922222222"
-                    className="w-full p-3 bg-white border-2 border-gray-200 rounded-xl font-mono text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600"
+                    className="w-full p-3 bg-slate-950 border-2 border-slate-700 rounded-xl font-mono text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
                   />
-                  <p className="text-[11px] text-gray-500">
-                    Supports Bangladeshi formats: <code className="font-bold">01XXXXXXXXX</code> or{" "}
-                    <code className="font-bold">8801XXXXXXXXX</code>
+                  <p className="text-[11px] text-slate-500">
+                    Supports Bangladeshi formats: <code className="font-bold text-slate-300">01XXXXXXXXX</code> or{" "}
+                    <code className="font-bold text-slate-300">8801XXXXXXXXX</code>
                   </p>
                 </div>
               )}
@@ -1710,23 +1710,23 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* SUB-PANEL: Custom CSV File */}
               {targetType === "csv" && (
                 <div className="space-y-3">
-                  <div className="border-2 border-dashed border-gray-300 hover:border-indigo-400 bg-gray-50/60 hover:bg-indigo-50/30 rounded-2xl p-5 text-center transition-all">
-                    <Upload className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-gray-800">Upload CSV / TXT Contact List</p>
-                    <p className="text-[11px] text-gray-500 mt-0.5">
-                      File format: Column for <span className="font-mono font-bold">phone</span> and optional{" "}
-                      <span className="font-mono font-bold">name</span>
+                  <div className="border-2 border-dashed border-slate-700 hover:border-amber-500/50 bg-slate-950/60 rounded-2xl p-5 text-center transition-all">
+                    <Upload className="w-8 h-8 text-amber-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-white">Upload CSV / TXT Contact List</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      File format: Column for <span className="font-mono font-bold text-amber-400">phone</span> and optional{" "}
+                      <span className="font-mono font-bold text-amber-400">name</span>
                     </p>
-                    <label className="mt-3 inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer">
+                    <label className="mt-3 inline-block px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs font-bold shadow-md cursor-pointer">
                       Browse File
                       <input type="file" accept=".csv,.txt" onChange={handleCsvUpload} className="hidden" />
                     </label>
                   </div>
 
                   {csvFileName && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-800">
+                    <div className="p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-xl flex items-center justify-between text-xs text-emerald-300">
                       <div className="flex items-center gap-2 truncate">
-                        <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
                         <span className="font-bold truncate">{csvFileName}</span>
                         <span>({csvRecipients.filter((r) => r.isValid).length} valid numbers)</span>
                       </div>
@@ -1736,7 +1736,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           setCsvFileName("")
                           setCsvRecipients([])
                         }}
-                        className="text-rose-600 hover:text-rose-800 font-bold text-[11px] cursor-pointer"
+                        className="text-rose-400 hover:text-rose-300 font-bold text-[11px] cursor-pointer"
                       >
                         Remove
                       </button>
@@ -1747,44 +1747,44 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
             </div>
 
             {/* Recipient Count Summary Banner */}
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-4 text-white shadow-md flex items-center justify-between">
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-amber-500/30 rounded-2xl p-4 text-white shadow-xl flex items-center justify-between">
               <div>
-                <p className="text-xs text-indigo-100 font-semibold uppercase tracking-wider">Ready to Deliver</p>
-                <h3 className="text-2xl font-black mt-0.5">
+                <p className="text-xs text-amber-400/90 font-semibold uppercase tracking-wider">Ready to Deliver</p>
+                <h3 className="text-2xl font-black mt-0.5 text-white">
                   {resolvedRecipients.length} Recipient{resolvedRecipients.length !== 1 ? "s" : ""}
                 </h3>
               </div>
               <div className="text-right">
-                <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-lg text-xs font-bold inline-block">
+                <span className="px-3 py-1 bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs font-bold inline-block text-amber-300">
                   {targetType.toUpperCase().replace("_", " ")}
                 </span>
-                <p className="text-[11px] text-indigo-100 mt-1">Est. {resolvedRecipients.length * smsStats.parts} SMS Parts</p>
+                <p className="text-[11px] text-slate-400 mt-1">Est. {resolvedRecipients.length * smsStats.parts} SMS Parts</p>
               </div>
             </div>
           </div>
 
           {/* Right Column: Compose Message, Merge Tags & Preview */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <h2 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-indigo-600" />
+            <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h2 className="text-sm font-black text-white flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-amber-400" />
                   2. Compose Message & Dynamic Merge Tags
                 </h2>
               </div>
 
               {/* Quick Template Picker */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">Load Quick Template:</label>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">Load Quick Template:</label>
                 <div className="grid grid-cols-2 gap-2">
                   {templates.map((t, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => setMessage(t.text)}
-                      className="p-2 border border-gray-200 rounded-xl text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition-all text-xs cursor-pointer truncate"
+                      className="p-2 border border-slate-700 bg-slate-950 rounded-xl text-left hover:border-amber-500/50 hover:bg-slate-850 transition-all text-xs cursor-pointer truncate"
                     >
-                      <span className="font-bold text-gray-800 block truncate">{t.label}</span>
+                      <span className="font-bold text-slate-200 block truncate">{t.label}</span>
                     </button>
                   ))}
                 </div>
@@ -1793,8 +1793,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* Merge Tag Chips */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-gray-700">Drag or Click to Insert Dynamic Tag:</label>
-                  <span className="text-[11px] text-gray-400">Drag tag directly into message or click to insert</span>
+                  <label className="text-xs font-bold text-slate-400">Drag or Click to Insert Dynamic Tag:</label>
+                  <span className="text-[11px] text-slate-500">Drag tag directly into message or click to insert</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {[
@@ -1820,14 +1820,14 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       className={cn(
                         "px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-grab active:cursor-grabbing flex items-center gap-1 shadow-sm select-none",
                         item.isHighlight
-                          ? "bg-amber-100 hover:bg-amber-200 text-amber-900 border-2 border-amber-400 ring-2 ring-amber-200/50 animate-pulse"
-                          : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200"
+                          ? "bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border-2 border-amber-500/50 ring-2 ring-amber-500/20 animate-pulse"
+                          : "bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
                       )}
                       title={`Drag ${item.tag} into the message box or click to insert`}
                     >
-                      <GripVertical className={cn("w-3 h-3", item.isHighlight ? "text-amber-700" : "text-indigo-400")} />
+                      <GripVertical className={cn("w-3 h-3", item.isHighlight ? "text-amber-400" : "text-slate-400")} />
                       <span>{item.tag}</span>
-                      <span className={cn("text-[10px] font-sans font-normal", item.isHighlight ? "text-amber-800 font-bold" : "text-indigo-500")}>
+                      <span className={cn("text-[10px] font-sans font-normal", item.isHighlight ? "text-amber-300 font-bold" : "text-slate-400")}>
                         ({item.label})
                       </span>
                     </button>
@@ -1837,7 +1837,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Message Textarea */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">Message Content *</label>
+                <label className="block text-xs font-bold text-slate-400 mb-1.5">Message Content *</label>
                 <textarea
                   ref={messageTextareaRef}
                   required
@@ -1857,33 +1857,33 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   }}
                   placeholder="Type your SMS here or drag tags/select a template above... (e.g. Dear Parent, your child {{name}} has obtained {{number}}/{{total_marks}} marks in {{exam_title}})"
                   className={cn(
-                    "w-full p-3.5 bg-white border-2 rounded-xl text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none transition-all",
+                    "w-full p-3.5 bg-slate-950 border-2 rounded-xl text-sm font-medium text-white placeholder:text-slate-500 focus:outline-none transition-all",
                     isDraggingOverTextarea
-                      ? "border-indigo-600 ring-4 ring-indigo-200 bg-indigo-50/20"
-                      : "border-gray-200 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100"
+                      ? "border-amber-400 ring-4 ring-amber-400/20 bg-amber-950/20"
+                      : "border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10"
                   )}
                 />
 
                 {/* SMS Parts Counter & Unicode indicator */}
-                <div className="flex items-center justify-between text-xs text-gray-500 mt-1.5">
+                <div className="flex items-center justify-between text-xs text-slate-400 mt-1.5">
                   <span>
-                    <strong className="text-gray-800">{smsStats.len}</strong> characters •{" "}
-                    <strong className="text-indigo-600">{smsStats.parts}</strong> SMS part{smsStats.parts !== 1 ? "s" : ""}
+                    <strong className="text-white">{smsStats.len}</strong> characters •{" "}
+                    <strong className="text-amber-400">{smsStats.parts}</strong> SMS part{smsStats.parts !== 1 ? "s" : ""}
                   </span>
-                  <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium text-[11px]">
+                  <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-medium text-[11px]">
                     {smsStats.isUnicode ? "Unicode / Bengali (70 chars/part)" : "Standard GSM (160 chars/part)"}
                   </span>
                 </div>
               </div>
 
               {/* Live Smartphone Screen Mockup */}
-              <div className="p-3.5 bg-slate-900 rounded-2xl text-white space-y-2 border border-slate-800">
+              <div className="p-3.5 bg-slate-950 rounded-2xl text-white space-y-2 border border-slate-800 shadow-inner">
                 <div className="flex items-center justify-between text-slate-400 text-[11px] pb-1 border-b border-slate-800">
                   <span className="flex items-center gap-1.5">
-                    <Smartphone className="w-3.5 h-3.5 text-indigo-400" />
+                    <Smartphone className="w-3.5 h-3.5 text-amber-400" />
                     Recipient Mobile View Simulation
                   </span>
-                  <span>MedhaShiree</span>
+                  <span className="text-amber-400/80 font-semibold">MedhaShiree</span>
                 </div>
                 {resolvedRecipients.length > 1 && (
                   <div className="flex items-center justify-between gap-2 pt-1">
@@ -1891,7 +1891,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     <select
                       value={previewRecipientIndex}
                       onChange={(e) => setPreviewRecipientIndex(Number(e.target.value))}
-                      className="bg-slate-800 text-slate-200 border border-slate-700 rounded-lg text-[11px] px-2 py-1 max-w-[240px] truncate focus:outline-none"
+                      className="bg-slate-900 text-slate-200 border border-slate-700 rounded-lg text-[11px] px-2 py-1 max-w-[240px] truncate focus:outline-none"
                     >
                       {resolvedRecipients.slice(0, 50).map((r, i) => (
                         <option key={i} value={i}>
@@ -1901,7 +1901,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     </select>
                   </div>
                 )}
-                <div className="p-3 bg-slate-800/90 rounded-xl text-xs text-slate-100 font-medium leading-relaxed shadow-inner">
+                <div className="p-3 bg-slate-900 rounded-xl text-xs text-slate-100 font-medium leading-relaxed border border-slate-800">
                   {sampleMessagePreview}
                 </div>
               </div>
@@ -1921,7 +1921,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   setShowConfirmModal(true)
                 }}
                 disabled={sending || resolvedRecipients.length === 0 || !message.trim()}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:shadow-none cursor-pointer"
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 {sending ? (
                   <>
@@ -1944,15 +1944,15 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       {activeTab === "gateway" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8 space-y-6">
-            <form onSubmit={handleSaveGateway} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-6">
-              <div className="border-b border-gray-100 pb-4">
+            <form onSubmit={handleSaveGateway} className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl space-y-6">
+              <div className="border-b border-slate-800 pb-4">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
                     <Settings className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-base font-black text-gray-900">Custom SMS Gateway API Builder</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <h2 className="text-base font-black text-white">Custom SMS Gateway API Builder</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
                       Visual parameter mapping with drag-and-drop token placement for sms.net.bd and any SMS provider
                     </p>
                   </div>
@@ -1961,33 +1961,33 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 1-Click Provider Templates */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-2">1-Click Provider Presets:</label>
+                <label className="block text-xs font-bold text-slate-300 mb-2">1-Click Provider Presets:</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("sms_net_bd")}
-                    className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-900 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold text-xs text-center transition-all cursor-pointer shadow-sm"
                   >
                     🚀 sms.net.bd (Recommended)
                   </button>
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("greenweb")}
-                    className="p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
                   >
                     Greenweb BD
                   </button>
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("mimsms")}
-                    className="p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
                   >
                     MIM SMS (JSON)
                   </button>
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("ssl_wireless")}
-                    className="p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-800 bg-slate-950 hover:bg-slate-800 text-slate-300 font-bold text-xs text-center transition-all cursor-pointer"
                   >
                     SSL Wireless
                   </button>
@@ -1996,7 +1996,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 1. API Key */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
                   1. Provider API Key *
                 </label>
                 <div className="relative">
@@ -2006,12 +2006,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     value={gatewayConfig.apiKey}
                     onChange={(e) => setGatewayConfig({ ...gatewayConfig, apiKey: e.target.value })}
                     placeholder="e.g. 48673a5a87b1c4e92... (paste your API key here)"
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm font-mono text-gray-900 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 cursor-pointer"
                   >
                     {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -2020,7 +2020,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 2. HTTP Call Type Selection */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
                   2. HTTP Call Type / Request Method *
                 </label>
                 <div className="grid grid-cols-3 gap-3">
@@ -2033,8 +2033,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       key={ct.id}
                       className={`p-3 rounded-xl border flex flex-col cursor-pointer transition-all ${
                         gatewayConfig.callType === ct.id
-                          ? "border-indigo-600 bg-indigo-50/70 text-indigo-900 font-bold shadow-sm"
-                          : "border-gray-200 hover:bg-gray-50 text-gray-600"
+                          ? "border-amber-500/60 bg-amber-500/10 text-amber-300 font-bold shadow-sm ring-1 ring-amber-500/30"
+                          : "border-slate-800 hover:bg-slate-800/40 text-slate-400 bg-slate-950/60"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -2043,11 +2043,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           name="callType"
                           checked={gatewayConfig.callType === ct.id}
                           onChange={() => setGatewayConfig({ ...gatewayConfig, callType: ct.id as any })}
-                          className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                          className="w-4 h-4 text-amber-500 border-slate-700 focus:ring-amber-500 bg-slate-950"
                         />
                         <span className="text-xs">{ct.label}</span>
                       </div>
-                      <span className="text-[10px] text-gray-500 mt-1 ml-6">{ct.hint}</span>
+                      <span className="text-[10px] text-slate-500 mt-1 ml-6">{ct.hint}</span>
                     </label>
                   ))}
                 </div>
@@ -2055,11 +2055,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 3. Base Endpoint URL */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
                   3. Base Gateway Endpoint URL *
                 </label>
                 <div className="relative">
-                  <Link2 className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Link2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     required
@@ -2071,28 +2071,28 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       setGatewayConfig({ ...gatewayConfig, baseUrl: clean, urlTemplate: newTemplate })
                     }}
                     placeholder="https://api.sms.net.bd/sendsms"
-                    className="w-full pl-10 pr-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
+                    className="w-full pl-10 pr-3 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-500"
                   />
                 </div>
               </div>
 
               {/* 4. DRAGGABLE TOKEN TOOLBOX */}
-              <div className="p-4 bg-gradient-to-r from-indigo-50 via-purple-50 to-blue-50 rounded-2xl border-2 border-indigo-200/80 space-y-2">
+              <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-amber-500/30 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-gray-900 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                  <span className="text-xs font-black text-white flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
                     4. Draggable Variable Tokens (Drag into slots below or click to assign):
                   </span>
-                  <span className="text-[11px] text-indigo-700 font-bold hidden sm:inline">
+                  <span className="text-[11px] text-amber-400 font-bold hidden sm:inline">
                     Drag tokens into the destination parameter slots below
                   </span>
                 </div>
 
                 <div className="flex flex-wrap gap-2.5 pt-1">
                   {[
-                    { token: "{msg}", label: "Message Content", desc: "Encoded SMS text", color: "indigo" },
-                    { token: "{to}", label: "Phone Number", desc: "Recipient mobile", color: "purple" },
-                    { token: "{api_key}", label: "API Key", desc: "Your auth token", color: "blue" },
+                    { token: "{msg}", label: "Message Content", desc: "Encoded SMS text", color: "amber" },
+                    { token: "{to}", label: "Phone Number", desc: "Recipient mobile", color: "amber" },
+                    { token: "{api_key}", label: "API Key", desc: "Your auth token", color: "amber" },
                   ].map((item) => (
                     <div
                       key={item.token}
@@ -2101,12 +2101,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         e.dataTransfer.setData("text/plain", item.token)
                         e.dataTransfer.setData("tokenType", item.token)
                       }}
-                      className="px-3.5 py-2 bg-white border-2 border-indigo-300 hover:border-indigo-600 rounded-xl shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-all flex items-center gap-2 group select-none"
+                      className="px-3.5 py-2 bg-slate-900 border border-slate-700 hover:border-amber-400/60 rounded-xl shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-all flex items-center gap-2 group select-none"
                     >
-                      <span className="font-mono font-black text-xs text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      <span className="font-mono font-black text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
                         {item.token}
                       </span>
-                      <span className="text-xs font-bold text-gray-800">{item.label}</span>
+                      <span className="text-xs font-bold text-slate-200">{item.label}</span>
                     </div>
                   ))}
                 </div>
@@ -2115,13 +2115,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* 5. VISUAL PARAMETER SLOTS (DROP TARGETS) */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-black text-gray-900">
+                  <label className="text-xs font-black text-white">
                     5. Parameter Mapping & Drop Targets:
                   </label>
                   <button
                     type="button"
                     onClick={addCustomParam}
-                    className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-lg cursor-pointer"
+                    className="flex items-center gap-1 text-xs font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg cursor-pointer transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add Custom Parameter
                   </button>
@@ -2146,27 +2146,27 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           const token = e.dataTransfer.getData("text/plain")
                           if (token) assignTokenToParam(param.id, token)
                         }}
-                        className={`p-3.5 rounded-2xl border-2 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                           isOver
-                            ? "border-indigo-600 bg-indigo-50 ring-4 ring-indigo-100 scale-[1.01]"
+                            ? "border-amber-400 bg-amber-500/15 ring-2 ring-amber-500/40 scale-[1.01]"
                             : isAssigned
-                            ? "border-emerald-200 bg-emerald-50/30"
-                            : "border-gray-200 bg-white"
+                            ? "border-emerald-500/30 bg-emerald-950/20"
+                            : "border-slate-800 bg-slate-950"
                         }`}
                       >
                         {/* Parameter Key */}
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-bold text-gray-400 w-5">#{idx + 1}</span>
+                          <span className="text-xs font-mono font-bold text-slate-500 w-5">#{idx + 1}</span>
                           <div>
-                            <span className="text-[10px] font-bold text-gray-400 block uppercase">Param Name</span>
+                            <span className="text-[10px] font-bold text-slate-500 block uppercase">Param Name</span>
                             <input
                               type="text"
                               value={param.key}
                               onChange={(e) => updateParamKey(param.id, e.target.value)}
-                              className="px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900 focus:outline-none focus:border-indigo-600 w-28"
+                              className="px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-mono font-bold text-white focus:outline-none focus:border-amber-400 w-28"
                             />
                           </div>
-                          <span className="text-gray-400 font-bold">=</span>
+                          <span className="text-slate-600 font-bold">=</span>
                         </div>
 
                         {/* Drop Target Box */}
@@ -2174,10 +2174,10 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           <div
                             className={`flex-1 p-2.5 rounded-xl border-2 border-dashed flex items-center justify-between transition-all ${
                               isOver
-                                ? "border-indigo-600 bg-indigo-100 text-indigo-900 font-black animate-pulse"
+                                ? "border-amber-400 bg-amber-500/20 text-amber-200 font-black animate-pulse"
                                 : isAssigned
-                                ? "border-emerald-400 bg-white text-emerald-950 font-bold"
-                                : "border-gray-300 bg-gray-50/70 text-gray-400"
+                                ? "border-emerald-500/40 bg-slate-900 text-emerald-300 font-bold"
+                                : "border-slate-800 bg-slate-950/80 text-slate-500"
                             }`}
                           >
                             <span className="text-xs font-mono">
@@ -2185,7 +2185,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                             </span>
 
                             {isAssigned && (
-                              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
                                 <Check className="w-3 h-3" /> Configured
                               </span>
                             )}
@@ -2200,8 +2200,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                 onClick={() => assignTokenToParam(param.id, tk)}
                                 className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
                                   param.value === tk
-                                    ? "bg-indigo-600 text-white"
-                                    : "bg-gray-100 hover:bg-indigo-50 text-gray-700 border border-gray-200"
+                                    ? "bg-amber-500 text-slate-950 font-black"
+                                    : "bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700"
                                 }`}
                                 title={`Assign ${tk} to this slot`}
                               >
@@ -2212,7 +2212,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                               <button
                                 type="button"
                                 onClick={() => removeParam(param.id)}
-                                className="p-1 text-gray-400 hover:text-rose-600 p-1.5 rounded-lg"
+                                className="p-1 text-slate-500 hover:text-rose-400 p-1.5 rounded-lg transition-colors"
                                 title="Remove parameter"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2227,7 +2227,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </div>
 
               {/* Assembled Request URL Preview */}
-              <div className="p-4 bg-slate-900 rounded-xl text-slate-300 font-mono text-xs space-y-1.5 border border-slate-800">
+              <div className="p-4 bg-slate-950 rounded-xl text-slate-300 font-mono text-xs space-y-1.5 border border-slate-800">
                 <p className="text-[10px] text-slate-400 uppercase tracking-wider font-sans font-bold flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   Live Assembled Request URL
@@ -2244,7 +2244,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               <button
                 type="submit"
                 disabled={savingGateway}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-2 disabled:bg-indigo-400 cursor-pointer"
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
               >
                 {savingGateway ? (
                   <>
@@ -2259,15 +2259,15 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Database Schema Cache / Missing Table Notice */}
               {hasMissingTable && (
-                <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-900 space-y-3 shadow-sm">
+                <div className="p-4 bg-amber-950/40 border border-amber-500/40 rounded-2xl text-amber-200 space-y-3 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
                       <div>
-                        <h4 className="font-bold text-sm text-amber-950">
+                        <h4 className="font-bold text-sm text-amber-300">
                           Supabase Table &apos;site_settings&apos; Not Created Yet
                         </h4>
-                        <p className="text-xs text-amber-800 mt-0.5">
+                        <p className="text-xs text-amber-200/80 mt-0.5">
                           Your gateway settings are saved in your browser and <strong>fully active</strong> for this device (SMS will send normally). To enable multi-device sync and save settings permanently in Supabase, run this 1-click SQL in your Supabase SQL Editor:
                         </p>
                       </div>
@@ -2278,13 +2278,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         navigator.clipboard.writeText(SITE_SETTINGS_SQL)
                         toast.success("Copied SQL to clipboard! Paste into Supabase SQL Editor.")
                       }}
-                      className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      className="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20"
                     >
                       <Copy className="w-3.5 h-3.5" />
                       Copy SQL Fix
                     </button>
                   </div>
-                  <div className="bg-slate-900 text-slate-200 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800">
+                  <div className="bg-slate-950 text-slate-300 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800">
                     <pre>{SITE_SETTINGS_SQL}</pre>
                   </div>
                 </div>
@@ -2295,35 +2295,35 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           {/* Right Column: Gateway Status & Live Test Sender */}
           <div className="lg:col-span-4 space-y-6">
             {/* Setup Status Checklist */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
-              <h3 className="text-sm font-black text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl space-y-4">
+              <h3 className="text-sm font-black text-white border-b border-slate-800 pb-2 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 Gateway Readiness Checklist
               </h3>
 
               <div className="space-y-2 text-xs">
                 <div className="flex items-center gap-2.5">
                   {gatewayConfig.apiKey ? (
-                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                   ) : (
-                    <X className="w-4 h-4 text-rose-500 shrink-0" />
+                    <X className="w-4 h-4 text-rose-400 shrink-0" />
                   )}
-                  <span className={gatewayConfig.apiKey ? "text-gray-800 font-bold" : "text-gray-400"}>
+                  <span className={gatewayConfig.apiKey ? "text-slate-200 font-bold" : "text-slate-500"}>
                     API Key Entered
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2.5">
                   {gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}") ? (
-                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                   ) : (
-                    <X className="w-4 h-4 text-rose-500 shrink-0" />
+                    <X className="w-4 h-4 text-rose-400 shrink-0" />
                   )}
                   <span
                     className={
                       gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}")
-                        ? "text-gray-800 font-bold"
-                        : "text-gray-400"
+                        ? "text-slate-200 font-bold"
+                        : "text-slate-500"
                     }
                   >
                     Message Token {"{msg}"} Configured
@@ -2332,15 +2332,15 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
                 <div className="flex items-center gap-2.5">
                   {gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}") ? (
-                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                   ) : (
-                    <X className="w-4 h-4 text-rose-500 shrink-0" />
+                    <X className="w-4 h-4 text-rose-400 shrink-0" />
                   )}
                   <span
                     className={
                       gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}")
-                        ? "text-gray-800 font-bold"
-                        : "text-gray-400"
+                        ? "text-slate-200 font-bold"
+                        : "text-slate-500"
                     }
                   >
                     Phone Token {"{to}"} Configured
@@ -2349,31 +2349,31 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </div>
 
               {isGatewayReady ? (
-                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800 font-medium">
+                <div className="p-3 bg-emerald-950/40 rounded-xl border border-emerald-500/30 text-xs text-emerald-300 font-medium">
                   ✓ Setup complete! You can now send single or bulk SMS anytime.
                 </div>
               ) : (
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 font-medium">
+                <div className="p-3 bg-amber-950/40 rounded-xl border border-amber-500/30 text-xs text-amber-300 font-medium">
                   Please complete the checklist to enable SMS dispatching.
                 </div>
               )}
             </div>
 
             {/* Test Gateway Sender Tool */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-3.5">
-              <h3 className="text-sm font-black text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-                <Send className="w-4 h-4 text-indigo-600" />
+            <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-5 shadow-xl space-y-3.5">
+              <h3 className="text-sm font-black text-white border-b border-slate-800 pb-2 flex items-center gap-2">
+                <Send className="w-4 h-4 text-amber-400" />
                 Live Test SMS Sender
               </h3>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Test Recipient Phone</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Test Recipient Phone</label>
                 <input
                   type="text"
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
                   placeholder="e.g. 01800000000 or 88018..."
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-indigo-600"
+                  className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-amber-400 placeholder:text-slate-500"
                 />
               </div>
 
@@ -2381,7 +2381,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 type="button"
                 onClick={handleSendTestSms}
                 disabled={testingGateway || !testPhone.trim() || !gatewayConfig.apiKey}
-                className="w-full py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:bg-gray-300 cursor-pointer"
+                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
               >
                 {testingGateway ? (
                   <>
@@ -2395,9 +2395,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </button>
 
               {testResult && (
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-1 text-xs">
-                  <p className="font-bold text-gray-800">Gateway Response:</p>
-                  <pre className="text-[11px] font-mono text-gray-700 bg-white p-2 rounded border border-gray-200 overflow-x-auto max-h-32">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1 text-xs">
+                  <p className="font-bold text-slate-200">Gateway Response:</p>
+                  <pre className="text-[11px] font-mono text-emerald-400 bg-slate-900 p-2 rounded border border-slate-800 overflow-x-auto max-h-32">
                     {JSON.stringify(testResult, null, 2)}
                   </pre>
                 </div>
@@ -2411,18 +2411,18 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       {/* TAB 3: DELIVERY LOGS & SMS QUEUE */}
       {/* ========================================================================= */}
       {activeTab === "logs" && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50/60">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+          <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
             <div>
-              <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                <History className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-black text-white flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-400" />
                 Recent Message Delivery Logs
               </h3>
-              <p className="text-xs text-gray-500 mt-0.5">Real-time status of messages dispatched through the system</p>
+              <p className="text-xs text-slate-400 mt-0.5">Real-time status of messages dispatched through the system</p>
             </div>
             <button
               onClick={refreshLogs}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
@@ -2431,7 +2431,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase tracking-wider text-[11px] font-bold">
+                <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[11px] font-bold">
                   <th className="px-4 py-3">Phone</th>
                   <th className="px-4 py-3">Message Snippet</th>
                   <th className="px-4 py-3">Type</th>
@@ -2439,13 +2439,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   <th className="px-4 py-3 text-right">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-xs">
+              <tbody className="divide-y divide-slate-800/60 text-xs">
                 {logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="px-4 py-3 font-mono font-bold text-gray-900">{log.to_phone}</td>
-                    <td className="px-4 py-3 max-w-md truncate text-gray-700 font-medium">{log.message}</td>
+                  <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="px-4 py-3 font-mono font-bold text-white">{log.to_phone}</td>
+                    <td className="px-4 py-3 max-w-md truncate text-slate-300 font-medium">{log.message}</td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[11px] font-semibold uppercase">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-semibold uppercase">
                         {log.type || "bulk"}
                       </span>
                     </td>
@@ -2453,10 +2453,10 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       <span
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
                           log.status === "sent"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
                             : log.status === "pending"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                            ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                            : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
                         }`}
                       >
                         {log.status === "sent" ? (
@@ -2469,7 +2469,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         {log.status.toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-500 font-mono text-[11px]">
+                    <td className="px-4 py-3 text-right text-slate-400 font-mono text-[11px]">
                       {new Date(log.created_at).toLocaleString("en-GB", {
                         day: "2-digit",
                         month: "short",
@@ -2481,7 +2481,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 ))}
                 {logs.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-gray-400">
+                    <td colSpan={5} className="py-12 text-center text-slate-500">
                       No SMS delivery logs recorded yet.
                     </td>
                   </tr>
@@ -2494,41 +2494,41 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
       {/* CONFIRM BULK SEND MODAL */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-150">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
-                <Send className="w-4 h-4 text-indigo-600" />
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-800 animate-in fade-in zoom-in duration-150 text-white">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="text-base font-black text-white flex items-center gap-2">
+                <Send className="w-4 h-4 text-amber-400" />
                 Confirm Bulk SMS Dispatch
               </h3>
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-white p-1 cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-gray-600">
-              <div className="p-3 bg-indigo-50/70 rounded-xl space-y-1.5 text-indigo-900">
+            <div className="space-y-3 text-xs text-slate-300">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5 text-amber-200">
                 <div className="flex justify-between">
                   <span>Total Recipients:</span>
-                  <strong className="text-sm font-black">{resolvedRecipients.length}</strong>
+                  <strong className="text-sm font-black text-amber-300">{resolvedRecipients.length}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Estimated SMS Parts:</span>
-                  <strong className="text-sm font-black">{resolvedRecipients.length * smsStats.parts}</strong>
+                  <strong className="text-sm font-black text-amber-300">{resolvedRecipients.length * smsStats.parts}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Target Destination:</span>
-                  <strong className="font-bold">{targetPhoneType.toUpperCase()}</strong>
+                  <strong className="font-bold text-white">{targetPhoneType.toUpperCase()}</strong>
                 </div>
               </div>
 
               <div>
-                <p className="font-bold text-gray-800 mb-1">Message Preview:</p>
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 font-medium max-h-36 overflow-y-auto">
+                <p className="font-bold text-slate-200 mb-1">Message Preview:</p>
+                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 font-medium max-h-36 overflow-y-auto">
                   {sampleMessagePreview}
                 </div>
               </div>
@@ -2538,14 +2538,14 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-xs hover:bg-gray-50 transition-colors cursor-pointer"
+                className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-bold text-xs hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleExecuteBulkSend}
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" /> Start Dispatch
               </button>
@@ -2556,28 +2556,28 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
       {/* SENDING PROGRESS MODAL */}
       {sending && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-gray-100">
-            <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mx-auto" />
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-slate-800 text-white">
+            <Loader2 className="w-10 h-10 text-amber-400 animate-spin mx-auto" />
             <div>
-              <h3 className="text-base font-black text-gray-900">Dispatching Messages...</h3>
-              <p className="text-xs text-gray-500 mt-1">Please keep this window open while sending.</p>
+              <h3 className="text-base font-black text-white">Dispatching Messages...</h3>
+              <p className="text-xs text-slate-400 mt-1">Please keep this window open while sending.</p>
             </div>
 
             <div className="space-y-1.5">
-              <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-slate-950 border border-slate-800 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                  className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-300"
                   style={{
                     width: `${sendProgress.total ? (sendProgress.current / sendProgress.total) * 100 : 0}%`,
                   }}
                 />
               </div>
-              <div className="flex justify-between text-[11px] text-gray-500 font-mono font-bold">
+              <div className="flex justify-between text-[11px] text-slate-400 font-mono font-bold">
                 <span>
                   {sendProgress.current} / {sendProgress.total} Sent
                 </span>
-                <span className="text-emerald-600">✓ {sendProgress.success}</span>
+                <span className="text-emerald-400">✓ {sendProgress.success}</span>
               </div>
             </div>
           </div>

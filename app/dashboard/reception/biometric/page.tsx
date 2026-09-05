@@ -45,7 +45,7 @@ export default function BiometricPage() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-gray-900">Biometric Entry System</h2><p className="text-sm text-gray-500 mt-1">Fingerprint scan simulation with fee alert</p></div>
+      <div><h2 className="text-2xl font-black text-white tracking-tight">Biometric Entry System</h2><p className="text-sm text-slate-400 mt-1">Fingerprint scan simulation with fee alert</p></div>
       <div className={`bg-gradient-to-br ${bgColor} rounded-2xl p-8 text-white text-center min-h-[400px] flex flex-col items-center justify-center transition-all duration-500`}>
         {status === "idle" && (
           <>
@@ -55,7 +55,7 @@ export default function BiometricPage() {
             <div className="flex gap-3 max-w-sm w-full">
               <input value={studentId} onChange={e => setStudentId(e.target.value)} placeholder="Student ID (e.g., EDU-2024-0001)"
                 className="flex-1 px-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-white/50 text-center" onKeyDown={e => e.key === "Enter" && handleScan()} />
-              <button onClick={handleScan} className="px-6 py-3 bg-white text-gray-800 rounded-xl font-semibold hover:bg-gray-100">Scan</button>
+              <button onClick={handleScan} className="px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl transition-all shadow-lg shadow-amber-500/20 cursor-pointer">Scan</button>
             </div>
           </>
         )}

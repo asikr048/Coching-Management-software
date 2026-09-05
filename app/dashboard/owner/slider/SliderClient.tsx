@@ -444,60 +444,60 @@ export default function SliderClient({
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
-      <div className="flex border-b border-gray-200 bg-white px-4 pt-2 rounded-2xl shadow-2xs gap-2 flex-wrap">
+      <div className="flex border border-slate-800 bg-slate-900/90 backdrop-blur-md p-2 rounded-2xl shadow-xl gap-2 flex-wrap text-white">
         <button
           onClick={() => setActiveTab('slider')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${
             activeTab === 'slider'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
-          <Image className="w-4 h-4" /> Hero Slider ({slides.length})
+          <Image className="w-4 h-4 text-amber-400" /> Hero Slider ({slides.length})
         </button>
 
         <button
           onClick={() => setActiveTab('notices')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${
             activeTab === 'notices'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
-          <Bell className="w-4 h-4" /> Notice Book ({notices.length})
+          <Bell className="w-4 h-4 text-amber-400" /> Notice Book ({notices.length})
         </button>
 
         <button
           onClick={() => setActiveTab('achievements')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${
             activeTab === 'achievements'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
-          <Trophy className="w-4 h-4" /> Achievements ({achievements.length})
+          <Trophy className="w-4 h-4 text-amber-400" /> Achievements ({achievements.length})
         </button>
 
         <button
           onClick={() => setActiveTab('blogs')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${
             activeTab === 'blogs'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
-          <BookOpen className="w-4 h-4" /> Educational Blogs ({blogs.length})
+          <BookOpen className="w-4 h-4 text-amber-400" /> Educational Blogs ({blogs.length})
         </button>
 
         <button
           onClick={() => setActiveTab('contact')}
-          className={`px-4 py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 ${
             activeTab === 'contact'
-              ? 'border-indigo-600 text-indigo-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
+              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-xs'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800'
           }`}
         >
-          <Globe className="w-4 h-4" /> Institutional Contacts
+          <Globe className="w-4 h-4 text-amber-400" /> Institutional Contacts
         </button>
       </div>
 
@@ -506,10 +506,10 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'slider' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex justify-between items-center bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
             <div>
-              <h3 className="font-bold text-gray-900 text-base">Hero Image Slider</h3>
-              <p className="text-xs text-gray-500">
+              <h3 className="font-extrabold text-white text-base">Hero Image Slider</h3>
+              <p className="text-xs text-amber-400/90 font-medium">
                 Shown on the left 65% of the homepage hero section
               </p>
             </div>
@@ -519,7 +519,7 @@ export default function SliderClient({
                 setSlideForm({ title: "", subtitle: "", image_url: "", link_url: "", branch_id: "" })
                 setShowSlideForm(true)
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" /> Add Slide
             </button>
@@ -531,11 +531,11 @@ export default function SliderClient({
               return (
                 <div
                   key={slide.id}
-                  className={`bg-white rounded-2xl border ${
-                    slide.is_active ? 'border-gray-200' : 'border-gray-300 opacity-60'
-                  } overflow-hidden shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between`}
+                  className={`bg-slate-900/90 backdrop-blur-md rounded-2xl border ${
+                    slide.is_active ? 'border-slate-800 hover:border-amber-500/40' : 'border-slate-800 opacity-50'
+                  } overflow-hidden shadow-xl hover:shadow-2xl transition-all flex flex-col justify-between`}
                 >
-                  <div className="relative aspect-video bg-gray-100">
+                  <div className="relative aspect-video bg-slate-950">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={slide.image_url}
@@ -576,19 +576,19 @@ export default function SliderClient({
 
                   <div className="p-4">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <h4 className="font-bold text-gray-900 text-sm truncate">{slide.title || "Untitled Slide"}</h4>
+                      <h4 className="font-bold text-white text-sm truncate">{slide.title || "Untitled Slide"}</h4>
                       {slideBranch ? (
-                        <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">
+                        <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md font-medium">
                           {slideBranch.name}
                         </span>
                       ) : (
-                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
+                        <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-md font-medium">
                           All Branches
                         </span>
                       )}
                     </div>
                     {slide.subtitle && (
-                      <p className="text-xs text-gray-500 line-clamp-1">{slide.subtitle}</p>
+                      <p className="text-xs text-slate-400 line-clamp-1">{slide.subtitle}</p>
                     )}
                   </div>
                 </div>
@@ -603,59 +603,59 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'notices' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex justify-between items-center bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
             <div>
-              <h3 className="font-bold text-gray-900 text-base">Notice Book ("সর্বশেষ নোটিশ :")</h3>
-              <p className="text-xs text-gray-500">
+              <h3 className="font-extrabold text-white text-base">Notice Book ("সর্বশেষ নোটিশ :")</h3>
+              <p className="text-xs text-amber-400/90 font-medium">
                 Notices displayed in the side-by-side institutional notice box next to the slider
               </p>
             </div>
             <button
               onClick={openCreateNotice}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" /> Post Notice
             </button>
           </div>
 
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="divide-y divide-gray-100">
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+            <div className="divide-y divide-slate-800/80">
               {notices.map(notice => {
                 const noticeBranch = branches.find(b => b.id === notice.branch_id)
                 return (
-                  <div key={notice.id} className="p-4 flex items-start justify-between gap-4 hover:bg-gray-50/70 transition-colors">
+                  <div key={notice.id} className="p-4 flex items-start justify-between gap-4 hover:bg-slate-800/40 transition-colors">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-amber-600 font-bold text-base">»</span>
-                        <h4 className="font-bold text-gray-900 text-sm">{notice.title}</h4>
-                        <span className="text-xs text-gray-400 font-medium">
+                        <span className="text-amber-400 font-bold text-base">»</span>
+                        <h4 className="font-bold text-slate-100 text-sm">{notice.title}</h4>
+                        <span className="text-xs text-slate-500 font-medium">
                           {notice.created_at ? new Date(notice.created_at).toLocaleDateString("en-GB") : ""}
                         </span>
                         {noticeBranch ? (
-                          <span className="text-[10px] bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded font-medium">
+                          <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md font-medium">
                             {noticeBranch.name}
                           </span>
                         ) : (
-                          <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
+                          <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-md font-medium">
                             All Branches
                           </span>
                         )}
                       </div>
                       {notice.content && (
-                        <p className="text-xs text-gray-600 line-clamp-2 pl-4">{notice.content}</p>
+                        <p className="text-xs text-slate-300 line-clamp-2 pl-4 leading-relaxed">{notice.content}</p>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button
                         onClick={() => openEditNotice(notice)}
-                        className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteNotice(notice.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -664,7 +664,7 @@ export default function SliderClient({
                 )
               })}
               {notices.length === 0 && (
-                <div className="p-12 text-center text-gray-400 text-sm">
+                <div className="p-12 text-center text-slate-500 text-sm">
                   No notices published yet. Click "Post Notice" to create your first notice.
                 </div>
               )}
@@ -678,16 +678,16 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'achievements' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex justify-between items-center bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
             <div>
-              <h3 className="font-bold text-gray-900 text-base">Student Achievements & Success Stories</h3>
-              <p className="text-xs text-gray-500">
+              <h3 className="font-extrabold text-white text-base">Student Achievements & Success Stories</h3>
+              <p className="text-xs text-amber-400/90 font-medium">
                 Feature top rankers, GPA 5.00 achievers, and medical/university admissions
               </p>
             </div>
             <button
               onClick={openCreateAch}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" /> Add Achievement
             </button>
@@ -697,10 +697,10 @@ export default function SliderClient({
             {achievements.map(ach => {
               const achBranch = branches.find(b => b.id === ach.branch_id)
               return (
-                <div key={ach.id} className="bg-white p-4 rounded-2xl border border-gray-200/90 shadow-xs flex flex-col justify-between">
+                <div key={ach.id} className="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 hover:border-amber-500/40 shadow-xl transition-all flex flex-col justify-between">
                   <div>
                     <div className="flex items-start gap-3 mb-3">
-                      <div className="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0 font-bold overflow-hidden border border-amber-200">
+                      <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center flex-shrink-0 font-bold overflow-hidden border border-amber-500/30">
                         {ach.photo_url ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img src={ach.photo_url} alt={ach.student_name} className="w-full h-full object-cover" />
@@ -709,39 +709,39 @@ export default function SliderClient({
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-bold text-gray-900 text-sm truncate">{ach.student_name}</h4>
+                        <div className="flex items-center justify-between gap-1">
+                          <h4 className="font-bold text-white text-sm truncate">{ach.student_name}</h4>
                           {ach.exam_year && (
-                            <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">
+                            <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold shrink-0">
                               {ach.exam_year}
                             </span>
                           )}
                         </div>
-                        <p className="text-xs font-semibold text-indigo-600 truncate">{ach.title}</p>
+                        <p className="text-xs font-semibold text-amber-400 truncate">{ach.title}</p>
                       </div>
                     </div>
 
                     {ach.description && (
-                      <p className="text-xs text-gray-600 line-clamp-2 bg-gray-50 p-2 rounded-lg mb-3">
+                      <p className="text-xs text-slate-300 line-clamp-2 bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 mb-3 leading-relaxed">
                         {ach.description}
                       </p>
                     )}
                   </div>
 
-                  <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
-                    <span className="text-gray-400 text-[11px]">
+                  <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-xs">
+                    <span className="text-slate-400 text-[11px]">
                       {achBranch ? achBranch.name : "All Branches"}
                     </span>
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => openEditAch(ach)}
-                        className="p-1 text-gray-400 hover:text-indigo-600 rounded"
+                        className="p-1 text-slate-400 hover:text-amber-400 rounded transition-colors"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDeleteAch(ach.id)}
-                        className="p-1 text-gray-400 hover:text-red-600 rounded"
+                        className="p-1 text-slate-500 hover:text-red-400 rounded transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -759,16 +759,16 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'blogs' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-gray-200/80 shadow-xs">
+          <div className="flex justify-between items-center bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-xl">
             <div>
-              <h3 className="font-bold text-gray-900 text-base">Educational Blogs & Articles</h3>
-              <p className="text-xs text-gray-500">
+              <h3 className="font-extrabold text-white text-base">Educational Blogs & Articles</h3>
+              <p className="text-xs text-amber-400/90 font-medium">
                 Write educational advice, exam guidelines, and motivational articles for students
               </p>
             </div>
             <button
               onClick={openCreateBlog}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-xs"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
             >
               <Plus className="w-4 h-4" /> Write Article
             </button>
@@ -778,29 +778,29 @@ export default function SliderClient({
             {blogs.map(blog => {
               const bBranch = branches.find(b => b.id === blog.branch_id)
               return (
-                <div key={blog.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-xs flex flex-col justify-between">
+                <div key={blog.id} className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 hover:border-amber-500/40 overflow-hidden shadow-xl transition-all flex flex-col justify-between">
                   <div className="p-4">
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      <span className="text-[11px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
                         {blog.author_name || "MedhaShiree"}
                       </span>
-                      <span className="text-[10px] text-gray-400">
+                      <span className="text-[10px] text-slate-400">
                         {blog.created_at ? new Date(blog.created_at).toLocaleDateString("en-GB") : ""}
                       </span>
                     </div>
 
-                    <h4 className="font-bold text-gray-900 text-base mb-1.5 hover:text-indigo-600 transition-colors">
+                    <h4 className="font-bold text-white text-base mb-1.5 hover:text-amber-400 transition-colors">
                       {blog.title}
                     </h4>
 
                     {blog.excerpt && (
-                      <p className="text-xs text-gray-600 line-clamp-2 mb-3">{blog.excerpt}</p>
+                      <p className="text-xs text-slate-300 line-clamp-2 mb-3 leading-relaxed">{blog.excerpt}</p>
                     )}
 
                     {Array.isArray(blog.tags) && blog.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 mb-2">
                         {blog.tags.map((t: string, i: number) => (
-                          <span key={i} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">
+                          <span key={i} className="text-[10px] bg-slate-800 text-amber-300/90 border border-slate-700 px-1.5 py-0.5 rounded">
                             #{t}
                           </span>
                         ))}
@@ -808,20 +808,20 @@ export default function SliderClient({
                     )}
                   </div>
 
-                  <div className="px-4 py-2.5 bg-gray-50/70 border-t border-gray-100 flex items-center justify-between text-xs">
-                    <span className="text-gray-500 font-medium">
+                  <div className="px-4 py-2.5 bg-slate-950/60 border-t border-slate-800 flex items-center justify-between text-xs">
+                    <span className="text-slate-400 font-medium">
                       {bBranch ? bBranch.name : "All Branches"}
                     </span>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => openEditBlog(blog)}
-                        className="text-indigo-600 hover:underline font-semibold flex items-center gap-1"
+                        className="text-amber-400 hover:text-amber-300 font-semibold flex items-center gap-1 transition-colors"
                       >
                         <Pencil className="w-3.5 h-3.5" /> Edit
                       </button>
                       <button
                         onClick={() => handleDeleteBlog(blog.id)}
-                        className="text-red-600 hover:underline font-semibold flex items-center gap-1"
+                        className="text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 transition-colors"
                       >
                         <Trash2 className="w-3.5 h-3.5" /> Delete
                       </button>
@@ -831,7 +831,7 @@ export default function SliderClient({
               )
             })}
             {blogs.length === 0 && (
-              <div className="col-span-full p-12 text-center text-gray-400 text-sm">
+              <div className="col-span-full p-12 text-center text-slate-500 text-sm">
                 No blog articles published yet. Click "Write Article" to publish your first post.
               </div>
             )}
@@ -843,66 +843,66 @@ export default function SliderClient({
       {/* 5. INSTITUTIONAL CONTACTS & BRANDING */}
       {/* ---------------------------------------------------- */}
       {activeTab === 'contact' && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5 shadow-xs max-w-2xl">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 space-y-5 shadow-xl max-w-2xl">
           <div>
-            <h3 className="text-base font-bold text-gray-900">Institutional Contact & Branding</h3>
-            <p className="text-xs text-gray-500">
+            <h3 className="text-base font-extrabold text-white">Institutional Contact & Branding</h3>
+            <p className="text-xs text-amber-400/90 font-medium">
               Default coaching contact details displayed on the top utility bar and footer
             </p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Helpline Phone Number</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Helpline Phone Number</label>
               <input
                 type="text"
                 value={contactPhone}
                 onChange={e => setContactPhone(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="01302201431"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Official Email Address</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Official Email Address</label>
               <input
                 type="email"
                 value={contactEmail}
                 onChange={e => setContactEmail(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="info@medhashiree.com"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Central Head Office Address</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Central Head Office Address</label>
               <input
                 type="text"
                 value={contactAddress}
                 onChange={e => setContactAddress(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="নাচোল, চাঁপাইনবাবগঞ্জ"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">WhatsApp Helpline Link</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">WhatsApp Helpline Link</label>
               <input
                 type="text"
                 value={contactLink}
                 onChange={e => setContactLink(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 placeholder="https://wa.me/8801302201431"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Footer About Synopsis</label>
+              <label className="block text-xs font-bold text-slate-300 mb-1">Footer About Synopsis</label>
               <textarea
                 rows={3}
                 value={footerAbout}
                 onChange={e => setFooterAbout(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500"
+                className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
               />
             </div>
 
@@ -910,7 +910,7 @@ export default function SliderClient({
               <button
                 onClick={handleSaveContact}
                 disabled={savingContact}
-                className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl shadow-xs transition-colors"
+                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
               >
                 {savingContact ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                 Save Branding Settings
@@ -922,58 +922,58 @@ export default function SliderClient({
 
       {/* --- ADD/EDIT SLIDE MODAL --- */}
       {showSlideForm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-100">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-800 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-900">
+              <h3 className="text-base font-extrabold text-white">
                 {editSlide ? "Edit Hero Slide" : "Add New Hero Slide"}
               </h3>
-              <button onClick={() => setShowSlideForm(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-400" />
+              <button onClick={() => setShowSlideForm(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleSlideSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Image URL *</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Image URL *</label>
                 <input
                   type="url"
                   required
                   value={slideForm.image_url}
                   onChange={e => setSlideForm({ ...slideForm, image_url: e.target.value })}
                   placeholder="https://images.unsplash.com/..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Title</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Title</label>
                 <input
                   type="text"
                   value={slideForm.title}
                   onChange={e => setSlideForm({ ...slideForm, title: e.target.value })}
                   placeholder="e.g. নতুন সেশনে ভর্তি চলছে"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Subtitle</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Subtitle</label>
                 <input
                   type="text"
                   value={slideForm.subtitle}
                   onChange={e => setSlideForm({ ...slideForm, subtitle: e.target.value })}
                   placeholder="e.g. এইচএসসি ও এসএসসি ব্যাচ ২০২৬"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Target Branch</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Target Branch</label>
                 <select
                   value={slideForm.branch_id}
                   onChange={e => setSlideForm({ ...slideForm, branch_id: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none"
                 >
                   <option value="">All Branches (সকল শাখা)</option>
                   {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
+                    <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>
                   ))}
                 </select>
               </div>
@@ -981,14 +981,14 @@ export default function SliderClient({
                 <button
                   type="button"
                   onClick={() => setShowSlideForm(false)}
-                  className="flex-1 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm"
+                  className="flex-1 py-2 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-semibold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={slideLoading}
-                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
                 >
                   {slideLoading ? "Saving..." : "Save Slide"}
                 </button>
@@ -1000,48 +1000,48 @@ export default function SliderClient({
 
       {/* --- ADD/EDIT NOTICE MODAL --- */}
       {showNoticeModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-100">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-800 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-900">
+              <h3 className="text-base font-extrabold text-white">
                 {editNotice ? "Edit Notice" : "Post New Notice"}
               </h3>
-              <button onClick={() => setShowNoticeModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-400" />
+              <button onClick={() => setShowNoticeModal(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleNoticeSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Notice Headline *</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Notice Headline *</label>
                 <input
                   type="text"
                   required
                   value={noticeForm.title}
                   onChange={e => setNoticeForm({ ...noticeForm, title: e.target.value })}
                   placeholder="e.g. ভর্তি বিজ্ঞপ্তি : ২০২৫-২৬ সেশনে ভর্তি চলছে"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Full Notice Content</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Full Notice Content</label>
                 <textarea
                   rows={4}
                   value={noticeForm.content}
                   onChange={e => setNoticeForm({ ...noticeForm, content: e.target.value })}
                   placeholder="Detailed notice text..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Notice Branch</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Notice Branch</label>
                 <select
                   value={noticeForm.branch_id}
                   onChange={e => setNoticeForm({ ...noticeForm, branch_id: e.target.value })}
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none"
                 >
                   <option value="">All Branches (সকল শাখা)</option>
                   {branches.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
+                    <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>
                   ))}
                 </select>
               </div>
@@ -1049,14 +1049,14 @@ export default function SliderClient({
                 <button
                   type="button"
                   onClick={() => setShowNoticeModal(false)}
-                  className="flex-1 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm"
+                  className="flex-1 py-2 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-semibold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={noticeLoading}
-                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
                 >
                   {noticeLoading ? "Saving..." : "Publish Notice"}
                 </button>
@@ -1068,96 +1068,96 @@ export default function SliderClient({
 
       {/* --- ADD/EDIT ACHIEVEMENT MODAL --- */}
       {showAchModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-gray-100">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-800 text-white">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-900">
+              <h3 className="text-base font-extrabold text-white">
                 {editAch ? "Edit Achievement" : "Add Student Achievement"}
               </h3>
-              <button onClick={() => setShowAchModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-400" />
+              <button onClick={() => setShowAchModal(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleAchSubmit} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Student Full Name *</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Student Full Name *</label>
                 <input
                   type="text"
                   required
                   value={achForm.student_name}
                   onChange={e => setAchForm({ ...achForm, student_name: e.target.value })}
                   placeholder="e.g. তাসনিম হাসান"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Achievement Title *</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Achievement Title *</label>
                 <input
                   type="text"
                   required
                   value={achForm.title}
                   onChange={e => setAchForm({ ...achForm, title: e.target.value })}
                   placeholder="e.g. রাজশাহী মেডিকেল কলেজ (চান্স প্রাপ্ত)"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Exam / Session Year</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Exam / Session Year</label>
                   <input
                     type="text"
                     value={achForm.exam_year}
                     onChange={e => setAchForm({ ...achForm, exam_year: e.target.value })}
                     placeholder="2025"
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Branch</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Branch</label>
                   <select
                     value={achForm.branch_id}
                     onChange={e => setAchForm({ ...achForm, branch_id: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white"
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none"
                   >
                     <option value="">All Branches</option>
                     {branches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                      <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>
                     ))}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Photo URL (Optional)</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Photo URL (Optional)</label>
                 <input
                   type="url"
                   value={achForm.photo_url}
                   onChange={e => setAchForm({ ...achForm, photo_url: e.target.value })}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Description / Testimonial</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Description / Testimonial</label>
                 <textarea
                   rows={2}
                   value={achForm.description}
                   onChange={e => setAchForm({ ...achForm, description: e.target.value })}
                   placeholder="Short comment or congratulations..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="flex gap-2 pt-3">
                 <button
                   type="button"
                   onClick={() => setShowAchModal(false)}
-                  className="flex-1 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm"
+                  className="flex-1 py-2 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-semibold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={achLoading}
-                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
                 >
                   {achLoading ? "Saving..." : "Save Achievement"}
                 </button>
@@ -1169,105 +1169,105 @@ export default function SliderClient({
 
       {/* --- ADD/EDIT BLOG MODAL --- */}
       {showBlogModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl w-full max-w-xl p-6 shadow-2xl border border-gray-100 my-8">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-xl p-6 shadow-2xl border border-slate-800 text-white my-8">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-gray-900">
+              <h3 className="text-base font-extrabold text-white">
                 {editBlog ? "Edit Educational Article" : "Write Educational Article"}
               </h3>
-              <button onClick={() => setShowBlogModal(false)} className="p-1 hover:bg-gray-100 rounded-lg">
-                <X className="w-5 h-5 text-gray-400" />
+              <button onClick={() => setShowBlogModal(false)} className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleBlogSubmit} className="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Article Title *</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Article Title *</label>
                 <input
                   type="text"
                   required
                   value={blogForm.title}
                   onChange={e => setBlogForm({ ...blogForm, title: e.target.value })}
                   placeholder="e.g. এইচএসসি পরীক্ষায় পদার্থবিজ্ঞানে এ+ পাওয়ার সহজ কৌশল"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Short Excerpt / Summary</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Short Excerpt / Summary</label>
                 <textarea
                   rows={2}
                   value={blogForm.excerpt}
                   onChange={e => setBlogForm({ ...blogForm, excerpt: e.target.value })}
                   placeholder="Brief synopsis for card preview..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Full Article Content *</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Full Article Content *</label>
                 <textarea
                   rows={7}
                   required
                   value={blogForm.content}
                   onChange={e => setBlogForm({ ...blogForm, content: e.target.value })}
                   placeholder="Write full article here..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Author Name</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Author Name</label>
                   <input
                     type="text"
                     value={blogForm.author_name}
                     onChange={e => setBlogForm({ ...blogForm, author_name: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Branch</label>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Branch</label>
                   <select
                     value={blogForm.branch_id}
                     onChange={e => setBlogForm({ ...blogForm, branch_id: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white"
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none"
                   >
                     <option value="">All Branches</option>
                     {branches.map(b => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
+                      <option key={b.id} value={b.id} className="bg-slate-900 text-white">{b.name}</option>
                     ))}
                   </select>
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Cover Image URL (Optional)</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Cover Image URL (Optional)</label>
                 <input
                   type="url"
                   value={blogForm.cover_image}
                   onChange={e => setBlogForm({ ...blogForm, cover_image: e.target.value })}
                   placeholder="https://..."
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Tags (Comma-separated)</label>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Tags (Comma-separated)</label>
                 <input
                   type="text"
                   value={blogForm.tags}
                   onChange={e => setBlogForm({ ...blogForm, tags: e.target.value })}
                   placeholder="পড়াশোনা, এইচএসসি, পদার্থবিজ্ঞান"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 text-white rounded-xl focus:border-amber-400 focus:outline-none placeholder:text-slate-500"
                 />
               </div>
               <div className="flex gap-2 pt-3">
                 <button
                   type="button"
                   onClick={() => setShowBlogModal(false)}
-                  className="flex-1 py-2 border border-gray-200 text-gray-700 rounded-xl text-sm"
+                  className="flex-1 py-2 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl text-sm font-semibold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={blogLoading}
-                  className="flex-1 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700"
+                  className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
                 >
                   {blogLoading ? "Publishing..." : "Publish Article"}
                 </button>

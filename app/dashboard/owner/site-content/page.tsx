@@ -139,25 +139,25 @@ export default function SiteContentPage() {
   }
 
   const priorityBadge: Record<string, string> = {
-    urgent: 'bg-red-100 text-red-700',
-    high: 'bg-amber-100 text-amber-700',
-    normal: 'bg-indigo-100 text-indigo-700',
-    low: 'bg-gray-100 text-gray-600',
+    urgent: 'bg-rose-500/15 text-rose-400 border border-rose-500/30',
+    high: 'bg-amber-500/15 text-amber-300 border border-amber-500/30',
+    normal: 'bg-indigo-500/15 text-indigo-300 border border-indigo-500/30',
+    low: 'bg-slate-800 text-slate-400 border border-slate-700',
   }
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Site Content Management</h1>
+      <h1 className="text-2xl font-black text-white tracking-tight">Site Content Management</h1>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-gray-200 pb-1">
+      <div className="flex gap-2 border-b border-slate-800 pb-1">
         {[
           { id: 'notices', label: 'Notice Board', icon: Bell },
           { id: 'feedback', label: 'Feedback', icon: MessageSquare },
           { id: 'settings', label: 'Contact Settings', icon: Link2 },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-t-xl text-sm font-semibold border-b-2 transition-all ${tab === t.id ? 'border-indigo-600 text-indigo-600 bg-indigo-50' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+            className={`flex items-center gap-2 px-4 py-2 rounded-t-xl text-sm font-semibold border-b-2 transition-all cursor-pointer ${tab === t.id ? 'border-amber-400 text-amber-400 bg-amber-500/10' : 'border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'}`}>
             <t.icon className="w-4 h-4" />{t.label}
           </button>
         ))}
@@ -166,18 +166,18 @@ export default function SiteContentPage() {
       {/* NOTICES TAB */}
       {tab === 'notices' && (
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
-            <h2 className="font-bold text-gray-800 flex items-center gap-2"><Plus className="w-4 h-4 text-indigo-600" /> Post New Notice</h2>
-            <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Notice title" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <textarea value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="Notice content..." rows={3} className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+          <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-6 space-y-4">
+            <h2 className="font-bold text-white flex items-center gap-2"><Plus className="w-4 h-4 text-amber-400" /> Post New Notice</h2>
+            <input value={newTitle} onChange={e => setNewTitle(e.target.value)} placeholder="Notice title" className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all" />
+            <textarea value={newContent} onChange={e => setNewContent(e.target.value)} placeholder="Notice content..." rows={3} className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all resize-none" />
             <div className="flex items-center justify-between gap-4">
-              <select value={newPriority} onChange={e => setNewPriority(e.target.value)} className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <option value="low">Low Priority</option>
-                <option value="normal">Normal</option>
-                <option value="high">High Priority</option>
-                <option value="urgent">Urgent</option>
+              <select value={newPriority} onChange={e => setNewPriority(e.target.value)} className="px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10">
+                <option value="low" className="bg-slate-950 text-white">Low Priority</option>
+                <option value="normal" className="bg-slate-950 text-white">Normal</option>
+                <option value="high" className="bg-slate-950 text-white">High Priority</option>
+                <option value="urgent" className="bg-slate-950 text-white">Urgent</option>
               </select>
-              <button onClick={addNotice} disabled={addingNotice} className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 text-sm">
+              <button onClick={addNotice} disabled={addingNotice} className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 text-sm cursor-pointer">
                 {addingNotice ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />} Post Notice
               </button>
             </div>
@@ -185,25 +185,25 @@ export default function SiteContentPage() {
 
           <div className="space-y-3">
             {loadingNotices ? (
-              <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-indigo-400 mx-auto" /></div>
+              <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-amber-400 mx-auto" /></div>
             ) : notices.length === 0 ? (
-              <div className="text-center py-8 text-gray-400">No notices yet.</div>
+              <div className="text-center py-8 text-slate-400">No notices yet.</div>
             ) : notices.map((n: any) => (
-              <div key={n.id} className={`bg-white rounded-2xl border p-4 flex items-start justify-between gap-4 ${n.is_active ? 'border-gray-200' : 'border-dashed border-gray-200 opacity-60'}`}>
+              <div key={n.id} className={`bg-slate-900/90 backdrop-blur-md rounded-2xl border p-4 flex items-start justify-between gap-4 shadow-md transition-all ${n.is_active ? 'border-slate-800' : 'border-dashed border-slate-800/80 opacity-60'}`}>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-bold capitalize ${priorityBadge[n.priority] || priorityBadge.normal}`}>{n.priority}</span>
-                    <span className="text-xs text-gray-400">{new Date(n.created_at).toLocaleDateString('en-GB')}</span>
-                    {!n.is_active && <span className="text-xs text-gray-400 italic">Hidden</span>}
+                    <span className="text-xs text-slate-400">{new Date(n.created_at).toLocaleDateString('en-GB')}</span>
+                    {!n.is_active && <span className="text-xs text-slate-500 italic">Hidden</span>}
                   </div>
-                  <p className="font-semibold text-gray-900">{n.title}</p>
-                  <p className="text-sm text-gray-500 mt-0.5">{n.content}</p>
+                  <p className="font-semibold text-white">{n.title}</p>
+                  <p className="text-sm text-slate-400 mt-0.5">{n.content}</p>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
-                  <button onClick={() => toggleNotice(n.id, n.is_active)} className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-500 transition-colors" title={n.is_active ? 'Hide' : 'Show'}>
+                  <button onClick={() => toggleNotice(n.id, n.is_active)} className="p-2 rounded-xl border border-slate-800 bg-slate-950/60 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer" title={n.is_active ? 'Hide' : 'Show'}>
                     {n.is_active ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
-                  <button onClick={() => deleteNotice(n.id)} className="p-2 rounded-xl border border-red-100 text-red-500 hover:bg-red-50 transition-colors">
+                  <button onClick={() => deleteNotice(n.id)} className="p-2 rounded-xl border border-rose-500/20 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 transition-colors cursor-pointer" title="Delete">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -217,27 +217,27 @@ export default function SiteContentPage() {
       {tab === 'feedback' && (
         <div className="space-y-3">
           {loadingFeedback ? (
-            <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-indigo-400 mx-auto" /></div>
+            <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin text-amber-400 mx-auto" /></div>
           ) : feedback.length === 0 ? (
-            <div className="text-center py-12 text-gray-400"><MessageSquare className="w-10 h-10 mx-auto mb-3 text-gray-300" /><p>No feedback submissions yet.</p></div>
+            <div className="text-center py-12 text-slate-400"><MessageSquare className="w-10 h-10 mx-auto mb-3 text-slate-600" /><p>No feedback submissions yet.</p></div>
           ) : feedback.map((f: any) => (
-            <div key={f.id} className={`bg-white rounded-2xl border p-5 space-y-2 ${f.is_read ? 'border-gray-100 opacity-75' : 'border-indigo-200 shadow-sm'}`}>
+            <div key={f.id} className={`bg-slate-900/90 backdrop-blur-md rounded-2xl border p-5 space-y-2 transition-all ${f.is_read ? 'border-slate-800 opacity-75' : 'border-amber-500/30 shadow-lg shadow-amber-500/5'}`}>
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-bold text-gray-900">{f.name}</p>
-                    {!f.is_read && <span className="w-2 h-2 bg-indigo-500 rounded-full" />}
-                    <div className="flex gap-0.5">{[1,2,3,4,5].map(n => <Star key={n} className={`w-3 h-3 ${n <= (f.rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-gray-200'}`} />)}</div>
+                    <p className="font-bold text-white">{f.name}</p>
+                    {!f.is_read && <span className="w-2 h-2 bg-amber-400 rounded-full animate-pulse" />}
+                    <div className="flex gap-0.5">{[1,2,3,4,5].map(n => <Star key={n} className={`w-3 h-3 ${n <= (f.rating || 0) ? 'text-amber-400 fill-amber-400' : 'text-slate-700'}`} />)}</div>
                   </div>
-                  <p className="text-xs text-gray-400">{f.email && `${f.email} · `}{f.phone && `${f.phone} · `}{new Date(f.created_at).toLocaleDateString('en-GB')}</p>
+                  <p className="text-xs text-slate-400">{f.email && `${f.email} · `}{f.phone && `${f.phone} · `}{new Date(f.created_at).toLocaleDateString('en-GB')}</p>
                 </div>
                 {!f.is_read && (
-                  <button onClick={() => markFeedbackRead(f.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors">
+                  <button onClick={() => markFeedbackRead(f.id)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 rounded-lg hover:bg-emerald-500/25 transition-colors cursor-pointer">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Mark Read
                   </button>
                 )}
               </div>
-              <p className="text-sm text-gray-700 bg-gray-50 rounded-xl p-3">{f.message}</p>
+              <p className="text-sm text-slate-300 bg-slate-950 border border-slate-800/80 rounded-xl p-3">{f.message}</p>
             </div>
           ))}
         </div>
@@ -245,19 +245,19 @@ export default function SiteContentPage() {
 
       {/* SETTINGS TAB */}
       {tab === 'settings' && (
-        <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-5 max-w-lg">
-          <h2 className="font-bold text-gray-800 flex items-center gap-2"><Link2 className="w-4 h-4 text-indigo-600" /> Contact / Message Link</h2>
-          <p className="text-sm text-gray-500">This link appears as a button on the homepage and hero slider. Use a WhatsApp, Messenger, email, or any URL.</p>
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-6 space-y-5 max-w-lg">
+          <h2 className="font-bold text-white flex items-center gap-2"><Link2 className="w-4 h-4 text-amber-400" /> Contact / Message Link</h2>
+          <p className="text-sm text-slate-400">This link appears as a button on the homepage and hero slider. Use a WhatsApp, Messenger, email, or any URL.</p>
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Button Label</label>
-            <input value={contactLabel} onChange={e => setContactLabel(e.target.value)} placeholder="e.g. WhatsApp Us" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Button Label</label>
+            <input value={contactLabel} onChange={e => setContactLabel(e.target.value)} placeholder="e.g. WhatsApp Us" className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all" />
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Link URL</label>
-            <input value={contactLink} onChange={e => setContactLink(e.target.value)} placeholder="https://wa.me/880..." className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-            <p className="text-xs text-gray-400 mt-1">WhatsApp: https://wa.me/880XXXXXXXXXX · Messenger: https://m.me/pagename</p>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Link URL</label>
+            <input value={contactLink} onChange={e => setContactLink(e.target.value)} placeholder="https://wa.me/880..." className="w-full px-4 py-3 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 transition-all" />
+            <p className="text-xs text-slate-500 mt-1">WhatsApp: https://wa.me/880XXXXXXXXXX · Messenger: https://m.me/pagename</p>
           </div>
-          <button onClick={saveSettings} disabled={savingSettings} className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-700 transition-colors disabled:opacity-50 text-sm">
+          <button onClick={saveSettings} disabled={savingSettings} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 text-sm cursor-pointer">
             {savingSettings ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save Settings
           </button>
         </div>

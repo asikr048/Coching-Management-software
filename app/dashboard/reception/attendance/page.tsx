@@ -48,52 +48,54 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-bold text-gray-900">Mark Attendance</h2><p className="text-sm text-gray-500 mt-1">{today}</p></div>
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <label className="block text-sm font-medium text-gray-700 mb-1">Select Batch</label>
-        <select value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)} className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <option value="">-- Select Batch --</option>
-          {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+      <div><h2 className="text-2xl font-black text-white tracking-tight">Mark Attendance</h2><p className="text-sm text-slate-400 mt-1">{today}</p></div>
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl p-5">
+        <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Select Batch</label>
+        <select value={selectedBatch} onChange={e => setSelectedBatch(e.target.value)} className="w-full max-w-xs px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10">
+          <option value="" className="bg-slate-950 text-white">-- Select Batch --</option>
+          {batches.map(b => <option key={b.id} value={b.id} className="bg-slate-950 text-white">{b.name}</option>)}
         </select>
       </div>
       {selectedBatch && students.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full">
-            <thead><tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Student</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">ID</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-            </tr></thead>
-            <tbody className="divide-y divide-gray-100">
-              {students.map((s, i) => (
-                <tr key={s.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-sm text-gray-500">{i + 1}</td>
-                  <td className="px-4 py-3 text-sm font-medium text-gray-800">{s.name}</td>
-                  <td className="px-4 py-3 text-sm text-gray-500 font-mono">{s.student_id}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1">
-                      {["present", "absent", "late", "excused"].map(st => (
-                        <button key={st} onClick={() => setAttendance(a => ({ ...a, [s.id]: st }))}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium capitalize transition-colors ${attendance[s.id] === st
-                            ? (st === "present" ? "bg-emerald-500 text-white" : st === "absent" ? "bg-red-500 text-white" : st === "late" ? "bg-yellow-500 text-white" : "bg-blue-500 text-white")
-                            : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{st}</button>
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="px-4 py-3 border-t border-gray-100 flex justify-between items-center">
-            <p className="text-sm text-gray-500">{students.length} students • Present: {Object.values(attendance).filter(v => v === "present").length} • Absent: {Object.values(attendance).filter(v => v === "absent").length}</p>
-            <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:bg-indigo-400">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead><tr className="bg-slate-950/80 border-b border-slate-800">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">#</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Student</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">ID</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Status</th>
+              </tr></thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {students.map((s, i) => (
+                  <tr key={s.id} className="hover:bg-slate-800/40 transition-colors">
+                    <td className="px-4 py-3 text-sm text-slate-500">{i + 1}</td>
+                    <td className="px-4 py-3 text-sm font-bold text-white">{s.name}</td>
+                    <td className="px-4 py-3 text-sm text-slate-400 font-mono">{s.student_id}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1.5">
+                        {["present", "absent", "late", "excused"].map(st => (
+                          <button key={st} onClick={() => setAttendance(a => ({ ...a, [s.id]: st }))}
+                            className={`px-3 py-1 rounded-lg text-xs font-bold capitalize transition-all cursor-pointer ${attendance[s.id] === st
+                              ? (st === "present" ? "bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20" : st === "absent" ? "bg-rose-500 text-white font-black shadow-md shadow-rose-500/20" : st === "late" ? "bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20" : "bg-blue-500 text-white font-black shadow-md shadow-blue-500/20")
+                              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"}`}>{st}</button>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-5 py-4 border-t border-slate-800 bg-slate-950/40 flex flex-col sm:flex-row justify-between items-center gap-3">
+            <p className="text-sm text-slate-400">{students.length} students • Present: <span className="text-emerald-400 font-bold">{Object.values(attendance).filter(v => v === "present").length}</span> • Absent: <span className="text-rose-400 font-bold">{Object.values(attendance).filter(v => v === "absent").length}</span></p>
+            <button onClick={handleSave} disabled={loading} className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 disabled:opacity-50 cursor-pointer">
               {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : <><UserCheck className="w-4 h-4" /> Save Attendance</>}
             </button>
           </div>
         </div>
       )}
-      {selectedBatch && students.length === 0 && <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400">No students enrolled in this batch.</div>}
+      {selectedBatch && students.length === 0 && <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-8 text-center text-slate-400">No students enrolled in this batch.</div>}
     </div>
   )
 }

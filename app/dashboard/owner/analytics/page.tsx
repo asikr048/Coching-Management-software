@@ -70,8 +70,8 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">Revenue & Analytics</h2>
-        <p className="text-sm text-gray-500 mt-1">Business insights and performance metrics — Owner only</p>
+        <h2 className="text-2xl font-bold text-white tracking-tight">Revenue & Analytics</h2>
+        <p className="text-sm text-slate-400 mt-1">Institutional business intelligence and financial trajectory — Owner access only</p>
       </div>
 
       {/* Top Stats */}
@@ -94,23 +94,23 @@ export default async function AnalyticsPage() {
       {/* Monthly Breakdown + Payment Methods */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Monthly Breakdown Table */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
           <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="w-5 h-5 text-indigo-600" />
-            <h3 className="font-semibold text-gray-800">Monthly Revenue (Last 6 Months)</h3>
+            <BarChart3 className="w-5 h-5 text-amber-400" />
+            <h3 className="font-bold text-white text-base">Monthly Revenue (Last 6 Months)</h3>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3.5">
             {monthlyData.map((m, i) => {
               const maxRev = Math.max(...monthlyData.map(x => x.revenue), 1)
               const pct = Math.round((m.revenue / maxRev) * 100)
               return (
                 <div key={i}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium text-gray-700">{m.month}</span>
-                    <span className="text-gray-600 font-semibold">{formatCurrency(m.revenue)}</span>
+                  <div className="flex justify-between text-sm mb-1.5">
+                    <span className="font-semibold text-slate-300">{m.month}</span>
+                    <span className="text-amber-300 font-bold">{formatCurrency(m.revenue)}</span>
                   </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all" style={{ width: `${pct}%` }} />
+                  <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+                    <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all" style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               )
@@ -119,27 +119,27 @@ export default async function AnalyticsPage() {
         </div>
 
         {/* Payment Method Breakdown */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
           <div className="flex items-center gap-2 mb-4">
-            <PieChart className="w-5 h-5 text-purple-600" />
-            <h3 className="font-semibold text-gray-800">Payment Methods (This Month)</h3>
+            <PieChart className="w-5 h-5 text-amber-400" />
+            <h3 className="font-bold text-white text-base">Payment Methods (This Month)</h3>
           </div>
           {methodBreakdown.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-8">No payments this month</p>
+            <p className="text-slate-500 text-sm text-center py-8">No payments this month</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {methodBreakdown.map(([method, amount]) => {
                 const pct = thisMonthRevenue > 0 ? Math.round((amount / thisMonthRevenue) * 100) : 0
                 return (
                   <div key={method} className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${methodColors[method] || "bg-gray-400"}`} />
+                    <div className={`w-3 h-3 rounded-full ${methodColors[method] || "bg-slate-700"}`} />
                     <div className="flex-1">
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="font-medium text-gray-700 capitalize">{method}</span>
-                        <span className="text-gray-600">{formatCurrency(amount)} ({pct}%)</span>
+                      <div className="flex justify-between text-sm mb-1.5">
+                        <span className="font-semibold text-slate-300 capitalize">{method}</span>
+                        <span className="text-slate-400 font-mono text-xs">{formatCurrency(amount)} <span className="text-amber-400 font-bold">({pct}%)</span></span>
                       </div>
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${methodColors[method] || "bg-gray-400"}`} style={{ width: `${pct}%` }} />
+                      <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800/80">
+                        <div className={`h-full rounded-full ${methodColors[method] || "bg-slate-700"}`} style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   </div>
@@ -151,31 +151,40 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Top Batches by Revenue */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6">
+      <div className="bg-slate-900/90 backdrop-blur-md rounded-2xl border border-slate-800 p-6 shadow-xl">
         <div className="flex items-center gap-2 mb-4">
-          <BookOpen className="w-5 h-5 text-blue-600" />
-          <h3 className="font-semibold text-gray-800">Top Batches by Revenue ({now.getFullYear()})</h3>
+          <BookOpen className="w-5 h-5 text-amber-400" />
+          <h3 className="font-bold text-white text-base">Top Batches by Revenue ({now.getFullYear()})</h3>
         </div>
         {topBatches.length === 0 ? (
-          <p className="text-gray-400 text-sm text-center py-4">No revenue data yet</p>
+          <p className="text-slate-500 text-sm text-center py-4">No revenue data yet</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead><tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">#</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Batch</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Revenue</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Share</th>
-              </tr></thead>
-              <tbody className="divide-y divide-gray-100">
+              <thead>
+                <tr className="bg-slate-950/80 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
+                  <th className="px-4 py-3.5 text-left">#</th>
+                  <th className="px-4 py-3.5 text-left">Batch</th>
+                  <th className="px-4 py-3.5 text-left">Revenue</th>
+                  <th className="px-4 py-3.5 text-left">Share</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/70">
                 {topBatches.map((b, i) => {
                   const share = yearRevenue > 0 ? Math.round((b.revenue / yearRevenue) * 100) : 0
                   return (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 text-sm text-gray-500">{i + 1}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-gray-800">{b.name}</td>
-                      <td className="px-4 py-3 text-sm font-semibold text-emerald-600">{formatCurrency(b.revenue)}</td>
-                      <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${share}%` }} /></div><span className="text-xs text-gray-500">{share}%</span></div></td>
+                    <tr key={i} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="px-4 py-3.5 text-sm text-slate-400 font-mono">{i + 1}</td>
+                      <td className="px-4 py-3.5 text-sm font-bold text-white">{b.name}</td>
+                      <td className="px-4 py-3.5 text-sm font-extrabold text-amber-400">{formatCurrency(b.revenue)}</td>
+                      <td className="px-4 py-3.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-24 h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                            <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-600" style={{ width: `${share}%` }} />
+                          </div>
+                          <span className="text-xs font-bold text-amber-300 font-mono">{share}%</span>
+                        </div>
+                      </td>
                     </tr>
                   )
                 })}
