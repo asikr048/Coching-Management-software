@@ -351,7 +351,139 @@ export default function StudentProfilePage() {
         </button>
       </div>
 
-      {/* 1. My Online Courses Section */}
+      {/* 1. My Classroom Batches */}
+      <div id="my-batches" className="space-y-4 scroll-mt-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">My Classroom Batches</h2>
+              <p className="text-xs text-gray-500">Live offline batches, room schedules, and teachers</p>
+            </div>
+          </div>
+          <Link href="/marketplace" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1">
+            Browse Batches <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
+
+        {enrollments.length === 0 && pendingBatchSubmissions.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-4">
+            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
+              <BookOpen className="w-8 h-8" />
+            </div>
+            <h3 className="text-lg font-bold text-gray-900">No Batches Enrolled Yet</h3>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">
+              You are registered with ID <span className="font-semibold text-indigo-600">{profile?.user_id}</span>. Contact the coaching reception or visit the office to enroll into an active batch!
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Link href="/marketplace" className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-sm">View Available Batches</Link>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Pending Batches */}
+            {pendingBatchSubmissions.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-amber-500" />
+                  <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider">Pending Batch Approval ({pendingBatchSubmissions.length})</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {pendingBatchSubmissions.map((sub, i) => {
+                    const b = sub.batch
+                    return (
+                      <div key={`pending-batch-${i}`} className="bg-amber-50/50 rounded-2xl border-2 border-amber-200 border-dashed p-5 space-y-3">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
+                            <h3 className="text-base font-bold text-gray-900 mt-1.5">{b?.name || "Batch"}</h3>
+                          </div>
+                          <span className="inline-flex items-center gap-1 text-xs px-2.5 py-0.5 bg-amber-100 text-amber-700 font-semibold rounded-full border border-amber-300 animate-pulse">
+                            <Clock className="w-3 h-3" /> Pending
+                          </span>
+                        </div>
+                        <div className="bg-amber-100/70 rounded-xl p-2.5 border border-amber-200/50">
+                          <p className="text-xs text-amber-700 flex items-center gap-1.5">
+                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                            Payment is being verified. Access granted once approved.
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Active Batches */}
+            {enrollments.length > 0 && (
+              <div className="space-y-3">
+                {pendingBatchSubmissions.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Active Batches ({enrollments.length})</h3>
+                  </div>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {enrollments.map((enr, i) => {
+                    const b = enr.batch
+                    const targetBatchId = enr.batch_id || b?.id
+                    const batchExamList = examResults.filter((r: any) => r.exam?.batch_id === targetBatchId || r.batch_id === targetBatchId)
+                    const latestExam = batchExamList.length > 0 ? batchExamList[0] : null
+                    const latestTotal = Number(latestExam?.exam?.total_marks) || 100
+                    const latestRaw = latestExam ? (latestExam.obtained_marks ?? latestExam.marks_obtained) : null
+                    const latestObt = latestRaw != null && latestRaw !== "" ? Number(latestRaw) : 0
+
+                    return (
+                      <Link key={i} href={`/student/batch/${targetBatchId}`}
+                        className="group bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all space-y-3 cursor-pointer">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
+                            <h3 className="text-base font-bold text-gray-900 mt-1.5 group-hover:text-indigo-600 transition-colors">{b?.name || "Batch"}</h3>
+                          </div>
+                          <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-200">{enr.status || "Active"}</span>
+                        </div>
+                        <div className="space-y-1.5 text-sm text-gray-500">
+                          {b?.teacher?.name && <p className="flex items-center gap-2"><User className="w-3.5 h-3.5" /> {b.teacher.name}</p>}
+                          {b?.schedule && <p className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> {b.schedule}</p>}
+                          {b?.monthly_fee != null && <p className="flex items-center gap-2"><DollarSign className="w-3.5 h-3.5" /> {formatCurrency(b.monthly_fee)}/mo</p>}
+                        </div>
+
+                        {batchExamList.length > 0 && (
+                          <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                            <span className="text-violet-700 font-semibold flex items-center gap-1.5 bg-violet-50 px-2 py-1 rounded-lg border border-violet-100">
+                              <Award className="w-3.5 h-3.5 text-violet-600 shrink-0" />
+                              <span className="truncate max-w-[120px]">{latestExam?.exam?.title || "Exam"}:</span>
+                              <span className="font-bold text-violet-900">{latestObt}/{latestTotal}</span>
+                              {latestExam?.grade && (
+                                <span className="px-1.5 py-0.2 bg-white rounded text-[10px] font-bold border border-violet-200 text-violet-800">
+                                  {latestExam.grade}
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-[11px] text-gray-400 font-medium">
+                              {batchExamList.length} {batchExamList.length === 1 ? "exam" : "exams"}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex items-center justify-end text-xs text-indigo-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity pt-1">
+                          View Details <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 2. My Online Courses Section */}
       <div id="my-courses" className="space-y-4 scroll-mt-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -471,138 +603,6 @@ export default function StudentProfilePage() {
                           <span className="text-purple-600 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                             Start Learning <PlayCircle className="w-4 h-4 ml-0.5" />
                           </span>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 2. My Classroom Batches */}
-      <div id="my-batches" className="space-y-4 scroll-mt-8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-700">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-gray-900">My Classroom Batches</h2>
-              <p className="text-xs text-gray-500">Live offline batches, room schedules, and teachers</p>
-            </div>
-          </div>
-          <Link href="/marketplace" className="text-sm text-indigo-600 hover:text-indigo-700 font-semibold flex items-center gap-1">
-            Browse Batches <ChevronRight className="w-4 h-4" />
-          </Link>
-        </div>
-
-        {enrollments.length === 0 && pendingBatchSubmissions.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center space-y-4">
-            <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mx-auto text-indigo-600">
-              <BookOpen className="w-8 h-8" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900">No Batches Enrolled Yet</h3>
-            <p className="text-gray-500 text-sm max-w-md mx-auto">
-              You are registered with ID <span className="font-semibold text-indigo-600">{profile?.user_id}</span>. Contact the coaching reception or visit the office to enroll into an active batch!
-            </p>
-            <div className="flex items-center justify-center gap-3 pt-2">
-              <Link href="/marketplace" className="px-6 py-2.5 bg-indigo-600 text-white font-semibold rounded-xl text-sm hover:bg-indigo-700 transition-colors shadow-sm">View Available Batches</Link>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {/* Pending Batches */}
-            {pendingBatchSubmissions.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-amber-500" />
-                  <h3 className="text-sm font-bold text-amber-700 uppercase tracking-wider">Pending Batch Approval ({pendingBatchSubmissions.length})</h3>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {pendingBatchSubmissions.map((sub, i) => {
-                    const b = sub.batch
-                    return (
-                      <div key={`pending-batch-${i}`} className="bg-amber-50/50 rounded-2xl border-2 border-amber-200 border-dashed p-5 space-y-3">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
-                            <h3 className="text-base font-bold text-gray-900 mt-1.5">{b?.name || "Batch"}</h3>
-                          </div>
-                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 bg-amber-100 text-amber-700 font-semibold rounded-full border border-amber-300 animate-pulse">
-                            <Clock className="w-3 h-3" /> Pending
-                          </span>
-                        </div>
-                        <div className="bg-amber-100/70 rounded-xl p-2.5 border border-amber-200/50">
-                          <p className="text-xs text-amber-700 flex items-center gap-1.5">
-                            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                            Payment is being verified. Access granted once approved.
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Active Batches */}
-            {enrollments.length > 0 && (
-              <div className="space-y-3">
-                {pendingBatchSubmissions.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-emerald-500" />
-                    <h3 className="text-sm font-bold text-emerald-700 uppercase tracking-wider">Active Batches ({enrollments.length})</h3>
-                  </div>
-                )}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {enrollments.map((enr, i) => {
-                    const b = enr.batch
-                    const targetBatchId = enr.batch_id || b?.id
-                    const batchExamList = examResults.filter((r: any) => r.exam?.batch_id === targetBatchId || r.batch_id === targetBatchId)
-                    const latestExam = batchExamList.length > 0 ? batchExamList[0] : null
-                    const latestTotal = Number(latestExam?.exam?.total_marks) || 100
-                    const latestRaw = latestExam ? (latestExam.obtained_marks ?? latestExam.marks_obtained) : null
-                    const latestObt = latestRaw != null && latestRaw !== "" ? Number(latestRaw) : 0
-
-                    return (
-                      <Link key={i} href={`/student/batch/${targetBatchId}`}
-                        className="group bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all space-y-3 cursor-pointer">
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
-                            <h3 className="text-base font-bold text-gray-900 mt-1.5 group-hover:text-indigo-600 transition-colors">{b?.name || "Batch"}</h3>
-                          </div>
-                          <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-200">{enr.status || "Active"}</span>
-                        </div>
-                        <div className="space-y-1.5 text-sm text-gray-500">
-                          {b?.teacher?.name && <p className="flex items-center gap-2"><User className="w-3.5 h-3.5" /> {b.teacher.name}</p>}
-                          {b?.schedule && <p className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> {b.schedule}</p>}
-                          {b?.monthly_fee != null && <p className="flex items-center gap-2"><DollarSign className="w-3.5 h-3.5" /> {formatCurrency(b.monthly_fee)}/mo</p>}
-                        </div>
-
-                        {batchExamList.length > 0 && (
-                          <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
-                            <span className="text-violet-700 font-semibold flex items-center gap-1.5 bg-violet-50 px-2 py-1 rounded-lg border border-violet-100">
-                              <Award className="w-3.5 h-3.5 text-violet-600 shrink-0" />
-                              <span className="truncate max-w-[120px]">{latestExam?.exam?.title || "Exam"}:</span>
-                              <span className="font-bold text-violet-900">{latestObt}/{latestTotal}</span>
-                              {latestExam?.grade && (
-                                <span className="px-1.5 py-0.2 bg-white rounded text-[10px] font-bold border border-violet-200 text-violet-800">
-                                  {latestExam.grade}
-                                </span>
-                              )}
-                            </span>
-                            <span className="text-[11px] text-gray-400 font-medium">
-                              {batchExamList.length} {batchExamList.length === 1 ? "exam" : "exams"}
-                            </span>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-end text-xs text-indigo-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity pt-1">
-                          View Details <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
                         </div>
                       </Link>
                     )
