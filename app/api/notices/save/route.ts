@@ -2,6 +2,68 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
+// Adaptive notice save with automatic schema detection and column fallback
+async function saveNoticeAdaptive(
+  adminClient: any,
+  noticeId: string | undefined,
+  initialPayload: Record<string, any>
+) {
+  let currentPayload = { ...initialPayload }
+
+  // Clean out null/undefined/empty arrays that might cause schema issues if column is missing
+  while (true) {
+    const query = noticeId
+      ? adminClient.from("notices").update(currentPayload).eq("id", noticeId).select("*").maybeSingle()
+      : adminClient.from("notices").insert([currentPayload]).select("*").maybeSingle()
+
+    const { data, error } = await query
+
+    if (!error && data) {
+      return data
+    }
+
+    const errMsg = (error?.message || "").toLowerCase()
+    console.warn(
+      `Notice save failed with keys [${Object.keys(currentPayload).join(", ")}]. Error: ${error?.message}`
+    )
+
+    // Strip branch_ids if not supported
+    if (errMsg.includes("branch_ids") && "branch_ids" in currentPayload) {
+      delete currentPayload.branch_ids
+      continue
+    }
+
+    // Strip branch_id if not supported
+    if (errMsg.includes("branch_id") && "branch_id" in currentPayload) {
+      delete currentPayload.branch_id
+      continue
+    }
+
+    // Strip notice_date if not supported
+    if (errMsg.includes("notice_date") && "notice_date" in currentPayload) {
+      delete currentPayload.notice_date
+      continue
+    }
+
+    // If general schema error (e.g. PGRST204 or 42703), peel off non-core columns in order
+    if ("branch_ids" in currentPayload) {
+      delete currentPayload.branch_ids
+      continue
+    }
+    if ("branch_id" in currentPayload) {
+      delete currentPayload.branch_id
+      continue
+    }
+    if ("notice_date" in currentPayload) {
+      delete currentPayload.notice_date
+      continue
+    }
+
+    // If only basic columns { title, content, is_active } remain and it still failed, throw
+    throw error || new Error("Failed to save notice row in database.")
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -47,16 +109,22 @@ export async function POST(req: NextRequest) {
       if (callerByEmail) callerStaff = callerByEmail
     }
 
-    // Retrieve custom roles and multi-branch assignments from site_settings
+    // Retrieve custom roles and persistent maps from site_settings
     let customRolesMap: Record<string, string> = {}
     let branchAssignmentsMap: Record<string, string[]> = {}
     let noticeBranchAssignments: Record<string, string[]> = {}
+    let noticeDatesMap: Record<string, string> = {}
 
     try {
       const { data: settingRows } = await admin
         .from("site_settings")
         .select("key, value")
-        .in("key", ["staff_custom_roles", "staff_branch_assignments", "notice_branch_assignments"])
+        .in("key", [
+          "staff_custom_roles",
+          "staff_branch_assignments",
+          "notice_branch_assignments",
+          "notice_dates",
+        ])
 
       if (settingRows) {
         settingRows.forEach(row => {
@@ -68,6 +136,9 @@ export async function POST(req: NextRequest) {
           }
           if (row.key === "notice_branch_assignments" && row.value) {
             try { noticeBranchAssignments = JSON.parse(row.value) } catch {}
+          }
+          if (row.key === "notice_dates" && row.value) {
+            try { noticeDatesMap = JSON.parse(row.value) } catch {}
           }
         })
       }
@@ -149,13 +220,15 @@ export async function POST(req: NextRequest) {
           .maybeSingle()
 
         if (existingNotice) {
-          const existingAssigned = noticeBranchAssignments[id] || (existingNotice.branch_ids || (existingNotice.branch_id ? [existingNotice.branch_id] : []))
+          const existingAssigned =
+            noticeBranchAssignments[id] ||
+            (existingNotice.branch_ids || (existingNotice.branch_id ? [existingNotice.branch_id] : []))
           if (existingAssigned.length === 0) {
             // It was a global notice!
             return NextResponse.json(
               {
                 error:
-                  "সার্বজনীন (Global) নোটিশ সম্পাদনা করার অনুমতি শুধুমাত্র মালিক বা অল-ব্রাঞ্চ পরিচালকের আছে (You cannot edit global notices).",
+                  "সার্বজনীন (Global) নোটিশ সম্পাদনা করার অনুমতি শুধুমাত্র প্রধান অ্যাডমিনের আছে (You cannot edit global notices).",
               },
               { status: 403 }
             )
@@ -174,11 +247,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 5. Build payload for notices table
+    // 5. Build full payload for notices table
     const primaryBranchId = requestedIsGlobal ? null : (requestedBranchIds[0] || null)
     const effectiveNoticeDate = notice_date || new Date().toISOString().split("T")[0]
 
-    // Payload with multi-branch array
     const fullPayload: Record<string, any> = {
       title: title.trim(),
       content: (content || "").trim(),
@@ -188,82 +260,34 @@ export async function POST(req: NextRequest) {
       is_active: !!is_active,
     }
 
-    let savedNotice: any = null
+    // Save with adaptive column pruning fallback
+    const savedNotice = await saveNoticeAdaptive(admin, id, fullPayload)
 
-    if (id) {
-      // Update
-      const { data, error } = await admin
-        .from("notices")
-        .update(fullPayload)
-        .eq("id", id)
-        .select("*")
-        .maybeSingle()
-
-      if (error) {
-        // Fallback: in case branch_ids column does not exist in schema yet
-        const fallbackPayload = {
-          title: title.trim(),
-          content: (content || "").trim(),
-          branch_id: primaryBranchId,
-          notice_date: effectiveNoticeDate,
-          is_active: !!is_active,
-        }
-        const { data: fbData, error: fbError } = await admin
-          .from("notices")
-          .update(fallbackPayload)
-          .eq("id", id)
-          .select("*")
-          .single()
-
-        if (fbError) throw fbError
-        savedNotice = fbData
-      } else {
-        savedNotice = data
-      }
-    } else {
-      // Insert
-      const { data, error } = await admin
-        .from("notices")
-        .insert([fullPayload])
-        .select("*")
-        .maybeSingle()
-
-      if (error) {
-        // Fallback: in case branch_ids column does not exist
-        const fallbackPayload = {
-          title: title.trim(),
-          content: (content || "").trim(),
-          branch_id: primaryBranchId,
-          notice_date: effectiveNoticeDate,
-          is_active: !!is_active,
-        }
-        const { data: fbData, error: fbError } = await admin
-          .from("notices")
-          .insert([fallbackPayload])
-          .select("*")
-          .single()
-
-        if (fbError) throw fbError
-        savedNotice = fbData
-      } else {
-        savedNotice = data
-      }
-    }
-
-    if (!savedNotice) {
-      throw new Error("Failed to save notice row in database.")
-    }
-
-    // 6. Update notice_branch_assignments in site_settings for guaranteed multi-branch persistence
+    // 6. Update notice_branch_assignments and notice_dates in site_settings for guaranteed persistence
     try {
       noticeBranchAssignments[savedNotice.id] = requestedIsGlobal ? [] : requestedBranchIds
-      await admin.from("site_settings").upsert({
-        key: "notice_branch_assignments",
-        value: JSON.stringify(noticeBranchAssignments),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "key" })
+      noticeDatesMap[savedNotice.id] = effectiveNoticeDate
+
+      await Promise.all([
+        admin.from("site_settings").upsert(
+          {
+            key: "notice_branch_assignments",
+            value: JSON.stringify(noticeBranchAssignments),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "key" }
+        ),
+        admin.from("site_settings").upsert(
+          {
+            key: "notice_dates",
+            value: JSON.stringify(noticeDatesMap),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "key" }
+        ),
+      ])
     } catch (settingErr) {
-      console.warn("Could not persist notice_branch_assignments in site_settings:", settingErr)
+      console.warn("Could not persist notice metadata in site_settings:", settingErr)
     }
 
     // 7. Enrich saved notice with branch metadata
@@ -273,13 +297,15 @@ export async function POST(req: NextRequest) {
     const finalBranchIds = requestedIsGlobal ? [] : requestedBranchIds
     const enrichedNotice = {
       ...savedNotice,
+      notice_date: savedNotice.notice_date || effectiveNoticeDate,
       branch_id: primaryBranchId,
       branch_ids: finalBranchIds,
       branch_names: finalBranchIds.map(bId => branchesMap.get(bId) || bId),
       is_global: requestedIsGlobal,
-      branch: primaryBranchId && branchesMap.has(primaryBranchId)
-        ? { id: primaryBranchId, name: branchesMap.get(primaryBranchId)! }
-        : null,
+      branch:
+        primaryBranchId && branchesMap.has(primaryBranchId)
+          ? { id: primaryBranchId, name: branchesMap.get(primaryBranchId)! }
+          : null,
     }
 
     return NextResponse.json({

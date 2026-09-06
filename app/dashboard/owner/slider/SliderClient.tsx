@@ -234,20 +234,26 @@ export default function SliderClient({
     setNoticeLoading(true)
     try {
       const payload = {
+        id: editNotice?.id,
         title: noticeForm.title.trim(),
         content: noticeForm.content.trim(),
-        branch_id: noticeForm.branch_id || null,
+        branch_ids: noticeForm.branch_id ? [noticeForm.branch_id] : [],
+        is_global: !noticeForm.branch_id,
         is_active: noticeForm.is_active,
       }
+      const res = await fetch("/api/notices/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to save notice")
+
       if (editNotice) {
-        const { error } = await supabase.from("notices").update(payload).eq("id", editNotice.id)
-        if (error) throw error
-        setNotices(prev => prev.map(n => n.id === editNotice.id ? { ...n, ...payload } : n))
+        setNotices(prev => prev.map(n => n.id === editNotice.id ? data.notice : n))
         toast.success("Notice updated")
       } else {
-        const { data, error } = await supabase.from("notices").insert([payload]).select().single()
-        if (error) throw error
-        setNotices(prev => [data, ...prev])
+        setNotices(prev => [data.notice, ...prev])
         toast.success("Notice published to Notice Book")
       }
       setShowNoticeModal(false)
@@ -261,8 +267,14 @@ export default function SliderClient({
   async function handleDeleteNotice(id: string) {
     if (!confirm("Are you sure you want to delete this notice?")) return
     try {
-      const { error } = await supabase.from("notices").delete().eq("id", id)
-      if (error) throw error
+      const res = await fetch("/api/notices/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to delete notice")
+
       setNotices(prev => prev.filter(n => n.id !== id))
       toast.success("Notice deleted")
     } catch (err: any) {
