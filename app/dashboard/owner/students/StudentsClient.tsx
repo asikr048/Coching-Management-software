@@ -1,22 +1,34 @@
 "use client"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, Fragment } from "react"
 import { 
   Search, Download, Eye, Edit, Trash2, MessageSquare, MoreVertical, 
   Calendar, DollarSign, CheckCircle2, ChevronDown, X, ShieldAlert, 
   ShieldCheck, Clock, AlertTriangle, Lock, Unlock, Check, UserCheck, 
-  Layers, ArrowRight, RefreshCw, Send
+  Layers, ArrowRight, RefreshCw, Send,
+  CreditCard, Receipt, Loader2, AlertCircle, CheckCircle, ChevronUp
 } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { formatDate, formatCurrency } from "@/lib/utils"
+import { formatDate, formatCurrency, getMonthLabel } from "@/lib/utils"
+import { checkFinancialAccess } from "@/lib/financial-access"
 import { toast } from "sonner"
 import type { Student } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
 
 interface Batch { id: string; name: string }
-interface DueData { student_id: string; due_amount: number; paid_amount: number; due_date: string; status: string }
+interface DueData { 
+  id: string
+  student_id: string
+  batch_id?: string | null
+  due_month?: string | null
+  due_amount: number
+  paid_amount: number
+  due_date: string
+  status: string
+  batch?: any
+}
 interface ExamData { student_id: string; obtained_marks: number; exams: { total_marks: number } | null | any }
 
 interface CurrentStaff {
@@ -81,6 +93,44 @@ export default function StudentsClient({
   const [sortOption, setSortOption] = useState<SortOption>("default")
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [openDropdown, setOpenDropdown] = useState<string | null>(null)
+
+  // Local Due State
+  const [localDueData, setLocalDueData] = useState<DueData[]>(dueData)
+  useEffect(() => {
+    setLocalDueData(dueData)
+  }, [dueData])
+
+  const [hasFinancialAccess, setHasFinancialAccess] = useState(true)
+  useEffect(() => {
+    checkFinancialAccess().then(({ hasAccess }) => setHasFinancialAccess(hasAccess))
+  }, [])
+
+  // Due Manage Modal States
+  const [dueManageStudent, setDueManageStudent] = useState<any | null>(null)
+  const [expandedDueId, setExpandedDueId] = useState<string | null>(null)
+  const [submittingPayment, setSubmittingPayment] = useState(false)
+  const [dueActionLoading, setDueActionLoading] = useState(false)
+
+  const [payForm, setPayForm] = useState({
+    amount: "",
+    discount: "0",
+    payment_method: "cash",
+    payment_date: new Date().toISOString().split("T")[0],
+    next_due_date: "",
+    referral_name: "",
+    referral_reason: "",
+    notes: "",
+  })
+
+  const [extendDueItem, setExtendDueItem] = useState<DueData | null>(null)
+  const [newDueDateVal, setNewDueDateVal] = useState("")
+
+  const [reduceDueItem, setReduceDueItem] = useState<DueData | null>(null)
+  const [reduceDueAmountVal, setReduceDueAmountVal] = useState("")
+
+  const [smsDueItem, setSmsDueItem] = useState<DueData | null>(null)
+  const [smsDueMessage, setSmsDueMessage] = useState("")
+  const [sendingDueSms, setSendingDueSms] = useState(false)
 
   // ==========================================
   // DELETION REQUESTS & 24H TIMELOCK STATE
@@ -170,9 +220,10 @@ export default function StudentsClient({
   const enrichedStudents = useMemo(() => {
     return localStudents.map(student => {
       // Dues
-      const sDues = dueData.filter(d => d.student_id === student.id)
-      const totalDue = sDues.reduce((acc, curr) => acc + (curr.due_amount - (curr.paid_amount || 0)), 0)
-      const nearestDue = sDues
+      const sDues = localDueData.filter(d => d.student_id === student.id)
+      const activeDues = sDues.filter(d => d.status !== "paid" && d.status !== "waived")
+      const totalDue = activeDues.reduce((acc, curr) => acc + Math.max(0, (curr.due_amount || 0) - (curr.paid_amount || 0)), 0)
+      const nearestDue = activeDues
         .filter(d => d.due_date)
         .map(d => new Date(d.due_date).getTime())
         .sort((a, b) => a - b)[0]
@@ -191,12 +242,13 @@ export default function StudentsClient({
 
       return {
         ...student,
+        dues: sDues,
         totalDue,
         nearestDueDate: nearestDue ? new Date(nearestDue).toISOString() : null,
         performance
       }
     })
-  }, [localStudents, dueData, examData])
+  }, [localStudents, localDueData, examData])
 
   const { selectedBranchId } = useBranch()
 
@@ -229,6 +281,259 @@ export default function StudentsClient({
 
     return result
   }, [enrichedStudents, query, batchFilter, sortOption, selectedBranchId])
+
+  // ==========================================
+  // DUE MANAGEMENT ACTION HANDLERS
+  // ==========================================
+  const initPayFormForDue = (d: DueData) => {
+    const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
+    const defaultNextDate = d.due_date ? d.due_date.split("T")[0] : (() => {
+      const nextM = new Date()
+      nextM.setMonth(nextM.getMonth() + 1)
+      nextM.setDate(10)
+      return nextM.toISOString().split("T")[0]
+    })()
+
+    setPayForm({
+      amount: String(outstanding),
+      discount: "0",
+      payment_method: "cash",
+      payment_date: new Date().toISOString().split("T")[0],
+      next_due_date: defaultNextDate,
+      referral_name: "",
+      referral_reason: "",
+      notes: "",
+    })
+  }
+
+  const openDueManage = (student: any) => {
+    setDueManageStudent(student)
+    const sDues = localDueData.filter(d => d.student_id === student.id)
+    const activeDue = sDues.find(d => (d.status === "pending" || d.status === "partial") && (d.due_amount - (d.paid_amount || 0)) > 0) || sDues[0]
+    if (activeDue && (activeDue.status === "pending" || activeDue.status === "partial")) {
+      initPayFormForDue(activeDue)
+      setExpandedDueId(activeDue.id)
+    } else {
+      setExpandedDueId(null)
+    }
+  }
+
+  const toggleDuePayExpand = (d: DueData) => {
+    if (expandedDueId === d.id) {
+      setExpandedDueId(null)
+      return
+    }
+    initPayFormForDue(d)
+    setExpandedDueId(d.id)
+  }
+
+  const handleRecordDuePayment = async (due: DueData) => {
+    if (!hasFinancialAccess) {
+      toast.error("Financial access required")
+      return
+    }
+    const payAmt = parseFloat(payForm.amount)
+    if (isNaN(payAmt) || payAmt <= 0) {
+      toast.error("Please enter a valid payment amount")
+      return
+    }
+    const discAmt = parseFloat(payForm.discount || "0")
+    if (isNaN(discAmt) || discAmt < 0) {
+      toast.error("Please enter a valid discount amount")
+      return
+    }
+
+    if (payForm.payment_method === "referral") {
+      if (!payForm.referral_name.trim()) {
+        toast.error("Please enter the Referral Student Name or ID")
+        return
+      }
+      if (!payForm.referral_reason.trim()) {
+        toast.error("Please enter the reason for the referral payment")
+        return
+      }
+    }
+
+    setSubmittingPayment(true)
+    try {
+      const now = new Date()
+      const receiptNo = `RCP-${now.getFullYear()}-${Date.now().toString().slice(-6)}`
+      const totalCredited = payAmt + discAmt
+
+      let paymentNotes: string | null = payForm.notes.trim() || null
+      if (payForm.payment_method === "referral") {
+        const refNotes = `Referral: ${payForm.referral_name.trim()} | Reason: ${payForm.referral_reason.trim()}`
+        paymentNotes = paymentNotes ? `${refNotes} | ${paymentNotes}` : refNotes
+      }
+
+      // 1. Insert into payments table
+      const { error: pError } = await supabase.from("payments").insert({
+        student_id: due.student_id,
+        batch_id: due.batch_id || null,
+        amount: payAmt + discAmt,
+        discount: discAmt,
+        total_paid: payAmt,
+        payment_method: payForm.payment_method,
+        payment_for: "monthly",
+        payment_month: due.due_month || null,
+        receipt_number: receiptNo,
+        notes: paymentNotes,
+        created_at: payForm.payment_date ? `${payForm.payment_date}T12:00:00Z` : undefined,
+      })
+
+      if (pError) throw pError
+
+      // 2. Update fee_dues
+      const currentPaid = Number(due.paid_amount) || 0
+      const newPaidTotal = currentPaid + totalCredited
+      const remainingDue = Math.max(0, due.due_amount - newPaidTotal)
+      const isFullyPaid = remainingDue <= 0
+
+      if (isFullyPaid) {
+        const { error: dError } = await supabase
+          .from("fee_dues")
+          .update({
+            paid_amount: due.due_amount,
+            status: "paid",
+          })
+          .eq("id", due.id)
+
+        if (dError) throw dError
+
+        setLocalDueData(prev => prev.map(item => item.id === due.id ? {
+          ...item,
+          paid_amount: due.due_amount,
+          status: "paid",
+        } : item))
+        toast.success(`✓ Full payment of ${formatCurrency(payAmt)} recorded for ${dueManageStudent?.name || "student"}! Due cleared. Receipt #${receiptNo}`)
+      } else {
+        const nextDate = payForm.next_due_date || due.due_date
+        const { error: dError } = await supabase
+          .from("fee_dues")
+          .update({
+            paid_amount: newPaidTotal,
+            status: "partial",
+            due_date: nextDate,
+          })
+          .eq("id", due.id)
+
+        if (dError) throw dError
+
+        setLocalDueData(prev => prev.map(item => item.id === due.id ? {
+          ...item,
+          paid_amount: newPaidTotal,
+          status: "partial",
+          due_date: nextDate,
+        } : item))
+
+        toast.success(`✓ Partial payment of ${formatCurrency(payAmt)} recorded! Remaining due of ${formatCurrency(remainingDue)} listed as partial due. Receipt #${receiptNo}`)
+      }
+
+      setExpandedDueId(null)
+    } catch (err: any) {
+      console.error("Payment recording failed:", err)
+      toast.error(err.message || "Failed to record payment")
+    } finally {
+      setSubmittingPayment(false)
+    }
+  }
+
+  const handleWaiveEntireDue = async (due: DueData) => {
+    if (!hasFinancialAccess) {
+      toast.error("Financial access required")
+      return
+    }
+    if (!confirm(`Are you sure you want to completely waive the remaining balance for ${dueManageStudent?.name || "this student"}?`)) return
+    setDueActionLoading(true)
+    try {
+      const { error } = await supabase.from("fee_dues").update({ status: "waived", paid_amount: due.due_amount }).eq("id", due.id)
+      if (error) throw error
+      setLocalDueData(prev => prev.map(d => d.id === due.id ? { ...d, status: "waived", paid_amount: due.due_amount } : d))
+      setExpandedDueId(null)
+      toast.success(`${dueManageStudent?.name || "Student"}'s remaining due marked as waived`)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to waive due")
+    } finally {
+      setDueActionLoading(false)
+    }
+  }
+
+  const handleExtendDueDate = async () => {
+    if (!extendDueItem || !newDueDateVal) return
+    setDueActionLoading(true)
+    try {
+      const { error } = await supabase.from("fee_dues").update({ due_date: newDueDateVal }).eq("id", extendDueItem.id)
+      if (error) throw error
+      setLocalDueData(prev => prev.map(d => d.id === extendDueItem.id ? { ...d, due_date: newDueDateVal } : d))
+      toast.success(`Due date extended to ${formatDate(newDueDateVal)}`)
+      setExtendDueItem(null)
+      setNewDueDateVal("")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to extend due date")
+    } finally {
+      setDueActionLoading(false)
+    }
+  }
+
+  const handleReduceDue = async () => {
+    if (!reduceDueItem || !reduceDueAmountVal) return
+    const reduction = parseFloat(reduceDueAmountVal)
+    if (isNaN(reduction) || reduction <= 0) {
+      toast.error("Please enter a valid reduction amount")
+      return
+    }
+    setDueActionLoading(true)
+    try {
+      const newDueAmount = Math.max(0, reduceDueItem.due_amount - reduction)
+      const newStatus = newDueAmount <= (reduceDueItem.paid_amount || 0) ? "paid" : reduceDueItem.status
+      const { error } = await supabase.from("fee_dues").update({ due_amount: newDueAmount, status: newStatus }).eq("id", reduceDueItem.id)
+      if (error) throw error
+      setLocalDueData(prev => prev.map(d => d.id === reduceDueItem.id ? { ...d, due_amount: newDueAmount, status: newStatus } : d))
+      toast.success(`Due reduced by ${formatCurrency(reduction)}`)
+      setReduceDueItem(null)
+      setReduceDueAmountVal("")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to reduce due")
+    } finally {
+      setDueActionLoading(false)
+    }
+  }
+
+  const handleSendDueSms = async () => {
+    if (!smsDueItem || !smsDueMessage.trim()) return
+    const phone = dueManageStudent?.guardian_phone || dueManageStudent?.phone
+    if (!phone) {
+      toast.error("No phone or guardian phone number available for this student")
+      return
+    }
+    setSendingDueSms(true)
+    try {
+      const res = await fetch("/api/sms/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipients: [{
+            phone,
+            message: smsDueMessage.trim(),
+            name: dueManageStudent.name,
+            studentId: dueManageStudent.student_id,
+          }],
+          branchId: dueManageStudent.branch_id || undefined,
+        }),
+      })
+      const result = await res.json()
+      if (result.success || res.ok) {
+        toast.success(`SMS reminder sent to ${phone}!`)
+      } else {
+        toast.error(result.error || "Failed to send SMS reminder via gateway")
+      }
+      setSmsDueItem(null)
+    } catch (e: any) {
+      toast.error(e.message || "SMS send failed")
+    } finally {
+      setSendingDueSms(false)
+    }
+  }
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -792,20 +1097,17 @@ export default function StudentsClient({
                                 <MessageSquare className="w-4 h-4 text-amber-400" /> Send SMS (Gateway)
                               </button>
                               
-                              {student.totalDue > 0 && (
-                                <>
-                                  <div className="h-px bg-slate-800 my-1"></div>
-                                  <button onClick={() => { toast.success("Due date extended"); setOpenDropdown(null); }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-left">
-                                    <Calendar className="w-4 h-4" /> Extend Due Date
-                                  </button>
-                                  <button onClick={() => { toast.success("Due reduction applied"); setOpenDropdown(null); }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-left">
-                                    <DollarSign className="w-4 h-4" /> Reduce Due
-                                  </button>
-                                  <button onClick={() => { toast.success("Marked as paid"); setOpenDropdown(null); }} className="w-full flex items-center gap-2 px-4 py-2 text-sm text-emerald-400 hover:bg-slate-800 transition-colors text-left">
-                                    <CheckCircle2 className="w-4 h-4" /> Mark Due Paid
-                                  </button>
-                                </>
-                              )}
+                              {/* Due Manage */}
+                              <div className="h-px bg-slate-800 my-1"></div>
+                              <button 
+                                onClick={() => {
+                                  setOpenDropdown(null)
+                                  openDueManage(student)
+                                }} 
+                                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-amber-300 hover:bg-slate-800 hover:text-amber-200 transition-colors text-left font-semibold cursor-pointer"
+                              >
+                                <Receipt className="w-4 h-4 text-amber-400" /> Due Manage
+                              </button>
                               
                               {/* Request Deletion (Dual Approval & 24h) */}
                               <div className="h-px bg-slate-800 my-1"></div>
@@ -1340,6 +1642,570 @@ export default function StudentsClient({
                 className="px-4 py-2 text-xs font-bold text-slate-950 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 rounded-xl shadow-md shadow-amber-500/20"
               >
                 Confirm 2nd Approval
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* 4. DUE MANAGE MODAL (MIRRORS FEE DUES)     */}
+      {/* ========================================== */}
+      {dueManageStudent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl border border-slate-200 p-5 sm:p-6 space-y-5 text-slate-900">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-500/10 border border-amber-300 text-amber-600 flex items-center justify-center shrink-0">
+                  <Receipt className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-bold text-slate-900">Due Management & Payments</h3>
+                    <span className="font-mono text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                      {dueManageStudent.student_id}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Student: <strong className="text-slate-800">{dueManageStudent.name}</strong> • Phone:{" "}
+                    <span className="font-mono">{dueManageStudent.guardian_phone || dueManageStudent.phone || "N/A"}</span>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setDueManageStudent(null)
+                  setExpandedDueId(null)
+                }}
+                className="p-1.5 hover:bg-slate-100 rounded-xl text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Dues List & Details */}
+            {(() => {
+              const studentDues = localDueData.filter(d => d.student_id === dueManageStudent.id)
+              const totalOutstanding = studentDues
+                .filter(d => d.status !== "paid" && d.status !== "waived")
+                .reduce((s, d) => s + Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)), 0)
+              const totalFees = studentDues.reduce((s, d) => s + (d.due_amount || 0), 0)
+              const totalPaid = studentDues.reduce((s, d) => s + (d.paid_amount || 0), 0)
+
+              return (
+                <div className="space-y-4">
+                  {/* Summary Bar */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Total Fee</span>
+                      <p className="text-base sm:text-lg font-extrabold text-slate-900 mt-0.5">{formatCurrency(totalFees)}</p>
+                    </div>
+                    <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 block">Total Paid</span>
+                      <p className="text-base sm:text-lg font-extrabold text-emerald-600 mt-0.5">{formatCurrency(totalPaid)}</p>
+                    </div>
+                    <div className="col-span-2 sm:col-span-1 bg-red-50 border border-red-200 rounded-2xl p-3">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-red-600 block">Outstanding Due</span>
+                      <p className="text-base sm:text-lg font-black text-rose-600 mt-0.5">{formatCurrency(totalOutstanding)}</p>
+                    </div>
+                  </div>
+
+                  {studentDues.length === 0 ? (
+                    <div className="py-12 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
+                      <Receipt className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-700">No Fee Due Records Found</p>
+                      <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                        This student currently has no recorded dues. Fee dues are automatically created upon batch enrollment or monthly billing cycles.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                              <th className="px-3.5 py-3">Batch</th>
+                              <th className="px-3.5 py-3">Month</th>
+                              <th className="px-3.5 py-3">Total Fee</th>
+                              <th className="px-3.5 py-3">Paid</th>
+                              <th className="px-3.5 py-3">Remaining Due</th>
+                              <th className="px-3.5 py-3">Due Date</th>
+                              <th className="px-3.5 py-3">Status</th>
+                              <th className="px-3.5 py-3 text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {studentDues.map((d) => {
+                              const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
+                              const isSettled = d.status === "paid" || d.status === "waived" || outstanding <= 0
+                              const isOverdue = !isSettled && d.due_date && new Date(d.due_date) < new Date()
+                              const isExpanded = expandedDueId === d.id
+
+                              return (
+                                <Fragment key={d.id}>
+                                  <tr className={`transition-colors ${isSettled ? "bg-emerald-50/30" : isOverdue ? "bg-red-50/50" : isExpanded ? "bg-amber-50/60 font-medium" : "hover:bg-slate-50/70"}`}>
+                                    <td className="px-3.5 py-3 font-semibold text-slate-900">
+                                      {(Array.isArray(d.batch) ? d.batch[0]?.name : d.batch?.name) || "General / Enrollment"}
+                                    </td>
+                                    <td className="px-3.5 py-3 text-slate-700">
+                                      {d.due_month ? getMonthLabel(d.due_month) : "General"}
+                                    </td>
+                                    <td className="px-3.5 py-3 font-bold text-slate-800">
+                                      {formatCurrency(d.due_amount)}
+                                    </td>
+                                    <td className="px-3.5 py-3 font-bold text-emerald-600">
+                                      {formatCurrency(d.paid_amount || 0)}
+                                    </td>
+                                    <td className="px-3.5 py-3 font-black text-rose-600 text-sm">
+                                      {formatCurrency(outstanding)}
+                                    </td>
+                                    <td className="px-3.5 py-3 text-slate-700 whitespace-nowrap">
+                                      {formatDate(d.due_date)}
+                                      {isOverdue && (
+                                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 inline ml-1.5" />
+                                      )}
+                                    </td>
+                                    <td className="px-3.5 py-3">
+                                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                        isSettled
+                                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                          : d.status === "partial"
+                                          ? "bg-amber-100 text-amber-800 border-amber-300"
+                                          : d.status === "waived"
+                                          ? "bg-slate-100 text-slate-700 border-slate-300"
+                                          : "bg-rose-100 text-rose-800 border-rose-300"
+                                      }`}>
+                                        {isSettled ? "Paid / Settled" : d.status === "waived" ? "Waived" : d.status}
+                                      </span>
+                                    </td>
+                                    <td className="px-3.5 py-3 text-right">
+                                      {isSettled ? (
+                                        <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                                          <Check className="w-3.5 h-3.5 text-emerald-600" /> Settled
+                                        </span>
+                                      ) : (
+                                        <div className="flex items-center justify-end gap-1.5">
+                                          {hasFinancialAccess ? (
+                                            <>
+                                              <button
+                                                onClick={() => {
+                                                  setExtendDueItem(d)
+                                                  setNewDueDateVal(d.due_date ? d.due_date.split("T")[0] : "")
+                                                }}
+                                                title="Extend due date"
+                                                className="p-1.5 hover:bg-slate-100 rounded-lg text-blue-600 transition-colors cursor-pointer"
+                                              >
+                                                <Calendar className="w-4 h-4" />
+                                              </button>
+                                              <button
+                                                onClick={() => {
+                                                  setReduceDueItem(d)
+                                                  setReduceDueAmountVal("")
+                                                }}
+                                                title="Reduce due amount"
+                                                className="p-1.5 hover:bg-slate-100 rounded-lg text-amber-600 transition-colors cursor-pointer"
+                                              >
+                                                <DollarSign className="w-4 h-4" />
+                                              </button>
+                                              <button
+                                                onClick={() => toggleDuePayExpand(d)}
+                                                title={isExpanded ? "Close payment panel" : "Pay / Settle Due"}
+                                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                                  isExpanded
+                                                    ? "bg-amber-600 text-white shadow-sm ring-2 ring-amber-400/40"
+                                                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300"
+                                                }`}
+                                              >
+                                                <CheckCircle className="w-3.5 h-3.5" />
+                                                <span>Pay</span>
+                                                {isExpanded ? (
+                                                  <ChevronUp className="w-3.5 h-3.5" />
+                                                ) : (
+                                                  <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                                                )}
+                                              </button>
+                                            </>
+                                          ) : (
+                                            <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                              <ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Locked
+                                            </span>
+                                          )}
+                                          <button
+                                            onClick={() => {
+                                              setSmsDueItem(d)
+                                              setSmsDueMessage(
+                                                `Dear Parent, fee of ${formatCurrency(outstanding)} for ${dueManageStudent.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`
+                                              )
+                                            }}
+                                            title="Send SMS reminder"
+                                            className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-600 transition-colors cursor-pointer"
+                                          >
+                                            <MessageSquare className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </td>
+                                  </tr>
+
+                                  {/* Expandable Pay Drawer */}
+                                  {isExpanded && (
+                                    <tr className="bg-amber-50/40 border-y border-amber-200">
+                                      <td colSpan={8} className="p-3 sm:p-4">
+                                        <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-lg space-y-4">
+                                          {/* Top Drawer Info */}
+                                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+                                            <div className="flex items-center gap-2.5">
+                                              <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-black border border-amber-200">
+                                                <CreditCard className="w-4 h-4 text-amber-600" />
+                                              </div>
+                                              <div>
+                                                <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                                                  Record Payment for {dueManageStudent.name}
+                                                  <span className="font-mono text-[11px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                                    {d.due_month ? getMonthLabel(d.due_month) : "General"}
+                                                  </span>
+                                                </h4>
+                                                <p className="text-[11px] text-slate-500">
+                                                  Batch: <strong className="text-slate-700">{(Array.isArray(d.batch) ? d.batch[0]?.name : d.batch?.name) || "General"}</strong>
+                                                </p>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                              <div className="px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-right">
+                                                <span className="text-[9px] text-slate-500 uppercase block font-bold">Total Due</span>
+                                                <strong className="text-xs font-bold text-slate-900">{formatCurrency(d.due_amount)}</strong>
+                                              </div>
+                                              <div className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-right">
+                                                <span className="text-[9px] text-emerald-600 uppercase block font-bold">Already Paid</span>
+                                                <strong className="text-xs font-bold text-emerald-700">{formatCurrency(d.paid_amount || 0)}</strong>
+                                              </div>
+                                              <div className="px-2.5 py-1 rounded-lg bg-rose-50 border border-rose-200 text-right">
+                                                <span className="text-[9px] text-rose-600 uppercase block font-bold">Outstanding</span>
+                                                <strong className="text-xs font-black text-rose-700">{formatCurrency(outstanding)}</strong>
+                                              </div>
+                                            </div>
+                                          </div>
+
+                                          {/* Pay Inputs */}
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
+                                            {/* Pay Amount */}
+                                            <div>
+                                              <div className="flex items-center justify-between mb-1">
+                                                <label className="font-bold text-slate-700">Pay Amount (৳) *</label>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => setPayForm(f => ({ ...f, amount: String(outstanding) }))}
+                                                  className="text-[10px] font-bold text-amber-600 hover:underline cursor-pointer"
+                                                >
+                                                  Pay Full (৳{outstanding})
+                                                </button>
+                                              </div>
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                max={outstanding}
+                                                value={payForm.amount}
+                                                onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
+                                                placeholder="e.g. 1000"
+                                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-bold text-sm text-slate-900 focus:outline-none focus:border-amber-500 shadow-sm"
+                                              />
+                                            </div>
+
+                                            {/* Payment Method */}
+                                            <div>
+                                              <label className="block font-bold text-slate-700 mb-1">Payment Method *</label>
+                                              <select
+                                                value={payForm.payment_method}
+                                                onChange={e => setPayForm(f => ({ ...f, payment_method: e.target.value }))}
+                                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-semibold text-xs text-slate-900 focus:outline-none focus:border-amber-500 shadow-sm cursor-pointer"
+                                              >
+                                                <option value="cash">Cash (নগদ)</option>
+                                                <option value="bkash">bKash (বিকাশ)</option>
+                                                <option value="nagad">Nagad (নগদ)</option>
+                                                <option value="rocket">Rocket (রকেট)</option>
+                                                <option value="bank">Bank Transfer</option>
+                                                <option value="referral">Referral / Waiver</option>
+                                              </select>
+                                            </div>
+
+                                            {/* Payment Date */}
+                                            <div>
+                                              <label className="block font-bold text-slate-700 mb-1">Payment Date</label>
+                                              <input
+                                                type="date"
+                                                value={payForm.payment_date}
+                                                onChange={e => setPayForm(f => ({ ...f, payment_date: e.target.value }))}
+                                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl font-medium text-xs text-slate-900 focus:outline-none focus:border-amber-500 shadow-sm"
+                                              />
+                                            </div>
+
+                                            {/* Referral Fields */}
+                                            {payForm.payment_method === "referral" && (
+                                              <>
+                                                <div>
+                                                  <label className="block font-bold text-purple-700 mb-1">Referral Student Name / ID *</label>
+                                                  <input
+                                                    type="text"
+                                                    required
+                                                    value={payForm.referral_name}
+                                                    onChange={e => setPayForm(f => ({ ...f, referral_name: e.target.value }))}
+                                                    placeholder="e.g. Shakib (MS-12345)"
+                                                    className="w-full px-3 py-2 bg-purple-50/50 border border-purple-300 rounded-xl font-medium text-xs text-purple-900 focus:outline-none focus:border-purple-500"
+                                                  />
+                                                </div>
+                                                <div className="sm:col-span-2">
+                                                  <label className="block font-bold text-purple-700 mb-1">Referral Reason / Note *</label>
+                                                  <input
+                                                    type="text"
+                                                    required
+                                                    value={payForm.referral_reason}
+                                                    onChange={e => setPayForm(f => ({ ...f, referral_reason: e.target.value }))}
+                                                    placeholder="e.g. Referred new student"
+                                                    className="w-full px-3 py-2 bg-purple-50/50 border border-purple-300 rounded-xl font-medium text-xs text-purple-900 focus:outline-none focus:border-purple-500"
+                                                  />
+                                                </div>
+                                              </>
+                                            )}
+
+                                            {/* Discount / Fee Waiver */}
+                                            <div>
+                                              <label className="block font-bold text-slate-700 mb-1">Fee Waiver / Discount (৳)</label>
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={payForm.discount}
+                                                onChange={e => setPayForm(f => ({ ...f, discount: e.target.value }))}
+                                                placeholder="0"
+                                                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:border-amber-500 shadow-sm"
+                                              />
+                                            </div>
+
+                                            {/* Partial / Full Notice */}
+                                            {(() => {
+                                              const enteredPay = parseFloat(payForm.amount || "0")
+                                              const enteredDisc = parseFloat(payForm.discount || "0")
+                                              const totalCredit = enteredPay + enteredDisc
+                                              const remaining = Math.max(0, outstanding - totalCredit)
+
+                                              if (remaining > 0) {
+                                                return (
+                                                  <div className="sm:col-span-2 p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                                    <div>
+                                                      <span className="text-xs font-bold text-amber-900 flex items-center gap-1.5">
+                                                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                                                        Partial Payment: Remaining due of{" "}
+                                                        <strong className="text-rose-600 font-black">৳{remaining.toLocaleString("en-BD")}</strong> will remain as partial due!
+                                                      </span>
+                                                      <span className="text-[10px] text-amber-700 block mt-0.5">
+                                                        Row status will update to partial with remaining balance.
+                                                      </span>
+                                                    </div>
+                                                    <div className="shrink-0 w-full sm:w-auto">
+                                                      <label className="block text-[10px] font-bold uppercase text-amber-800 mb-0.5">
+                                                        Next Due Date:
+                                                      </label>
+                                                      <input
+                                                        type="date"
+                                                        value={payForm.next_due_date}
+                                                        onChange={e => setPayForm(f => ({ ...f, next_due_date: e.target.value }))}
+                                                        className="px-2.5 py-1 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-slate-900 focus:outline-none"
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                )
+                                              } else if (totalCredit >= outstanding && outstanding > 0) {
+                                                return (
+                                                  <div className="sm:col-span-2 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-800">
+                                                    <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                                                    <span className="text-xs font-bold">
+                                                      ✓ Full Payment: This due will be completely settled and cleared!
+                                                    </span>
+                                                  </div>
+                                                )
+                                              }
+                                              return null
+                                            })()}
+                                          </div>
+
+                                          {/* Action Buttons in Drawer */}
+                                          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200">
+                                            <button
+                                              type="button"
+                                              onClick={() => handleWaiveEntireDue(d)}
+                                              disabled={submittingPayment || dueActionLoading}
+                                              className="text-xs text-rose-600 hover:text-rose-700 hover:underline font-bold cursor-pointer"
+                                            >
+                                              Waive Entire Remaining Balance (100% Waiver)
+                                            </button>
+
+                                            <div className="flex items-center gap-2">
+                                              <button
+                                                type="button"
+                                                onClick={() => setExpandedDueId(null)}
+                                                className="px-4 py-2 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-100 transition-colors cursor-pointer"
+                                              >
+                                                Cancel
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRecordDuePayment(d)}
+                                                disabled={submittingPayment || !payForm.amount || parseFloat(payForm.amount) <= 0}
+                                                className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                                              >
+                                                {submittingPayment ? (
+                                                  <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Recording Payment...
+                                                  </>
+                                                ) : (
+                                                  <>
+                                                    <Check className="w-3.5 h-3.5" /> Confirm & Record Payment
+                                                  </>
+                                                )}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
+                                </Fragment>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Footer close button */}
+            <div className="flex justify-end pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => {
+                  setDueManageStudent(null)
+                  setExpandedDueId(null)
+                }}
+                className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Modal: Extend Due Date */}
+      {extendDueItem && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-60 p-4 animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-sm p-6 shadow-2xl text-slate-900">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900 text-base">Extend Due Date</h3>
+              <button onClick={() => setExtendDueItem(null)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-600 mb-1">Student: <strong className="text-slate-900">{dueManageStudent?.name}</strong></p>
+            <p className="text-sm text-slate-600 mb-4">Current: <strong className="text-amber-700 font-bold">{formatDate(extendDueItem.due_date)}</strong></p>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">New Due Date</label>
+            <input
+              type="date"
+              value={newDueDateVal}
+              onChange={e => setNewDueDateVal(e.target.value)}
+              className="w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 mb-5"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setExtendDueItem(null)} className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+                Cancel
+              </button>
+              <button
+                onClick={handleExtendDueDate}
+                disabled={dueActionLoading || !newDueDateVal}
+                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+              >
+                {dueActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />} Extend
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Modal: Reduce Due Amount */}
+      {reduceDueItem && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-60 p-4 animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-sm p-6 shadow-2xl text-slate-900">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900 text-base">Reduce Due Amount</h3>
+              <button onClick={() => setReduceDueItem(null)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-600 mb-1">Student: <strong className="text-slate-900">{dueManageStudent?.name}</strong></p>
+            <p className="text-sm text-slate-600 mb-4">
+              Current Due: <strong className="text-rose-600 font-bold">{formatCurrency(reduceDueItem.due_amount - (reduceDueItem.paid_amount || 0))}</strong>
+            </p>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Reduce By (৳)</label>
+            <input
+              type="number"
+              value={reduceDueAmountVal}
+              onChange={e => setReduceDueAmountVal(e.target.value)}
+              min="1"
+              max={reduceDueItem.due_amount - (reduceDueItem.paid_amount || 0)}
+              className="w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 mb-5"
+              placeholder="Amount to reduce"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setReduceDueItem(null)} className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+                Cancel
+              </button>
+              <button
+                onClick={handleReduceDue}
+                disabled={dueActionLoading || !reduceDueAmountVal}
+                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+              >
+                {dueActionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />} Reduce
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-Modal: SMS Reminder */}
+      {smsDueItem && (
+        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center z-60 p-4 animate-in fade-in">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 shadow-2xl text-slate-900">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900 text-base">Send SMS Reminder</h3>
+              <button onClick={() => setSmsDueItem(null)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 transition-colors cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-sm text-slate-600 mb-1">To: <strong className="text-slate-900">{dueManageStudent?.name}</strong></p>
+            <p className="text-sm text-slate-600 mb-4">
+              Phone: <span className="font-mono text-amber-700 font-bold">{dueManageStudent?.guardian_phone || dueManageStudent?.phone || "N/A"}</span>
+            </p>
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Message</label>
+            <textarea
+              value={smsDueMessage}
+              onChange={e => setSmsDueMessage(e.target.value)}
+              rows={4}
+              className="w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 mb-5"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setSmsDueItem(null)} className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-colors cursor-pointer">
+                Cancel
+              </button>
+              <button
+                onClick={handleSendDueSms}
+                disabled={sendingDueSms || !smsDueMessage.trim()}
+                className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-purple-500/20 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {sendingDueSms ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />} Send SMS
               </button>
             </div>
           </div>

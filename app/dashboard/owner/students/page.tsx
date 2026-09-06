@@ -16,8 +16,8 @@ export default async function StudentsPage() {
 
   const { data: feeDues } = await supabase
     .from("fee_dues")
-    .select("student_id, due_amount, paid_amount, due_date, status")
-    .in("status", ["pending", "partial"])
+    .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name)")
+    .order("due_date", { ascending: true })
 
   const { data: examResults } = await supabase
     .from("exam_results")
@@ -62,7 +62,7 @@ export default async function StudentsPage() {
       <StudentsClient 
         students={students || []} 
         batches={batches || []}
-        dueData={feeDues || []}
+        dueData={(feeDues as any) || []}
         examData={examResults as any || []}
         currentStaff={currentStaff}
         initialDeletionRequests={initialDeletionRequests}
