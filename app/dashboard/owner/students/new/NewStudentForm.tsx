@@ -77,6 +77,36 @@ export default function NewStudentForm({
   const [dueDate, setDueDate] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10); return d.toISOString().split("T")[0] })
   
   const [enrolledBatchIds, setEnrolledBatchIds] = useState<string[]>([])
+  const [allBatches, setAllBatches] = useState<Batch[]>(batches || [])
+
+  useEffect(() => {
+    if (batches && batches.length > 0) {
+      setAllBatches(batches)
+    } else {
+      async function fetchBatchesClient() {
+        try {
+          const { data, error } = await supabase
+            .from("batches")
+            .select("id, name, branch_id, origin_batch_id, origin_branch_id, branch_seats, classroom, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee, status, is_active")
+            .order("name")
+
+          if (!error && data && data.length > 0) {
+            const active = data.filter((b: any) => b.is_active !== false && b.status !== "finished")
+            setAllBatches(active.length > 0 ? active : data)
+          }
+        } catch {
+          try {
+            const { data: raw } = await supabase.from("batches").select("*").order("name")
+            if (raw && raw.length > 0) {
+              const active = raw.filter((b: any) => b.is_active !== false && b.status !== "finished")
+              setAllBatches(active.length > 0 ? active : raw)
+            }
+          } catch {}
+        }
+      }
+      fetchBatchesClient()
+    }
+  }, [batches])
   
   // Post-enrollment receipt modal
   const [receipt, setReceipt] = useState<EnrollmentReceipt | null>(null)
@@ -87,13 +117,12 @@ export default function NewStudentForm({
   // When selected student changes, fetch their enrolled batch IDs
   async function handleSelectStudent(s: StudentOpt | null) {
     setSelectedStudent(s)
-    setForm(prev => ({ ...prev, batch_id: "" }))
     if (!s) {
       setEnrolledBatchIds([])
       return
     }
     if (s.branch_id) {
-      setSelectedBranchId(s.branch_id)
+      handleBranchChange(s.branch_id)
     }
     setExistingFix({
       guardian_name: s.guardian_name || "",
@@ -115,6 +144,25 @@ export default function NewStudentForm({
 
   function update(f: string, v: string) { setForm(prev => ({ ...prev, [f]: v })) }
 
+  function handleBranchChange(newBrId: string) {
+    setSelectedBranchId(newBrId)
+    const matches = allBatches.filter(b => 
+      b.branch_id === newBrId ||
+      (b as any).origin_branch_id === newBrId ||
+      ((b as any).branch_seats && (b as any).branch_seats[newBrId] !== undefined) ||
+      !b.branch_id
+    )
+    const candidateList = matches.length > 0 ? matches : allBatches
+    const openBatch = candidateList.find(b => 
+      !enrolledBatchIds.includes(b.id) &&
+      (b.current_seats || 0) < b.max_seats &&
+      b.status !== "admission_closed" &&
+      b.status !== "finished"
+    ) || candidateList[0]
+
+    setForm(f => ({ ...f, batch_id: openBatch ? openBatch.id : "" }))
+  }
+
   function resetForm() {
     setForm({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
     setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
@@ -134,16 +182,34 @@ export default function NewStudentForm({
   }, [searchQuery, students])
 
   const branchFilteredBatches = useMemo(() => {
-    if (!selectedBranchId) return batches
-    const matches = batches.filter(b => 
+    if (!allBatches || allBatches.length === 0) return []
+    if (!selectedBranchId) return allBatches
+    const matches = allBatches.filter(b => 
       b.branch_id === selectedBranchId ||
       (b as any).origin_branch_id === selectedBranchId ||
       ((b as any).branch_seats && (b as any).branch_seats[selectedBranchId] !== undefined)
     )
-    return matches.length > 0 ? matches : batches
-  }, [batches, selectedBranchId])
+    const globalBatches = allBatches.filter(b => !b.branch_id && !(b as any).origin_branch_id)
+    const combined = [...matches, ...globalBatches.filter(g => !matches.some(e => e.id === g.id))]
+    return combined.length > 0 ? combined : allBatches
+  }, [allBatches, selectedBranchId])
 
-  const batch = batches.find(b => b.id === form.batch_id)
+  // Auto-select first available batch if none selected so payment section appears immediately
+  useEffect(() => {
+    if (!form.batch_id && branchFilteredBatches.length > 0) {
+      const firstOpen = branchFilteredBatches.find(b => 
+        !enrolledBatchIds.includes(b.id) &&
+        (b.current_seats || 0) < b.max_seats &&
+        b.status !== "admission_closed" &&
+        b.status !== "finished"
+      ) || branchFilteredBatches[0]
+      if (firstOpen) {
+        setForm(f => ({ ...f, batch_id: firstOpen.id }))
+      }
+    }
+  }, [branchFilteredBatches, form.batch_id, enrolledBatchIds])
+
+  const batch = allBatches.find(b => b.id === form.batch_id)
   const total = batch ? batch.monthly_fee + batch.admission_fee : 0
   const paid = parseFloat(paidAmount) || 0
   const due = Math.max(0, total - paid)
@@ -764,10 +830,7 @@ export default function NewStudentForm({
             <div className="mb-2.5">
               <select
                 value={selectedBranchId}
-                onChange={e => {
-                  setSelectedBranchId(e.target.value)
-                  setForm(f => ({ ...f, batch_id: "" }))
-                }}
+                onChange={e => handleBranchChange(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               >
                 <option value="">-- All Branches (সকল শাখা) --</option>
@@ -785,10 +848,7 @@ export default function NewStudentForm({
                   <button
                     key={b.id}
                     type="button"
-                    onClick={() => {
-                      setSelectedBranchId(b.id)
-                      setForm(f => ({ ...f, batch_id: "" }))
-                    }}
+                    onClick={() => handleBranchChange(b.id)}
                     className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-all text-left truncate flex items-center justify-between cursor-pointer ${
                       isSel
                         ? "bg-amber-600 text-white border-amber-700 shadow-xs ring-2 ring-amber-300"
@@ -806,89 +866,144 @@ export default function NewStudentForm({
 
         {/* Batch selection */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5">
-          <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-            <BookOpen className="w-4 h-4 text-indigo-600" /> Select Batch (ব্যাচ নির্বাচন) *
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {branchFilteredBatches.map(b => {
-              const isEnrolled = enrolledBatchIds.includes(b.id)
-              const sel = form.batch_id === b.id
-              const full = b.current_seats >= b.max_seats
-              const isClosed = b.status === "admission_closed"
-              const isFinished = b.status === "finished"
-              const disabled = full || isEnrolled || isClosed || isFinished
-              const branchObj = branches.find(br => br.id === b.branch_id)
-
-              return (
-                <button
-                  type="button"
-                  key={b.id}
-                  disabled={disabled}
-                  onClick={() => {
-                    if (disabled) return
-                    update("batch_id", sel ? "" : b.id)
-                    if (!sel) setPaidAmount("")
-                  }}
-                  className={`px-3.5 py-3 rounded-xl border text-left text-xs transition-all relative cursor-pointer ${
-                    sel
-                      ? "border-amber-500 bg-amber-50/80 shadow-sm ring-2 ring-amber-500/20"
-                      : isEnrolled
-                      ? "border-emerald-200 bg-emerald-50/50 opacity-70 cursor-not-allowed"
-                      : isClosed
-                      ? "border-amber-200 bg-amber-50/50 opacity-60 cursor-not-allowed"
-                      : isFinished
-                      ? "border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed"
-                      : full
-                      ? "border-slate-200 opacity-40 cursor-not-allowed"
-                      : "border-slate-200 bg-slate-50/60 hover:border-amber-400 hover:bg-amber-50/40"
-                  }`}>
-                  {sel && <Check className="float-right w-4 h-4 text-amber-600" />}
-                  {isEnrolled && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                      ✓ Enrolled
-                    </span>
-                  )}
-                  {!isEnrolled && isClosed && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                      Closed
-                    </span>
-                  )}
-                  {!isEnrolled && isFinished && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                      Finished
-                    </span>
-                  )}
-                  <p className={`font-bold text-[13px] ${isEnrolled ? "text-emerald-700" : isClosed ? "text-amber-800" : "text-slate-900"}`}>{b.name}</p>
-                  
-                  {/* Branch & Classroom Badges */}
-                  {(branchObj || b.classroom) && (
-                    <div className="flex flex-wrap items-center gap-1.5 my-1">
-                      {branchObj && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100/70 text-amber-900 px-1.5 py-0.5 rounded">
-                          <Landmark className="w-2.5 h-2.5" /> {branchObj.name}
-                        </span>
-                      )}
-                      {b.classroom && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-slate-200/80 text-slate-700 px-1.5 py-0.5 rounded">
-                          <DoorOpen className="w-2.5 h-2.5 text-slate-500" /> {b.classroom}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  <p className="text-slate-500 text-[11px] mt-0.5">
-                    {isEnrolled
-                      ? "Already enrolled in this batch"
-                      : isClosed
-                      ? "Admission closed"
-                      : isFinished
-                      ? "Program completed"
-                      : `${b.current_seats}/${b.max_seats} seats • ${formatCurrency(b.monthly_fee)}/mo${b.admission_fee > 0 ? ` +${formatCurrency(b.admission_fee)}` : ""}`}
-                  </p>
-                </button>
-              )
-            })}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
+            <p className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4 text-indigo-600" /> Select Batch (ব্যাচ নির্বাচন) *
+            </p>
+            <span className="text-[11px] text-slate-500 font-medium">
+              {branchFilteredBatches.length} available batch{branchFilteredBatches.length === 1 ? "" : "es"}
+            </span>
           </div>
+
+          {/* Dropdown Selector for Fast Batch Selection */}
+          <div className="mb-3.5">
+            <select
+              value={form.batch_id}
+              onChange={e => {
+                const nextId = e.target.value
+                setForm(f => ({ ...f, batch_id: nextId }))
+                if (!nextId) setPaidAmount("")
+                const selectedB = allBatches.find(b => b.id === nextId)
+                if (selectedB?.branch_id && selectedB.branch_id !== selectedBranchId) {
+                  setSelectedBranchId(selectedB.branch_id)
+                }
+              }}
+              className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white border border-slate-300 focus:border-amber-500 rounded-xl text-sm font-bold text-slate-900 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
+            >
+              <option value="" disabled>-- Select from available batches ({branchFilteredBatches.length} available) --</option>
+              {branchFilteredBatches.map(b => {
+                const isEnrolled = enrolledBatchIds.includes(b.id)
+                const full = b.current_seats >= b.max_seats
+                const isClosed = b.status === "admission_closed"
+                const isFinished = b.status === "finished"
+                const brName = branches.find(br => br.id === b.branch_id)?.name
+                const seatInfo = b.max_seats ? ` [${b.current_seats || 0}/${b.max_seats} seats]` : ""
+                const statusText = isEnrolled ? " (Already Enrolled)" : isClosed ? " (Closed)" : isFinished ? " (Finished)" : full ? " (Full)" : ""
+                return (
+                  <option key={b.id} value={b.id} disabled={full || isEnrolled || isClosed || isFinished}>
+                    {b.name} ({b.class_level || "All"}){brName ? ` • ${brName}` : ""}{seatInfo} — {formatCurrency(b.monthly_fee + (b.admission_fee || 0))}{statusText}
+                  </option>
+                )
+              })}
+            </select>
+          </div>
+
+          {branchFilteredBatches.length === 0 ? (
+            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+              <p className="text-xs font-bold text-slate-700">No batches currently found for this branch.</p>
+              <button
+                type="button"
+                onClick={() => setSelectedBranchId("")}
+                className="mt-2 text-xs font-bold text-amber-600 hover:underline cursor-pointer inline-flex items-center gap-1"
+              >
+                View all available batches across all branches →
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {branchFilteredBatches.map(b => {
+                const isEnrolled = enrolledBatchIds.includes(b.id)
+                const sel = form.batch_id === b.id
+                const full = b.current_seats >= b.max_seats
+                const isClosed = b.status === "admission_closed"
+                const isFinished = b.status === "finished"
+                const disabled = full || isEnrolled || isClosed || isFinished
+                const branchObj = branches.find(br => br.id === b.branch_id)
+
+                return (
+                  <button
+                    type="button"
+                    key={b.id}
+                    disabled={disabled}
+                    onClick={() => {
+                      if (disabled) return
+                      update("batch_id", sel ? "" : b.id)
+                      if (!sel) setPaidAmount("")
+                      if (b.branch_id && b.branch_id !== selectedBranchId) {
+                        setSelectedBranchId(b.branch_id)
+                      }
+                    }}
+                    className={`px-3.5 py-3 rounded-xl border text-left text-xs transition-all relative cursor-pointer ${
+                      sel
+                        ? "border-amber-500 bg-amber-50/80 shadow-sm ring-2 ring-amber-500/20"
+                        : isEnrolled
+                        ? "border-emerald-200 bg-emerald-50/50 opacity-70 cursor-not-allowed"
+                        : isClosed
+                        ? "border-amber-200 bg-amber-50/50 opacity-60 cursor-not-allowed"
+                        : isFinished
+                        ? "border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed"
+                        : full
+                        ? "border-slate-200 opacity-40 cursor-not-allowed"
+                        : "border-slate-200 bg-slate-50/60 hover:border-amber-400 hover:bg-amber-50/40"
+                    }`}>
+                    {sel && <Check className="float-right w-4 h-4 text-amber-600" />}
+                    {isEnrolled && (
+                      <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        ✓ Enrolled
+                      </span>
+                    )}
+                    {!isEnrolled && isClosed && (
+                      <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        Closed
+                      </span>
+                    )}
+                    {!isEnrolled && isFinished && (
+                      <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                        Finished
+                      </span>
+                    )}
+                    <p className={`font-bold text-[13px] ${isEnrolled ? "text-emerald-700" : isClosed ? "text-amber-800" : "text-slate-900"}`}>{b.name}</p>
+                    
+                    {/* Branch & Classroom Badges */}
+                    {(branchObj || b.classroom) && (
+                      <div className="flex flex-wrap items-center gap-1.5 my-1">
+                        {branchObj && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100/70 text-amber-900 px-1.5 py-0.5 rounded">
+                            <Landmark className="w-2.5 h-2.5" /> {branchObj.name}
+                          </span>
+                        )}
+                        {b.classroom && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-slate-200/80 text-slate-700 px-1.5 py-0.5 rounded">
+                            <DoorOpen className="w-2.5 h-2.5 text-slate-500" /> {b.classroom}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <p className="text-slate-500 text-[11px] mt-0.5">
+                      {isEnrolled
+                        ? "Already enrolled in this batch"
+                        : isClosed
+                        ? "Admission closed"
+                        : isFinished
+                        ? "Program completed"
+                        : `${b.current_seats}/${b.max_seats} seats • ${formatCurrency(b.monthly_fee)}/mo${b.admission_fee > 0 ? ` +${formatCurrency(b.admission_fee)}` : ""}`}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Payment */}
@@ -905,6 +1020,17 @@ export default function NewStudentForm({
               <div><label className={labelCls}>Remaining Due</label><div className={`px-3.5 py-2.5 rounded-xl text-sm font-black text-center ${due > 0 ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{formatCurrency(due)}</div></div>
               <div><label className={labelCls}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={ic} /></div>
             </div>
+          </div>
+        )}
+
+        {/* Payment Guidance placeholder if no batch selected */}
+        {!batch && (mode === "new" || selectedStudent) && (
+          <div className="bg-white rounded-2xl border border-dashed border-amber-300/80 p-5 text-center shadow-2xs">
+            <CreditCard className="w-6 h-6 text-amber-500 mx-auto mb-2 opacity-75" />
+            <p className="text-xs font-bold text-slate-800">Select a batch from available batches above</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Once you select a batch, fee calculations and payment details will appear here to complete the next step.
+            </p>
           </div>
         )}
 
