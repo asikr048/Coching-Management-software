@@ -147,30 +147,15 @@ export default function HomePage() {
 
       // 7. Notices
       try {
-        const { data: n } = await supabase.from("notices").select("*, branch:branches(name)").eq("is_active", true).order("created_at", { ascending: false }).limit(15)
-        if (n && n.length > 0) {
+        const { data: n, error: nErr } = await supabase
+          .from("notices")
+          .select("*, branch:branches(name)")
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(15)
+
+        if (!nErr && Array.isArray(n)) {
           setNotices(n)
-        } else {
-          setNotices([
-            {
-              id: "n1",
-              title: "ভর্তি বিজ্ঞপ্তি : ২০২৫-২৬ সেশনে ভর্তি কার্যক্রম চলমান রয়েছে।",
-              content: "সকল শাখার সকল ব্যাচে নতুন সেশনের ক্লাস আগামী ১০ তারিখ হতে শুরু হবে। আসন সংখ্যা সীমিত বিধায় দ্রুত যোগাযোগ করুন।",
-              created_at: new Date().toISOString(),
-            },
-            {
-              id: "n2",
-              title: "এইচএসসি মডেল টেস্ট ২০২৬ এর সময়সূচি প্রকাশিত হয়েছে।",
-              content: "আগামী রবিবার হতে পদার্থবিজ্ঞান ও রসায়ন মডেল টেস্টের চূড়ান্ত সময়সূচি অনুযায়ী পরীক্ষা গ্রহণ করা হবে।",
-              created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-            },
-            {
-              id: "n3",
-              title: "অভিভাবক সমাবেশ ও ত্রৈমাসিক ফলাফল প্রকাশ সংক্রান্ত নোটিশ।",
-              content: "সকল অভিভাবকবৃন্দকে আগামী শুক্রবারে কোচিং অডিটোরিয়ামে উপস্থিত থাকার জন্য বিনীত অনুরোধ করা হচ্ছে।",
-              created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
-            },
-          ])
         }
       } catch {}
 

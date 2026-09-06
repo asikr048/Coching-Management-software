@@ -8,7 +8,7 @@ import {
   BarChart3, UserCheck, MessageSquare, Settings, ChevronLeft,
   ChevronRight, Package, Trophy, Fingerprint, ShoppingBag,
   DollarSign, GitMerge, Home, FileText, ImageIcon, Shield, ClipboardList,
-  X, Globe, Landmark, Sparkles
+  X, Globe, Landmark, Sparkles, Bell
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
 
@@ -24,6 +24,7 @@ const ownerNav = [
   { href: "/dashboard/owner/referrals", icon: GitMerge, label: "Referrals" },
   { href: "/dashboard/owner/exams", icon: FileText, label: "Exams" },
   { href: "/dashboard/owner/materials", icon: Package, label: "Materials" },
+  { href: "/dashboard/owner/notices", icon: Bell, label: "Notice Board (নোটিশ)" },
   { href: "/dashboard/owner/staff", icon: UserCheck, label: "Staff" },
   { href: "/dashboard/owner/sms", icon: MessageSquare, label: "Bulk SMS" },
   { href: "/dashboard/owner/slider", icon: Globe, label: "Homepage Editor" },

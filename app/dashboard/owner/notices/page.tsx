@@ -1,33 +1,32 @@
 import { createClient } from "@/lib/supabase/server"
-import SliderClient from "./SliderClient"
+import NoticesClient from "./NoticesClient"
 
 export const dynamic = "force-dynamic"
 
-export default async function SliderPage() {
+export default async function NoticesPage() {
   const supabase = await createClient()
-  const [
-    { data: slides },
-    { data: settings },
-    { data: blogs },
-    { data: achievements },
-    { data: notices },
-    { data: branches },
-  ] = await Promise.all([
-    supabase.from("slider_images").select("*").order("sort_order"),
-    supabase.from("site_settings").select("key, value"),
-    supabase.from("blogs").select("*").order("created_at", { ascending: false }),
-    supabase.from("achievements").select("*").order("sort_order", { ascending: true }),
-    supabase.from("notices").select("*").order("created_at", { ascending: false }),
-    supabase.from("branches").select("*").order("name", { ascending: true }),
-  ])
 
-  const settingsMap = (settings || []).reduce((acc: Record<string, string>, item: any) => {
-    acc[item.key] = item.value
-    return acc
-  }, {})
+  // 1. Fetch site settings to check if seeded
+  const { data: settingRow } = await supabase
+    .from("site_settings")
+    .select("value")
+    .eq("key", "notices_seeded")
+    .maybeSingle()
 
-  let noticeList = notices || []
-  if (noticeList.length === 0 && settingsMap['notices_seeded'] !== 'true') {
+  // 2. Fetch notices
+  let { data: notices } = await supabase
+    .from("notices")
+    .select("*, branch:branches(id, name)")
+    .order("created_at", { ascending: false })
+
+  // 3. Fetch branches
+  const { data: branches } = await supabase
+    .from("branches")
+    .select("*")
+    .order("name", { ascending: true })
+
+  // 4. Auto-seed the 3 default notices into Supabase if first time so admin can delete/manage them
+  if ((!notices || notices.length === 0) && (!settingRow || settingRow.value !== "true")) {
     const defaults = [
       {
         title: "ভর্তি বিজ্ঞপ্তি : ২০২৫-২৬ সেশনে ভর্তি কার্যক্রম চলমান রয়েছে।",
@@ -48,31 +47,29 @@ export default async function SliderPage() {
         notice_date: new Date(Date.now() - 86400000 * 5).toISOString().split("T")[0],
       },
     ]
+
     try {
-      const { data: seeded } = await supabase.from("notices").insert(defaults).select("*")
-      await supabase.from("site_settings").upsert({ key: "notices_seeded", value: "true" }, { onConflict: "key" })
+      const { data: seeded } = await supabase
+        .from("notices")
+        .insert(defaults)
+        .select("*, branch:branches(id, name)")
+
+      await supabase
+        .from("site_settings")
+        .upsert({ key: "notices_seeded", value: "true" }, { onConflict: "key" })
+
       if (seeded && seeded.length > 0) {
-        noticeList = seeded
+        notices = seeded
       }
-    } catch {}
+    } catch (e) {
+      console.error("Error auto-seeding default notices:", e)
+    }
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-          Homepage Content Editor (ওয়েবসাইট ও কনটেন্ট সম্পাদক)
-        </h1>
-        <p className="text-sm text-amber-400/90 font-medium mt-1">
-          Manage Hero image slider, Notice Board, Student Achievements, Educational Blogs, and Institutional Branding.
-        </p>
-      </div>
-      <SliderClient
-        slides={slides || []}
-        initialSettings={settingsMap}
-        initialBlogs={blogs || []}
-        initialAchievements={achievements || []}
-        initialNotices={noticeList}
+      <NoticesClient
+        initialNotices={notices || []}
         branches={branches || []}
       />
     </div>

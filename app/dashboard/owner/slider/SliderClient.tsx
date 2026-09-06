@@ -626,36 +626,38 @@ export default function SliderClient({
                   <div key={notice.id} className="p-4 flex items-start justify-between gap-4 hover:bg-amber-50/30 transition-colors">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-amber-400 font-bold text-base">»</span>
-                        <h4 className="font-bold text-slate-100 text-sm">{notice.title}</h4>
-                        <span className="text-xs text-slate-500 font-medium">
+                        <span className="text-amber-600 font-bold text-base">»</span>
+                        <h4 className="font-bold text-slate-900 text-sm">{notice.title}</h4>
+                        <span className="text-xs text-slate-400 font-medium">
                           {notice.created_at ? new Date(notice.created_at).toLocaleDateString("en-GB") : ""}
                         </span>
                         {noticeBranch ? (
-                          <span className="text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md font-medium">
+                          <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-md font-medium">
                             {noticeBranch.name}
                           </span>
                         ) : (
-                          <span className="text-[10px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-md font-medium">
+                          <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
                             All Branches
                           </span>
                         )}
                       </div>
                       {notice.content && (
-                        <p className="text-xs text-slate-300 line-clamp-2 pl-4 leading-relaxed">{notice.content}</p>
+                        <p className="text-xs text-slate-600 line-clamp-2 pl-4 leading-relaxed">{notice.content}</p>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button
                         onClick={() => openEditNotice(notice)}
-                        className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-slate-200"
+                        title="Edit Notice"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteNotice(notice.id)}
-                        className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-slate-200"
+                        title="Delete Notice"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
