@@ -199,7 +199,7 @@ export async function POST(req: NextRequest) {
       try {
         const { data: bData } = await admin
           .from("batches")
-          .select("id, name, monthly_fee, admission_fee, current_seats")
+          .select("id, name, monthly_fee, admission_fee, current_seats, origin_batch_id")
           .eq("id", sub.batch_id)
           .maybeSingle()
 
@@ -209,6 +209,36 @@ export async function POST(req: NextRequest) {
           batchTotalFee = batchMonthlyFee + batchAdmissionFee
           if (isEnrollment && (!existingEnr || existingEnr.status !== "active")) {
             await admin.from("batches").update({ current_seats: (bData.current_seats || 0) + 1 }).eq("id", sub.batch_id)
+
+            // Fill selected branch seat if multi-branch child batch exists
+            if (sub.branch_id) {
+              try {
+                const { data: childBatch } = await admin
+                  .from("batches")
+                  .select("id, current_seats")
+                  .eq("origin_batch_id", sub.batch_id)
+                  .eq("branch_id", sub.branch_id)
+                  .maybeSingle()
+
+                if (childBatch) {
+                  await admin.from("batches").update({ current_seats: (childBatch.current_seats || 0) + 1 }).eq("id", childBatch.id)
+                }
+
+                if (bData.origin_batch_id) {
+                  const { data: parentBatch } = await admin
+                    .from("batches")
+                    .select("id, current_seats")
+                    .eq("id", bData.origin_batch_id)
+                    .maybeSingle()
+
+                  if (parentBatch) {
+                    await admin.from("batches").update({ current_seats: (parentBatch.current_seats || 0) + 1 }).eq("id", parentBatch.id)
+                  }
+                }
+              } catch (branchSeatErr) {
+                console.warn("Branch seat update note:", branchSeatErr)
+              }
+            }
           }
         }
       } catch (err) {

@@ -92,6 +92,9 @@ export default function NewStudentForm({
       setEnrolledBatchIds([])
       return
     }
+    if (s.branch_id) {
+      setSelectedBranchId(s.branch_id)
+    }
     setExistingFix({
       guardian_name: s.guardian_name || "",
       guardian_phone: s.guardian_phone || "",
@@ -132,7 +135,11 @@ export default function NewStudentForm({
 
   const branchFilteredBatches = useMemo(() => {
     if (!selectedBranchId) return batches
-    const matches = batches.filter(b => b.branch_id === selectedBranchId)
+    const matches = batches.filter(b => 
+      b.branch_id === selectedBranchId ||
+      (b as any).origin_branch_id === selectedBranchId ||
+      ((b as any).branch_seats && (b as any).branch_seats[selectedBranchId] !== undefined)
+    )
     return matches.length > 0 ? matches : batches
   }, [batches, selectedBranchId])
 
@@ -298,7 +305,32 @@ export default function NewStudentForm({
       }
 
       // Update seats count
-      if (batch) await supabase.from("batches").update({ current_seats: batch.current_seats + 1 }).eq("id", form.batch_id)
+      if (batch) {
+        await supabase.from("batches").update({ current_seats: (batch.current_seats || 0) + 1 }).eq("id", form.batch_id)
+        if (selectedBranchId) {
+          try {
+            const { data: childBatch } = await supabase
+              .from("batches")
+              .select("id, current_seats")
+              .eq("origin_batch_id", form.batch_id)
+              .eq("branch_id", selectedBranchId)
+              .maybeSingle()
+            if (childBatch) {
+              await supabase.from("batches").update({ current_seats: (childBatch.current_seats || 0) + 1 }).eq("id", childBatch.id)
+            }
+            if ((batch as any).origin_batch_id) {
+              const { data: parentBatch } = await supabase
+                .from("batches")
+                .select("id, current_seats")
+                .eq("id", (batch as any).origin_batch_id)
+                .maybeSingle()
+              if (parentBatch) {
+                await supabase.from("batches").update({ current_seats: (parentBatch.current_seats || 0) + 1 }).eq("id", parentBatch.id)
+              }
+            }
+          } catch {}
+        }
+      }
 
       // Record payment
       let receiptNum = `RCP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
@@ -663,7 +695,25 @@ export default function NewStudentForm({
                 <div className="sm:col-span-2"><label className={labelCls}>Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
                 <div><label className={labelCls}>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mt-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3">
+                {branches.length > 0 && (
+                  <div>
+                    <label className={labelCls}>Branch / Campus</label>
+                    <select
+                      value={selectedBranchId}
+                      onChange={e => {
+                        setSelectedBranchId(e.target.value)
+                        setForm(f => ({ ...f, batch_id: "" }))
+                      }}
+                      className={ic}
+                    >
+                      <option value="">Default / All</option>
+                      {branches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div><label className={labelCls}>Email</label><input type="email" value={form.email} onChange={e => update("email", e.target.value)} className={ic} placeholder="Optional" /></div>
                 <div><label className={labelCls}>Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={ic}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
                 <div><label className={labelCls}>Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => update("date_of_birth", e.target.value)} className={ic} /></div>
@@ -711,6 +761,23 @@ export default function NewStudentForm({
               </p>
               <span className="text-[11px] text-slate-500 font-medium">নির্ধারিত শাখার ব্যাচসমূহ দেখতে ক্লিক করুন</span>
             </div>
+            <div className="mb-2.5">
+              <select
+                value={selectedBranchId}
+                onChange={e => {
+                  setSelectedBranchId(e.target.value)
+                  setForm(f => ({ ...f, batch_id: "" }))
+                }}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              >
+                <option value="">-- All Branches (সকল শাখা) --</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>
+                    🏛️ {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {branches.map(b => {
                 const isSel = selectedBranchId === b.id
@@ -724,7 +791,7 @@ export default function NewStudentForm({
                     }}
                     className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-all text-left truncate flex items-center justify-between cursor-pointer ${
                       isSel
-                        ? "bg-amber-600 text-white border-amber-700 shadow-xs"
+                        ? "bg-amber-600 text-white border-amber-700 shadow-xs ring-2 ring-amber-300"
                         : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
                     }`}
                   >

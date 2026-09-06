@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, useMemo, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -18,6 +18,9 @@ interface Batch {
   id: string
   name: string
   branch_id?: string | null
+  origin_branch_id?: string | null
+  origin_batch_id?: string | null
+  branch_seats?: Record<string, any> | null
   classroom?: string | null
   subject: string | null
   class_level: string | null
@@ -83,6 +86,7 @@ function EnrollContent() {
     name: "",
     phone: "",
     email: "",
+    branch_id: "",
     gender: "male",
     date_of_birth: "",
     class_level: "",
@@ -176,6 +180,7 @@ function EnrollContent() {
           name: student.name || prev.name,
           phone: student.phone || prev.phone,
           email: student.email || prev.email,
+          branch_id: student.branch_id || prev.branch_id,
           gender: student.gender || prev.gender,
           date_of_birth: student.date_of_birth || prev.date_of_birth,
           class_level: student.class_level || prev.class_level,
@@ -186,6 +191,9 @@ function EnrollContent() {
           guardian_relation: student.guardian_relation || prev.guardian_relation,
           referred_by_code: student.referred_by_code || prev.referred_by_code,
         }))
+        if (student.branch_id) {
+          setSelectedBranchId(student.branch_id)
+        }
         if (student.student_id) setSubmittedStudentId(student.student_id)
         if (student.id) setSubmittedStudentDbId(student.id)
 
@@ -337,32 +345,55 @@ function EnrollContent() {
         }
 
         // 1. Fetch active batches
-        const { data: batchList, error: batchErr } = await supabase
-          .from("batches")
-          .select("id, name, branch_id, classroom, subject, class_level, monthly_fee, admission_fee, schedule_days, schedule_time, description, max_seats, current_seats, status")
-          .eq("is_active", true)
-          .order("name")
+        let loadedBatches: Batch[] = []
+        try {
+          const { data: fullList, error: fullErr } = await supabase
+            .from("batches")
+            .select("*")
+            .order("name")
 
-        if (!batchErr && batchList) {
-          setBatches(batchList)
-          if (batchIdParam && batchList.some(b => b.id === batchIdParam)) {
-            const targetBatch = batchList.find(b => b.id === batchIdParam)
-            setSelectedBatchId(batchIdParam)
-            if (targetBatch?.branch_id) {
-              setSelectedBranchId(targetBatch.branch_id)
-            } else if (branchList && branchList.length > 0) {
-              setSelectedBranchId(branchList[0].id)
-            }
-          } else if (batchList.length > 0 && !selectedBatchId) {
-            setSelectedBatchId(batchList[0].id)
-            if (batchList[0].branch_id) {
-              setSelectedBranchId(batchList[0].branch_id)
-            } else if (branchList && branchList.length > 0) {
-              setSelectedBranchId(branchList[0].id)
-            }
-          } else if (branchList && branchList.length > 0 && !selectedBranchId) {
-            setSelectedBranchId(branchList[0].id)
+          if (!fullErr && fullList && fullList.length > 0) {
+            loadedBatches = fullList.filter((b: any) => b.is_active !== false && b.status !== "finished")
           }
+        } catch {}
+
+        if (loadedBatches.length === 0) {
+          try {
+            const { data: fallbackList, error: fallbackErr } = await supabase
+              .from("batches")
+              .select("id, name, branch_id, classroom, subject, class_level, monthly_fee, admission_fee, schedule_days, schedule_time, description, max_seats, current_seats, status")
+              .order("name")
+
+            if (!fallbackErr && fallbackList && fallbackList.length > 0) {
+              loadedBatches = fallbackList.filter((b: any) => b.is_active !== false && b.status !== "finished")
+            }
+          } catch {}
+        }
+
+        if (loadedBatches.length > 0) {
+          setBatches(loadedBatches)
+
+          let initialBatch: Batch | undefined
+          if (batchIdParam && loadedBatches.some(b => b.id === batchIdParam)) {
+            initialBatch = loadedBatches.find(b => b.id === batchIdParam)
+          } else {
+            initialBatch = loadedBatches[0]
+          }
+
+          if (initialBatch) {
+            setSelectedBatchId(initialBatch.id)
+            const targetBranch = initialBatch.branch_id || (initialBatch as any).origin_branch_id
+            if (targetBranch) {
+              setSelectedBranchId(targetBranch)
+              setForm(prev => ({ ...prev, branch_id: targetBranch }))
+            } else if (branchList && branchList.length > 0) {
+              setSelectedBranchId(branchList[0].id)
+              setForm(prev => ({ ...prev, branch_id: branchList[0].id }))
+            }
+          }
+        } else if (branchList && branchList.length > 0 && !selectedBranchId) {
+          setSelectedBranchId(branchList[0].id)
+          setForm(prev => ({ ...prev, branch_id: branchList[0].id }))
         }
 
         // 2. Fetch published courses
@@ -454,19 +485,56 @@ function EnrollContent() {
   }, [batchIdParam, courseIdParam, enrollType])
 
   // Batches filtered by selected branch
-  const branchFilteredBatches = batches.filter(b => {
-    if (!selectedBranchId) return true
-    return !b.branch_id || b.branch_id === selectedBranchId
-  })
+  const branchFilteredBatches = useMemo(() => {
+    if (!batches || batches.length === 0) return []
+    if (!selectedBranchId) return batches
 
-  // Synchronize selected batch with current branch
+    // 1. Exact match by branch_id, origin_branch_id, or branch_seats allocation
+    const exactMatches = batches.filter(b => {
+      if (b.branch_id === selectedBranchId) return true
+      if ((b as any).origin_branch_id === selectedBranchId) return true
+      if (b.branch_seats && typeof b.branch_seats === "object" && b.branch_seats[selectedBranchId] !== undefined) return true
+      return false
+    })
+
+    // 2. Global batches available across all branches (no branch specified)
+    const globalBatches = batches.filter(b => !b.branch_id && !(b as any).origin_branch_id)
+
+    const matches = [...exactMatches, ...globalBatches.filter(gb => !exactMatches.some(m => m.id === gb.id))]
+
+    // 3. Fallback: If no batches are specifically assigned to this branch, return all active batches so the dropdown is NEVER empty or blank!
+    return matches.length > 0 ? matches : batches
+  }, [batches, selectedBranchId])
+
+  // Explicit branch change handler that synchronizes selected batch immediately
+  function handleBranchChange(newBranchId: string) {
+    setSelectedBranchId(newBranchId)
+    updateForm("branch_id", newBranchId)
+
+    const matches = batches.filter(b => 
+      b.branch_id === newBranchId || 
+      (b as any).origin_branch_id === newBranchId || 
+      (b.branch_seats && typeof b.branch_seats === "object" && b.branch_seats[newBranchId] !== undefined) ||
+      !b.branch_id
+    )
+
+    if (matches.length > 0) {
+      const openBatch = matches.find(b => b.status !== "admission_closed" && b.status !== "finished") || matches[0]
+      setSelectedBatchId(openBatch.id)
+    } else if (batches.length > 0) {
+      setSelectedBatchId(batches[0].id)
+    }
+  }
+
+  // Synchronize selected batch when branchFilteredBatches changes
   useEffect(() => {
-    if (enrollType === "batch" && selectedBranchId && branchFilteredBatches.length > 0) {
-      if (!selectedBatchId || !branchFilteredBatches.some(b => b.id === selectedBatchId)) {
+    if (enrollType === "batch" && batches.length > 0) {
+      const isCurrentValid = branchFilteredBatches.some(b => b.id === selectedBatchId)
+      if (!isCurrentValid && branchFilteredBatches.length > 0) {
         setSelectedBatchId(branchFilteredBatches[0].id)
       }
     }
-  }, [selectedBranchId, branchFilteredBatches, enrollType, selectedBatchId])
+  }, [selectedBranchId, branchFilteredBatches, enrollType, batches, selectedBatchId])
 
   // Current selected batch or course
   const selectedBatch = batches.find(b => b.id === selectedBatchId) || branchFilteredBatches[0] || batches[0]
@@ -529,6 +597,11 @@ function EnrollContent() {
       if (!form.guardian_phone.trim() || form.guardian_phone.trim().length < 11) {
         toast.error("Please enter a valid 11-digit guardian phone number (01XXXXXXXXX)")
         return
+      }
+      if (branches.length > 0 && !selectedBranchId) {
+        const autoBranch = selectedBatch?.branch_id || (selectedBatch as any)?.origin_branch_id || branches[0].id
+        setSelectedBranchId(autoBranch)
+        updateForm("branch_id", autoBranch)
       }
     }
 
@@ -596,7 +669,7 @@ function EnrollContent() {
         body: JSON.stringify({
           form,
           batchId: selectedBatch?.id || null,
-          branchId: selectedBranchId || selectedBatch?.branch_id || null,
+          branchId: selectedBranchId || form.branch_id || selectedBatch?.branch_id || (selectedBatch as any)?.origin_branch_id || null,
           courseId: selectedCourse?.id || null,
           isCourse,
           paidAmount: actualPaidAmount,
@@ -1329,13 +1402,31 @@ function EnrollContent() {
             {/* Branch Selection for Batches */}
             {!isCourse && branches.length > 0 && (
               <div className="pb-4 mb-4 border-b border-gray-100">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5">
                   <label className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
-                    <Landmark className="w-3.5 h-3.5 text-indigo-600" />
+                    <Landmark className="w-4 h-4 text-indigo-600" />
                     Select Branch (শাখা নির্বাচন করুন) *
                   </label>
-                  <span className="text-[11px] text-gray-400 font-medium">নির্দিষ্ট শাখার ব্যাচ ও ক্লাসরুম দেখতে সিলেক্ট করুন</span>
+                  <span className="text-[11px] text-gray-500 font-medium">নির্দিষ্ট শাখার ব্যাচ ও ক্লাসরুম দেখতে সিলেক্ট করুন</span>
                 </div>
+
+                {/* Dropdown Selector for Branch */}
+                <div className="mb-2.5">
+                  <select
+                    value={selectedBranchId}
+                    onChange={e => handleBranchChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 hover:bg-white border border-indigo-200 focus:border-indigo-500 rounded-xl text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition-all cursor-pointer"
+                  >
+                    <option value="" disabled>-- Select Campus / Branch (শাখা বেছে নিন) --</option>
+                    {branches.map(br => (
+                      <option key={br.id} value={br.id}>
+                        🏛️ {br.name} {br.address ? `(${br.address})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quick Clickable Buttons */}
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                   {branches.map(br => {
                     const isSel = selectedBranchId === br.id
@@ -1343,10 +1434,10 @@ function EnrollContent() {
                       <button
                         key={br.id}
                         type="button"
-                        onClick={() => setSelectedBranchId(br.id)}
-                        className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all text-left truncate flex items-center justify-between cursor-pointer ${
+                        onClick={() => handleBranchChange(br.id)}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all text-left truncate flex items-center justify-between cursor-pointer ${
                           isSel
-                            ? "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                            ? "bg-indigo-600 text-white border-indigo-700 shadow-xs ring-2 ring-indigo-300"
                             : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
                         }`}
                       >
@@ -1375,7 +1466,7 @@ function EnrollContent() {
               </div>
 
               {/* Selector Dropdown */}
-              <div className="sm:w-72">
+              <div className="sm:w-80">
                 {isCourse ? (
                   <select
                     value={selectedCourseId}
@@ -1391,18 +1482,32 @@ function EnrollContent() {
                 ) : (
                   <select
                     value={selectedBatchId}
-                    onChange={e => setSelectedBatchId(e.target.value)}
+                    onChange={e => {
+                      const nextId = e.target.value
+                      setSelectedBatchId(nextId)
+                      const batchObj = batches.find(b => b.id === nextId)
+                      if (batchObj?.branch_id && batchObj.branch_id !== selectedBranchId) {
+                        setSelectedBranchId(batchObj.branch_id)
+                        updateForm("branch_id", batchObj.branch_id)
+                      }
+                    }}
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
-                    {branchFilteredBatches.map(b => {
-                      const isClosed = b.status === "admission_closed" || b.status === "finished"
-                      const branchName = branches.find(br => br.id === b.branch_id)?.name
-                      return (
-                        <option key={b.id} value={b.id}>
-                          {b.name} ({b.class_level || "All"}){branchName ? ` [${branchName}]` : ""}{isClosed ? " — [Admission Closed]" : ""}
-                        </option>
-                      )
-                    })}
+                    {branchFilteredBatches.length === 0 ? (
+                      <option value="" disabled>No batches available</option>
+                    ) : (
+                      branchFilteredBatches.map(b => {
+                        const isClosed = b.status === "admission_closed" || b.status === "finished"
+                        const branchName = branches.find(br => br.id === b.branch_id)?.name || 
+                          ((b as any).origin_branch_id ? branches.find(br => br.id === (b as any).origin_branch_id)?.name : null)
+                        const seatInfo = b.max_seats ? ` (${b.current_seats || 0}/${b.max_seats} seats)` : ""
+                        return (
+                          <option key={b.id} value={b.id}>
+                            {b.name} ({b.class_level || "All"}){branchName ? ` [${branchName}]` : ""}{seatInfo}{isClosed ? " — [Admission Closed]" : ""}
+                          </option>
+                        )
+                      })
+                    )}
                   </select>
                 )}
                 {!isCourse && (() => {
@@ -1811,6 +1916,27 @@ function EnrollContent() {
                     />
                   </div>
                 </div>
+
+                {branches.length > 0 && (
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>Campus / Branch (শাখা)</label>
+                    <div className="relative">
+                      <Landmark className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <select
+                        value={selectedBranchId || form.branch_id || ""}
+                        onChange={e => handleBranchChange(e.target.value)}
+                        className={`${inputClass} pl-10 cursor-pointer font-medium`}
+                      >
+                        <option value="">Online / Main Campus (All Branches)</option>
+                        {branches.map(br => (
+                          <option key={br.id} value={br.id}>
+                            {br.name} {br.address ? `— ${br.address}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               /* If BATCH: Full student information */
@@ -1828,6 +1954,28 @@ function EnrollContent() {
                     />
                   </div>
                 </div>
+
+                {branches.length > 0 && (
+                  <div>
+                    <label className={labelClass}>Campus / Branch (শাখা) <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <Landmark className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <select
+                        required
+                        value={selectedBranchId || form.branch_id || ""}
+                        onChange={e => handleBranchChange(e.target.value)}
+                        className={`${inputClass} pl-10 cursor-pointer font-medium`}
+                      >
+                        <option value="" disabled>Select Campus / Branch</option>
+                        {branches.map(br => (
+                          <option key={br.id} value={br.id}>
+                            {br.name} {br.address ? `— ${br.address}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className={labelClass}>Phone Number <span className="text-red-500">*</span></label>
