@@ -172,14 +172,36 @@ export async function POST(req: NextRequest) {
           enrPayload.branch_id = sub.branch_id
         }
 
-        const { error: enrErr } = await admin.from("enrollments").upsert(
+        let { error: enrErr } = await admin.from("enrollments").upsert(
           enrPayload,
           { onConflict: "student_id,batch_id" }
         )
 
-        if (enrErr && !enrErr.message.includes("duplicate")) {
+        // If schema cache lacks branch_id column on enrollments, retry gracefully without branch_id
+        if (enrErr && (
+          enrErr.message?.includes("branch_id") || 
+          enrErr.message?.includes("schema cache") || 
+          (enrErr as any).code === "PGRST204"
+        )) {
+          delete enrPayload.branch_id
+          const retryRes = await admin.from("enrollments").upsert(
+            enrPayload,
+            { onConflict: "student_id,batch_id" }
+          )
+          enrErr = retryRes.error
+        }
+
+        if (enrErr && !enrErr.message?.includes("duplicate")) {
           console.warn("Enrollment upsert note, trying fallback:", enrErr.message)
-          await admin.from("enrollments").insert(enrPayload)
+          const fallbackRes = await admin.from("enrollments").insert(enrPayload)
+          if (fallbackRes.error && (
+            fallbackRes.error.message?.includes("branch_id") || 
+            fallbackRes.error.message?.includes("schema cache") || 
+            (fallbackRes.error as any).code === "PGRST204"
+          )) {
+            delete enrPayload.branch_id
+            await admin.from("enrollments").insert(enrPayload)
+          }
         }
 
         // Also ensure student is linked to branch if not already linked

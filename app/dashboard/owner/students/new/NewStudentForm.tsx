@@ -259,6 +259,7 @@ export default function NewStudentForm({
 
         // Update missing info
         const updates: Record<string, string> = {}
+        if (selectedBranchId && !selectedStudent.branch_id) (updates as any).branch_id = selectedBranchId
         if (missingFields.includes("guardian_phone") && existingFix.guardian_phone.trim()) updates.guardian_phone = existingFix.guardian_phone.trim()
         if (missingFields.includes("guardian_name") && existingFix.guardian_name.trim()) updates.guardian_name = existingFix.guardian_name.trim()
         if (missingFields.includes("address") && existingFix.address.trim()) updates.address = existingFix.address.trim()
@@ -355,14 +356,31 @@ export default function NewStudentForm({
         return
       }
 
-      // Add enrollment
-      const { error: eErr } = await supabase.from("enrollments").insert({
+      // Add enrollment with adaptive column support
+      const enrollPayload: Record<string, any> = {
         student_id: sid,
         batch_id: form.batch_id,
-        branch_id: selectedBranchId || batch?.branch_id || null
-      })
+        status: "active"
+      }
+      if (selectedBranchId || batch?.branch_id) {
+        enrollPayload.branch_id = selectedBranchId || batch?.branch_id || null
+      }
+
+      let { error: eErr } = await supabase.from("enrollments").insert(enrollPayload)
+
+      // Fallback if branch_id column doesn't exist in live Supabase enrollments schema cache
+      if (eErr && (
+        eErr.message?.includes("branch_id") || 
+        eErr.message?.includes("schema cache") || 
+        (eErr as any).code === "PGRST204"
+      )) {
+        delete enrollPayload.branch_id
+        const retryRes = await supabase.from("enrollments").insert(enrollPayload)
+        eErr = retryRes.error
+      }
+
       if (eErr) {
-        if (eErr.code === "23505" || eErr.message.includes("unique constraint") || eErr.message.includes("duplicate key")) {
+        if (eErr.code === "23505" || eErr.message?.includes("unique constraint") || eErr.message?.includes("duplicate key")) {
           toast.error(`Student is already enrolled in ${batch?.name || "this batch"}!`)
           setLoading(false)
           return
