@@ -23,6 +23,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
   const [dues, setDues] = useState(initialDues)
   const [search, setSearch] = useState("")
   const [batchFilter, setBatchFilter] = useState("")
+  const [statusFilter, setStatusFilter] = useState<"active" | "all" | "partial" | "pending" | "paid" | "overdue">("active")
   const [sortBy, setSortBy] = useState<"date" | "amount">("date")
   const [hasFinancialAccess, setHasFinancialAccess] = useState(true)
 
@@ -58,14 +59,40 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
       d.student?.name?.toLowerCase().includes(search.toLowerCase()) ||
       d.student?.student_id?.toLowerCase().includes(search.toLowerCase())
     const matchBatch = !batchFilter || d.batch_id === batchFilter
-    return matchSearch && matchBatch
+
+    const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
+    const isSettled = d.status === "paid" || d.status === "waived" || outstanding <= 0
+    const isOverdue = new Date(d.due_date) < new Date()
+
+    let matchStatus = true
+    if (statusFilter === "active") {
+      matchStatus = !isSettled && (d.status === "pending" || d.status === "partial")
+    } else if (statusFilter === "partial") {
+      matchStatus = !isSettled && d.status === "partial"
+    } else if (statusFilter === "pending") {
+      matchStatus = !isSettled && d.status === "pending"
+    } else if (statusFilter === "paid") {
+      matchStatus = isSettled
+    } else if (statusFilter === "overdue") {
+      matchStatus = !isSettled && isOverdue
+    } else if (statusFilter === "all") {
+      matchStatus = true
+    }
+
+    return matchSearch && matchBatch && matchStatus
   }).sort((a, b) => {
     if (sortBy === "amount") return (b.due_amount - b.paid_amount) - (a.due_amount - a.paid_amount)
     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
   })
 
-  const totalOutstanding = filtered.reduce((s, d) => s + Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)), 0)
-  const overdueCount = filtered.filter(d => new Date(d.due_date) < new Date()).length
+  const totalOutstanding = dues
+    .filter(d => d.status !== "paid" && d.status !== "waived")
+    .reduce((s, d) => s + Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)), 0)
+
+  const activeCount = dues.filter(d => (d.status === "pending" || d.status === "partial") && Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)) > 0).length
+  const partialCount = dues.filter(d => d.status === "partial" && Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)) > 0).length
+  const paidCount = dues.filter(d => d.status === "paid" || d.status === "waived" || Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)) <= 0).length
+  const overdueCount = dues.filter(d => (d.status === "pending" || d.status === "partial") && Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)) > 0 && new Date(d.due_date) < new Date()).length
 
   // Actions
   async function extendDueDate() {
@@ -85,11 +112,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
     const newStatus = newDueAmount <= (reduceModal.paid_amount || 0) ? "paid" : reduceModal.status
     const { error } = await supabase.from("fee_dues").update({ due_amount: newDueAmount, status: newStatus }).eq("id", reduceModal.id)
     if (error) { toast.error("Failed to reduce"); setActionLoading(false); return }
-    if (newStatus === "paid") {
-      setDues(prev => prev.filter(d => d.id !== reduceModal.id))
-    } else {
-      setDues(prev => prev.map(d => d.id === reduceModal.id ? { ...d, due_amount: newDueAmount } : d))
-    }
+    setDues(prev => prev.map(d => d.id === reduceModal.id ? { ...d, due_amount: newDueAmount, status: newStatus } : d))
     toast.success(`Due reduced by ${formatCurrency(parseFloat(reduceAmount))}`)
     setReduceModal(null); setReduceAmount(""); setActionLoading(false)
   }
@@ -193,7 +216,11 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
         if (dError) throw dError
 
-        setDues(prev => prev.filter(item => item.id !== due.id))
+        setDues(prev => prev.map(item => item.id === due.id ? {
+          ...item,
+          paid_amount: due.due_amount,
+          status: "paid",
+        } : item))
         toast.success(`✓ Full payment of ${formatCurrency(payAmt)} recorded for ${due.student?.name}! Due cleared. Receipt #${receiptNo}`)
       } else {
         const nextDate = payForm.next_due_date || due.due_date
@@ -237,7 +264,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
     try {
       const { error } = await supabase.from("fee_dues").update({ status: "waived", paid_amount: due.due_amount }).eq("id", due.id)
       if (error) throw error
-      setDues(prev => prev.filter(d => d.id !== due.id))
+      setDues(prev => prev.map(d => d.id === due.id ? { ...d, status: "waived", paid_amount: due.due_amount } : d))
       setExpandedDueId(null)
       toast.success(`${due.student?.name}'s remaining due marked as waived`)
     } catch (err: any) {
@@ -270,8 +297,10 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Fee Dues</h2>
-          <p className="text-sm text-slate-400 mt-1">{filtered.length} pending receivables · {overdueCount} overdue</p>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Fee Dues & Due History</h2>
+          <p className="text-sm text-slate-500 mt-1">
+            {activeCount} active receivables ({partialCount} partial) · {paidCount} settled in history · {overdueCount} overdue
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="bg-red-500/15 border border-red-500/30 rounded-2xl px-5 py-2.5 backdrop-blur-md">
@@ -284,8 +313,8 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 flex flex-wrap gap-3">
+      {/* Filters & Status Tabs */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 flex flex-wrap gap-3 items-center">
         <div className="flex-1 min-w-48 relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student name or student ID (MS-...)"
@@ -295,6 +324,15 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
           className="px-3.5 py-2.5 text-sm text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer">
           <option value="">All Batches</option>
           {batches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+        </select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as any)}
+          className="px-3.5 py-2.5 text-sm text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 font-semibold cursor-pointer">
+          <option value="active">Active Receivables ({activeCount})</option>
+          <option value="partial">Partial Dues Only ({partialCount})</option>
+          <option value="pending">Pending Dues Only ({Math.max(0, activeCount - partialCount)})</option>
+          <option value="paid">Settled / Paid History ({paidCount})</option>
+          <option value="overdue">Overdue Receivables ({overdueCount})</option>
+          <option value="all">All Dues & History ({dues.length})</option>
         </select>
         <select value={sortBy} onChange={e => setSortBy(e.target.value as "date" | "amount")}
           className="px-3.5 py-2.5 text-sm text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 cursor-pointer">
@@ -312,9 +350,9 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                 <th className="px-4 py-3.5 text-left">Student</th>
                 <th className="px-4 py-3.5 text-left">Batch</th>
                 <th className="px-4 py-3.5 text-left">Month</th>
-                <th className="px-4 py-3.5 text-left">Due</th>
+                <th className="px-4 py-3.5 text-left">Total Fee</th>
                 <th className="px-4 py-3.5 text-left">Paid</th>
-                <th className="px-4 py-3.5 text-left">Outstanding</th>
+                <th className="px-4 py-3.5 text-left">Remaining Due</th>
                 <th className="px-4 py-3.5 text-left">Due Date</th>
                 <th className="px-4 py-3.5 text-left">Status</th>
                 <th className="px-4 py-3.5 text-left">Actions</th>
@@ -322,14 +360,15 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
             </thead>
             <tbody className="divide-y divide-slate-100/70 text-sm">
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-14 text-slate-500 text-sm">No pending dues found</td></tr>
+                <tr><td colSpan={9} className="text-center py-14 text-slate-500 text-sm">No dues found for selected filter</td></tr>
               ) : filtered.map(d => {
                 const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
-                const overdue = new Date(d.due_date) < new Date()
+                const isSettled = d.status === "paid" || d.status === "waived" || outstanding <= 0
+                const overdue = !isSettled && new Date(d.due_date) < new Date()
                 const isExpanded = expandedDueId === d.id
                 return (
                   <Fragment key={d.id}>
-                    <tr className={`transition-colors ${overdue ? "bg-red-50/60" : isExpanded ? "bg-amber-50/80 font-medium" : "hover:bg-slate-50/70"}`}>
+                    <tr className={`transition-colors ${isSettled ? "bg-emerald-50/20" : overdue ? "bg-red-50/60" : isExpanded ? "bg-amber-50/80 font-medium" : "hover:bg-slate-50/70"}`}>
                       <td className="px-4 py-3.5">
                         <p className="font-bold text-slate-900">{d.student?.name}</p>
                         <p className="text-xs text-amber-700 font-mono font-bold mt-0.5">{d.student?.student_id}</p>
@@ -345,41 +384,55 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                       </td>
                       <td className="px-4 py-3.5">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                          d.status === "partial" ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-rose-100 text-rose-800 border-rose-300"
-                        }`}>{d.status}</span>
+                          d.status === "paid" || outstanding <= 0
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            : d.status === "partial"
+                            ? "bg-amber-100 text-amber-800 border-amber-300"
+                            : d.status === "waived"
+                            ? "bg-slate-100 text-slate-700 border-slate-300"
+                            : "bg-rose-100 text-rose-800 border-rose-300"
+                        }`}>
+                          {d.status === "paid" || outstanding <= 0 ? "Paid / Settled" : d.status === "waived" ? "Waived" : d.status}
+                        </span>
                       </td>
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5">
-                          {hasFinancialAccess ? (
-                            <>
-                              <button onClick={() => { setExtendModal(d); setNewDate(d.due_date) }} title="Extend due date"
-                                className="p-2 hover:bg-slate-100 rounded-lg text-blue-600 transition-colors cursor-pointer"><Calendar className="w-4 h-4" /></button>
-                              <button onClick={() => setReduceModal(d)} title="Reduce due"
-                                className="p-2 hover:bg-slate-100 rounded-lg text-amber-600 transition-colors cursor-pointer"><DollarSign className="w-4 h-4" /></button>
-                              <button
-                                onClick={() => togglePayExpand(d)}
-                                title={isExpanded ? "Close payment panel" : "Pay / Settle Due (Enter amount)"}
-                                className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
-                                  isExpanded
-                                    ? "bg-amber-600 text-white shadow-sm ring-2 ring-amber-400/40"
-                                    : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300"
-                                }`}
-                              >
-                                <CheckCircle className="w-3.5 h-3.5" />
-                                <span>Pay</span>
-                                {isExpanded ? (
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                ) : (
-                                  <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-                                )}
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-xs text-slate-500 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Locked</span>
-                          )}
-                          <button onClick={() => { setSmsModal(d); setSmsMessage(`Dear Parent, fee of ${formatCurrency(outstanding)} for ${d.student?.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`) }} title="Send SMS reminder"
-                            className="p-2 hover:bg-purple-50 rounded-lg text-purple-600 transition-colors cursor-pointer"><MessageSquare className="w-4 h-4" /></button>
-                        </div>
+                        {isSettled ? (
+                          <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5 text-emerald-600" /> Settled
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            {hasFinancialAccess ? (
+                              <>
+                                <button onClick={() => { setExtendModal(d); setNewDate(d.due_date) }} title="Extend due date"
+                                  className="p-2 hover:bg-slate-100 rounded-lg text-blue-600 transition-colors cursor-pointer"><Calendar className="w-4 h-4" /></button>
+                                <button onClick={() => setReduceModal(d)} title="Reduce due"
+                                  className="p-2 hover:bg-slate-100 rounded-lg text-amber-600 transition-colors cursor-pointer"><DollarSign className="w-4 h-4" /></button>
+                                <button
+                                  onClick={() => togglePayExpand(d)}
+                                  title={isExpanded ? "Close payment panel" : "Pay / Settle Due (Enter amount)"}
+                                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                                    isExpanded
+                                      ? "bg-amber-600 text-white shadow-sm ring-2 ring-amber-400/40"
+                                      : "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300"
+                                  }`}
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  <span>Pay</span>
+                                  {isExpanded ? (
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+                                  )}
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-slate-500 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Locked</span>
+                            )}
+                            <button onClick={() => { setSmsModal(d); setSmsMessage(`Dear Parent, fee of ${formatCurrency(outstanding)} for ${d.student?.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`) }} title="Send SMS reminder"
+                              className="p-2 hover:bg-purple-50 rounded-lg text-purple-600 transition-colors cursor-pointer"><MessageSquare className="w-4 h-4" /></button>
+                          </div>
+                        )}
                       </td>
                     </tr>
 

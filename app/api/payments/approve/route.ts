@@ -237,14 +237,19 @@ export async function POST(req: NextRequest) {
         payment_method: sub.payment_method || "cash",
         transaction_id: cleanTrx,
         payment_for: isEnrollment ? "enrollment" : "monthly_fee",
+        payment_month: sub.due_date ? new Date(sub.due_date).toISOString().slice(0, 7) : nowIso.slice(0, 7),
+        paid_at: nowIso,
+        received_by: staffId || null,
         receipt_number: receiptNo,
         notes: paymentNotes,
       })
 
       // 5. Update or create fee_dues
+      let dueUpdated = false
       if (sub.fee_due_id) {
         const { data: dueData } = await admin.from("fee_dues").select("*").eq("id", sub.fee_due_id).maybeSingle()
         if (dueData) {
+          dueUpdated = true
           const newPaid = (Number(dueData.paid_amount) || 0) + amountNum
           const totalOwed = Math.max(Number(dueData.due_amount) || 0, totalFeeNum, batchTotalFee, newPaid + effectiveDue)
           const isFull = newPaid >= totalOwed
@@ -258,7 +263,9 @@ export async function POST(req: NextRequest) {
             })
             .eq("id", sub.fee_due_id)
         }
-      } else if (effectiveDue > 0) {
+      }
+
+      if (!dueUpdated && effectiveDue > 0) {
         const targetDueDate =
           sub.due_date ||
           (() => {
@@ -291,9 +298,13 @@ export async function POST(req: NextRequest) {
               status: isFull ? "paid" : newPaid > 0 ? "partial" : "pending",
             })
             .eq("id", existingDue.id)
+
+          if (!sub.fee_due_id) {
+            await admin.from("payment_submissions").update({ fee_due_id: existingDue.id }).eq("id", submissionId)
+          }
         } else {
           const isFull = amountNum >= expectedTotal
-          const { error: dueErr } = await admin.from("fee_dues").insert({
+          const { data: createdDue, error: dueErr } = await admin.from("fee_dues").insert({
             student_id: sub.student_id,
             batch_id: sub.batch_id,
             due_month: dueMonth,
@@ -301,7 +312,12 @@ export async function POST(req: NextRequest) {
             paid_amount: amountNum,
             due_date: targetDueDate,
             status: isFull ? "paid" : amountNum > 0 ? "partial" : "pending",
-          })
+          }).select("id").maybeSingle()
+
+          if (createdDue?.id && !sub.fee_due_id) {
+            await admin.from("payment_submissions").update({ fee_due_id: createdDue.id }).eq("id", submissionId)
+          }
+
           if (dueErr && !dueErr.message.includes("duplicate")) {
             console.warn("Fee due insert note:", dueErr.message)
           }

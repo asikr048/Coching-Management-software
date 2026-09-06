@@ -205,7 +205,7 @@ export async function GET(req: NextRequest) {
             .from("fee_dues")
             .select("*, batch:batches(name)")
             .in("student_id", studentDbIdArray)
-            .in("status", ["pending", "partial"])
+            .in("status", ["pending", "partial", "paid", "waived"])
             .order("due_month", { ascending: false })
         : Promise.resolve({ data: [] }),
 

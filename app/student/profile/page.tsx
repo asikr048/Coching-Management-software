@@ -299,7 +299,9 @@ export default function StudentProfilePage() {
   const totalClasses = attendance.length
   const presentClasses = attendance.filter(a => a.status === "present").length
   const attendanceRate = totalClasses > 0 ? Math.round((presentClasses / totalClasses) * 100) : 100
-  const totalPendingDue = dues.reduce((acc, d) => acc + (Number(d.due_amount || 0) - Number(d.paid_amount || 0)), 0)
+  const activeDues = dues.filter((d: any) => d.status !== "paid" && d.status !== "waived" && (Number(d.due_amount || 0) - Number(d.paid_amount || 0)) > 0)
+  const settledDues = dues.filter((d: any) => d.status === "paid" || d.status === "waived" || (Number(d.due_amount || 0) - Number(d.paid_amount || 0)) <= 0)
+  const totalPendingDue = activeDues.reduce((acc: number, d: any) => acc + Math.max(0, Number(d.due_amount || 0) - Number(d.paid_amount || 0)), 0)
   const avgScore = examResults.length > 0
     ? Math.round(examResults.reduce((acc, r) => {
         const total = Number(r.exam?.total_marks) || 100
@@ -390,14 +392,14 @@ export default function StudentProfilePage() {
 
         <button onClick={() => setActiveModal('dues')} className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-amber-300 hover:shadow-md hover:bg-amber-50/20 transition-all group cursor-pointer text-left w-full">
           <div className="flex items-center justify-between text-gray-500">
-            <span className="text-[11px] font-semibold uppercase tracking-wider">Pending Dues</span>
+            <span className="text-[11px] font-semibold uppercase tracking-wider">Fee Dues</span>
             <DollarSign className="w-4 h-4 text-amber-600" />
           </div>
           <p className={`text-2xl sm:text-3xl font-extrabold ${totalPendingDue > 0 ? "text-amber-600" : "text-emerald-600"}`}>
             {formatCurrency(totalPendingDue)}
           </p>
-          <p className="text-xs text-gray-500">{dues.length > 0 ? `${dues.length} pending months` : "All fees clear"}</p>
-          <p className="text-xs text-amber-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">{dues.length > 0 ? 'Pay now →' : 'View history →'}</p>
+          <p className="text-xs text-gray-500">{activeDues.length > 0 ? `${activeDues.length} pending months` : "All fees clear"}</p>
+          <p className="text-xs text-amber-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">{activeDues.length > 0 ? 'Pay now →' : 'View history →'}</p>
         </button>
 
         <button onClick={() => setActiveModal('exams')} className="col-span-2 sm:col-span-1 bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-violet-300 hover:shadow-md hover:bg-violet-50/20 transition-all group cursor-pointer text-left w-full">
@@ -841,24 +843,76 @@ export default function StudentProfilePage() {
       <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
         <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
           <div className="flex items-center justify-between p-6 border-b border-gray-100">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-amber-500" /> Pending Dues</h2>
+            <div>
+              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-500" /> Fee Dues & Due History
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {activeDues.length} active due{activeDues.length === 1 ? '' : 's'} · {settledDues.length} settled in history
+              </p>
+            </div>
             <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
           </div>
-          <div className="p-6 overflow-y-auto space-y-3">
-            {dues.length > 0 ? dues.map((due: any, i: number) => (
-              <div key={i} className="flex items-center justify-between p-4 bg-rose-50 border border-rose-100 rounded-xl gap-4">
-                <div>
-                  <p className="font-semibold text-gray-900">{due.due_month ? new Date(due.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Unknown'}</p>
-                  <p className="text-sm text-rose-600 font-bold mt-0.5">{formatCurrency(due.due_amount - (due.paid_amount || 0))} due</p>
-                </div>
-                <button
-                  onClick={() => { setPayingDue(due); setActiveModal(null); setPayMethod('bkash'); setSenderNumber(''); setTransactionId(''); setReferralName(''); setReferralReason('') }}
-                  className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors"
-                >
-                  Pay Now
-                </button>
+          <div className="p-6 overflow-y-auto space-y-4">
+            {/* Active Dues */}
+            {activeDues.length > 0 && (
+              <div className="space-y-2.5">
+                <h3 className="text-xs font-bold uppercase text-rose-600 tracking-wider">Active Receivables</h3>
+                {activeDues.map((due: any, i: number) => {
+                  const remaining = Math.max(0, Number(due.due_amount || 0) - Number(due.paid_amount || 0))
+                  const hasPartial = Number(due.paid_amount || 0) > 0
+                  return (
+                    <div key={due.id || i} className="flex items-center justify-between p-4 bg-rose-50 border border-rose-100 rounded-xl gap-4">
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {due.batch?.name ? `${due.batch.name} • ` : ''}
+                          {due.due_month ? new Date(due.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Unknown'}
+                        </p>
+                        <p className="text-sm text-rose-600 font-bold mt-0.5">
+                          {formatCurrency(remaining)} due
+                          {hasPartial && (
+                            <span className="text-xs font-medium text-amber-700 ml-1.5">
+                              ({formatCurrency(due.paid_amount)} already paid)
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => { setPayingDue(due); setActiveModal(null); setPayMethod('bkash'); setSenderNumber(''); setTransactionId(''); setReferralName(''); setReferralReason('') }}
+                        className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors cursor-pointer"
+                      >
+                        Pay Now
+                      </button>
+                    </div>
+                  )
+                })}
               </div>
-            )) : (
+            )}
+
+            {/* Settled / Due History */}
+            {settledDues.length > 0 && (
+              <div className="space-y-2.5">
+                <h3 className="text-xs font-bold uppercase text-emerald-700 tracking-wider">Settled / Due History</h3>
+                {settledDues.map((due: any, i: number) => (
+                  <div key={due.id || i} className="flex items-center justify-between p-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl gap-3">
+                    <div>
+                      <p className="font-medium text-gray-900 text-sm">
+                        {due.batch?.name ? `${due.batch.name} • ` : ''}
+                        {due.due_month ? new Date(due.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Unknown'}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Total Fee: <span className="font-semibold text-gray-700">{formatCurrency(due.due_amount)}</span> • Paid: <span className="font-semibold text-emerald-700">{formatCurrency(due.paid_amount || due.due_amount)}</span>
+                      </p>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      {due.status === "waived" ? "Waived" : "✓ Settled"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeDues.length === 0 && settledDues.length === 0 && (
               <div className="text-center py-10">
                 <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
                 <p className="font-semibold text-emerald-700">All fees are clear!</p>
