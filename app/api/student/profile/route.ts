@@ -406,6 +406,8 @@ export async function GET(req: NextRequest) {
     let materialIssues: any[] = []
 
     try {
+      const candidateIssueIds = Array.from(new Set([...studentDbIdArray, ...Array.from(candidateCodes), user.id]))
+
       const [bExamsRes, bMatsRes, mIssRes] = await Promise.all([
         studentEnrolledBatchIds.length > 0
           ? admin
@@ -418,11 +420,11 @@ export async function GET(req: NextRequest) {
           .from("materials")
           .select("*")
           .order("created_at", { ascending: false }),
-        studentDbIdArray.length > 0
+        candidateIssueIds.length > 0
           ? admin
               .from("material_issues")
               .select("*, material:materials(*)")
-              .in("student_id", studentDbIdArray)
+              .in("student_id", candidateIssueIds)
               .order("issued_at", { ascending: false })
             : Promise.resolve({ data: [] })
       ])
@@ -438,6 +440,10 @@ export async function GET(req: NextRequest) {
         enrollments.map((e: any) => e.batch?.branch_id).filter(Boolean).map(String)
       )
       if (primaryStudent?.branch_id) studentBranchIdSet.add(String(primaryStudent.branch_id))
+
+      const enrolledBatchNames = new Set(
+        enrollments.map((e: any) => e.batch?.name).filter(Boolean).map(n => String(n).trim().toLowerCase())
+      )
 
       batchMaterials = rawMats.filter((m: any) => {
         // 1. If student was issued this material directly, always show
@@ -458,6 +464,13 @@ export async function GET(req: NextRequest) {
               if (Array.from(studentBatchIdSet).some(bid => m.batch_ids.includes(bid))) return true
             }
           }
+        }
+
+        // 3.5. Batch Name Match (e.g. "Class 9")
+        if (enrolledBatchNames.size > 0) {
+          if (m.batch_name && enrolledBatchNames.has(String(m.batch_name).trim().toLowerCase())) return true
+          if (m.subject && enrolledBatchNames.has(String(m.subject).trim().toLowerCase())) return true
+          if (Array.isArray(m.batch_names) && m.batch_names.some((bn: any) => enrolledBatchNames.has(String(bn).trim().toLowerCase()))) return true
         }
 
         // 4. If material has NO specific batch specified (general batch material)
