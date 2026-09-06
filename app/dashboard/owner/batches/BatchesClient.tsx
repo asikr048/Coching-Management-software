@@ -37,6 +37,8 @@ interface BatchData {
   schedule_time?: string
   description?: string
   image_url?: string
+  classroom?: string
+  branch_seats?: Record<string, number>
   status?: string
 }
 
@@ -81,8 +83,10 @@ export default function BatchesClient({
     class_level: "",
     branch_id: selectedBranchId !== "all" ? selectedBranchId : (branches[0]?.id || ""),
     deploy_branch_ids: [] as string[],
+    branch_seats: {} as Record<string, string>,
     teacher_id: "",
     room_id: "",
+    classroom: "",
     max_seats: "30",
     monthly_fee: "0",
     admission_fee: "0",
@@ -104,24 +108,50 @@ export default function BatchesClient({
       ? selectedBranchId 
       : (currentBranch?.id || branches[0]?.id || "")
 
+    const initialBranchSeats: Record<string, string> = {}
+    branches.forEach(b => {
+      initialBranchSeats[b.id] = "30"
+    })
+
     setForm({
       ...defaultForm,
       branch_id: activeBranchId,
-      deploy_branch_ids: []
+      deploy_branch_ids: [],
+      branch_seats: initialBranchSeats
     })
     setEditingBatch(null)
     setShowCreateModal(true)
   }
 
   function openEditModal(batch: BatchData) {
+    const childBranches = batches
+      .filter(b => b.origin_batch_id === batch.id && b.branch_id)
+      .map(b => b.branch_id!)
+
+    const initialBranchSeats: Record<string, string> = {}
+    branches.forEach(b => {
+      const child = batches.find(childB => childB.origin_batch_id === batch.id && childB.branch_id === b.id)
+      if (child) {
+        initialBranchSeats[b.id] = String(child.max_seats ?? 30)
+      } else if (batch.branch_seats && batch.branch_seats[b.id]) {
+        initialBranchSeats[b.id] = String(batch.branch_seats[b.id])
+      } else if (b.id === batch.branch_id) {
+        initialBranchSeats[b.id] = String(batch.max_seats ?? 30)
+      } else {
+        initialBranchSeats[b.id] = String(batch.max_seats ?? 30)
+      }
+    })
+
     setForm({
       name: batch.name || "",
       subject: batch.subject || "",
       class_level: batch.class_level || "",
       branch_id: batch.branch_id || (branches[0]?.id || ""),
-      deploy_branch_ids: [],
+      deploy_branch_ids: childBranches,
+      branch_seats: initialBranchSeats,
       teacher_id: batch.teacher_id || "",
       room_id: batch.room_id || "",
+      classroom: batch.classroom || "",
       max_seats: String(batch.max_seats ?? 30),
       monthly_fee: String(batch.monthly_fee ?? 0),
       admission_fee: String(batch.admission_fee ?? 0),
@@ -143,14 +173,22 @@ export default function BatchesClient({
     }
     setLoading(true)
     try {
-      const primaryBranch = branches.find(b => b.id === form.branch_id)
-      const primaryPayload = {
+      const selectedBranches = [
+        form.branch_id,
+        ...form.deploy_branch_ids.filter(id => id && id !== form.branch_id)
+      ]
+
+      const payload = {
+        id: editingBatch?.id,
         name: form.name.trim(),
         branch_id: form.branch_id || null,
+        selected_branch_ids: selectedBranches,
+        branch_seats: form.branch_seats,
         subject: form.subject.trim() || null,
         class_level: form.class_level.trim() || null,
         teacher_id: form.teacher_id || null,
         room_id: form.room_id || null,
+        classroom: form.classroom.trim(),
         max_seats: parseInt(form.max_seats) || 30,
         monthly_fee: parseFloat(form.monthly_fee) || 0,
         admission_fee: parseFloat(form.admission_fee) || 0,
@@ -158,73 +196,34 @@ export default function BatchesClient({
         schedule_days: form.schedule_days.trim() || null,
         schedule_time: form.schedule_time.trim() || null,
         description: form.description.trim() || null,
-        status: form.status || "ongoing",
-        approval_status: "approved",
-        is_active: true
+        status: form.status || "ongoing"
+      }
+
+      const res = await fetch("/api/batches/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      })
+
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to save batch")
       }
 
       if (editingBatch) {
-        // Update batch
-        const { data, error } = await supabase
-          .from("batches")
-          .update(primaryPayload)
-          .eq("id", editingBatch.id)
-          .select("*, teacher:staff(name, subject), branch:branches(id, name)")
-          .single()
-
-        if (error) throw error
-        setBatches(batches.map(b => b.id === editingBatch.id ? { ...b, ...data, branch: primaryBranch ? { id: primaryBranch.id, name: primaryBranch.name } : null } : b))
-        setEditingBatch(null)
-        setShowCreateModal(false)
-        toast.success(`Batch "${primaryPayload.name}" updated successfully!`)
-      } else {
-        // Create primary batch
-        const { data: createdPrimary, error } = await supabase
-          .from("batches")
-          .insert(primaryPayload)
-          .select("*, teacher:staff(name, subject), branch:branches(id, name)")
-          .single()
-
-        if (error) throw error
-
-        let allNew = [createdPrimary]
-
-        // Create pending batches for other branches if selected
-        const otherBranchIds = form.deploy_branch_ids.filter(id => id !== form.branch_id)
-        if (otherBranchIds.length > 0) {
-          const otherRows = otherBranchIds.map(targetBId => ({
-            name: form.name.trim(),
-            branch_id: targetBId,
-            subject: form.subject.trim() || null,
-            class_level: form.class_level.trim() || null,
-            max_seats: parseInt(form.max_seats) || 30,
-            monthly_fee: parseFloat(form.monthly_fee) || 0,
-            admission_fee: parseFloat(form.admission_fee) || 0,
-            fee_type: form.fee_type,
-            schedule_days: form.schedule_days.trim() || null,
-            schedule_time: form.schedule_time.trim() || null,
-            description: form.description.trim() || null,
-            status: form.status || "ongoing",
-            approval_status: "pending_approval",
-            origin_branch_id: form.branch_id || null,
-            origin_batch_id: createdPrimary.id,
-            is_active: false
-          }))
-
-          const { data: clonedBatches, error: cloneErr } = await supabase
-            .from("batches")
-            .insert(otherRows)
-            .select("*, teacher:staff(name, subject), branch:branches(id, name)")
-
-          if (!cloneErr && clonedBatches) {
-            allNew = [...clonedBatches, ...allNew]
-          }
+        if (data.batch) {
+          setBatches(prev => prev.map(b => b.id === editingBatch.id ? { ...b, ...data.batch } : b))
         }
-
-        setBatches(prev => [...allNew, ...prev])
-        setShowCreateModal(false)
-        toast.success(`Batch "${primaryPayload.name}" created successfully! ${otherBranchIds.length > 0 ? `(${otherBranchIds.length} branch deployment requests submitted for approval)` : ""}`)
+        toast.success(data.message || `Batch "${payload.name}" updated successfully!`)
+      } else {
+        if (data.batch) {
+          setBatches(prev => [data.batch, ...prev])
+        }
+        toast.success(data.message || `Batch "${payload.name}" created successfully!`)
       }
+
+      setShowCreateModal(false)
+      setEditingBatch(null)
       setForm(defaultForm)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to save batch")
@@ -274,12 +273,26 @@ export default function BatchesClient({
 
   async function handleStatusChange(batchId: string, newStatus: string) {
     try {
-      const { error } = await supabase.from("batches").update({ status: newStatus }).eq("id", batchId)
-      if (error) throw error
+      const batchObj = batches.find(b => b.id === batchId)
+      const res = await fetch("/api/batches/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: batchId,
+          name: batchObj?.name || "Batch",
+          status: newStatus,
+          branch_id: batchObj?.branch_id
+        })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        const { error } = await supabase.from("batches").update({ status: newStatus }).eq("id", batchId)
+        if (error) throw error
+      }
       setBatches(batches.map(b => b.id === batchId ? { ...b, status: newStatus } : b))
       toast.success(`Status updated to ${statusLabels[newStatus] || newStatus}`)
     } catch (err: unknown) {
-      toast.error("Failed to update status")
+      toast.error(err instanceof Error ? err.message : "Failed to update status")
     }
   }
 
@@ -586,6 +599,12 @@ export default function BatchesClient({
                     <UserCheck className="w-3.5 h-3.5 text-slate-500" />
                     <span>Teacher: <b className="text-slate-900">{batch.teacher?.name || "Unassigned"}</b></span>
                   </div>
+                  {batch.classroom && (
+                    <div className="flex items-center gap-1.5 text-slate-700 font-medium bg-slate-100/80 px-2.5 py-1.5 rounded-lg border border-slate-200 text-[11px]">
+                      <DoorOpen className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                      <span>Classroom: <b className="text-slate-900">{batch.classroom}</b></span>
+                    </div>
+                  )}
                   {(batch.schedule_days || batch.schedule_time) && (
                     <div className="flex items-center gap-1.5 text-amber-900 font-medium bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200 text-[11px]">
                       <Calendar className="w-3.5 h-3.5 text-amber-600 shrink-0" />
@@ -678,76 +697,162 @@ export default function BatchesClient({
 
             {/* Scrollable Form Body */}
             <form onSubmit={handleSave} className="overflow-y-auto p-6 space-y-5 flex-1">
-              {/* Branch Selection */}
+              {/* Branch & Seat Configuration */}
               <div>
                 <div className="flex items-center gap-2 mb-3">
                   <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Branch Configuration (শাখা নির্ধারণ)</h4>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  <div>
-                    <label className={lbl}>Primary Branch (মূল শাখা) *</label>
-                    <select
-                      value={form.branch_id}
-                      onChange={e => updateForm("branch_id", e.target.value)}
-                      className={`${ic} font-bold`}
-                    >
-                      {branches.map(b => (
-                        <option key={b.id} value={b.id}>{b.name}</option>
-                      ))}
-                    </select>
-                    <p className="text-[11px] text-slate-500 mt-1">
-                      {editingBatch ? "The branch this batch belongs to." : "This batch will be immediately active in this primary branch."}
-                    </p>
-                  </div>
+                  <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider">Branch & Seat Allocation (শাখা ও আসন নির্ধারণ)</h4>
                 </div>
 
-                {/* Multi-Branch Deployment (Only in Create Mode) */}
-                {!editingBatch && branches.length > 1 && (
-                  <div className="mt-3 bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                        <Landmark className="w-3.5 h-3.5 text-amber-600" />
-                        Deploy to Other Branches (অন্যান্য শাখায় প্রকাশ করুন)
-                      </label>
-                      <span className="text-[11px] text-slate-500 font-medium">Requires approval on recipient branches</span>
-                    </div>
-                    <p className="text-xs text-slate-600">
-                      নিচের অন্যান্য শাখাগুলো সিলেক্ট করলে, ঐ শাখাগুলোতে ব্যাচটি অনুমোদনের অপেক্ষায় যাবে। তারা অনুমোদন করলেই লাইভ হবে।
-                    </p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                      {branches
-                        .filter(b => b.id !== form.branch_id)
-                        .map(b => {
-                          const isChecked = form.deploy_branch_ids.includes(b.id)
-                          return (
-                            <label
-                              key={b.id}
-                              className={`flex items-center gap-2.5 p-2.5 rounded-xl border text-xs font-semibold cursor-pointer transition-all ${
-                                isChecked
-                                  ? "bg-amber-50 border-amber-300 text-amber-950 font-bold"
-                                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
-                              }`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={isChecked}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setForm(f => ({ ...f, deploy_branch_ids: [...f.deploy_branch_ids, b.id] }))
-                                  } else {
-                                    setForm(f => ({ ...f, deploy_branch_ids: f.deploy_branch_ids.filter(id => id !== b.id) }))
-                                  }
-                                }}
-                                className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300"
-                              />
-                              <span className="truncate">{b.name}</span>
-                            </label>
-                          )
-                        })}
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-4">
+                  {/* Primary Branch Selection */}
+                  <div>
+                    <label className={lbl}>Primary Branch (মূল শাখা) *</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-1.5">
+                      {branches.map(b => {
+                        const isPrimary = form.branch_id === b.id
+                        return (
+                          <button
+                            key={b.id}
+                            type="button"
+                            onClick={() => {
+                              updateForm("branch_id", b.id)
+                              setForm(f => ({
+                                ...f,
+                                branch_id: b.id,
+                                deploy_branch_ids: f.deploy_branch_ids.filter(id => id !== b.id)
+                              }))
+                            }}
+                            className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold text-left transition-all ${
+                              isPrimary
+                                ? "bg-amber-600 text-white border-amber-700 shadow-xs"
+                                : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+                            }`}
+                          >
+                            <span className="truncate">{b.name}</span>
+                            {isPrimary && (
+                              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-md font-extrabold uppercase">
+                                Primary
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
                     </div>
                   </div>
-                )}
+
+                  {/* Primary Branch Seats */}
+                  <div className="pt-3 border-t border-slate-200">
+                    <div className="max-w-xs">
+                      <label className={lbl}>
+                        Seats for {branches.find(b => b.id === form.branch_id)?.name || "Primary Branch"} *
+                      </label>
+                      <div className="relative mt-1">
+                        <input
+                          type="number"
+                          min="1"
+                          required
+                          value={form.max_seats}
+                          onChange={e => {
+                            const val = e.target.value
+                            updateForm("max_seats", val)
+                            setForm(f => ({
+                              ...f,
+                              branch_seats: { ...f.branch_seats, [f.branch_id]: val }
+                            }))
+                          }}
+                          className={`${ic} font-bold pr-12`}
+                          placeholder="30"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-semibold pointer-events-none">
+                          Seats
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Additional Branches Mark Select (Available in BOTH Create & Edit) */}
+                  {branches.length > 1 && (
+                    <div className="pt-3 border-t border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <Landmark className="w-3.5 h-3.5 text-amber-600" />
+                          Deploy to Other Branches (অন্যান্য শাখায় মার্ক করে যুক্ত করুন)
+                        </label>
+                        <span className="text-[11px] text-slate-500 font-medium">প্রতি শাখার জন্য নির্দিষ্ট সিট সংখ্যা দিন</span>
+                      </div>
+                      <p className="text-xs text-slate-600">
+                        নিচের শাখাগুলোতে এই ব্যাচ পরিচালনা করতে চাইলে টিক দিন এবং প্রতি শাখার সিট সংখ্যা লিখে দিন।
+                      </p>
+
+                      <div className="space-y-2 pt-1">
+                        {branches
+                          .filter(b => b.id !== form.branch_id)
+                          .map(b => {
+                            const isChecked = form.deploy_branch_ids.includes(b.id)
+                            const branchSeatVal = form.branch_seats[b.id] ?? form.max_seats ?? "30"
+                            return (
+                              <div
+                                key={b.id}
+                                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border transition-all ${
+                                  isChecked
+                                    ? "bg-amber-50/70 border-amber-300"
+                                    : "bg-white border-slate-200"
+                                }`}
+                              >
+                                <label className="flex items-center gap-2.5 cursor-pointer flex-1 select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setForm(f => ({
+                                          ...f,
+                                          deploy_branch_ids: [...f.deploy_branch_ids, b.id],
+                                          branch_seats: {
+                                            ...f.branch_seats,
+                                            [b.id]: f.branch_seats[b.id] || f.max_seats || "30"
+                                          }
+                                        }))
+                                      } else {
+                                        setForm(f => ({
+                                          ...f,
+                                          deploy_branch_ids: f.deploy_branch_ids.filter(id => id !== b.id)
+                                        }))
+                                      }
+                                    }}
+                                    className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300"
+                                  />
+                                  <span className="text-xs font-bold text-slate-800">{b.name}</span>
+                                </label>
+
+                                {isChecked && (
+                                  <div className="flex items-center gap-2 pl-6 sm:pl-0">
+                                    <span className="text-xs text-slate-600 font-medium whitespace-nowrap">Seats (সিট):</span>
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      required
+                                      value={branchSeatVal}
+                                      onChange={e => {
+                                        const val = e.target.value
+                                        setForm(f => ({
+                                          ...f,
+                                          branch_seats: { ...f.branch_seats, [b.id]: val }
+                                        }))
+                                      }}
+                                      className="w-24 px-2.5 py-1 text-xs border border-amber-300 rounded-lg bg-white font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 focus:outline-hidden"
+                                      placeholder="30"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Section 1: Basic Information */}
@@ -834,19 +939,15 @@ export default function BatchesClient({
                     </select>
                   </div>
                   <div>
-                    <label className={lbl}>Classroom / Lab</label>
-                    <select 
-                      value={form.room_id} 
-                      onChange={e => updateForm("room_id", e.target.value)} 
+                    <label className={lbl}>Classroom / Lab (রুম বা ল্যাব নং)</label>
+                    <input 
+                      type="text"
+                      value={form.classroom} 
+                      onChange={e => updateForm("classroom", e.target.value)} 
                       className={ic}
-                    >
-                      <option value="">-- Select Classroom --</option>
-                      {branchRooms.map(r => (
-                        <option key={r.id} value={r.id}>
-                          {r.name} ({r.capacity} seats capacity)
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="e.g. Room 201, Lab 3, Ground Floor Hall"
+                    />
+                    <p className="text-[11px] text-slate-500 mt-1">ক্লাসরুম বা ল্যাবের নাম/নম্বর লিখে দিন</p>
                   </div>
                 </div>
               </div>

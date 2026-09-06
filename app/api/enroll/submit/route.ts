@@ -7,6 +7,7 @@ export async function POST(req: NextRequest) {
     const {
       form,
       batchId,
+      branchId: clientBranchId,
       courseId,
       isCourse,
       paidAmount,
@@ -45,6 +46,16 @@ export async function POST(req: NextRequest) {
     const actualDue = Number(dueAmount) >= 0 ? Number(dueAmount) : Math.max(0, totalFee - actualPaid)
 
     const admin = createAdminClient()
+
+    let resolvedBranchId: string | null = clientBranchId || form?.branch_id || null
+    if (!resolvedBranchId && batchId) {
+      try {
+        const { data: bRow } = await admin.from("batches").select("branch_id").eq("id", batchId).maybeSingle()
+        if (bRow?.branch_id) {
+          resolvedBranchId = bRow.branch_id
+        }
+      } catch {}
+    }
 
     // 1. Find existing student if any
     let studentDbId: string | null = null
@@ -207,6 +218,7 @@ export async function POST(req: NextRequest) {
         address: form.address?.trim() || null,
         referred_by_code: form.referred_by_code?.trim() || null,
         is_active: true,
+        ...(resolvedBranchId ? { branch_id: resolvedBranchId } : {}),
       }
 
       const { data: newStudent, error: createStudentErr } = await admin
@@ -242,6 +254,7 @@ export async function POST(req: NextRequest) {
         .update({
           name: form.name.trim(),
           ...(studentCode ? { student_id: studentCode } : {}),
+          ...(resolvedBranchId ? { branch_id: resolvedBranchId } : {}),
           ...(form.guardian_name?.trim() ? { guardian_name: form.guardian_name.trim() } : {}),
           ...(cleanGuardianPhone ? { guardian_phone: cleanGuardianPhone } : {}),
           ...(form.school_college?.trim() ? { school_college: form.school_college.trim() } : {}),
@@ -412,6 +425,10 @@ export async function POST(req: NextRequest) {
 
     if (linkedFeeDueId) {
       submissionPayload.fee_due_id = linkedFeeDueId
+    }
+
+    if (resolvedBranchId) {
+      submissionPayload.branch_id = resolvedBranchId
     }
 
     if (batchId) {

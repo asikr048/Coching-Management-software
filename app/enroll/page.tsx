@@ -10,13 +10,15 @@ import {
   GraduationCap, Loader2, CheckCircle, ArrowRight, ArrowLeft,
   Copy, Check, User, Phone, Mail, Calendar, BookOpen, MapPin,
   Users, Lock, Clock, Sparkles, Video, AlertCircle,
-  Eye, EyeOff, LogIn, UserCheck, KeyRound
+  Eye, EyeOff, LogIn, UserCheck, KeyRound, Landmark, DoorOpen
 } from "lucide-react"
 import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
 
 interface Batch {
   id: string
   name: string
+  branch_id?: string | null
+  classroom?: string | null
   subject: string | null
   class_level: string | null
   monthly_fee: number | null
@@ -66,6 +68,8 @@ function EnrollContent() {
   const [step, setStep] = useState<"admission" | "payment" | "success">("admission")
   const [loadingData, setLoadingData] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [branches, setBranches] = useState<{ id: string; name: string; address?: string }[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("")
   const [batches, setBatches] = useState<Batch[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedBatchId, setSelectedBatchId] = useState<string>(batchIdParam)
@@ -322,19 +326,42 @@ function EnrollContent() {
     async function loadData() {
       setLoadingData(true)
       try {
+        // 0. Fetch active branches
+        const { data: branchList } = await supabase
+          .from("branches")
+          .select("id, name, address")
+          .order("name")
+
+        if (branchList && branchList.length > 0) {
+          setBranches(branchList)
+        }
+
         // 1. Fetch active batches
         const { data: batchList, error: batchErr } = await supabase
           .from("batches")
-          .select("id, name, subject, class_level, monthly_fee, admission_fee, schedule_days, schedule_time, description, max_seats, current_seats, status")
+          .select("id, name, branch_id, classroom, subject, class_level, monthly_fee, admission_fee, schedule_days, schedule_time, description, max_seats, current_seats, status")
           .eq("is_active", true)
           .order("name")
 
         if (!batchErr && batchList) {
           setBatches(batchList)
           if (batchIdParam && batchList.some(b => b.id === batchIdParam)) {
+            const targetBatch = batchList.find(b => b.id === batchIdParam)
             setSelectedBatchId(batchIdParam)
+            if (targetBatch?.branch_id) {
+              setSelectedBranchId(targetBatch.branch_id)
+            } else if (branchList && branchList.length > 0) {
+              setSelectedBranchId(branchList[0].id)
+            }
           } else if (batchList.length > 0 && !selectedBatchId) {
             setSelectedBatchId(batchList[0].id)
+            if (batchList[0].branch_id) {
+              setSelectedBranchId(batchList[0].branch_id)
+            } else if (branchList && branchList.length > 0) {
+              setSelectedBranchId(branchList[0].id)
+            }
+          } else if (branchList && branchList.length > 0 && !selectedBranchId) {
+            setSelectedBranchId(branchList[0].id)
           }
         }
 
@@ -426,8 +453,23 @@ function EnrollContent() {
     loadData()
   }, [batchIdParam, courseIdParam, enrollType])
 
+  // Batches filtered by selected branch
+  const branchFilteredBatches = batches.filter(b => {
+    if (!selectedBranchId) return true
+    return !b.branch_id || b.branch_id === selectedBranchId
+  })
+
+  // Synchronize selected batch with current branch
+  useEffect(() => {
+    if (enrollType === "batch" && selectedBranchId && branchFilteredBatches.length > 0) {
+      if (!selectedBatchId || !branchFilteredBatches.some(b => b.id === selectedBatchId)) {
+        setSelectedBatchId(branchFilteredBatches[0].id)
+      }
+    }
+  }, [selectedBranchId, branchFilteredBatches, enrollType, selectedBatchId])
+
   // Current selected batch or course
-  const selectedBatch = batches.find(b => b.id === selectedBatchId) || batches[0]
+  const selectedBatch = batches.find(b => b.id === selectedBatchId) || branchFilteredBatches[0] || batches[0]
   const selectedCourse = courses.find(c => c.id === selectedCourseId) || courses[0]
 
   const isCourse = enrollType === "course"
@@ -554,6 +596,7 @@ function EnrollContent() {
         body: JSON.stringify({
           form,
           batchId: selectedBatch?.id || null,
+          branchId: selectedBranchId || selectedBatch?.branch_id || null,
           courseId: selectedCourse?.id || null,
           isCourse,
           paidAmount: actualPaidAmount,
@@ -712,6 +755,20 @@ function EnrollContent() {
                 <span className="text-gray-400">{isCourse ? "Enrolled Course" : "Batch"}</span>
                 <span className="font-semibold text-cyan-300">{itemName}</span>
               </div>
+              {!isCourse && selectedBatch?.branch_id && (
+                <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
+                  <span className="text-gray-400">Branch</span>
+                  <span className="font-semibold text-white">
+                    {branches.find(b => b.id === selectedBatch.branch_id)?.name || "Main Branch"}
+                  </span>
+                </div>
+              )}
+              {!isCourse && selectedBatch?.classroom && (
+                <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
+                  <span className="text-gray-400">Classroom / Lab</span>
+                  <span className="font-semibold text-white">{selectedBatch.classroom}</span>
+                </div>
+              )}
               <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
                 <span className="text-gray-400">Total Program Fee</span>
                 <span className="font-bold text-gray-200">{formatCurrency(totalAmount)}</span>
@@ -1269,6 +1326,39 @@ function EnrollContent() {
           
           {/* Program Selection Card */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            {/* Branch Selection for Batches */}
+            {!isCourse && branches.length > 0 && (
+              <div className="pb-4 mb-4 border-b border-gray-100">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Landmark className="w-3.5 h-3.5 text-indigo-600" />
+                    Select Branch (শাখা নির্বাচন করুন) *
+                  </label>
+                  <span className="text-[11px] text-gray-400 font-medium">নির্দিষ্ট শাখার ব্যাচ ও ক্লাসরুম দেখতে সিলেক্ট করুন</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {branches.map(br => {
+                    const isSel = selectedBranchId === br.id
+                    return (
+                      <button
+                        key={br.id}
+                        type="button"
+                        onClick={() => setSelectedBranchId(br.id)}
+                        className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all text-left truncate flex items-center justify-between cursor-pointer ${
+                          isSel
+                            ? "bg-indigo-600 text-white border-indigo-700 shadow-xs"
+                            : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <span className="truncate">{br.name}</span>
+                        {isSel && <Check className="w-3.5 h-3.5 text-white shrink-0 ml-1" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isCourse ? "bg-purple-50 text-purple-600" : "bg-indigo-50 text-indigo-600"}`}>
@@ -1304,11 +1394,12 @@ function EnrollContent() {
                     onChange={e => setSelectedBatchId(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
-                    {batches.map(b => {
+                    {branchFilteredBatches.map(b => {
                       const isClosed = b.status === "admission_closed" || b.status === "finished"
+                      const branchName = branches.find(br => br.id === b.branch_id)?.name
                       return (
                         <option key={b.id} value={b.id}>
-                          {b.name} ({b.class_level || "All"}){isClosed ? " — [Admission Closed]" : ""}
+                          {b.name} ({b.class_level || "All"}){branchName ? ` [${branchName}]` : ""}{isClosed ? " — [Admission Closed]" : ""}
                         </option>
                       )
                     })}
@@ -1351,7 +1442,28 @@ function EnrollContent() {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {selectedBatch.class_level || "All Levels"} • {selectedBatch.subject || "General"}
                     {selectedBatch.schedule_days ? ` • ${selectedBatch.schedule_days}` : ""}
+                    {selectedBatch.schedule_time ? ` (${selectedBatch.schedule_time})` : ""}
                   </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    {selectedBatch.branch_id && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-white text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-200">
+                        <Landmark className="w-3 h-3" />
+                        {branches.find(b => b.id === selectedBatch.branch_id)?.name || "Branch"}
+                      </span>
+                    )}
+                    {selectedBatch.classroom && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-white text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                        <DoorOpen className="w-3 h-3 text-slate-500" />
+                        Classroom: {selectedBatch.classroom}
+                      </span>
+                    )}
+                    {typeof selectedBatch.current_seats === "number" && typeof selectedBatch.max_seats === "number" && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                        <Users className="w-3 h-3 text-slate-500" />
+                        {selectedBatch.current_seats} / {selectedBatch.max_seats} Seats filled
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Total Payable</p>

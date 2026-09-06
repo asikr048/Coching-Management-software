@@ -3,12 +3,36 @@ import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, AlertCircle, Printer, Download, RefreshCw } from "lucide-react"
+import { Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, AlertCircle, Printer, Download, RefreshCw, Landmark, DoorOpen } from "lucide-react"
 import { formatCurrency } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 
-interface Batch { id: string; name: string; subject?: string; class_level?: string; max_seats: number; current_seats: number; monthly_fee: number; admission_fee: number; status?: string }
-interface StudentOpt { id: string; name: string; student_id: string; phone?: string; email?: string; guardian_name?: string; guardian_phone?: string; address?: string; class_level?: string; school_college?: string }
+interface Batch { 
+  id: string
+  name: string
+  branch_id?: string | null
+  classroom?: string | null
+  subject?: string
+  class_level?: string
+  max_seats: number
+  current_seats: number
+  monthly_fee: number
+  admission_fee: number
+  status?: string 
+}
+interface StudentOpt { 
+  id: string
+  name: string
+  student_id: string
+  branch_id?: string | null
+  phone?: string
+  email?: string
+  guardian_name?: string
+  guardian_phone?: string
+  address?: string
+  class_level?: string
+  school_college?: string 
+}
 
 interface EnrollmentReceipt {
   receipt_number: string
@@ -30,7 +54,15 @@ interface EnrollmentReceipt {
   qr_data: string
 }
 
-export default function NewStudentForm({ batches, students }: { batches: Batch[]; students: StudentOpt[] }) {
+export default function NewStudentForm({ 
+  batches, 
+  students, 
+  branches = [] 
+}: { 
+  batches: Batch[]
+  students: StudentOpt[]
+  branches?: { id: string; name: string }[] 
+}) {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
@@ -38,6 +70,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
   const [mode, setMode] = useState<"new" | "existing">("new")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStudent, setSelectedStudent] = useState<StudentOpt | null>(null)
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => branches[0]?.id || "")
   const [form, setForm] = useState({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
   const [existingFix, setExistingFix] = useState({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
   const [paidAmount, setPaidAmount] = useState("")
@@ -96,6 +129,12 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
     const q = searchQuery.toLowerCase()
     return students.filter(s => s.name.toLowerCase().includes(q) || s.student_id.toLowerCase().includes(q) || (s.phone && s.phone.includes(q))).slice(0, 8)
   }, [searchQuery, students])
+
+  const branchFilteredBatches = useMemo(() => {
+    if (!selectedBranchId) return batches
+    const matches = batches.filter(b => b.branch_id === selectedBranchId)
+    return matches.length > 0 ? matches : batches
+  }, [batches, selectedBranchId])
 
   const batch = batches.find(b => b.id === form.batch_id)
   const total = batch ? batch.monthly_fee + batch.admission_fee : 0
@@ -207,6 +246,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         const { data: st, error: sErr } = await supabase.from("students").insert({
           student_id: studentIdStr,
           name: form.name.trim(),
+          branch_id: selectedBranchId || batch?.branch_id || null,
           phone: form.phone.trim() || null,
           email: email,
           gender: form.gender,
@@ -243,7 +283,11 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
       }
 
       // Add enrollment
-      const { error: eErr } = await supabase.from("enrollments").insert({ student_id: sid, batch_id: form.batch_id })
+      const { error: eErr } = await supabase.from("enrollments").insert({
+        student_id: sid,
+        batch_id: form.batch_id,
+        branch_id: selectedBranchId || batch?.branch_id || null
+      })
       if (eErr) {
         if (eErr.code === "23505" || eErr.message.includes("unique constraint") || eErr.message.includes("duplicate key")) {
           toast.error(`Student is already enrolled in ${batch?.name || "this batch"}!`)
@@ -658,19 +702,55 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
           </div>
         )}
 
+        {/* Branch Selection */}
+        {branches.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-4">
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Landmark className="w-4 h-4 text-amber-600" /> Select Branch (শাখা নির্বাচন) *
+              </p>
+              <span className="text-[11px] text-slate-500 font-medium">নির্ধারিত শাখার ব্যাচসমূহ দেখতে ক্লিক করুন</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {branches.map(b => {
+                const isSel = selectedBranchId === b.id
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedBranchId(b.id)
+                      setForm(f => ({ ...f, batch_id: "" }))
+                    }}
+                    className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-all text-left truncate flex items-center justify-between cursor-pointer ${
+                      isSel
+                        ? "bg-amber-600 text-white border-amber-700 shadow-xs"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="truncate">{b.name}</span>
+                    {isSel && <Check className="w-3.5 h-3.5 text-white shrink-0 ml-1" />}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Batch selection */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5">
           <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
             <BookOpen className="w-4 h-4 text-indigo-600" /> Select Batch (ব্যাচ নির্বাচন) *
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-            {batches.map(b => {
+            {branchFilteredBatches.map(b => {
               const isEnrolled = enrolledBatchIds.includes(b.id)
               const sel = form.batch_id === b.id
               const full = b.current_seats >= b.max_seats
               const isClosed = b.status === "admission_closed"
               const isFinished = b.status === "finished"
               const disabled = full || isEnrolled || isClosed || isFinished
+              const branchObj = branches.find(br => br.id === b.branch_id)
 
               return (
                 <button
@@ -712,6 +792,23 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
                     </span>
                   )}
                   <p className={`font-bold text-[13px] ${isEnrolled ? "text-emerald-700" : isClosed ? "text-amber-800" : "text-slate-900"}`}>{b.name}</p>
+                  
+                  {/* Branch & Classroom Badges */}
+                  {(branchObj || b.classroom) && (
+                    <div className="flex flex-wrap items-center gap-1.5 my-1">
+                      {branchObj && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100/70 text-amber-900 px-1.5 py-0.5 rounded">
+                          <Landmark className="w-2.5 h-2.5" /> {branchObj.name}
+                        </span>
+                      )}
+                      {b.classroom && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-slate-200/80 text-slate-700 px-1.5 py-0.5 rounded">
+                          <DoorOpen className="w-2.5 h-2.5 text-slate-500" /> {b.classroom}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   <p className="text-slate-500 text-[11px] mt-0.5">
                     {isEnrolled
                       ? "Already enrolled in this batch"

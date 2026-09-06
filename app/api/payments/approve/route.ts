@@ -163,22 +163,32 @@ export async function POST(req: NextRequest) {
           await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
         }
       } else {
+        const enrPayload: Record<string, any> = {
+          student_id: sub.student_id,
+          batch_id: sub.batch_id,
+          status: "active",
+        }
+        if (sub.branch_id) {
+          enrPayload.branch_id = sub.branch_id
+        }
+
         const { error: enrErr } = await admin.from("enrollments").upsert(
-          {
-            student_id: sub.student_id,
-            batch_id: sub.batch_id,
-            status: "active",
-          },
+          enrPayload,
           { onConflict: "student_id,batch_id" }
         )
 
         if (enrErr && !enrErr.message.includes("duplicate")) {
           console.warn("Enrollment upsert note, trying fallback:", enrErr.message)
-          await admin.from("enrollments").insert({
-            student_id: sub.student_id,
-            batch_id: sub.batch_id,
-            status: "active",
-          })
+          await admin.from("enrollments").insert(enrPayload)
+        }
+
+        // Also ensure student is linked to branch if not already linked
+        if (sub.branch_id && sub.student_id) {
+          await admin
+            .from("students")
+            .update({ branch_id: sub.branch_id })
+            .eq("id", sub.student_id)
+            .is("branch_id", null)
         }
       }
 
