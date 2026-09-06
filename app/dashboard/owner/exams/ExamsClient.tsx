@@ -62,6 +62,8 @@ export default function ExamsClient({
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [publishing, setPublishing] = useState<string | null>(null)
+  const [deleteConfirmExam, setDeleteConfirmExam] = useState<ExamRow | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const { selectedBranchId, currentBranch } = useBranch()
   
   // Filters
@@ -293,6 +295,33 @@ export default function ExamsClient({
     }
   }
 
+  async function handleDeleteExam(examId: string) {
+    setDeletingId(examId)
+    try {
+      const res = await fetch(`/api/exams/${examId}`, {
+        method: "DELETE",
+      })
+
+      if (!res.ok) {
+        // Direct Supabase fallback
+        await supabase.from("exam_results").delete().eq("exam_id", examId)
+        await supabase.from("exam_questions").delete().eq("exam_id", examId)
+        await supabase.from("exam_submissions").delete().eq("exam_id", examId)
+        const { error: dErr } = await supabase.from("exams").delete().eq("id", examId)
+        if (dErr) throw dErr
+      }
+
+      setExams((prev) => prev.filter((e) => e.id !== examId))
+      toast.success("✓ Exam deleted successfully!")
+      setDeleteConfirmExam(null)
+    } catch (err: any) {
+      console.error("Delete exam error:", err)
+      toast.error(err?.message || "Failed to delete exam")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
 
   return (
@@ -370,9 +399,24 @@ export default function ExamsClient({
                 </div>
               </div>
               <div className="flex flex-col gap-1 items-end shrink-0">
-                <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", exam.is_published ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
-                  {exam.is_published ? "Published" : "Draft"}
-                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", exam.is_published ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
+                    {exam.is_published ? "Published" : "Draft"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirmExam(exam)}
+                    disabled={deletingId === exam.id}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                    title="Delete Exam"
+                  >
+                    {deletingId === exam.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                </div>
                 {exam.is_online && <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-extrabold">ONLINE</span>}
               </div>
             </div>
@@ -407,12 +451,23 @@ export default function ExamsClient({
                   </Link>
                 )}
               </div>
-              <Link
-                href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-                className="w-full flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Send Result SMS
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
+                  className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Send Result SMS
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmExam(exam)}
+                  disabled={deletingId === exam.id}
+                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer"
+                  title="Delete Exam"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
         ))}
@@ -429,6 +484,53 @@ export default function ExamsClient({
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><p className="text-xs text-slate-500 font-medium">Online Exams</p><p className="text-2xl font-extrabold text-blue-600 mt-1">{exams.filter(e=>e.is_online).length}</p></div>
         </div>
       </div>
+
+      {/* Delete Exam Confirmation Modal */}
+      {deleteConfirmExam && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Delete Exam?</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Are you sure you want to delete <strong className="text-slate-800 font-bold">&quot;{deleteConfirmExam.title}&quot;</strong>?
+                  All associated questions and student exam results will be permanently removed. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmExam(null)}
+                disabled={deletingId === deleteConfirmExam.id}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteExam(deleteConfirmExam.id)}
+                disabled={deletingId === deleteConfirmExam.id}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-md shadow-rose-600/20 disabled:opacity-50 cursor-pointer"
+              >
+                {deletingId === deleteConfirmExam.id ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Permanently
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Modal */}
       {showModal && (
