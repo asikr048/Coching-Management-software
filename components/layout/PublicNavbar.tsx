@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
-import { GraduationCap, User } from "lucide-react"
+import { User } from "lucide-react"
 
 export default function PublicNavbar() {
   const [currentUser, setCurrentUser] = useState<any>(null)
@@ -35,9 +35,9 @@ export default function PublicNavbar() {
   return (
     <nav className="bg-white border-b border-gray-100 px-4 py-4">
       <div className="max-w-6xl mx-auto flex items-center justify-between">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center">
-            <GraduationCap className="w-4 h-4 text-white" />
+        <Link href="/" className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-full border border-indigo-200 overflow-hidden flex items-center justify-center bg-white shadow-xs">
+            <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
           </div>
           <span className="text-lg font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent">MedhaShiree</span>
         </Link>

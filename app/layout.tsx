@@ -10,6 +10,16 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "MedhaShiree - Coaching Management System",
   description: "Complete coaching center management solution with biometric attendance, fee management, course marketplace and more.",
+  icons: {
+    icon: [
+      { url: "/icon.png", type: "image/png" },
+      { url: "/favicon.ico" },
+    ],
+    apple: [
+      { url: "/icon.png" },
+    ],
+    shortcut: "/favicon.ico",
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -20,8 +20,8 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-200">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-full border border-indigo-200 overflow-hidden flex items-center justify-center bg-white shadow-sm flex-shrink-0">
+              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             <div>
               <span className="text-lg font-bold text-gray-900 tracking-tight">

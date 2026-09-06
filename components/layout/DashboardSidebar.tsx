@@ -84,8 +84,8 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
       {/* Brand Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-800/80 bg-slate-950/40">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center text-slate-950 shadow-md shadow-amber-500/20 flex-shrink-0">
-            <GraduationCap className="w-5 h-5 font-bold" />
+          <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-white border border-amber-400/40 shadow-md shadow-amber-500/20 flex-shrink-0">
+            <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
           </div>
           {(!collapsed || isMobileView) && (
             <div className="min-w-0">

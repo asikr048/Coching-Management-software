@@ -624,8 +624,8 @@ function EnrollContent() {
           {/* Logo */}
           <div className="flex justify-center mb-8">
             <Link href="/" className="inline-flex items-center gap-2.5">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                <GraduationCap className="w-6 h-6 text-white" />
+              <div className="w-10 h-10 rounded-full border border-cyan-400/40 overflow-hidden flex items-center justify-center bg-white shadow-lg shadow-cyan-500/20">
+                <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
               </div>
               <span className="text-2xl font-black bg-gradient-to-r from-white via-indigo-200 to-cyan-400 bg-clip-text text-transparent">
                 MedhaShiree
@@ -1144,8 +1144,8 @@ function EnrollContent() {
       <nav className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-0 z-30 shadow-xs">
         <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-200">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-full border border-indigo-200 overflow-hidden flex items-center justify-center bg-white shadow-xs flex-shrink-0">
+              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             <span className="text-xl font-black bg-gradient-to-r from-indigo-700 to-violet-700 bg-clip-text text-transparent">
               MedhaShiree

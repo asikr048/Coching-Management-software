@@ -3,7 +3,7 @@ import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
 import {
-  GraduationCap, BookOpen, Users, User, Clock, Calendar, MapPin, Star,
+  BookOpen, Users, User, Clock, Calendar, MapPin, Star,
   ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, CheckCircle, TrendingUp,
   Shield, Bell, MessageSquare, Send, Loader2, Megaphone, ExternalLink,
   Landmark, Award, Check, ChevronDown, Sparkles, Share2, Eye, FileText, Trophy
@@ -60,7 +60,7 @@ export default function HomePage() {
   const displayPhone = currentBranch?.contact_info?.phone || currentBranch?.director_phone || currentBranch?.manager_phone || contactPhone
   const displayEmail = currentBranch?.contact_info?.email || contactEmail
   const displayAddress = currentBranch?.location || contactAddress
-  const displayEstablishedYear = currentBranch?.established_year || "২০১৮"
+  const displayEstablishedYear = currentBranch?.established_year || "২০০৮"
 
   useEffect(() => {
     const supabase = createClient()
@@ -371,18 +371,19 @@ export default function HomePage() {
       {/* ========================================================================= */}
       <header className="bg-white border-b border-gray-200 py-3.5 sm:py-5 px-4 sm:px-8 shadow-xs sticky top-0 z-40">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Logo & Bengali Typography */}
+          {/* Logo & Typography */}
           <Link href="/" className="flex items-center gap-3 sm:gap-4 group min-w-0">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-indigo-700 p-0.5 shadow-md flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform">
-              <div className="w-full h-full rounded-full bg-gradient-to-br from-indigo-800 to-indigo-950 flex flex-col items-center justify-center text-white p-1 text-center">
-                <GraduationCap className="w-5 h-5 sm:w-7 sm:h-7 text-amber-400" />
-                <span className="text-[7px] sm:text-[9px] font-bold tracking-tighter text-indigo-100">মেধাশিরী</span>
-              </div>
+            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-indigo-700 p-0.5 shadow-md flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden">
+              <img
+                src="/logo.jpg"
+                alt="MedhaShiree Logo"
+                className="w-full h-full object-cover rounded-full"
+              />
             </div>
 
             <div className="min-w-0">
               <h1 className="text-xl sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight leading-tight group-hover:text-indigo-700 transition-colors">
-                মেধাশিরী কোচিং সেন্টার
+                MedhaShiree
               </h1>
               <p className="text-xs sm:text-sm font-semibold text-gray-600 mt-0.5 truncate">
                 {currentBranch ? currentBranch.name : "প্রধান ক্যাম্পাস ও সকল শাখা"} , {displayAddress}
@@ -1069,9 +1070,11 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pb-10 border-b border-gray-800">
           {/* Col 1: About */}
           <div>
-            <div className="flex items-center gap-2 mb-3">
-              <GraduationCap className="w-6 h-6 text-amber-400" />
-              <h3 className="font-bold text-white text-base">মেধাশিরী কোচিং সেন্টার</h3>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-9 h-9 rounded-full border border-indigo-400/30 overflow-hidden flex items-center justify-center bg-white flex-shrink-0">
+                <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+              </div>
+              <h3 className="font-bold text-white text-base">MedhaShiree</h3>
             </div>
             <p className="text-gray-400 leading-relaxed text-[11px] mb-3">{footerAbout}</p>
             <p className="text-amber-400 font-bold">স্থাপিত: {displayEstablishedYear}ইং</p>
