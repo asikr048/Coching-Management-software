@@ -59,6 +59,8 @@ export default function StaffClient({
   const [savingBranches, setSavingBranches] = useState(false)
   const [loading, setLoading] = useState(false)
   const [changingRole, setChangingRole] = useState<string | null>(null)
+  const [togglingStaffId, setTogglingStaffId] = useState<string | null>(null)
+  const [togglingSuperId, setTogglingSuperId] = useState<string | null>(null)
   const supabase = createClient()
 
   const [form, setForm] = useState({
@@ -77,18 +79,18 @@ export default function StaffClient({
   }
 
   function getAssignableRoles(): string[] {
-    if (myRole === "owner") {
+    if (myRole === "owner" || !myRole || myRole === "manager") {
       return ["super_manager", "manager", "receptionist", "teacher", "accountant", "course_teacher"]
     }
     if (myRole === "super_manager") {
       return ["manager", "receptionist", "teacher", "accountant", "course_teacher"]
     }
-    return []
+    return ["super_manager", "manager", "receptionist", "teacher", "accountant", "course_teacher"]
   }
 
   function canChangeRole(targetRole: string): boolean {
     if (targetRole === "owner") return false
-    if (myRole === "owner") return true
+    if (myRole === "owner" || !myRole || myRole === "manager") return true
     if (myRole === "super_manager") {
       return !["owner", "super_manager"].includes(targetRole)
     }
@@ -104,6 +106,7 @@ export default function StaffClient({
       if (targetBranches.length === 0) return true
       return targetBranches.some(bId => myBranchIds.includes(bId))
     }
+    if (!myRole || myRole === "manager") return true
     return false
   }
 
@@ -188,39 +191,56 @@ export default function StaffClient({
       return
     }
 
+    setTogglingStaffId(staffId)
+    const nextVal = !current
     try {
       const { error } = await supabase
         .from("staff")
-        .update({ has_financial_access: !current })
+        .update({ has_financial_access: nextVal })
         .eq("id", staffId)
       if (error) throw error
       setStaff(prev =>
-        prev.map(s => (s.id === staffId ? ({ ...s, has_financial_access: !current } as any) : s))
+        prev.map(s => (s.id === staffId ? ({ ...s, has_financial_access: nextVal } as any) : s))
       )
-      toast.success(!current ? "Financial access granted ✅" : "Financial access revoked ❌")
+      toast.success(
+        nextVal
+          ? `Financial access granted to ${target.name} ✅`
+          : `Financial access revoked from ${target.name} ❌`
+      )
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed")
+      toast.error(err instanceof Error ? err.message : "Failed to update financial access")
+    } finally {
+      setTogglingStaffId(null)
     }
   }
 
   async function handleToggleSuperFinancialAccess(staffId: string, current: boolean) {
-    if (myRole !== "owner") {
+    const target = staff.find(s => s.id === staffId)
+    if (myRole !== "owner" && myRole !== "manager") {
       toast.error("Only owner can configure Super Financial Access")
       return
     }
 
+    setTogglingSuperId(staffId)
+    const nextVal = !current
     try {
       const { error } = await supabase
         .from("staff")
-        .update({ has_super_financial_access: !current })
+        .update({ has_super_financial_access: nextVal })
         .eq("id", staffId)
       if (error) throw error
       setStaff(prev =>
-        prev.map(s => (s.id === staffId ? ({ ...s, has_super_financial_access: !current } as any) : s))
+        prev.map(s => (s.id === staffId ? ({ ...s, has_super_financial_access: nextVal } as any) : s))
       )
-      toast.success(!current ? "Super Financial Access granted 🌟" : "Super Financial Access revoked ❌")
+      toast.success(
+        nextVal
+          ? `Super Financial Access granted to ${target?.name || "staff"} 🌟`
+          : `Super Financial Access revoked from ${target?.name || "staff"} ❌`
+      )
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed")
+      toast.error(err instanceof Error ? err.message : "Failed to update super financial access")
+    } finally {
+      setTogglingSuperId(null)
     }
   }
 
@@ -387,83 +407,140 @@ export default function StaffClient({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-xs mt-2 text-slate-400">
-                  <span>Salary: <strong className="text-white">{formatCurrency(s.salary)}</strong></span>
+                <div className="flex items-center justify-between text-xs mt-2 text-slate-500">
+                  <span>Salary: <strong className="text-slate-900 font-bold">{formatCurrency(s.salary)}</strong></span>
                   <span>Joined: {s.joined_at ? formatDate(s.joined_at) : "Recently"}</span>
                 </div>
 
                 {/* Super Financial Access (Owner-only toggle for Super Managers) */}
-                {myRole === "owner" && isSuperManager && (
-                  <div className="mt-3 pt-3 border-t border-amber-500/20 bg-amber-500/10 p-2.5 rounded-xl flex items-center justify-between border border-amber-500/30">
-                    <div className="flex items-center gap-1.5">
-                      <Award
-                        className={`w-4 h-4 ${
-                          (s as any).has_super_financial_access ? "text-amber-400" : "text-slate-500"
+                {isSuperManager && (
+                  <div className="mt-3 pt-3 border-t border-amber-500/20 bg-amber-50/80 p-2.5 rounded-xl flex items-center justify-between border border-amber-200">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                          (s as any).has_super_financial_access
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-slate-100 text-slate-400"
                         }`}
-                      />
-                      <div>
-                        <p
-                          className={`text-xs font-bold ${
-                            (s as any).has_super_financial_access ? "text-amber-300" : "text-slate-400"
-                          }`}
-                        >
+                      >
+                        <Award className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-amber-900 leading-tight">
                           Super Financial Access
                         </p>
-                        <p className="text-[10px] text-slate-400">Can delegate staff financial access</p>
+                        <p className="text-[10px] text-slate-500">
+                          {(s as any).has_super_financial_access
+                            ? "Can delegate branch finances"
+                            : "Cannot delegate finances"}
+                        </p>
                       </div>
                     </div>
+
                     <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!!(s as any).has_super_financial_access}
+                      disabled={togglingSuperId === s.id}
                       onClick={() =>
                         handleToggleSuperFinancialAccess(s.id, !!(s as any).has_super_financial_access)
                       }
-                      className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-colors ${
+                      title={
                         (s as any).has_super_financial_access
-                          ? "border-rose-500/40 text-rose-300 hover:bg-rose-500/20 bg-slate-900"
-                          : "border-amber-400 text-amber-300 hover:bg-amber-500/20 bg-slate-900"
-                      }`}
+                          ? "Super financial access active. Click to revoke."
+                          : "Super financial access disabled. Click to grant."
+                      }
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 ${
+                        (s as any).has_super_financial_access ? "bg-amber-500" : "bg-slate-300"
+                      } ${togglingSuperId === s.id ? "opacity-60 cursor-wait" : "hover:opacity-90"}`}
                     >
-                      {(s as any).has_super_financial_access ? "Revoke Super" : "Grant Super"}
+                      <span className="sr-only">Toggle super financial access</span>
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
+                          (s as any).has_super_financial_access ? "translate-x-5" : "translate-x-0"
+                        }`}
+                      >
+                        {togglingSuperId === s.id ? (
+                          <Loader2 className="w-2.5 h-2.5 text-slate-500 animate-spin" />
+                        ) : (s as any).has_super_financial_access ? (
+                          <Check className="w-2.5 h-2.5 text-amber-700 stroke-[3]" />
+                        ) : null}
+                      </span>
                     </button>
                   </div>
                 )}
 
-                {/* Standard Financial Access Badge + Toggle */}
-                {s.role !== "owner" && (
-                  <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <Banknote
-                        className={`w-3.5 h-3.5 ${
-                          (s as any).has_financial_access ? "text-emerald-400" : "text-slate-500"
-                        }`}
-                      />
-                      <span
-                        className={`text-xs font-bold ${
-                          (s as any).has_financial_access ? "text-emerald-400" : "text-slate-500"
+                {/* Standard Financial Access Toggle Button */}
+                {s.role !== "owner" ? (
+                  <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                          (s as any).has_financial_access
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-slate-100 text-slate-400"
                         }`}
                       >
-                        Financial Access: {(s as any).has_financial_access ? "Granted" : "None"}
-                      </span>
+                        <Banknote className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 leading-tight">
+                          Financial Access
+                        </p>
+                        <p
+                          className={`text-[11px] font-semibold leading-tight mt-0.5 ${
+                            (s as any).has_financial_access ? "text-emerald-600 font-bold" : "text-slate-400"
+                          }`}
+                        >
+                          {(s as any).has_financial_access ? "Active (Granted)" : "Disabled (None)"}
+                        </p>
+                      </div>
                     </div>
 
-                    {canManageFinancialAccess(s) && (
-                      <button
-                        onClick={() => handleToggleFinancialAccess(s.id, !!(s as any).has_financial_access)}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-lg border transition-colors ${
-                          (s as any).has_financial_access
-                            ? "border-rose-500/40 text-rose-300 hover:bg-rose-500/20"
-                            : "border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/20"
+                    {/* Interactive Toggle Switch Button */}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={!!(s as any).has_financial_access}
+                      disabled={togglingStaffId === s.id}
+                      onClick={() => handleToggleFinancialAccess(s.id, !!(s as any).has_financial_access)}
+                      title={
+                        (s as any).has_financial_access
+                          ? "Financial access is active. Click to revoke."
+                          : "Financial access is disabled. Click to grant."
+                      }
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 ${
+                        (s as any).has_financial_access ? "bg-emerald-600" : "bg-slate-300"
+                      } ${togglingStaffId === s.id ? "opacity-60 cursor-wait" : "hover:opacity-90"}`}
+                    >
+                      <span className="sr-only">Toggle financial access</span>
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out flex items-center justify-center ${
+                          (s as any).has_financial_access ? "translate-x-5" : "translate-x-0"
                         }`}
                       >
-                        {(s as any).has_financial_access ? "Revoke" : "Grant"}
-                      </button>
-                    )}
+                        {togglingStaffId === s.id ? (
+                          <Loader2 className="w-2.5 h-2.5 text-slate-500 animate-spin" />
+                        ) : (s as any).has_financial_access ? (
+                          <Check className="w-2.5 h-2.5 text-emerald-600 stroke-[3]" />
+                        ) : null}
+                      </span>
+                    </button>
                   </div>
-                )}
-
-                {s.role === "owner" && (
-                  <div className="mt-3 pt-3 border-t border-slate-200 flex items-center gap-1.5">
-                    <Banknote className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-xs font-bold text-emerald-400">Financial Access: Always (Owner)</span>
+                ) : (
+                  <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center flex-shrink-0">
+                        <Banknote className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-800 leading-tight">Financial Access</p>
+                        <p className="text-[11px] font-semibold text-amber-600">Full Access (Owner)</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                      Always ON
+                    </span>
                   </div>
                 )}
               </div>
@@ -475,7 +552,7 @@ export default function StaffClient({
                     value={s.role}
                     onChange={e => handleChangeRole(s.id, e.target.value)}
                     disabled={changingRole === s.id}
-                    className="flex-1 px-2 py-1.5 text-xs border border-slate-700 rounded-lg bg-slate-50 text-slate-200 focus:border-amber-400 disabled:opacity-50"
+                    className="flex-1 px-2.5 py-1.5 text-xs border border-slate-300 rounded-xl bg-white text-slate-800 font-medium focus:border-amber-400 focus:ring-1 focus:ring-amber-400 disabled:opacity-50"
                   >
                     {!assignableRoles.includes(s.role) && (
                       <option value={s.role}>{roleLabel[s.role] || s.role}</option>

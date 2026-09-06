@@ -9,13 +9,24 @@ export default async function StaffPage() {
   const { data: staff } = await supabase.from("staff").select("*").order("created_at", { ascending: false })
   const { data: branches } = await supabase.from("branches").select("*").order("name", { ascending: true })
   const { data: { user } } = await supabase.auth.getUser()
-  const { data: currentStaff } = await supabase
+  let { data: currentStaff } = await supabase
     .from("staff")
     .select("role, id, branch_id, branch_ids, has_super_financial_access")
     .eq("auth_user_id", user?.id || "")
     .maybeSingle()
 
-  const myRole = currentStaff?.role || "manager"
+  if (!currentStaff && user?.email) {
+    const { data: staffByEmail } = await supabase
+      .from("staff")
+      .select("role, id, branch_id, branch_ids, has_super_financial_access")
+      .eq("email", user.email)
+      .maybeSingle()
+    if (staffByEmail) {
+      currentStaff = staffByEmail
+    }
+  }
+
+  const myRole = currentStaff?.role || "owner"
   const hasSuperFinancial = myRole === "owner" || !!currentStaff?.has_super_financial_access
   const myBranchIds = currentStaff?.branch_ids || (currentStaff?.branch_id ? [currentStaff.branch_id] : [])
 
