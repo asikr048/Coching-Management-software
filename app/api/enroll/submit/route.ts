@@ -271,17 +271,68 @@ export async function POST(req: NextRequest) {
     }
 
     let isExistingEnrolled = false
-    if (batchId) {
-      const { data: activeEnr } = await admin
-        .from("enrollments")
-        .select("id")
-        .eq("student_id", studentDbId)
-        .eq("batch_id", batchId)
-        .eq("status", "active")
-        .maybeSingle()
+    if (studentDbId) {
+      if (batchId) {
+        const { data: activeEnr } = await admin
+          .from("enrollments")
+          .select("id")
+          .eq("student_id", studentDbId)
+          .eq("batch_id", batchId)
+          .eq("status", "active")
+          .maybeSingle()
 
-      if (activeEnr) {
-        isExistingEnrolled = true
+        if (activeEnr) {
+          isExistingEnrolled = true
+        }
+
+        // Check if already has a pending submission for this batch
+        const { data: existingPendingBatch } = await admin
+          .from("payment_submissions")
+          .select("id")
+          .eq("student_id", studentDbId)
+          .eq("batch_id", batchId)
+          .eq("status", "pending")
+          .maybeSingle()
+
+        if (existingPendingBatch) {
+          return NextResponse.json(
+            { error: "You already have a pending payment submission for this batch awaiting admin approval." },
+            { status: 400 }
+          )
+        }
+      }
+
+      if (courseId) {
+        // Check if student already owns this course
+        const { data: existingCourse } = await admin
+          .from("course_purchases")
+          .select("id")
+          .eq("student_id", studentDbId)
+          .eq("course_id", courseId)
+          .maybeSingle()
+
+        if (existingCourse) {
+          return NextResponse.json(
+            { error: "You have already purchased and enrolled in this online course! You can access it anytime from your dashboard." },
+            { status: 400 }
+          )
+        }
+
+        // Check if already has a pending submission for this course
+        const { data: existingPendingCourse } = await admin
+          .from("payment_submissions")
+          .select("id")
+          .eq("student_id", studentDbId)
+          .eq("course_id", courseId)
+          .eq("status", "pending")
+          .maybeSingle()
+
+        if (existingPendingCourse) {
+          return NextResponse.json(
+            { error: "You already have a pending payment submission for this online course awaiting admin approval." },
+            { status: 400 }
+          )
+        }
       }
     }
 

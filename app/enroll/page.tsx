@@ -12,6 +12,7 @@ import {
   Users, Lock, Clock, Sparkles, Video, AlertCircle,
   Eye, EyeOff, LogIn, UserCheck, KeyRound
 } from "lucide-react"
+import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
 
 interface Batch {
   id: string
@@ -114,6 +115,31 @@ function EnrollContent() {
   const [alreadyEnrolled, setAlreadyEnrolled] = useState(false)
   const [submittedPaidAmount, setSubmittedPaidAmount] = useState<number>(0)
   const [submittedDueAmount, setSubmittedDueAmount] = useState<number>(0)
+
+  // Unified enrollment detection across batches and courses
+  const [userEnrollments, setUserEnrollments] = useState<UserEnrollmentsState>(() => getCachedUserEnrollments())
+
+  // Refresh user enrollments whenever current user changes
+  useEffect(() => {
+    async function refreshEnrollments() {
+      try {
+        const res = await getUserEnrollments()
+        setUserEnrollments(res)
+      } catch (err) {
+        console.warn("Could not fetch user enrollments:", err)
+      }
+    }
+    refreshEnrollments()
+  }, [currentUser])
+
+  // Computed enrolled / pending states for currently selected program
+  const isTargetEnrolled = enrollType === "batch"
+    ? Boolean(selectedBatchId && (userEnrollments.enrolledBatchIds.has(selectedBatchId) || alreadyEnrolled))
+    : Boolean(selectedCourseId && (userEnrollments.enrolledCourseIds.has(selectedCourseId) || alreadyEnrolled))
+
+  const isTargetPending = enrollType === "batch"
+    ? Boolean(selectedBatchId && (userEnrollments.pendingBatchIds.has(selectedBatchId) || existingPending))
+    : Boolean(selectedCourseId && (userEnrollments.pendingCourseIds.has(selectedCourseId) || existingPending))
 
   // Copy helpers
   const [copiedPhone, setCopiedPhone] = useState(false)
@@ -422,6 +448,11 @@ function EnrollContent() {
   function handleProceedToPayment(e: React.FormEvent) {
     e.preventDefault()
 
+    if (isTargetEnrolled) {
+      toast.error(`You are already enrolled in this ${isCourse ? "course" : "batch"}! Please access it from your student dashboard.`)
+      return
+    }
+
     if (isCourse) {
       if (!selectedCourse) {
         toast.error("Please select a course to enroll in")
@@ -492,6 +523,11 @@ function EnrollContent() {
   // Submit payment in Step 2
   async function handleSubmitPayment(e: React.FormEvent) {
     e.preventDefault()
+
+    if (isTargetEnrolled) {
+      toast.error(`You are already enrolled in this ${isCourse ? "course" : "batch"}!`)
+      return
+    }
 
     if (!paymentMethod) {
       toast.error("Please select a payment method (bKash, Nagad, Rocket, or Upay)")
@@ -1086,22 +1122,50 @@ function EnrollContent() {
                 </div>
 
                 {/* Submit Payment Button */}
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full py-4 rounded-xl bg-[#00ffff] hover:bg-[#1fe6f7] active:bg-[#00d0e0] text-black font-extrabold text-base tracking-wide transition-all shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin text-black" />
-                      Submitting Payment...
-                    </>
-                  ) : (
-                    <>
-                      Submit Payment (৳{actualPaidAmount}) ✓
-                    </>
-                  )}
-                </button>
+                {isTargetEnrolled ? (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-center text-xs font-bold text-emerald-300">
+                      You are already enrolled in this {isCourse ? "course" : "batch"}.
+                    </div>
+                    <Link
+                      href={isCourse ? `/student/course/${selectedCourseId}` : `/student/batch/${selectedBatchId}`}
+                      className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-base tracking-wide transition-all shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                      <span>Already Enrolled — Go to Classroom</span>
+                    </Link>
+                  </div>
+                ) : isTargetPending ? (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-center text-xs font-bold text-amber-300">
+                      Payment for this {isCourse ? "course" : "batch"} is already submitted and pending review.
+                    </div>
+                    <Link
+                      href="/student/profile"
+                      className="w-full py-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-base tracking-wide transition-all shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Clock className="w-5 h-5" />
+                      <span>Pending Approval — View in Profile</span>
+                    </Link>
+                  </div>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-4 rounded-xl bg-[#00ffff] hover:bg-[#1fe6f7] active:bg-[#00d0e0] text-black font-extrabold text-base tracking-wide transition-all shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin text-black" />
+                        Submitting Payment...
+                      </>
+                    ) : (
+                      <>
+                        Submit Payment (৳{actualPaidAmount}) ✓
+                      </>
+                    )}
+                  </button>
+                )}
 
                 {/* Cancel link */}
                 <div className="text-center pt-1">
@@ -1296,6 +1360,63 @@ function EnrollContent() {
                     <p className="text-[11px] text-gray-400">Monthly ৳{batchMonthlyFee} + Admission ৳{batchAdmissionFee}</p>
                   )}
                 </div>
+              </div>
+            ) : null}
+
+            {/* Prominent Enrollment / Pending Status Banner */}
+            {isTargetEnrolled ? (
+              <div className="mt-4 p-4 sm:p-5 bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-emerald-600/20">
+                    <CheckCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-emerald-900 flex items-center gap-1.5">
+                      Already Enrolled! (ভর্তি সম্পন্ন)
+                    </h4>
+                    <p className="text-xs text-emerald-700 mt-0.5">
+                      You are already enrolled in this {isCourse ? "course" : "batch"}. Duplicate enrollment is not permitted.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Link
+                    href={isCourse ? `/student/course/${selectedCourseId}` : `/student/batch/${selectedBatchId}`}
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <GraduationCap className="w-4 h-4" />
+                    <span>Go to Classroom</span>
+                  </Link>
+                  <Link
+                    href="/student/profile"
+                    className="px-3.5 py-2.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-semibold transition-colors"
+                  >
+                    My Profile
+                  </Link>
+                </div>
+              </div>
+            ) : isTargetPending ? (
+              <div className="mt-4 p-4 sm:p-5 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-amber-500/20">
+                    <Clock className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-amber-900 flex items-center gap-1.5">
+                      Payment Pending Approval! (অপেক্ষমাণ)
+                    </h4>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Your payment submission for this {isCourse ? "course" : "batch"} is currently being reviewed by administration.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/student/profile"
+                  className="w-full sm:w-auto px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200 flex items-center justify-center gap-1.5"
+                >
+                  <User className="w-4 h-4" />
+                  <span>Check Status in Profile</span>
+                </Link>
               </div>
             ) : null}
           </div>
@@ -1759,18 +1880,50 @@ function EnrollContent() {
             </div>
           )}
 
-          {/* Action Button: Proceed to Payment */}
+          {/* Action Button: Proceed to Payment or Enter Classroom */}
           <div className="pt-2">
-            <button
-              type="submit"
-              className="w-full py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-lg rounded-2xl shadow-xl shadow-indigo-300/40 hover:shadow-indigo-400/50 transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99]"
-            >
-              <span>Proceed to Payment</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
-            <p className="text-center text-xs text-gray-400 mt-3">
-              You will be redirected to the payment screen to send fee via bKash, Nagad, Rocket, or Upay.
-            </p>
+            {isTargetEnrolled ? (
+              <div className="space-y-3">
+                <Link
+                  href={isCourse ? `/student/course/${selectedCourseId}` : `/student/batch/${selectedBatchId}`}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-lg rounded-2xl shadow-xl shadow-emerald-200 hover:shadow-emerald-300 transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99]"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  <span>Already Enrolled — Go to Classroom (ভর্তি সম্পন্ন)</span>
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+                <p className="text-center text-xs text-emerald-700 font-medium">
+                  You are already enrolled in this {isCourse ? "course" : "batch"}. Click above to enter your classroom directly.
+                </p>
+              </div>
+            ) : isTargetPending ? (
+              <div className="space-y-3">
+                <Link
+                  href="/student/profile"
+                  className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-lg rounded-2xl shadow-xl shadow-amber-200 hover:shadow-amber-300 transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99]"
+                >
+                  <Clock className="w-5 h-5" />
+                  <span>Payment Pending Approval — View in Profile</span>
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+                <p className="text-center text-xs text-amber-700 font-medium">
+                  Your payment submission is pending verification. Please wait for admin approval.
+                </p>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="submit"
+                  className="w-full py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-lg rounded-2xl shadow-xl shadow-indigo-300/40 hover:shadow-indigo-400/50 transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99]"
+                >
+                  <span>Proceed to Payment</span>
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+                <p className="text-center text-xs text-gray-400 mt-3">
+                  You will be redirected to the payment screen to send fee via bKash, Nagad, Rocket, or Upay.
+                </p>
+              </>
+            )}
           </div>
 
         </form>

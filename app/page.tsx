@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import type { Branch } from "@/lib/supabase/types"
+import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
 
 export default function HomePage() {
   const [branches, setBranches] = useState<Branch[]>([])
@@ -23,6 +24,16 @@ export default function HomePage() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
+  const [userEnrollments, setUserEnrollments] = useState<UserEnrollmentsState>(() => {
+    return getCachedUserEnrollments() || {
+      enrolledBatchIds: new Set<string>(),
+      pendingBatchIds: new Set<string>(),
+      enrolledCourseIds: new Set<string>(),
+      pendingCourseIds: new Set<string>(),
+      isStaff: false,
+      user: null,
+    }
+  })
   const [notices, setNotices] = useState<any[]>([])
   const [achievements, setAchievements] = useState<any[]>([])
   const [blogs, setBlogs] = useState<any[]>([])
@@ -66,13 +77,17 @@ export default function HomePage() {
     const supabase = createClient()
 
     async function loadData() {
-      // 1. Auth Check
+      // 1. Auth & Enrollment Check
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
           setCurrentUser(user)
           const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle()
           setUserRole(staff?.role || "student")
+
+          getUserEnrollments().then(enrState => {
+            setUserEnrollments(enrState)
+          })
         }
       } catch {}
 
@@ -679,6 +694,9 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredBatches.map(batch => {
               const isClosed = batch.status === "admission_closed" || batch.status === "finished"
+              const isEnrolled = userEnrollments.enrolledBatchIds.has(batch.id)
+              const isPending = userEnrollments.pendingBatchIds.has(batch.id)
+
               return (
                 <div
                   key={batch.id}
@@ -691,12 +709,16 @@ export default function HomePage() {
                       </Link>
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${
-                          isClosed
+                          isEnrolled
+                            ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                            : isPending
+                            ? "bg-amber-100 text-amber-800 border border-amber-300"
+                            : isClosed
                             ? "bg-red-50 text-red-700 border border-red-200"
                             : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                         }`}
                       >
-                        {isClosed ? "ভর্তি বন্ধ (Closed)" : "ভর্তি চলছে (Open)"}
+                        {isEnrolled ? "✓ ভর্তি সম্পন্ন (Enrolled)" : isPending ? "⏳ অপেক্ষমাণ (Pending)" : isClosed ? "ভর্তি বন্ধ (Closed)" : "ভর্তি চলছে (Open)"}
                       </span>
                     </div>
 
@@ -740,7 +762,23 @@ export default function HomePage() {
                       </p>
                     </div>
 
-                    {isClosed ? (
+                    {isEnrolled ? (
+                      <Link
+                        href={`/student/batch/${batch.id}`}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors shadow-xs flex items-center gap-1.5"
+                      >
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        ক্লাসরুমে যান
+                      </Link>
+                    ) : isPending ? (
+                      <Link
+                        href="/student/profile"
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-xs flex items-center gap-1.5"
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        অপেক্ষমাণ
+                      </Link>
+                    ) : isClosed ? (
                       <span className="px-3.5 py-2 rounded-xl text-xs font-bold bg-gray-100 text-gray-400 cursor-not-allowed">
                         ভর্তি বন্ধ
                       </span>
@@ -779,47 +817,68 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              {courses.map(course => (
-                <div
-                  key={course.id}
-                  className="bg-gray-50/50 rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col justify-between"
-                >
-                  <div className="aspect-video bg-gray-200 relative overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={course.thumbnail_url || "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=600&auto=format&fit=crop"}
-                      alt={course.title}
-                      className="w-full h-full object-cover"
-                    />
-                    {course.subject && (
-                      <span className="absolute top-2 left-2 text-[10px] font-bold bg-indigo-900/80 text-white px-2 py-0.5 rounded backdrop-blur-xs">
-                        {course.subject}
-                      </span>
-                    )}
-                  </div>
+              {courses.map(course => {
+                const isCourseEnrolled = userEnrollments.enrolledCourseIds.has(course.id)
+                const isCoursePending = userEnrollments.pendingCourseIds.has(course.id)
 
-                  <div className="p-4 flex-1 flex flex-col justify-between">
-                    <div>
-                      <h4 className="font-bold text-gray-900 text-sm mb-1 line-clamp-2">{course.title}</h4>
-                      {course.teacher?.name && (
-                        <p className="text-xs text-gray-500 mb-2">প্রভাষক: {course.teacher.name}</p>
+                return (
+                  <div
+                    key={course.id}
+                    className="bg-gray-50/50 rounded-2xl border border-gray-200 overflow-hidden hover:shadow-md transition-shadow flex flex-col justify-between"
+                  >
+                    <div className="aspect-video bg-gray-200 relative overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={course.thumbnail_url || "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=600&auto=format&fit=crop"}
+                        alt={course.title}
+                        className="w-full h-full object-cover"
+                      />
+                      {course.subject && (
+                        <span className="absolute top-2 left-2 text-[10px] font-bold bg-indigo-900/80 text-white px-2 py-0.5 rounded backdrop-blur-xs">
+                          {course.subject}
+                        </span>
                       )}
                     </div>
 
-                    <div className="pt-3 border-t border-gray-200 flex items-center justify-between mt-2">
-                      <span className="text-sm font-bold text-indigo-700">
-                        {course.price ? formatCurrency(course.price) : "বিনামূল্যে"}
-                      </span>
-                      <Link
-                        href={`/enroll?courseId=${course.id}`}
-                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1"
-                      >
-                        ভর্তি হন (Enroll) <ArrowRight className="w-3.5 h-3.5" />
-                      </Link>
+                    <div className="p-4 flex-1 flex flex-col justify-between">
+                      <div>
+                        <h4 className="font-bold text-gray-900 text-sm mb-1 line-clamp-2">{course.title}</h4>
+                        {course.teacher?.name && (
+                          <p className="text-xs text-gray-500 mb-2">প্রভাষক: {course.teacher.name}</p>
+                        )}
+                      </div>
+
+                      <div className="pt-3 border-t border-gray-200 flex items-center justify-between mt-2">
+                        <span className="text-sm font-bold text-indigo-700">
+                          {course.price ? formatCurrency(course.price) : "বিনামূল্যে"}
+                        </span>
+                        {isCourseEnrolled ? (
+                          <Link
+                            href={`/student/course/${course.id}`}
+                            className="text-xs font-bold text-emerald-700 hover:text-emerald-800 inline-flex items-center gap-1 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200"
+                          >
+                            <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> কোর্সে যান (Enrolled)
+                          </Link>
+                        ) : isCoursePending ? (
+                          <Link
+                            href="/student/profile"
+                            className="text-xs font-bold text-amber-700 hover:text-amber-800 inline-flex items-center gap-1 bg-amber-50 px-2.5 py-1.5 rounded-lg border border-amber-200"
+                          >
+                            <Clock className="w-3.5 h-3.5 text-amber-600" /> অপেক্ষমাণ (Pending)
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/enroll?courseId=${course.id}`}
+                            className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1"
+                          >
+                            ভর্তি হন (Enroll) <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </section>

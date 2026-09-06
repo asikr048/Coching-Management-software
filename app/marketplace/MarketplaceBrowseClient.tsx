@@ -1,5 +1,5 @@
 "use client"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
 import { formatCurrency } from "@/lib/utils"
 import {
@@ -7,6 +7,7 @@ import {
   Star, ChevronRight, CheckCircle2, Phone, MessageSquare, PlayCircle,
   Sparkles, X, ArrowRight, ShieldCheck, AlertCircle
 } from "lucide-react"
+import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
 
 interface TeacherInfo {
   name?: string
@@ -73,6 +74,20 @@ export default function MarketplaceBrowseClient({
   const [selectedClass, setSelectedClass] = useState("all")
   const [sortBy, setSortBy] = useState<"default" | "fee_asc" | "fee_desc" | "seats">("default")
   const [selectedCourse, setSelectedCourse] = useState<CourseItem | null>(null)
+  const [userEnrollments, setUserEnrollments] = useState<UserEnrollmentsState>(() => {
+    return getCachedUserEnrollments() || {
+      enrolledBatchIds: new Set<string>(),
+      pendingBatchIds: new Set<string>(),
+      enrolledCourseIds: new Set<string>(),
+      pendingCourseIds: new Set<string>(),
+      isStaff: false,
+      user: null,
+    }
+  })
+
+  useEffect(() => {
+    getUserEnrollments().then(setUserEnrollments)
+  }, [])
 
   // Extract unique subjects
   const allSubjects = useMemo(() => {
@@ -320,6 +335,8 @@ export default function MarketplaceBrowseClient({
                 const isFull = seatsLeft <= 0
                 const isAlmostFull = seatsLeft > 0 && seatsLeft <= 5
                 const isAdmissionClosed = batch.status === "admission_closed" || batch.status === "finished"
+                const isBatchEnrolled = userEnrollments.enrolledBatchIds.has(batch.id)
+                const isBatchPending = userEnrollments.pendingBatchIds.has(batch.id)
 
                 return (
                   <div
@@ -344,7 +361,17 @@ export default function MarketplaceBrowseClient({
                             )}
                           </div>
 
-                          {isAdmissionClosed ? (
+                          {isBatchEnrolled ? (
+                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              Enrolled (ভর্তি সম্পন্ন)
+                            </span>
+                          ) : isBatchPending ? (
+                            <span className="px-2.5 py-1 bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
+                              <Clock className="w-3.5 h-3.5 text-amber-600" />
+                              Pending Approval
+                            </span>
+                          ) : isAdmissionClosed ? (
                             <span className="px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200/90 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                               Admission Closed
@@ -385,37 +412,25 @@ export default function MarketplaceBrowseClient({
                           </div>
                         </div>
 
-                        {/* Schedule Chips */}
-                        <div className="space-y-1.5 pt-2 text-xs text-gray-600">
+                        {/* Timing & schedule */}
+                        <div className="space-y-1.5 text-xs text-gray-600 pt-1">
                           {batch.schedule_days && (
-                            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                              <Calendar className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
-                              <span className="font-medium text-gray-800">{batch.schedule_days}</span>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                              <span>{batch.schedule_days}</span>
                             </div>
                           )}
                           {batch.schedule_time && (
-                            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-100">
-                              <Clock className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
-                              <span className="font-medium text-gray-800">{batch.schedule_time}</span>
+                            <div className="flex items-center gap-2">
+                              <Clock className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                              <span>{batch.schedule_time}</span>
                             </div>
                           )}
-                        </div>
-
-                        {/* Seat Capacity Progress Bar */}
-                        <div className="space-y-1.5 pt-1">
-                          <div className="flex items-center justify-between text-xs text-gray-500 font-medium">
-                            <span>Seat Capacity</span>
-                            <span className={isAlmostFull ? "text-red-600 font-bold" : "text-gray-700"}>
-                              {currentSeats}/{maxSeats} Filled ({seatsLeft} remaining)
+                          <div className="flex items-center gap-2">
+                            <Users className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                            <span>
+                              {currentSeats} / {maxSeats} students enrolled
                             </span>
-                          </div>
-                          <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                isFull ? "bg-gray-400" : isAlmostFull ? "bg-red-500" : "bg-gradient-to-r from-indigo-500 to-emerald-500"
-                              }`}
-                              style={{ width: `${percentFilled}%` }}
-                            />
                           </div>
                         </div>
                       </div>
@@ -440,13 +455,33 @@ export default function MarketplaceBrowseClient({
                           )}
                         </div>
 
-                        <Link
-                          href={`/batch/${batch.id}`}
-                          className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-indigo-50 group-hover:bg-indigo-600 text-indigo-700 group-hover:text-white rounded-xl text-sm font-semibold transition-all duration-200 shadow-sm"
-                        >
-                          View Batch &amp; Schedule
-                          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                        </Link>
+                        {isBatchEnrolled ? (
+                          <Link
+                            href={`/student/batch/${batch.id}`}
+                            className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-all duration-200 shadow-md shadow-emerald-200"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            Go to Batch Classroom
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          </Link>
+                        ) : isBatchPending ? (
+                          <Link
+                            href="/student/profile"
+                            className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold transition-all duration-200 shadow-md shadow-amber-200"
+                          >
+                            <Clock className="w-4 h-4" />
+                            Pending Approval (View Status)
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/batch/${batch.id}`}
+                            className="w-full inline-flex items-center justify-center gap-2 py-3 px-4 bg-indigo-50 group-hover:bg-indigo-600 text-indigo-700 group-hover:text-white rounded-xl text-sm font-semibold transition-all duration-200 shadow-sm"
+                          >
+                            View Batch &amp; Schedule
+                            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                          </Link>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -493,7 +528,11 @@ export default function MarketplaceBrowseClient({
 
           {filteredCourses.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredCourses.map(course => (
+              {filteredCourses.map(course => {
+                const isCourseEnrolled = userEnrollments.enrolledCourseIds.has(course.id)
+                const isCoursePending = userEnrollments.pendingCourseIds.has(course.id)
+
+                return (
                 <div
                   key={course.id}
                   className="bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-xl hover:border-purple-300 transition-all duration-300 flex flex-col justify-between group"
@@ -502,6 +541,20 @@ export default function MarketplaceBrowseClient({
                   <div>
                     <div className="h-44 bg-gradient-to-br from-purple-700 via-indigo-700 to-violet-800 relative flex items-center justify-center p-6 text-white overflow-hidden">
                       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white/10 via-transparent to-transparent opacity-60" />
+
+                      {/* Enrollment Badge */}
+                      {isCourseEnrolled ? (
+                        <div className="absolute top-3 left-3 z-20 flex items-center gap-1 bg-emerald-600/90 text-white backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-bold shadow-md">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Enrolled (ভর্তি সম্পন্ন)</span>
+                        </div>
+                      ) : isCoursePending ? (
+                        <div className="absolute top-3 left-3 z-20 flex items-center gap-1 bg-amber-500/90 text-white backdrop-blur-md px-2.5 py-1 rounded-full text-xs font-bold shadow-md">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Pending (অপেক্ষমাণ)</span>
+                        </div>
+                      ) : null}
+
                       <div className="relative z-10 flex flex-col items-center text-center space-y-2">
                         <div className="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 group-hover:scale-110 transition-transform">
                           <PlayCircle className="w-8 h-8 text-white" />
@@ -562,17 +615,36 @@ export default function MarketplaceBrowseClient({
                         <BookOpen className="w-3.5 h-3.5" />
                         Details
                       </button>
-                      <Link
-                        href={`/enroll?courseId=${course.id}`}
-                        className="flex-1 py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-md shadow-purple-200"
-                      >
-                        <span>Enroll Now</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </Link>
+                      {isCourseEnrolled ? (
+                        <Link
+                          href={`/student/course/${course.id}`}
+                          className="flex-1 py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-md shadow-emerald-200"
+                        >
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Go to Course</span>
+                        </Link>
+                      ) : isCoursePending ? (
+                        <Link
+                          href="/student/profile"
+                          className="flex-1 py-2.5 px-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-md shadow-amber-200"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>Pending Approval</span>
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/enroll?courseId=${course.id}`}
+                          className="flex-1 py-2.5 px-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shadow-md shadow-purple-200"
+                        >
+                          <span>Enroll Now</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <div className="p-12 text-center bg-white rounded-3xl border border-dashed border-gray-200 space-y-3">
@@ -679,13 +751,31 @@ export default function MarketplaceBrowseClient({
                 >
                   Close
                 </button>
-                <Link
-                  href={`/enroll?courseId=${selectedCourse.id}`}
-                  className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-sm font-bold text-center transition-all shadow-md shadow-purple-300 flex items-center justify-center gap-2"
-                >
-                  <span>Enroll / Buy Course Now</span>
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
+                {selectedCourse && userEnrollments.enrolledCourseIds.has(selectedCourse.id) ? (
+                  <Link
+                    href={`/student/course/${selectedCourse.id}`}
+                    className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold text-center transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Enrolled • Go to Course</span>
+                  </Link>
+                ) : selectedCourse && userEnrollments.pendingCourseIds.has(selectedCourse.id) ? (
+                  <Link
+                    href="/student/profile"
+                    className="flex-1 py-3 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-sm font-bold text-center transition-all shadow-md shadow-amber-200 flex items-center justify-center gap-2"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>Enrollment Pending • View Status</span>
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/enroll?courseId=${selectedCourse.id}`}
+                    className="flex-1 py-3 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-sm font-bold text-center transition-all shadow-md shadow-purple-300 flex items-center justify-center gap-2"
+                  >
+                    <span>Enroll / Buy Course Now</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </Link>
+                )}
               </div>
             </div>
           </div>
