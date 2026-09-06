@@ -92,9 +92,11 @@ export default function HomePage() {
       } catch {}
 
       // 2. Branches
+      let loadedBranches: any[] = []
       try {
         const { data: bList } = await supabase.from("branches").select("*").eq("is_active", true).order("name")
         if (bList && bList.length > 0) {
+          loadedBranches = bList
           setBranches(bList)
         }
       } catch {}
@@ -157,13 +159,38 @@ export default function HomePage() {
       try {
         const { data: n, error: nErr } = await supabase
           .from("notices")
-          .select("*, branch:branches(name)")
+          .select("*")
           .eq("is_active", true)
           .order("created_at", { ascending: false })
-          .limit(15)
+          .limit(25)
 
         if (!nErr && Array.isArray(n)) {
-          setNotices(n)
+          let noticeBranchesMap: Record<string, string[]> = {}
+          try {
+            const { data: nbSetting } = await supabase
+              .from("site_settings")
+              .select("value")
+              .eq("key", "notice_branch_assignments")
+              .maybeSingle()
+            if (nbSetting?.value) {
+              noticeBranchesMap = JSON.parse(nbSetting.value)
+            }
+          } catch {}
+
+          const enriched = n.map((item: any) => {
+            const extraBranchIds = noticeBranchesMap[item.id] || []
+            const branchIds = Array.isArray(item.branch_ids) && item.branch_ids.length > 0
+              ? item.branch_ids
+              : (extraBranchIds.length > 0 ? extraBranchIds : (item.branch_id ? [item.branch_id] : []))
+            const assignedBranches = (loadedBranches || []).filter((b: any) => branchIds.includes(b.id))
+            const branchNames = assignedBranches.map((b: any) => b.name)
+            return {
+              ...item,
+              branch_ids: branchIds,
+              branch: branchNames.length > 0 ? { name: branchNames.join(", ") } : null,
+            }
+          })
+          setNotices(enriched)
         }
       } catch {}
 
@@ -263,7 +290,11 @@ export default function HomePage() {
 
   const filteredNotices = notices.filter(n => {
     if (selectedBranchId === "all") return true
-    return n.branch_id === selectedBranchId || !n.branch_id
+    const isGlobal = !n.branch_id && (!n.branch_ids || n.branch_ids.length === 0)
+    if (isGlobal) return true
+    if (n.branch_id === selectedBranchId) return true
+    if (Array.isArray(n.branch_ids) && n.branch_ids.includes(selectedBranchId)) return true
+    return false
   })
 
   const filteredAchievements = achievements.filter(a => {
