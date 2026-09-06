@@ -138,6 +138,7 @@ export default function StudentBatchDetailPage() {
         
         // 1. Fetch student profile and verified enrollments via server API
         let studentData: any = null
+        let currentProfile: any = null
         let currentEnrollment: any = null
         let profileExamResults: any[] = []
 
@@ -146,6 +147,7 @@ export default function StudentBatchDetailPage() {
           if (profileRes.ok) {
             const profileJson = await profileRes.json()
             if (profileJson.student) studentData = profileJson.student
+            if (profileJson.profile) currentProfile = profileJson.profile
             if (profileJson.enrollments) {
               currentEnrollment = profileJson.enrollments.find((e: any) => e.batch_id === batchId || e.batch?.id === batchId)
             }
@@ -182,7 +184,7 @@ export default function StudentBatchDetailPage() {
             userProf = byEmail
           }
 
-          const currentProfile = userProf || {
+          currentProfile = userProf || {
             user_id: user.user_metadata?.user_id || 'MS-' + user.id.slice(0, 5).toUpperCase(),
             email: user.email,
           }
@@ -411,54 +413,102 @@ export default function StudentBatchDetailPage() {
         // 7. Get batch materials & student material issues
         let rawBatchMaterials: any[] = []
         try {
-          const { data: bMats } = await supabase
+          const { data: allMats } = await supabase
             .from('materials')
             .select('*')
-            .or(`batch_id.eq.${batchId},batch_ids.cs.["${batchId}"]`)
             .order('created_at', { ascending: false })
 
-          if (bMats && bMats.length > 0) {
-            rawBatchMaterials = bMats
-          } else {
+          let candidateMaterials: any[] = allMats && allMats.length > 0 ? allMats : []
+
+          if (candidateMaterials.length === 0) {
             const { data: fbMats } = await supabase
               .from('materials')
               .select('*')
               .eq('batch_id', batchId)
               .order('created_at', { ascending: false })
-            if (fbMats) rawBatchMaterials = fbMats
+            if (fbMats) candidateMaterials = fbMats
           }
-        } catch {
-          const { data: fbMats } = await supabase
-            .from('materials')
-            .select('*')
-            .eq('batch_id', batchId)
-            .order('created_at', { ascending: false })
-          if (fbMats) rawBatchMaterials = fbMats
-        }
 
-        if (rawBatchMaterials.length === 0) {
+          // Also check localStorage if available
           try {
             const localMatStr = localStorage.getItem("medhashiree_materials")
             if (localMatStr) {
               const localMats = JSON.parse(localMatStr)
               if (Array.isArray(localMats)) {
-                rawBatchMaterials = localMats.filter((m: any) => 
-                  m.batch_id === batchId || 
-                  (Array.isArray(m.batch_ids) && m.batch_ids.includes(batchId)) ||
-                  !m.batch_id
-                )
+                const existingIds = new Set(candidateMaterials.map((m: any) => m.id))
+                for (const lm of localMats) {
+                  if (!existingIds.has(lm.id)) {
+                    candidateMaterials.push(lm)
+                    existingIds.add(lm.id)
+                  }
+                }
               }
             }
           } catch {}
+
+          const bIdStr = String(batchId)
+          const currentBatchName = batchData?.name || currentEnrollment?.batch?.name || ''
+          const currentBranchId = batchData?.branch_id || currentEnrollment?.batch?.branch_id || ''
+
+          rawBatchMaterials = candidateMaterials.filter((m: any) => {
+            if (!m) return false
+
+            // 1. Single batch match
+            if (m.batch_id && String(m.batch_id) === bIdStr) return true
+
+            // 2. Multi batch match via batch_ids (array or json string or comma string)
+            if (m.batch_ids) {
+              if (Array.isArray(m.batch_ids)) {
+                if (m.batch_ids.some((bid: any) => String(bid) === bIdStr)) return true
+              } else if (typeof m.batch_ids === 'string') {
+                try {
+                  const parsed = JSON.parse(m.batch_ids)
+                  if (Array.isArray(parsed) && parsed.some((bid: any) => String(bid) === bIdStr)) return true
+                } catch {
+                  if (m.batch_ids.includes(bIdStr)) return true
+                }
+              }
+            }
+
+            // 3. Batch Name / Class match (e.g. "Class 9")
+            if (currentBatchName) {
+              const bNameLower = currentBatchName.trim().toLowerCase()
+              if (m.batch_name && String(m.batch_name).trim().toLowerCase() === bNameLower) return true
+              if (m.subject && String(m.subject).trim().toLowerCase() === bNameLower) return true
+              if (Array.isArray(m.batch_names) && m.batch_names.some((bn: any) => String(bn).trim().toLowerCase() === bNameLower)) return true
+            }
+
+            // 4. Material with no specific batch (general material for branch or entire coaching)
+            const hasNoBatch = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
+              (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]")
+
+            if (hasNoBatch) {
+              if (m.branch_id && currentBranchId) {
+                return String(m.branch_id) === String(currentBranchId)
+              }
+              return true
+            }
+
+            return false
+          })
+        } catch (mCatchErr) {
+          console.warn("Materials loading error in batch page:", mCatchErr)
         }
 
         let studentIssues: any[] = []
-        if (studentId) {
+        const candidateSids = Array.from(new Set([
+          studentId,
+          studentData?.id,
+          studentData?.student_id,
+          currentProfile?.user_id,
+        ].filter(Boolean)))
+
+        if (candidateSids.length > 0) {
           try {
             const { data: materialData } = await supabase
               .from('material_issues')
               .select('*, material:materials(*)')
-              .eq('student_id', studentId)
+              .in('student_id', candidateSids)
 
             if (materialData) {
               studentIssues = materialData
@@ -467,6 +517,24 @@ export default function StudentBatchDetailPage() {
             console.warn('Material issues fetch note:', mErr)
           }
         }
+
+        // Also merge local issues if available
+        try {
+          const localIssStr = localStorage.getItem("medhashiree_material_issues")
+          if (localIssStr) {
+            const localIss = JSON.parse(localIssStr)
+            if (Array.isArray(localIss)) {
+              const existingIssIds = new Set(studentIssues.map((i: any) => i.id))
+              const matchSids = new Set(candidateSids.map(String))
+              for (const li of localIss) {
+                if (!existingIssIds.has(li.id) && matchSids.has(String(li.student_id))) {
+                  studentIssues.push(li)
+                  existingIssIds.add(li.id)
+                }
+              }
+            }
+          }
+        } catch {}
 
         // Map received materials
         const issuesMap = new Map<string, any>()
