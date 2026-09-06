@@ -341,13 +341,14 @@ export default function HomePage() {
           {/* Social Quick Links Right */}
           <div className="flex items-center gap-3 text-gray-300">
             <a
-              href={contactLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-emerald-400 transition-colors p-1"
-              title="WhatsApp"
+              href="#contact"
+              className="hover:text-amber-300 transition-colors p-1 flex items-center gap-1.5 text-gray-300"
+              title="Contact Us"
             >
-              <MessageSquare className="w-3.5 h-3.5" />
+              <Phone className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-[11px] font-semibold text-gray-200 hidden sm:inline hover:text-amber-300">
+                Contact Us
+              </span>
             </a>
             <a
               href="https://facebook.com"
