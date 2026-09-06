@@ -396,39 +396,90 @@ export async function GET(req: NextRequest) {
     }
 
     // 5b. Fetch scheduled batch exams & materials for enrolled batches
-    const studentEnrolledBatchIds = Array.from(new Set(enrollments.map((e: any) => e.batch_id).filter(Boolean)))
+    const studentEnrolledBatchIds = Array.from(new Set([
+      ...enrollments.map((e: any) => e.batch_id).filter(Boolean),
+      ...(primaryStudent?.batch_id ? [primaryStudent.batch_id] : []),
+      ...subResults.flatMap((sr: any) => sr.data || []).filter((s: any) => s.batch_id).map((s: any) => s.batch_id),
+    ]))
     let batchExams: any[] = []
     let batchMaterials: any[] = []
     let materialIssues: any[] = []
 
-    if (studentEnrolledBatchIds.length > 0) {
-      try {
-        const [bExamsRes, bMatsRes, mIssRes] = await Promise.all([
-          admin
-            .from("exams")
-            .select("id, title, total_marks, pass_marks, exam_date, duration_minutes, subject, batch_id, is_online, show_all_results, result_note, is_published, created_at, teacher:staff(name)")
-            .in("batch_id", studentEnrolledBatchIds)
-            .order("exam_date", { ascending: false }),
-          admin
-            .from("materials")
-            .select("*")
-            .in("batch_id", studentEnrolledBatchIds)
-            .order("created_at", { ascending: false }),
-          studentDbIdArray.length > 0
-            ? admin
-                .from("material_issues")
-                .select("*, material:materials(*)")
-                .in("student_id", studentDbIdArray)
-                .order("issued_at", { ascending: false })
+    try {
+      const [bExamsRes, bMatsRes, mIssRes] = await Promise.all([
+        studentEnrolledBatchIds.length > 0
+          ? admin
+              .from("exams")
+              .select("id, title, total_marks, pass_marks, exam_date, duration_minutes, subject, batch_id, is_online, show_all_results, result_note, is_published, created_at, teacher:staff(name)")
+              .in("batch_id", studentEnrolledBatchIds)
+              .order("exam_date", { ascending: false })
+          : Promise.resolve({ data: [] }),
+        admin
+          .from("materials")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        studentDbIdArray.length > 0
+          ? admin
+              .from("material_issues")
+              .select("*, material:materials(*)")
+              .in("student_id", studentDbIdArray)
+              .order("issued_at", { ascending: false })
             : Promise.resolve({ data: [] })
-        ])
+      ])
 
-        if (bExamsRes.data) batchExams = bExamsRes.data
-        if (bMatsRes.data) batchMaterials = bMatsRes.data
-        if (mIssRes.data) materialIssues = mIssRes.data
-      } catch (extraErr) {
-        console.warn("Scheduled exams & materials profile fetch notice:", extraErr)
-      }
+      if (bExamsRes.data) batchExams = bExamsRes.data
+      if (mIssRes.data) materialIssues = mIssRes.data
+
+      const rawMats = bMatsRes.data || []
+      const studentBatchIdSet = new Set(studentEnrolledBatchIds.map(String))
+      const issuedMatIds = new Set(materialIssues.map((iss: any) => iss.material_id).filter(Boolean))
+
+      const studentBranchIdSet = new Set(
+        enrollments.map((e: any) => e.batch?.branch_id).filter(Boolean).map(String)
+      )
+      if (primaryStudent?.branch_id) studentBranchIdSet.add(String(primaryStudent.branch_id))
+
+      batchMaterials = rawMats.filter((m: any) => {
+        // 1. If student was issued this material directly, always show
+        if (issuedMatIds.has(m.id)) return true
+
+        // 2. Direct single batch match
+        if (m.batch_id && studentBatchIdSet.has(String(m.batch_id))) return true
+
+        // 3. Multi-batch match via batch_ids (JSONB or array or string)
+        if (m.batch_ids) {
+          if (Array.isArray(m.batch_ids)) {
+            if (m.batch_ids.some((bid: any) => studentBatchIdSet.has(String(bid)))) return true
+          } else if (typeof m.batch_ids === 'string') {
+            try {
+              const parsed = JSON.parse(m.batch_ids)
+              if (Array.isArray(parsed) && parsed.some((bid: any) => studentBatchIdSet.has(String(bid)))) return true
+            } catch {
+              if (Array.from(studentBatchIdSet).some(bid => m.batch_ids.includes(bid))) return true
+            }
+          }
+        }
+
+        // 4. If material has NO specific batch specified (general batch material)
+        const hasNoBatch = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
+          (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]")
+
+        if (hasNoBatch) {
+          if (m.branch_id) {
+            return studentBranchIdSet.size === 0 || studentBranchIdSet.has(String(m.branch_id))
+          }
+          return true
+        }
+
+        // 5. If student has only 1 batch enrolled and the material has 1 batch (fallback safeguard)
+        if (studentBatchIdSet.size === 1 && m.batch_id && studentBatchIdSet.has(String(m.batch_id))) {
+          return true
+        }
+
+        return false
+      })
+    } catch (extraErr) {
+      console.warn("Scheduled exams & materials profile fetch notice:", extraErr)
     }
 
     // 6. Course Purchases

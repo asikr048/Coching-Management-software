@@ -436,6 +436,22 @@ export default function StudentBatchDetailPage() {
           if (fbMats) rawBatchMaterials = fbMats
         }
 
+        if (rawBatchMaterials.length === 0) {
+          try {
+            const localMatStr = localStorage.getItem("medhashiree_materials")
+            if (localMatStr) {
+              const localMats = JSON.parse(localMatStr)
+              if (Array.isArray(localMats)) {
+                rawBatchMaterials = localMats.filter((m: any) => 
+                  m.batch_id === batchId || 
+                  (Array.isArray(m.batch_ids) && m.batch_ids.includes(batchId)) ||
+                  !m.batch_id
+                )
+              }
+            }
+          } catch {}
+        }
+
         let studentIssues: any[] = []
         if (studentId) {
           try {

@@ -105,8 +105,53 @@ export default function StudentProfilePage() {
           setDues(data.dues || [])
           setExamResults(data.examResults || [])
           if (data.batchExams) setBatchExams(data.batchExams)
-          if (data.materials) setMaterials(data.materials)
-          if (data.materialIssues) setMaterialIssues(data.materialIssues)
+          let currentMaterials = data.materials || []
+          let currentIssues = data.materialIssues || []
+
+          // Client-side local backup merge (if owner/admin created in same browser or offline sync)
+          try {
+            const localMatStr = localStorage.getItem("medhashiree_materials")
+            if (localMatStr) {
+              const localMats = JSON.parse(localMatStr)
+              if (Array.isArray(localMats)) {
+                const existingMatIds = new Set(currentMaterials.map((m: any) => m.id))
+                const enrolledBatchIds = new Set(data.enrollments?.map((e: any) => e.batch_id).filter(Boolean))
+                for (const lm of localMats) {
+                  if (!existingMatIds.has(lm.id)) {
+                    const isForBatch = !lm.batch_id || enrolledBatchIds.has(lm.batch_id) ||
+                      (Array.isArray(lm.batch_ids) && lm.batch_ids.some((bid: any) => enrolledBatchIds.has(bid)))
+                    if (isForBatch) {
+                      currentMaterials.push(lm)
+                      existingMatIds.add(lm.id)
+                    }
+                  }
+                }
+              }
+            }
+          } catch {}
+
+          // If currentMaterials is still empty, perform client-side direct query to Supabase as backup
+          if (currentMaterials.length === 0) {
+            try {
+              const { data: clientMats } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
+              if (clientMats && clientMats.length > 0) {
+                const enrolledBatchIds = new Set(data.enrollments?.map((e: any) => e.batch_id).filter(Boolean))
+                const matched = clientMats.filter((m: any) => {
+                  if (m.batch_id && enrolledBatchIds.has(m.batch_id)) return true
+                  if (Array.isArray(m.batch_ids) && m.batch_ids.some((bid: any) => enrolledBatchIds.has(bid))) return true
+                  if (!m.batch_id && (!m.batch_ids || m.batch_ids.length === 0)) return true
+                  return false
+                })
+                if (matched.length > 0) {
+                  currentMaterials = matched
+                }
+              }
+            } catch {}
+          }
+
+          setMaterials(currentMaterials)
+          setMaterialIssues(currentIssues)
+
           if (data.paymentAccounts) {
             setPaymentAccounts(data.paymentAccounts)
           } else {
@@ -115,7 +160,11 @@ export default function StudentProfilePage() {
           }
 
           try {
-            sessionStorage.setItem("ms_student_profile_cache", JSON.stringify(data))
+            sessionStorage.setItem("ms_student_profile_cache", JSON.stringify({
+              ...data,
+              materials: currentMaterials,
+              materialIssues: currentIssues,
+            }))
           } catch {}
         } else if (res.status === 401) {
           router.push("/login")
@@ -149,6 +198,16 @@ export default function StudentProfilePage() {
             if (sByEmail) studentRecord = sByEmail
           }
           if (studentRecord) setStudentData(studentRecord)
+
+          // Direct client fallback for materials
+          try {
+            const { data: fbMats } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
+            if (fbMats && fbMats.length > 0) setMaterials(fbMats)
+            if (studentRecord?.id) {
+              const { data: fbIssues } = await supabase.from("material_issues").select("*").eq("student_id", studentRecord.id)
+              if (fbIssues) setMaterialIssues(fbIssues)
+            }
+          } catch {}
 
           const { data: acctData } = await supabase.from("payment_accounts").select("*").eq("is_active", true)
           if (acctData) setPaymentAccounts(acctData)
@@ -1277,7 +1336,12 @@ export default function StudentProfilePage() {
                   {filteredMaterials.map((m: any) => {
                     const isReceived = receivedMaterialIds.has(m.id)
                     const issueRecord = materialIssues.find((mi: any) => mi.material_id === m.id)
-                    const batchObj = enrollments.find((e: any) => e.batch_id === m.batch_id)?.batch
+                    const batchObj = enrollments.find((e: any) => 
+                      e.batch_id === m.batch_id || 
+                      (Array.isArray(m.batch_ids) && m.batch_ids.includes(e.batch_id))
+                    )?.batch
+                    const targetBatchId = m.batch_id || (Array.isArray(m.batch_ids) && m.batch_ids[0]) || (enrollments[0]?.batch_id)
+                    const stockCount = m.available_stock ?? m.total_stock ?? m.quantity
 
                     return (
                       <div
@@ -1290,7 +1354,7 @@ export default function StudentProfilePage() {
                       >
                         <div className="space-y-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-bold text-gray-900">{m.title || "Study Material"}</p>
+                            <p className="font-bold text-gray-900">{m.name || m.title || "Study Material"}</p>
                             {m.type && (
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wide">
                                 {m.type}
@@ -1324,8 +1388,8 @@ export default function StudentProfilePage() {
                                 • 🏢 Collect from coaching office
                               </span>
                             )}
-                            {m.quantity != null && (
-                              <span>• In stock: {m.quantity}</span>
+                            {stockCount != null && (
+                              <span>• In stock: {stockCount}</span>
                             )}
                           </div>
                         </div>
@@ -1341,9 +1405,9 @@ export default function StudentProfilePage() {
                               <FileText className="w-3 h-3 text-slate-500" /> Download
                             </a>
                           )}
-                          {m.batch_id && (
+                          {targetBatchId && (
                             <Link
-                              href={`/student/batch/${m.batch_id}`}
+                              href={`/student/batch/${targetBatchId}`}
                               className="px-3 py-1 bg-white hover:bg-indigo-50 text-indigo-600 font-semibold rounded-xl text-xs border border-indigo-200 transition-colors shadow-xs"
                             >
                               Batch Page →
