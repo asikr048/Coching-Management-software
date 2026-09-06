@@ -1,10 +1,16 @@
 "use client"
 import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, AlertCircle, Printer, Download, RefreshCw, Landmark, DoorOpen } from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
+import { 
+  Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, 
+  AlertCircle, Printer, Download, RefreshCw, Landmark, DoorOpen, History, 
+  Calendar, Filter, Eye, Phone, Mail, UserCheck, ArrowRight, FileText, 
+  CheckCircle2, Clock, DollarSign, ChevronRight, ExternalLink, X 
+} from "lucide-react"
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 
 interface Batch { 
@@ -57,16 +63,36 @@ interface EnrollmentReceipt {
 export default function NewStudentForm({ 
   batches, 
   students, 
-  branches = [] 
+  branches = [],
+  initialEnrollments = [],
+  initialPayments = [],
+  initialDues = [],
 }: { 
   batches: Batch[]
   students: StudentOpt[]
   branches?: { id: string; name: string }[] 
+  initialEnrollments?: any[]
+  initialPayments?: any[]
+  initialDues?: any[]
 }) {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
   const [financialAccess, setFinancialAccess] = useState<boolean | null>(null)
+
+  // Primary tab state: Enroll form vs Enrollment History
+  const [activeTab, setActiveTab] = useState<"enroll" | "history">("enroll")
+
+  // Reactive history lists
+  const [enrollmentsList, setEnrollmentsList] = useState<any[]>(initialEnrollments || [])
+  const [paymentsList, setPaymentsList] = useState<any[]>(initialPayments || [])
+  const [duesList, setDuesList] = useState<any[]>(initialDues || [])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historySearchQuery, setHistorySearchQuery] = useState("")
+  const [historyBranchFilter, setHistoryBranchFilter] = useState("all")
+  const [historyBatchFilter, setHistoryBatchFilter] = useState("all")
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<"all" | "paid" | "due">("all")
+
   const [mode, setMode] = useState<"new" | "existing">("new")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStudent, setSelectedStudent] = useState<StudentOpt | null>(null)
@@ -78,6 +104,60 @@ export default function NewStudentForm({
   
   const [enrolledBatchIds, setEnrolledBatchIds] = useState<string[]>([])
   const [allBatches, setAllBatches] = useState<Batch[]>(batches || [])
+
+  useEffect(() => {
+    if (initialEnrollments && initialEnrollments.length > 0) {
+      setEnrollmentsList(initialEnrollments)
+    }
+  }, [initialEnrollments])
+
+  useEffect(() => {
+    if (initialPayments && initialPayments.length > 0) {
+      setPaymentsList(initialPayments)
+    }
+  }, [initialPayments])
+
+  useEffect(() => {
+    if (initialDues && initialDues.length > 0) {
+      setDuesList(initialDues)
+    }
+  }, [initialDues])
+
+  async function fetchHistory() {
+    setHistoryLoading(true)
+    try {
+      const [enrRes, payRes, dueRes] = await Promise.all([
+        supabase
+          .from("enrollments")
+          .select("id, created_at, status, batch_id, student_id, branch_id, student:students(id, name, student_id, phone, email, guardian_name, guardian_phone, address, school_college, class_level), batch:batches(id, name, subject, class_level, monthly_fee, admission_fee, classroom, branch_id)")
+          .order("created_at", { ascending: false })
+          .limit(150),
+        supabase
+          .from("payments")
+          .select("id, student_id, batch_id, amount, total_paid, payment_method, payment_for, payment_month, receipt_number, created_at, paid_at")
+          .order("created_at", { ascending: false })
+          .limit(250),
+        supabase
+          .from("fee_dues")
+          .select("id, student_id, batch_id, due_amount, paid_amount, due_date, status")
+          .limit(250),
+      ])
+      if (enrRes.data && enrRes.data.length > 0) setEnrollmentsList(enrRes.data)
+      if (payRes.data) setPaymentsList(payRes.data)
+      if (dueRes.data) setDuesList(dueRes.data)
+    } catch (err) {
+      console.warn("Could not fetch enrollment history:", err)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  // Client-side fallback if enrollmentsList is initially empty
+  useEffect(() => {
+    if (enrollmentsList.length === 0) {
+      fetchHistory()
+    }
+  }, [])
 
   useEffect(() => {
     if (batches && batches.length > 0) {
@@ -225,6 +305,119 @@ export default function NewStudentForm({
     if (!selectedStudent.school_college) missing.push("school_college")
     return missing
   }, [selectedStudent])
+
+  function getEnrollmentReceiptData(enr: any): EnrollmentReceipt {
+    const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+    const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+    const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
+    const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+
+    const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+    const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+    const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+
+    const dateStr = enr.created_at
+      ? new Date(enr.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+      : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+
+    const receiptNo = matchingPayment?.receipt_number || `RCP-${new Date(enr.created_at || Date.now()).getFullYear()}-${(enr.id || '').replace(/-/g, '').slice(-6).toUpperCase()}`
+
+    const dispStudentId = student.student_id || student.id || "N/A"
+    const qrData = `Student ID: ${dispStudentId} | Name: ${student.name || ''} | Batch: ${b.name || ''} | Fee: ${totalFee} | Paid: ${paidAmt}`
+
+    return {
+      receipt_number: receiptNo,
+      student_name: student.name || "Student",
+      student_id: dispStudentId,
+      student_phone: student.phone,
+      student_email: student.email,
+      guardian_name: student.guardian_name,
+      guardian_phone: student.guardian_phone,
+      batch_name: b.name || "Enrolled Batch",
+      subject: b.subject || b.class_level || "General",
+      date: dateStr,
+      total_fee: totalFee,
+      paid_amount: paidAmt,
+      due_amount: dueAmt,
+      due_date: matchingDue?.due_date || undefined,
+      payment_method: matchingPayment?.payment_method?.toUpperCase() || "Cash / Counter",
+      qr_data: qrData
+    }
+  }
+
+  function handlePrintFromHistory(enr: any) {
+    const r = getEnrollmentReceiptData(enr)
+    setReceipt(r)
+    handlePrint(r)
+  }
+
+  function handleSavePDFFromHistory(enr: any) {
+    const r = getEnrollmentReceiptData(enr)
+    setReceipt(r)
+    handleSavePDF(r)
+  }
+
+  function handlePreviewReceipt(enr: any) {
+    const r = getEnrollmentReceiptData(enr)
+    setReceipt(r)
+  }
+
+  const filteredEnrollments = useMemo(() => {
+    return enrollmentsList.filter((enr: any) => {
+      const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+      const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+      const brId = enr.branch_id || b.branch_id
+
+      if (historyBranchFilter !== "all" && brId !== historyBranchFilter) return false
+      if (historyBatchFilter !== "all" && enr.batch_id !== historyBatchFilter) return false
+
+      if (historySearchQuery.trim()) {
+        const q = historySearchQuery.trim().toLowerCase()
+        const sName = (student.name || "").toLowerCase()
+        const sId = (student.student_id || "").toLowerCase()
+        const sPhone = (student.phone || "").toLowerCase()
+        const gPhone = (student.guardian_phone || "").toLowerCase()
+        const bName = (b.name || "").toLowerCase()
+        const match = sName.includes(q) || sId.includes(q) || sPhone.includes(q) || gPhone.includes(q) || bName.includes(q)
+        if (!match) return false
+      }
+
+      if (historyStatusFilter !== "all") {
+        const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
+        const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+        const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+        const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+        const isPaidFull = totalFee > 0 ? (paidAmt >= totalFee) : true
+
+        if (historyStatusFilter === "paid" && !isPaidFull) return false
+        if (historyStatusFilter === "due" && isPaidFull) return false
+      }
+
+      return true
+    })
+  }, [enrollmentsList, students, allBatches, historyBranchFilter, historyBatchFilter, historySearchQuery, historyStatusFilter, paymentsList, duesList])
+
+  const historyStats = useMemo(() => {
+    let totalEnrolled = enrollmentsList.length
+    let totalPaid = 0
+    let totalDue = 0
+    let paidCount = 0
+
+    enrollmentsList.forEach((enr: any) => {
+      const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+      const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
+      const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+      const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+      const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+      const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+
+      totalPaid += paidAmt
+      totalDue += dueAmt
+      if (totalFee > 0 && paidAmt >= totalFee) paidCount++
+    })
+
+    return { totalEnrolled, totalPaid, totalDue, paidCount }
+  }, [enrollmentsList, allBatches, paymentsList, duesList])
 
   if (financialAccess === false) return (
     <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-8 text-center shadow-xl">
@@ -522,6 +715,56 @@ export default function NewStudentForm({
         qr_data: qrData
       })
 
+      // Real-time update history lists
+      const newEnrItem = {
+        id: `enr-${Date.now()}`,
+        student_id: sid,
+        batch_id: form.batch_id,
+        branch_id: selectedBranchId || batch?.branch_id || null,
+        status: "active",
+        created_at: new Date().toISOString(),
+        student: {
+          id: sid,
+          name: studentName,
+          student_id: dispId,
+          phone: studentPhone,
+          email: studentEmail,
+          guardian_name: guardianName,
+          guardian_phone: guardianPhone,
+          address: form.address,
+          school_college: form.school_college,
+          class_level: form.class_level,
+        },
+        batch: batch || { id: form.batch_id, name: "Enrolled Batch", monthly_fee: 0, admission_fee: 0 },
+      }
+      setEnrollmentsList(prev => [newEnrItem, ...prev])
+
+      if (paid > 0) {
+        setPaymentsList(prev => [{
+          id: `pay-${Date.now()}`,
+          student_id: sid,
+          batch_id: form.batch_id,
+          amount: total,
+          total_paid: paid,
+          payment_method: "cash",
+          payment_for: "admission",
+          receipt_number: receiptNum,
+          created_at: new Date().toISOString(),
+        }, ...prev])
+      }
+
+      if (due > 0) {
+        setDuesList(prev => [{
+          id: `due-${Date.now()}`,
+          student_id: sid,
+          batch_id: form.batch_id,
+          due_amount: total,
+          paid_amount: paid,
+          due_date: dueDate,
+          status: paid > 0 ? "partial" : "pending",
+        }, ...prev])
+      }
+
     } catch (err: any) {
       toast.error(err?.message || "Failed")
       console.error(err)
@@ -531,12 +774,13 @@ export default function NewStudentForm({
   }
 
   // Print function
-  function handlePrint() {
-    if (!receipt) return
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(receipt.qr_data)}`
+  function handlePrint(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(target.qr_data)}`
     const win = window.open("", "_blank", "width=650,height=800")
     if (!win) return
-    win.document.write(`<html><head><title>Admission Document - ${receipt.student_id}</title><style>
+    win.document.write(`<html><head><title>Admission Document - ${target.student_id}</title><style>
       body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 25px; max-width: 520px; margin: 0 auto; color: #1e293b; background: #fff; }
       .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 15px; position: relative; }
       .header h1 { margin: 0; font-size: 22px; color: #4338ca; text-transform: uppercase; letter-spacing: 1px; }
@@ -562,31 +806,31 @@ export default function NewStudentForm({
       </div>
       
       <div class="section-title">Student Information</div>
-      <div class="row"><span class="label">Student ID:</span><span class="value">${receipt.student_id}</span></div>
-      <div class="row"><span class="label">Full Name:</span><span class="value">${receipt.student_name}</span></div>
-      ${receipt.student_phone ? `<div class="row"><span class="label">Phone:</span><span class="value">${receipt.student_phone}</span></div>` : ''}
-      ${receipt.guardian_name ? `<div class="row"><span class="label">Guardian:</span><span class="value">${receipt.guardian_name}</span></div>` : ''}
-      ${receipt.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${receipt.guardian_phone}</span></div>` : ''}
+      <div class="row"><span class="label">Student ID:</span><span class="value">${target.student_id}</span></div>
+      <div class="row"><span class="label">Full Name:</span><span class="value">${target.student_name}</span></div>
+      ${target.student_phone ? `<div class="row"><span class="label">Phone:</span><span class="value">${target.student_phone}</span></div>` : ''}
+      ${target.guardian_name ? `<div class="row"><span class="label">Guardian:</span><span class="value">${target.guardian_name}</span></div>` : ''}
+      ${target.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${target.guardian_phone}</span></div>` : ''}
 
-      ${receipt.password ? `
+      ${target.password ? `
       <div class="cred-box">
-        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Student Portal Login ID:</span><span class="value">${receipt.student_id}</span></div>
-        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Account Password:</span><span class="value font-mono" style="color: #4338ca;">${receipt.password}</span></div>
+        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Student Portal Login ID:</span><span class="value">${target.student_id}</span></div>
+        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Account Password:</span><span class="value font-mono" style="color: #4338ca;">${target.password}</span></div>
       </div>
       ` : ''}
 
       <div class="section-title">Enrolled Program</div>
-      <div class="row"><span class="label">Batch:</span><span class="value">${receipt.batch_name}</span></div>
-      <div class="row"><span class="label">Subject/Class:</span><span class="value">${receipt.subject}</span></div>
-      <div class="row"><span class="label">Enrollment Date:</span><span class="value">${receipt.date}</span></div>
+      <div class="row"><span class="label">Batch:</span><span class="value">${target.batch_name}</span></div>
+      <div class="row"><span class="label">Subject/Class:</span><span class="value">${target.subject}</span></div>
+      <div class="row"><span class="label">Enrollment Date:</span><span class="value">${target.date}</span></div>
 
       <div class="section-title">Payment Breakdown</div>
       <div class="summary-box">
-        <div class="row"><span class="label">Total Fee:</span><span class="value">৳${receipt.total_fee.toLocaleString("en-BD")}</span></div>
-        <div class="row"><span class="label">Paid Amount:</span><span class="value paid-text">৳${receipt.paid_amount.toLocaleString("en-BD")}</span></div>
-        <div class="total-row"><span class="label">Due Amount:</span><span class="value ${receipt.due_amount > 0 ? 'due-text' : 'paid-text'}">৳${receipt.due_amount.toLocaleString("en-BD")}</span></div>
-        ${receipt.due_date ? `<div class="row"><span class="label">Due Date:</span><span class="value due-text">${receipt.due_date}</span></div>` : ''}
-        <div class="row" style="margin-top: 5px; font-size: 11px; color: #64748b;"><span class="label">Receipt Ref:</span><span>${receipt.receipt_number}</span></div>
+        <div class="row"><span class="label">Total Fee:</span><span class="value">৳${target.total_fee.toLocaleString("en-BD")}</span></div>
+        <div class="row"><span class="label">Paid Amount:</span><span class="value paid-text">৳${target.paid_amount.toLocaleString("en-BD")}</span></div>
+        <div class="total-row"><span class="label">Due Amount:</span><span class="value ${target.due_amount > 0 ? 'due-text' : 'paid-text'}">৳${target.due_amount.toLocaleString("en-BD")}</span></div>
+        ${target.due_date ? `<div class="row"><span class="label">Due Date:</span><span class="value due-text">${target.due_date}</span></div>` : ''}
+        <div class="row" style="margin-top: 5px; font-size: 11px; color: #64748b;"><span class="label">Receipt Ref:</span><span>${target.receipt_number}</span></div>
       </div>
 
       <div class="qr-container">
@@ -608,8 +852,9 @@ export default function NewStudentForm({
   }
 
   // Save / Download PDF function using jsPDF
-  async function handleSavePDF() {
-    if (!receipt) return
+  async function handleSavePDF(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
     try {
       const { jsPDF } = await import("jspdf")
       const doc = new jsPDF({ unit: "mm", format: [105, 148] }) // A6 size receipt
@@ -629,54 +874,54 @@ export default function NewStudentForm({
       doc.setFontSize(9)
       doc.setFont("helvetica", "bold")
       doc.setTextColor(15, 23, 42)
-      doc.text("Student ID: " + receipt.student_id, 10, y)
+      doc.text("Student ID: " + target.student_id, 10, y)
       y += 5
       doc.setFont("helvetica", "normal")
-      doc.text("Name: " + receipt.student_name, 10, y)
+      doc.text("Name: " + target.student_name, 10, y)
       y += 5
-      if (receipt.student_phone) {
-        doc.text("Phone: " + receipt.student_phone, 10, y)
+      if (target.student_phone) {
+        doc.text("Phone: " + target.student_phone, 10, y)
         y += 5
       }
-      if (receipt.guardian_phone) {
-        doc.text("Guardian Phone: " + receipt.guardian_phone, 10, y)
+      if (target.guardian_phone) {
+        doc.text("Guardian Phone: " + target.guardian_phone, 10, y)
         y += 5
       }
 
-      if (receipt.password) {
+      if (target.password) {
         doc.setFillColor(238, 242, 255)
         doc.roundedRect(10, y, 85, 10, 2, 2, "F")
         doc.setFont("helvetica", "bold")
         doc.setTextColor(67, 56, 202)
-        doc.text("Login ID: " + receipt.student_id + "  |  Password: " + receipt.password, 13, y + 6)
+        doc.text("Login ID: " + target.student_id + "  |  Password: " + target.password, 13, y + 6)
         doc.setTextColor(15, 23, 42)
         y += 14
       }
 
       doc.setFont("helvetica", "bold")
-      doc.text("Batch: " + receipt.batch_name, 10, y)
+      doc.text("Batch: " + target.batch_name, 10, y)
       y += 5
       doc.setFont("helvetica", "normal")
-      doc.text("Date: " + receipt.date, 10, y)
+      doc.text("Date: " + target.date, 10, y)
       y += 6
 
       doc.setFillColor(248, 250, 252)
       doc.roundedRect(10, y, 85, 22, 2, 2, "F")
-      doc.text("Total Fee: ৳" + receipt.total_fee.toLocaleString("en-BD"), 13, y + 6)
+      doc.text("Total Fee: ৳" + target.total_fee.toLocaleString("en-BD"), 13, y + 6)
       doc.setTextColor(22, 163, 74)
-      doc.text("Paid: ৳" + receipt.paid_amount.toLocaleString("en-BD"), 13, y + 11)
-      doc.setTextColor(receipt.due_amount > 0 ? 220 : 22, receipt.due_amount > 0 ? 38 : 163, receipt.due_amount > 0 ? 38 : 74)
+      doc.text("Paid: ৳" + target.paid_amount.toLocaleString("en-BD"), 13, y + 11)
+      doc.setTextColor(target.due_amount > 0 ? 220 : 22, target.due_amount > 0 ? 38 : 163, target.due_amount > 0 ? 38 : 74)
       doc.setFont("helvetica", "bold")
-      doc.text("Due: ৳" + receipt.due_amount.toLocaleString("en-BD"), 13, y + 17)
-      if (receipt.due_date) {
+      doc.text("Due: ৳" + target.due_amount.toLocaleString("en-BD"), 13, y + 17)
+      if (target.due_date) {
         doc.setFontSize(7)
         doc.setTextColor(180, 83, 9)
-        doc.text("Due Date: " + receipt.due_date, 55, y + 17)
+        doc.text("Due Date: " + target.due_date, 55, y + 17)
       }
 
       y += 26
       // Add QR code image
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(receipt.qr_data)}`
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(target.qr_data)}`
       const img = new Image()
       img.crossOrigin = "anonymous"
       img.src = qrUrl
@@ -690,7 +935,7 @@ export default function NewStudentForm({
         img.onerror = () => resolve(true)
       })
 
-      doc.save(`Enrollment_${receipt.student_id}.pdf`)
+      doc.save(`Enrollment_${target.student_id}.pdf`)
       toast.success("PDF document downloaded!")
     } catch (e: any) {
       toast.error("Could not generate PDF: " + (e?.message || "Please use print option"))
@@ -702,7 +947,42 @@ export default function NewStudentForm({
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Top Navigation Tabs */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/90 shadow-2xs mb-5">
+        <button
+          type="button"
+          onClick={() => setActiveTab("enroll")}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeTab === "enroll"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          }`}
+        >
+          <UserPlus className="w-4 h-4 text-amber-500" />
+          <span>➕ Enroll Student (নতুন শিক্ষার্থী ভর্তি)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("history")}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeTab === "history"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          }`}
+        >
+          <History className="w-4 h-4 text-indigo-600" />
+          <span>📜 Enrollment History (ভর্তির ইতিহাস ও মানি রিসিট)</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            activeTab === "history" ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-700"
+          }`}>
+            {enrollmentsList.length}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === "enroll" && (
+        <div className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
         {/* Mode selector */}
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-4 flex items-center gap-3">
           <select value={mode} onChange={e => { setMode(e.target.value as "new"|"existing"); setSelectedStudent(null); setSearchQuery(""); setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" }) }}
@@ -1060,7 +1340,325 @@ export default function NewStudentForm({
             {loading ? <><Loader2 className="w-4 h-4 animate-spin text-white" /> Processing...</> : <><UserPlus className="w-4 h-4" /> {mode === "new" ? "Create & Enroll (ভর্তি সম্পন্ন করুন)" : "Enroll Student"}</>}
           </button>
         </div>
-      </form>
+        </form>
+
+        {/* Recent Enrollments Quick Access below Form */}
+        {enrollmentsList.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-600" />
+                <h4 className="font-black text-slate-900 text-sm">Recent Enrollments (সাম্প্রতিক ভর্তির ইতিহাস)</h4>
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                  Last {Math.min(5, enrollmentsList.length)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab("history")}
+                className="text-xs font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer transition-colors"
+              >
+                View All History ({enrollmentsList.length}) <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            <div className="divide-y divide-slate-100">
+              {enrollmentsList.slice(0, 5).map((enr: any) => {
+                const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+                const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+                const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
+                const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+                const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+                const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+                const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+
+                return (
+                  <div key={enr.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900">{student.name || "Student"}</span>
+                        <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          {student.student_id || "N/A"}
+                        </span>
+                        <span className="text-xs font-semibold text-slate-600">• {b.name || "Batch"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                        <span>{formatDate(enr.created_at)}</span>
+                        <span>• Paid: <b className="text-emerald-600">{formatCurrency(paidAmt)}</b></span>
+                        {dueAmt > 0 && <span>• Due: <b className="text-rose-600">{formatCurrency(dueAmt)}</b></span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handlePrintFromHistory(enr)}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Print Admission Slip"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Print</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSavePDFFromHistory(enr)}
+                        className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Download PDF"
+                      >
+                        <Download className="w-3.5 h-3.5 text-amber-600" />
+                        <span>PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewReceipt(enr)}
+                        className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg text-xs transition-colors cursor-pointer"
+                        title="View Details"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      )}
+
+      {/* History Tab View */}
+      {activeTab === "history" && (
+        <div className="space-y-4">
+          {/* Summary Stats Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <p className="text-[11px] font-bold text-slate-500 uppercase">Total Enrolled</p>
+              <p className="text-xl font-black text-slate-900 mt-0.5">{historyStats.totalEnrolled}</p>
+            </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <p className="text-[11px] font-bold text-emerald-600 uppercase">Total Collection</p>
+              <p className="text-xl font-black text-emerald-700 mt-0.5">{formatCurrency(historyStats.totalPaid)}</p>
+            </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <p className="text-[11px] font-bold text-rose-600 uppercase">Outstanding Due</p>
+              <p className="text-xl font-black text-rose-700 mt-0.5">{formatCurrency(historyStats.totalDue)}</p>
+            </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <p className="text-[11px] font-bold text-indigo-600 uppercase">Fully Paid</p>
+              <p className="text-xl font-black text-indigo-700 mt-0.5">{historyStats.paidCount}</p>
+            </div>
+          </div>
+
+          {/* Search & Filter Controls */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={e => setHistorySearchQuery(e.target.value)}
+                  placeholder="Search student name, ID (MS-...), phone, guardian phone, batch..."
+                  className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 bg-white shadow-2xs"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={fetchHistory}
+                disabled={historyLoading}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                title="Refresh History from Database"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${historyLoading ? "animate-spin text-amber-600" : ""}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 items-center text-xs">
+              {/* Branch filter */}
+              <select
+                value={historyBranchFilter}
+                onChange={e => setHistoryBranchFilter(e.target.value)}
+                className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="all">All Branches (সকল শাখা)</option>
+                {branches.map(br => (
+                  <option key={br.id} value={br.id}>{br.name}</option>
+                ))}
+              </select>
+
+              {/* Batch filter */}
+              <select
+                value={historyBatchFilter}
+                onChange={e => setHistoryBatchFilter(e.target.value)}
+                className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="all">All Batches (সকল ব্যাচ)</option>
+                {allBatches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+
+              {/* Status filter */}
+              <select
+                value={historyStatusFilter}
+                onChange={e => setHistoryStatusFilter(e.target.value as any)}
+                className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="all">All Payment Status</option>
+                <option value="paid">✓ Fully Paid</option>
+                <option value="due">⏳ Has Due</option>
+              </select>
+
+              <span className="text-slate-400 ml-auto font-medium">
+                Showing {filteredEnrollments.length} enrolled students
+              </span>
+            </div>
+          </div>
+
+          {/* Table / Cards */}
+          {filteredEnrollments.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
+              <UserPlus className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="font-bold text-slate-700 text-sm">No enrollment records found</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {historySearchQuery ? "Try a different search keyword or clear filters." : "Students enrolled in batches will appear here."}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="px-4 py-3">Student Info</th>
+                      <th className="px-4 py-3">Batch & Campus</th>
+                      <th className="px-4 py-3">Enrolled Date</th>
+                      <th className="px-4 py-3">Payment Summary</th>
+                      <th className="px-4 py-3 text-right">Actions (Print / PDF)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredEnrollments.map((enr: any) => {
+                      const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+                      const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+                      const branchObj = branches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+                      const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
+                      const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+                      const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+                      const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+                      const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+                      const isPaid = totalFee > 0 ? paidAmt >= totalFee : true
+
+                      return (
+                        <tr key={enr.id} className="hover:bg-amber-50/30 transition-colors">
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-slate-900 text-sm">{student.name || "Student"}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="font-mono text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                {student.student_id || "N/A"}
+                              </span>
+                              {student.phone && <span className="text-[11px] text-slate-500 font-medium">📞 {student.phone}</span>}
+                            </div>
+                            {student.guardian_phone && (
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                Guardian: {student.guardian_phone} {student.guardian_name ? `(${student.guardian_name})` : ""}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-slate-800">{b.name || "Enrolled Batch"}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap text-[10px]">
+                              {branchObj && (
+                                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-semibold border border-slate-200">
+                                  🏢 {branchObj.name}
+                                </span>
+                              )}
+                              {b.classroom && (
+                                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                                  🚪 {b.classroom}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3.5 whitespace-nowrap text-slate-600">
+                            <div className="font-medium text-slate-900">{formatDate(enr.created_at)}</div>
+                            <div className="text-[10px] text-slate-400">{formatDateTime(enr.created_at).split(",")[1] || ""}</div>
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900">Total: {formatCurrency(totalFee)}</span>
+                              {isPaid ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                                  ✓ Paid
+                                </span>
+                              ) : paidAmt > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                                  ⏳ Partial
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded-md">
+                                  ✕ Unpaid
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                              <span className="text-emerald-600 font-semibold">Paid: {formatCurrency(paidAmt)}</span>
+                              {dueAmt > 0 && <span className="text-rose-600 font-semibold">• Due: {formatCurrency(dueAmt)}</span>}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handlePrintFromHistory(enr)}
+                                className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                                title="Print Admission & Payment Slip"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>Print</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSavePDFFromHistory(enr)}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                                title="Download Receipt PDF"
+                              >
+                                <Download className="w-3.5 h-3.5 text-amber-600" />
+                                <span>PDF</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewReceipt(enr)}
+                                className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-xl transition-colors cursor-pointer"
+                                title="Preview Full Slip"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              {student.id && (
+                                <Link
+                                  href={`/dashboard/owner/students/${student.id}`}
+                                  className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"
+                                  title="View Student Profile"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </Link>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Confirmation & Printable PDF Modal with QR Code */}
       {receipt && (
@@ -1068,6 +1666,14 @@ export default function NewStudentForm({
           <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
             {/* Header */}
             <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6 text-white text-center relative">
+              <button 
+                type="button" 
+                onClick={() => setReceipt(null)} 
+                className="absolute top-4 right-4 text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                title="Close receipt"
+              >
+                <X className="w-5 h-5" />
+              </button>
               <div className="w-12 h-12 bg-white/20 backdrop-blur-xs rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
                 <Check className="w-6 h-6 text-white font-black" />
               </div>
@@ -1130,17 +1736,17 @@ export default function NewStudentForm({
                 </div>
               </div>
 
-              {/* Modal Buttons: Print, Save, New Enrollment */}
+              {/* Modal Buttons: Print, Save, Close */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 pt-1">
                 <button
                   type="button"
-                  onClick={handlePrint}
+                  onClick={() => handlePrint()}
                   className="py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 text-sm shadow-md shadow-amber-500/20 transition-all cursor-pointer">
                   <Printer className="w-4 h-4" /> Print Receipt
                 </button>
                 <button
                   type="button"
-                  onClick={handleSavePDF}
+                  onClick={() => handleSavePDF()}
                   className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl font-bold flex items-center justify-center gap-2 text-sm transition-all cursor-pointer">
                   <Download className="w-4 h-4" /> Save PDF
                 </button>
@@ -1148,9 +1754,9 @@ export default function NewStudentForm({
 
               <button
                 type="button"
-                onClick={resetForm}
+                onClick={() => { resetForm(); setReceipt(null); }}
                 className="w-full py-2.5 border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer">
-                <RefreshCw className="w-4 h-4" /> Enroll Another Student
+                <RefreshCw className="w-4 h-4" /> Close Slip / Next Student
               </button>
             </div>
           </div>
