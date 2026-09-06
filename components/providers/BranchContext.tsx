@@ -66,7 +66,7 @@ export function BranchProvider({
         if (user) {
           const { data: staffRow } = await supabase
             .from("staff")
-            .select("id, role, branch_id, branch_ids")
+            .select("*")
             .eq("auth_user_id", user.id)
             .maybeSingle()
 

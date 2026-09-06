@@ -42,7 +42,7 @@ export async function checkSuperFinancialAccess(): Promise<{
 
   const { data: staffRow } = await supabase
     .from("staff")
-    .select("id, role, has_super_financial_access, branch_id, branch_ids")
+    .select("*")
     .eq("auth_user_id", user.id)
     .maybeSingle()
 
@@ -92,7 +92,7 @@ export async function getStaffBranchAccess(): Promise<{
 
   const { data: staffRow } = await supabase
     .from("staff")
-    .select("id, role, branch_id, branch_ids")
+    .select("*")
     .eq("auth_user_id", user.id)
     .maybeSingle()
 
