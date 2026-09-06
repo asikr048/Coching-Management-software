@@ -686,7 +686,9 @@ export default function HomePage() {
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="font-bold text-gray-900 text-base leading-snug">{batch.name}</h3>
+                      <Link href={`/batch/${batch.id}`}>
+                        <h3 className="font-bold text-gray-900 text-base leading-snug hover:text-indigo-600 transition-colors cursor-pointer">{batch.name}</h3>
+                      </Link>
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold flex-shrink-0 ${
                           isClosed
@@ -724,7 +726,7 @@ export default function HomePage() {
                       {batch.branch?.name && (
                         <p className="flex items-center gap-1.5 text-indigo-700 font-medium">
                           <Landmark className="w-3.5 h-3.5 text-indigo-500" />
-                          <span>শাখা: {batch.branch.name}</span>
+                          <span> শাখা: {batch.branch.name}</span>
                         </p>
                       )}
                     </div>
@@ -738,18 +740,18 @@ export default function HomePage() {
                       </p>
                     </div>
 
-                    <a
-                      href={contactLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-colors shadow-xs ${
-                        isClosed
-                          ? "bg-gray-100 text-gray-500 pointer-events-none"
-                          : "bg-indigo-600 hover:bg-indigo-700 text-white"
-                      }`}
-                    >
-                      {isClosed ? "ভর্তি বন্ধ" : "ভর্তি হন (Enroll)"}
-                    </a>
+                    {isClosed ? (
+                      <span className="px-3.5 py-2 rounded-xl text-xs font-bold bg-gray-100 text-gray-400 cursor-not-allowed">
+                        ভর্তি বন্ধ
+                      </span>
+                    ) : (
+                      <Link
+                        href={`/enroll?batchId=${batch.id}`}
+                        className="px-3.5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-xs flex items-center gap-1.5"
+                      >
+                        ভর্তি হন (Enroll)
+                      </Link>
+                    )}
                   </div>
                 </div>
               )
@@ -808,14 +810,12 @@ export default function HomePage() {
                       <span className="text-sm font-bold text-indigo-700">
                         {course.price ? formatCurrency(course.price) : "বিনামূল্যে"}
                       </span>
-                      <a
-                        href={contactLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <Link
+                        href={`/enroll?courseId=${course.id}`}
                         className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1"
                       >
-                        বিস্তারিত <ArrowRight className="w-3.5 h-3.5" />
-                      </a>
+                        ভর্তি হন (Enroll) <ArrowRight className="w-3.5 h-3.5" />
+                      </Link>
                     </div>
                   </div>
                 </div>
