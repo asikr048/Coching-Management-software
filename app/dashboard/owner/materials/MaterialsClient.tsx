@@ -5,11 +5,13 @@ import {
   Package, BookOpen, FileText, ClipboardList, Plus, Search,
   Filter, CheckCircle2, XCircle, Users, Download, ArrowRight,
   AlertTriangle, RefreshCw, Layers, Edit2, Trash2, Check,
-  Clock, Sparkles, ChevronRight, X, UserCheck, Printer
+  Clock, Sparkles, ChevronRight, X, UserCheck, Printer, Landmark, Building2
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { toast } from "sonner"
+import { useBranch } from "@/components/providers/BranchContext"
+import type { Branch } from "@/lib/supabase/types"
 
 export type MaterialType = "book" | "sheet" | "notes" | "worksheet" | "exam_paper" | "other"
 
@@ -17,6 +19,7 @@ export interface Material {
   id: string
   name: string
   type: MaterialType
+  branch_id?: string | null
   batch_id?: string | null
   batch_ids?: string[] | null
   subject?: string | null
@@ -56,6 +59,7 @@ export interface Batch {
   name: string
   subject?: string | null
   is_active?: boolean
+  branch_id?: string | null
 }
 
 export interface Student {
@@ -79,6 +83,7 @@ interface Props {
   initialMaterials: Material[]
   initialIssues: MaterialIssue[]
   batches: Batch[]
+  branches?: Branch[]
   students: Student[]
   currentStaff: CurrentStaff
 }
@@ -96,10 +101,12 @@ export default function MaterialsClient({
   initialMaterials = [],
   initialIssues = [],
   batches = [],
+  branches = [],
   students = [],
   currentStaff
 }: Props) {
   const supabase = useMemo(() => createClient(), [])
+  const { selectedBranchId, currentBranch } = useBranch()
 
   // Materials state (synced with localStorage backup)
   const [materials, setMaterials] = useState<Material[]>(() => {
@@ -165,6 +172,7 @@ export default function MaterialsClient({
     name: "",
     type: "sheet" as MaterialType,
     subject: "",
+    branch_id: (selectedBranchId !== "all" ? selectedBranchId : "") as string,
     batch_ids: [] as string[],
     total_stock: 50,
     price: 0,
@@ -177,6 +185,7 @@ export default function MaterialsClient({
       name: "",
       type: "sheet",
       subject: "",
+      branch_id: selectedBranchId !== "all" ? selectedBranchId : (branches[0]?.id || ""),
       batch_ids: [],
       total_stock: 50,
       price: 0,
@@ -195,6 +204,7 @@ export default function MaterialsClient({
       name: m.name,
       type: m.type,
       subject: m.subject || "",
+      branch_id: m.branch_id || (selectedBranchId !== "all" ? selectedBranchId : (branches[0]?.id || "")),
       batch_ids: initialBatchIds,
       total_stock: m.total_stock,
       price: m.price || 0,
@@ -220,6 +230,7 @@ export default function MaterialsClient({
     }
 
     const primaryBatchId = formData.batch_ids.length > 0 ? formData.batch_ids[0] : null
+    const finalBranchId = formData.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null)
 
     if (editingMaterial) {
       // Edit
@@ -231,6 +242,7 @@ export default function MaterialsClient({
         name: formData.name.trim(),
         type: formData.type,
         subject: formData.subject.trim() || null,
+        branch_id: finalBranchId,
         batch_id: primaryBatchId,
         batch_ids: formData.batch_ids,
         total_stock: Number(formData.total_stock),
@@ -247,6 +259,7 @@ export default function MaterialsClient({
           name: updatedMat.name,
           type: updatedMat.type,
           subject: updatedMat.subject,
+          branch_id: finalBranchId,
           batch_id: primaryBatchId,
           batch_ids: formData.batch_ids,
           total_stock: updatedMat.total_stock,
@@ -267,6 +280,7 @@ export default function MaterialsClient({
         name: formData.name.trim(),
         type: formData.type,
         subject: formData.subject.trim() || null,
+        branch_id: finalBranchId,
         batch_id: primaryBatchId,
         batch_ids: formData.batch_ids,
         total_stock: Number(formData.total_stock),
@@ -285,6 +299,7 @@ export default function MaterialsClient({
           name: newMat.name,
           type: newMat.type,
           subject: newMat.subject,
+          branch_id: finalBranchId,
           batch_id: primaryBatchId,
           batch_ids: formData.batch_ids,
           total_stock: newMat.total_stock,
@@ -346,6 +361,12 @@ export default function MaterialsClient({
     setDistributeNotes("")
     setDistributeModalOpen(true)
   }
+
+  const distributeAvailableBatches = useMemo(() => {
+    const targetBranch = distributeMaterial?.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null)
+    if (!targetBranch) return batches
+    return batches.filter(b => !b.branch_id || b.branch_id === targetBranch)
+  }, [batches, distributeMaterial, selectedBranchId])
 
   const toggleDistributeBatch = (batchId: string) => {
     if (distributeSelectedBatchIds.includes(batchId)) {
@@ -651,6 +672,10 @@ export default function MaterialsClient({
   // Filtered materials grid
   const filteredMaterials = useMemo(() => {
     return materials.filter(m => {
+      // 0. Branch filter
+      if (selectedBranchId !== "all") {
+        if (m.branch_id && m.branch_id !== selectedBranchId) return false
+      }
       // 1. Search query
       const q = searchQuery.trim().toLowerCase()
       if (q) {
@@ -672,7 +697,14 @@ export default function MaterialsClient({
 
       return true
     })
-  }, [materials, searchQuery, selectedType, selectedBatchFilter, stockFilter])
+  }, [materials, selectedBranchId, searchQuery, selectedType, selectedBatchFilter, stockFilter])
+
+  // Batches available for the add/edit modal (filtered by material's branch)
+  const modalAvailableBatches = useMemo(() => {
+    const bId = formData.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null)
+    if (!bId) return batches
+    return batches.filter(b => !b.branch_id || b.branch_id === bId)
+  }, [batches, formData.branch_id, selectedBranchId])
 
   // Overall stats
   const totalMaterialsCount = materials.length
@@ -689,7 +721,7 @@ export default function MaterialsClient({
             <Package className="w-7 h-7 text-amber-400" />
             Study Materials & Distribution
           </h2>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-600 mt-1">
             Manage books, lecture sheets, notes, and track student distribution across batches
           </p>
         </div>
@@ -720,7 +752,7 @@ export default function MaterialsClient({
               <Package className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black text-white mt-2">{totalMaterialsCount}</p>
+          <p className="text-2xl font-black text-slate-900 mt-2">{totalMaterialsCount}</p>
           <p className="text-xs text-slate-500 mt-1">Books, sheets, and notes</p>
         </div>
 
@@ -731,7 +763,7 @@ export default function MaterialsClient({
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black text-emerald-400 mt-2">{totalStockInHand}</p>
+          <p className="text-2xl font-black text-emerald-600 mt-2">{totalStockInHand}</p>
           <p className="text-xs text-slate-500 mt-1">Available for distribution</p>
         </div>
 
@@ -742,7 +774,7 @@ export default function MaterialsClient({
               <Users className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black text-blue-400 mt-2">{totalDistributedCount}</p>
+          <p className="text-2xl font-black text-blue-600 mt-2">{totalDistributedCount}</p>
           <p className="text-xs text-slate-500 mt-1">Copies given to students</p>
         </div>
 
@@ -753,7 +785,7 @@ export default function MaterialsClient({
               <AlertTriangle className="w-4 h-4" />
             </div>
           </div>
-          <p className="text-2xl font-black text-amber-400 mt-2">{lowStockCount}</p>
+          <p className="text-2xl font-black text-amber-600 mt-2">{lowStockCount}</p>
           <p className="text-xs text-slate-500 mt-1">&le; 5 units remaining</p>
         </div>
       </div>
@@ -767,7 +799,7 @@ export default function MaterialsClient({
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search materials by title or subject..."
-              className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+              className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-slate-900 placeholder:text-slate-400"
             />
           </div>
 
@@ -775,7 +807,7 @@ export default function MaterialsClient({
             <select
               value={selectedType}
               onChange={e => setSelectedType(e.target.value)}
-              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-slate-900"
             >
               <option value="all">All Types</option>
               <option value="sheet">Lecture Sheets</option>
@@ -789,18 +821,20 @@ export default function MaterialsClient({
             <select
               value={selectedBatchFilter}
               onChange={e => setSelectedBatchFilter(e.target.value)}
-              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-slate-900"
             >
               <option value="all">All Batches</option>
-              {batches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
+              {batches
+                .filter(b => selectedBranchId === "all" || !b.branch_id || b.branch_id === selectedBranchId)
+                .map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
             </select>
 
             <select
               value={stockFilter}
               onChange={e => setStockFilter(e.target.value as any)}
-              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+              className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-slate-900"
             >
               <option value="all">All Stock Status</option>
               <option value="in_stock">In Stock (&gt;0)</option>
@@ -856,10 +890,18 @@ export default function MaterialsClient({
                 <div>
                   {/* Top Badges */}
                   <div className="flex items-center justify-between gap-2 mb-3">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${config.bg} ${config.color} ${config.border}`}>
-                      <TypeIcon className="w-3.5 h-3.5" />
-                      {config.label}
-                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${config.bg} ${config.color} ${config.border}`}>
+                        <TypeIcon className="w-3.5 h-3.5" />
+                        {config.label}
+                      </span>
+                      {m.branch_id && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                          <Building2 className="w-3 h-3 text-slate-500" />
+                          {branches.find(b => b.id === m.branch_id)?.name || "Branch"}
+                        </span>
+                      )}
+                    </div>
 
                     {m.price > 0 ? (
                       <span className="text-xs font-bold text-slate-300 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-md font-mono">
@@ -873,22 +915,22 @@ export default function MaterialsClient({
                   </div>
 
                   {/* Title & Subject */}
-                  <h3 className="font-bold text-slate-900 text-base group-hover:text-amber-400 transition-colors">
+                  <h3 className="font-bold text-slate-900 text-base group-hover:text-amber-500 transition-colors">
                     {m.name}
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5 font-medium">
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">
                     {m.subject || "General Subject"}
                   </p>
 
                   {/* Assigned Batches List */}
                   <div className="mt-2 flex flex-wrap gap-1 items-center">
                     {assignedBatches.length === 0 ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                         All Batches
                       </span>
                     ) : (
                       assignedBatches.map(b => (
-                        <span key={b.id} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                        <span key={b.id} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/10 text-amber-700 border border-amber-500/20">
                           {b.name}
                         </span>
                       ))
@@ -896,7 +938,7 @@ export default function MaterialsClient({
                   </div>
 
                   {m.description && (
-                    <p className="text-xs text-slate-400 mt-2.5 line-clamp-2">
+                    <p className="text-xs text-slate-500 mt-2.5 line-clamp-2">
                       {m.description}
                     </p>
                   )}
@@ -904,12 +946,12 @@ export default function MaterialsClient({
                   {/* Stock Indicator */}
                   <div className="mt-4 pt-3 border-t border-slate-200">
                     <div className="flex items-center justify-between text-xs mb-1.5">
-                      <span className="text-slate-400">
-                        In Stock: <strong className={isOutOfStock ? "text-rose-400" : isLowStock ? "text-amber-400" : "text-white"}>{m.available_stock}</strong> / {m.total_stock} units
+                      <span className="text-slate-600">
+                        In Stock: <strong className={isOutOfStock ? "text-rose-600" : isLowStock ? "text-amber-600" : "text-slate-900"}>{m.available_stock}</strong> / {m.total_stock} units
                       </span>
                       <span className="text-slate-500 font-mono">{stockPct}%</span>
                     </div>
-                    <div className="w-full bg-white border border-slate-300 h-2 rounded-full overflow-hidden">
+                    <div className="w-full bg-slate-100 border border-slate-200 h-2 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
                           isOutOfStock ? "bg-rose-500" : isLowStock ? "bg-amber-500" : "bg-emerald-500"
@@ -967,10 +1009,10 @@ export default function MaterialsClient({
       {/* 1. ADD / EDIT MATERIAL MODAL (MULTI-BATCH) */}
       {/* ========================================== */}
       {addModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-200 text-white">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-950">
-              <h3 className="font-black text-slate-900 flex items-center gap-2">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-slate-900 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border border-slate-700 text-white">
+            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950">
+              <h3 className="font-black text-white flex items-center gap-2">
                 <Package className="w-5 h-5 text-amber-400" />
                 {editingMaterial ? "Edit Material" : "Add New Study Material"}
               </h3>
@@ -989,7 +1031,7 @@ export default function MaterialsClient({
                   value={formData.name}
                   onChange={e => setFormData({ ...formData, name: e.target.value })}
                   placeholder="e.g., HSC Physics Chapter 1 Lecture Sheet"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 placeholder:text-slate-500"
                 />
               </div>
 
@@ -1001,7 +1043,7 @@ export default function MaterialsClient({
                   <select
                     value={formData.type}
                     onChange={e => setFormData({ ...formData, type: e.target.value as MaterialType })}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100"
                   >
                     <option value="sheet">📄 Lecture Sheet</option>
                     <option value="book">📖 Book</option>
@@ -1020,10 +1062,29 @@ export default function MaterialsClient({
                     value={formData.subject}
                     onChange={e => setFormData({ ...formData, subject: e.target.value })}
                     placeholder="e.g., Physics, Math"
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 placeholder:text-slate-500"
                   />
                 </div>
               </div>
+
+              {/* Branch Selector */}
+              {branches.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Target Branch
+                  </label>
+                  <select
+                    value={formData.branch_id}
+                    onChange={e => setFormData({ ...formData, branch_id: e.target.value, batch_ids: [] })}
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100"
+                  >
+                    <option value="">All Branches</option>
+                    {branches.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* MULTI-BATCH SELECTOR */}
               <div>
@@ -1034,26 +1095,26 @@ export default function MaterialsClient({
                   <button
                     type="button"
                     onClick={() => {
-                      if (formData.batch_ids.length === batches.length) {
+                      if (formData.batch_ids.length === modalAvailableBatches.length) {
                         setFormData({ ...formData, batch_ids: [] })
                       } else {
-                        setFormData({ ...formData, batch_ids: batches.map(b => b.id) })
+                        setFormData({ ...formData, batch_ids: modalAvailableBatches.map(b => b.id) })
                       }
                     }}
                     className="text-[11px] font-bold text-amber-400 hover:text-amber-300 cursor-pointer"
                   >
-                    {formData.batch_ids.length === batches.length ? "Deselect All" : "Select All Batches"}
+                    {formData.batch_ids.length === modalAvailableBatches.length ? "Deselect All" : "Select All Batches"}
                   </button>
                 </div>
 
-                <div className="border border-slate-200 rounded-xl p-2.5 bg-slate-950 max-h-44 overflow-y-auto space-y-1.5">
+                <div className="border border-slate-700 rounded-xl p-2.5 bg-slate-950 max-h-44 overflow-y-auto space-y-1.5">
                   {/* Option: All Batches */}
                   <div
                     onClick={() => setFormData({ ...formData, batch_ids: [] })}
                     className={`p-2 rounded-lg text-xs font-medium flex items-center justify-between cursor-pointer transition-colors ${
                       formData.batch_ids.length === 0 
                         ? "bg-amber-500 text-slate-950 shadow-sm font-bold" 
-                        : "bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-200"
+                        : "bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-700"
                     }`}
                   >
                     <span>✨ Available for All Batches (Open to Everyone)</span>
@@ -1062,7 +1123,7 @@ export default function MaterialsClient({
 
                   {/* Individual Batches */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
-                    {batches.map(b => {
+                    {modalAvailableBatches.map(b => {
                       const isSelected = formData.batch_ids.includes(b.id)
                       return (
                         <div
@@ -1071,7 +1132,7 @@ export default function MaterialsClient({
                           className={`p-2 rounded-lg text-xs font-medium flex items-center justify-between cursor-pointer border transition-all ${
                             isSelected 
                               ? "bg-amber-500/15 border-amber-500/40 text-amber-300 font-bold shadow-sm" 
-                              : "bg-slate-900 border-slate-200 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                              : "bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                           }`}
                         >
                           <div className="flex items-center gap-2 truncate">
@@ -1123,7 +1184,7 @@ export default function MaterialsClient({
                     required
                     value={formData.total_stock}
                     onChange={e => setFormData({ ...formData, total_stock: Math.max(1, parseInt(e.target.value) || 1) })}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white font-mono"
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 font-mono"
                   />
                 </div>
 
@@ -1136,7 +1197,7 @@ export default function MaterialsClient({
                     min="0"
                     value={formData.price}
                     onChange={e => setFormData({ ...formData, price: Math.max(0, parseFloat(e.target.value) || 0) })}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white font-mono"
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 font-mono"
                   />
                 </div>
               </div>
@@ -1150,11 +1211,11 @@ export default function MaterialsClient({
                   onChange={e => setFormData({ ...formData, description: e.target.value })}
                   rows={2}
                   placeholder="e.g., Covers chapter formulas, exercises, and past questions..."
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500 resize-none"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 placeholder:text-slate-500 resize-none"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setAddModalOpen(false)}
@@ -1211,7 +1272,7 @@ export default function MaterialsClient({
                       setDistributeSelectedBatchIds(found.batch_ids)
                     }
                   }}
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100"
                 >
                   {materials.map(m => (
                     <option key={m.id} value={m.id}>
@@ -1227,7 +1288,7 @@ export default function MaterialsClient({
               </div>
 
               {/* Mode Toggle */}
-              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
                 <button
                   type="button"
                   onClick={() => {
@@ -1265,20 +1326,20 @@ export default function MaterialsClient({
                       <button
                         type="button"
                         onClick={() => {
-                          if (distributeSelectedBatchIds.length === batches.length) {
+                          if (distributeSelectedBatchIds.length === distributeAvailableBatches.length) {
                             setDistributeSelectedBatchIds([])
                           } else {
-                            setDistributeSelectedBatchIds(batches.map(b => b.id))
+                            setDistributeSelectedBatchIds(distributeAvailableBatches.map(b => b.id))
                           }
                         }}
                         className="text-[11px] text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
                       >
-                        {distributeSelectedBatchIds.length === batches.length ? "Deselect All" : "Select All Batches"}
+                        {distributeSelectedBatchIds.length === distributeAvailableBatches.length ? "Deselect All" : "Select All Batches"}
                       </button>
                     </div>
 
-                    <div className="flex flex-wrap gap-1.5 p-2 bg-white border border-slate-300 rounded-xl max-h-28 overflow-y-auto">
-                      {batches.map(b => {
+                    <div className="flex flex-wrap gap-1.5 p-2 bg-slate-950 border border-slate-800 rounded-xl max-h-28 overflow-y-auto">
+                      {distributeAvailableBatches.map(b => {
                         const isSelected = distributeSelectedBatchIds.includes(b.id)
                         return (
                           <button
@@ -1288,7 +1349,7 @@ export default function MaterialsClient({
                             className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition-all cursor-pointer ${
                               isSelected 
                                 ? "bg-amber-500 text-slate-950 border-amber-500 shadow-sm font-bold" 
-                                : "bg-slate-900 text-slate-300 border-slate-200 hover:bg-slate-800"
+                                : "bg-slate-900 text-slate-300 border-slate-700 hover:bg-slate-800"
                             }`}
                           >
                             <input
@@ -1305,7 +1366,7 @@ export default function MaterialsClient({
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
-                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                       Students in Selected Batches ({batchStudents.length})
                     </span>
                     <button
@@ -1317,7 +1378,7 @@ export default function MaterialsClient({
                     </button>
                   </div>
 
-                  <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-slate-950">
+                  <div className="max-h-56 overflow-y-auto border border-slate-800 rounded-xl divide-y divide-slate-800/80 bg-slate-950">
                     {batchStudents.length === 0 ? (
                       <p className="p-6 text-center text-xs text-slate-500">
                         {distributeSelectedBatchIds.length === 0 
@@ -1336,7 +1397,7 @@ export default function MaterialsClient({
                             onClick={() => !alreadyIssued && toggleDistributeStudent(student.id)}
                             className={`p-3 flex items-center justify-between text-xs transition-colors ${
                               alreadyIssued 
-                                ? "bg-slate-50/50 opacity-50 cursor-not-allowed" 
+                                ? "bg-slate-900/50 opacity-50 cursor-not-allowed" 
                                 : isSelected 
                                 ? "bg-amber-500/15 cursor-pointer" 
                                 : "hover:bg-slate-900 cursor-pointer"
@@ -1351,7 +1412,7 @@ export default function MaterialsClient({
                                 className="w-4 h-4 text-amber-500 rounded cursor-pointer bg-slate-950 border-slate-700"
                               />
                               <div>
-                                <p className="font-bold text-slate-900">{student.name}</p>
+                                <p className="font-bold text-slate-100">{student.name}</p>
                                 <p className="text-[11px] text-slate-400 font-mono">
                                   {student.student_id} • {studentBatchNames || "Enrolled"}
                                 </p>
@@ -1384,12 +1445,12 @@ export default function MaterialsClient({
                       value={distributeSearchStudentQuery}
                       onChange={e => setDistributeSearchStudentQuery(e.target.value)}
                       placeholder="Search student by name, student ID, or phone..."
-                      className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                      className="w-full pl-9 pr-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 placeholder:text-slate-500"
                     />
                   </div>
 
                   <div className="flex items-center justify-between pt-1">
-                    <span className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                       Matching Students ({searchStudents.length})
                     </span>
                     <button
@@ -1401,7 +1462,7 @@ export default function MaterialsClient({
                     </button>
                   </div>
 
-                  <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl divide-y divide-slate-100 bg-slate-950">
+                  <div className="max-h-56 overflow-y-auto border border-slate-800 rounded-xl divide-y divide-slate-800/80 bg-slate-950">
                     {searchStudents.length === 0 ? (
                       <p className="p-6 text-center text-xs text-slate-500">No matching students found.</p>
                     ) : (
@@ -1415,7 +1476,7 @@ export default function MaterialsClient({
                             onClick={() => !alreadyIssued && toggleDistributeStudent(student.id)}
                             className={`p-3 flex items-center justify-between text-xs transition-colors ${
                               alreadyIssued 
-                                ? "bg-slate-50/50 opacity-50 cursor-not-allowed" 
+                                ? "bg-slate-900/50 opacity-50 cursor-not-allowed" 
                                 : isSelected 
                                 ? "bg-amber-500/15 cursor-pointer" 
                                 : "hover:bg-slate-900 cursor-pointer"
@@ -1430,7 +1491,7 @@ export default function MaterialsClient({
                                 className="w-4 h-4 text-amber-500 rounded cursor-pointer bg-slate-950 border-slate-700"
                               />
                               <div>
-                                <p className="font-bold text-slate-900">{student.name}</p>
+                                <p className="font-bold text-slate-100">{student.name}</p>
                                 <p className="text-[11px] text-slate-400 font-mono">{student.student_id} • {student.phone || "No phone"}</p>
                               </div>
                             </div>
@@ -1461,13 +1522,13 @@ export default function MaterialsClient({
                   value={distributeNotes}
                   onChange={e => setDistributeNotes(e.target.value)}
                   placeholder="e.g. Handed over in class / collection verified"
-                  className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                  className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 placeholder:text-slate-500"
                 />
               </div>
 
               {/* Stock Preview Alert */}
               {distributeMaterial && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-200 flex items-center justify-between text-xs">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
                   <div>
                     <span className="text-slate-400">Selected: </span>
                     <strong className="text-amber-400 font-bold">{distributeSelectedStudentIds.size} students</strong>
@@ -1547,7 +1608,7 @@ export default function MaterialsClient({
             </div>
 
             {/* Distribution Summary Card */}
-            <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
+            <div className="px-6 py-3 bg-slate-950 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-300">
               <div className="flex items-center gap-4">
                 <span>Total Target: <strong className="text-white">{targetStudentsForMaterial.length}</strong></span>
                 <span>Distributed: <strong className="text-emerald-400">{materialIssuesList.length}</strong></span>
@@ -1564,9 +1625,9 @@ export default function MaterialsClient({
             </div>
 
             {/* Sub Filter Tabs, Batch Selector & Search */}
-            <div className="px-6 py-3 border-b border-slate-200 bg-slate-900 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="px-6 py-3 border-b border-slate-800 bg-slate-900 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
+                <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
                   <button
                     onClick={() => setWhoGotItTab("all")}
                     className={`px-3 py-1 font-bold rounded-lg transition-all cursor-pointer ${
@@ -1613,17 +1674,17 @@ export default function MaterialsClient({
                   value={whoGotItSearch}
                   onChange={e => setWhoGotItSearch(e.target.value)}
                   placeholder="Find student..."
-                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-400 text-white placeholder:text-slate-500"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 placeholder:text-slate-500"
                 />
               </div>
             </div>
 
             {/* Student Distribution Table */}
             <div className="p-6 overflow-y-auto flex-1">
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xl bg-slate-900">
+              <div className="border border-slate-800 rounded-xl overflow-hidden shadow-xl bg-slate-900">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                    <tr className="bg-slate-950 border-b border-slate-800 text-xs font-bold text-slate-400 uppercase tracking-wider">
                       <th className="px-4 py-2.5">#</th>
                       <th className="px-4 py-2.5">Student</th>
                       <th className="px-4 py-2.5">Batch</th>
@@ -1632,7 +1693,7 @@ export default function MaterialsClient({
                       <th className="px-4 py-2.5 text-right">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
+                  <tbody className="divide-y divide-slate-800 text-xs">
                     {(() => {
                       const list = targetStudentsForMaterial.filter(s => {
                         const issue = materialIssuesList.find(i => i.student_id === s.id)
@@ -1672,10 +1733,10 @@ export default function MaterialsClient({
                         const batchNames = student.enrollments?.map(e => e.batch?.name).filter(Boolean).join(", ")
 
                         return (
-                          <tr key={student.id} className="hover:bg-amber-50/30 transition-colors">
+                          <tr key={student.id} className="hover:bg-slate-800/60 transition-colors">
                             <td className="px-4 py-3 text-slate-500 font-mono">{idx + 1}</td>
                             <td className="px-4 py-3">
-                              <p className="font-bold text-slate-900">{student.name}</p>
+                              <p className="font-bold text-slate-100">{student.name}</p>
                               <p className="text-[11px] text-slate-400 font-mono">{student.student_id} • {student.phone || "No phone"}</p>
                             </td>
                             <td className="px-4 py-3 text-slate-300">

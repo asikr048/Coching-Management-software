@@ -251,18 +251,25 @@ export default function StudentBatchDetailPage() {
         // 6. Get exam results (combining server verified results and database query)
         let mergedExams: any[] = []
         if (profileExamResults && profileExamResults.length > 0) {
-          mergedExams = profileExamResults.filter((r: any) => r.exam?.batch_id === batchId || !r.exam?.batch_id)
+          mergedExams = profileExamResults.filter((r: any) => 
+            r.exam?.batch_id === batchId || 
+            (Array.isArray(r.exam?.batch_ids) && r.exam.batch_ids.includes(batchId)) || 
+            !r.exam?.batch_id
+          )
         }
 
         if (studentId) {
           try {
             const { data: examData } = await supabase
               .from('exam_results')
-              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, subject)')
+              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, batch_ids, subject)')
               .eq('student_id', studentId)
 
             if (examData && examData.length > 0) {
-              const batchFromDb = examData.filter((r: any) => r.exam?.batch_id === batchId)
+              const batchFromDb = examData.filter((r: any) => 
+                r.exam?.batch_id === batchId || 
+                (Array.isArray(r.exam?.batch_ids) && r.exam.batch_ids.includes(batchId))
+              )
               const map = new Map<string, any>()
               mergedExams.forEach(e => map.set(e.id || e.exam_id, e))
               batchFromDb.forEach(e => map.set(e.id || e.exam_id, e))
@@ -288,11 +295,15 @@ export default function StudentBatchDetailPage() {
         // 7. Get material issues
         const { data: materialData } = await supabase
           .from('material_issues')
-          .select('*, material:materials(name, type, batch_id)')
+          .select('*, material:materials(name, type, batch_id, batch_ids)')
           .eq('student_id', studentId)
           
         if (materialData) {
-          const batchMaterials = materialData.filter((m: any) => m.material?.batch_id === batchId)
+          const batchMaterials = materialData.filter((m: any) => 
+            m.material?.batch_id === batchId || 
+            (Array.isArray(m.material?.batch_ids) && m.material.batch_ids.includes(batchId)) ||
+            !m.material?.batch_id
+          )
           setMaterials(batchMaterials)
         }
 

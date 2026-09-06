@@ -61,11 +61,14 @@ export interface Student {
 }
 
 export interface Batch {
-  id: string; branch_id?: string; name: string; subject?: string; class_level?: string
+  id: string; branch_id?: string | null; name: string; subject?: string; class_level?: string
   teacher_id?: string; room_id?: string; schedule?: string; start_date?: string; end_date?: string
   max_seats: number; current_seats: number; monthly_fee: number; admission_fee: number
   fee_type: "monthly" | "quarterly" | "one_time"; is_active: boolean
-  teacher?: Staff; created_at: string
+  approval_status?: "approved" | "pending_approval" | "rejected"
+  origin_branch_id?: string | null
+  origin_batch_id?: string | null
+  teacher?: Staff; branch?: Branch; origin_branch?: Branch; created_at: string
 }
 
 export interface Enrollment {
@@ -98,10 +101,10 @@ export interface Attendance {
 }
 
 export interface Exam {
-  id: string; branch_id?: string; batch_id?: string; title: string
+  id: string; branch_id?: string | null; batch_id?: string; batch_ids?: string[] | null; title: string
   exam_type: "mcq" | "written" | "mixed"; subject?: string; total_marks: number
   pass_marks: number; exam_date?: string; duration_minutes: number
-  is_published: boolean; batch?: Batch; created_at: string
+  is_published: boolean; is_online?: boolean; batch?: Batch; branch?: Branch; created_at: string
 }
 
 export interface ExamResult {
@@ -110,8 +113,8 @@ export interface ExamResult {
 }
 
 export interface Material {
-  id: string; branch_id?: string; name: string
-  type: "book" | "notes" | "worksheet" | "other"; batch_id?: string
+  id: string; branch_id?: string | null; name: string
+  type: "book" | "notes" | "worksheet" | "other"; batch_id?: string; batch_ids?: string[] | null
   subject?: string; total_stock: number; available_stock: number; price: number; created_at: string
 }
 

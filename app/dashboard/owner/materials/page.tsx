@@ -25,13 +25,22 @@ export default async function MaterialsPage() {
     console.warn("Could not load material_issues from supabase:", e)
   }
 
-  // 3. Batches
+  // 3. Batches with branch_id
   let batches: any[] = []
   try {
-    const { data } = await supabase.from("batches").select("id, name, subject, is_active").order("name")
+    const { data } = await supabase.from("batches").select("id, name, subject, is_active, branch_id").order("name")
     if (data) batches = data
   } catch (e) {
     console.warn("Could not load batches from supabase:", e)
+  }
+
+  // 3b. Branches
+  let branches: any[] = []
+  try {
+    const { data: bData } = await supabase.from("branches").select("*").eq("is_active", true).order("name")
+    if (bData) branches = bData
+  } catch (e) {
+    console.warn("Could not load branches from supabase:", e)
   }
 
   // 4. Students
@@ -65,6 +74,7 @@ export default async function MaterialsPage() {
       initialMaterials={materials}
       initialIssues={issues}
       batches={batches}
+      branches={branches}
       students={students}
       currentStaff={currentStaff}
     />

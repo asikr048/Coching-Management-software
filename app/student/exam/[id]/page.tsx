@@ -32,7 +32,11 @@ export default function StudentExamPage() {
           return
         }
 
-        const { data: studentData, error: sErr } = await supabase.from("students").select("id, batch_id").eq("auth_id", user.id).single()
+        const { data: studentData, error: sErr } = await supabase
+          .from("students")
+          .select("id, batch_id, enrollments(batch_id)")
+          .eq("auth_id", user.id)
+          .single()
         if (sErr || !studentData) throw new Error("Student profile not found")
         setStudent(studentData)
 
@@ -40,8 +44,28 @@ export default function StudentExamPage() {
         const { data: examData, error: eErr } = await supabase.from("exams").select("*").eq("id", examId).single()
         if (eErr || !examData) throw new Error("Exam not found")
         
-        if (examData.batch_id && examData.batch_id !== studentData.batch_id) {
-          throw new Error("You are not enrolled in the batch for this exam")
+        // Multi-batch check
+        const examBatches: string[] = []
+        if (examData.batch_id) examBatches.push(examData.batch_id)
+        if (Array.isArray(examData.batch_ids)) {
+          examData.batch_ids.forEach((id: string) => {
+            if (id && !examBatches.includes(id)) examBatches.push(id)
+          })
+        }
+
+        if (examBatches.length > 0) {
+          const studentBatches: string[] = []
+          if (studentData.batch_id) studentBatches.push(studentData.batch_id)
+          if (Array.isArray(studentData.enrollments)) {
+            studentData.enrollments.forEach((e: any) => {
+              if (e.batch_id && !studentBatches.includes(e.batch_id)) studentBatches.push(e.batch_id)
+            })
+          }
+
+          const hasAccess = studentBatches.some(bId => examBatches.includes(bId))
+          if (!hasAccess) {
+            throw new Error("You are not enrolled in the batch for this exam")
+          }
         }
 
         // Check if already submitted
