@@ -35,15 +35,7 @@ export default async function PublicMarketplace() {
   const contactPhone = settingsMap["contact_phone"] || settingsMap["contact_number"] || "01302201431"
   const contactWhatsApp = settingsMap["contact_whatsapp"] || contactPhone
 
-  const batches = (batchesRes.data || []).map((b: any) => {
-    const isChemistry = b.name && b.name.toLowerCase().includes("chemistry")
-    if (isChemistry && b.status !== "admission_closed") {
-      // Proactively update DB row in background so status is permanently admission_closed
-      supabase.from("batches").update({ status: "admission_closed" }).eq("id", b.id).then(() => {})
-      return { ...b, status: "admission_closed" }
-    }
-    return b
-  })
+  const batches = batchesRes.data || []
 
   return (
     <div className="min-h-screen bg-slate-50">

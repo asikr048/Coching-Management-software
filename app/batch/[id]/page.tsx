@@ -12,14 +12,9 @@ export default async function BatchDetailPage({ params }: { params: Promise<{ id
   const { data: batch } = await supabase.from("batches").select("*, teacher:staff(name, subject)").eq("id", id).single()
   if (!batch) notFound()
 
-  if (batch.name && batch.name.toLowerCase().includes("chemistry") && batch.status !== "admission_closed") {
-    batch.status = "admission_closed"
-    supabase.from("batches").update({ status: "admission_closed" }).eq("id", batch.id).then(() => {})
-  }
-
   const seatsLeft = batch.max_seats - (batch.current_seats || 0)
   const isFull = seatsLeft <= 0
-  const isAdmissionClosed = batch.status === "admission_closed"
+  const isAdmissionClosed = batch.status === "admission_closed" || batch.status === "finished"
 
   return (
     <div className="min-h-screen bg-gray-50">

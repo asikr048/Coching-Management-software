@@ -93,14 +93,7 @@ export default function HomePage() {
           .order("created_at", { ascending: false })
 
         if (b) {
-          const mapped = b.map((item: any) => {
-            if (item.name && item.name.toLowerCase().includes("chemistry") && item.status !== "admission_closed") {
-              item.status = "admission_closed"
-              supabase.from("batches").update({ status: "admission_closed" }).eq("id", item.id).then(() => {})
-            }
-            return item
-          })
-          setBatches(mapped)
+          setBatches(b)
         }
       } catch {}
 
@@ -273,14 +266,21 @@ export default function HomePage() {
     setFbSubmitting(true)
     try {
       const supabase = createClient()
-      await supabase.from("feedbacks").insert({
+      const payload: any = {
         name: fbName,
         email: fbEmail || null,
         phone: fbPhone || null,
         message: fbMessage,
         rating: fbRating,
-        branch_id: selectedBranchId !== "all" ? selectedBranchId : null,
-      })
+      }
+      if (selectedBranchId !== "all") {
+        payload.branch_id = selectedBranchId
+      }
+      let { error } = await supabase.from("feedback").insert(payload)
+      if (error && (error.message?.includes("branch_id") || error.code === "PGRST204" || error.code === "42703")) {
+        delete payload.branch_id
+        await supabase.from("feedback").insert(payload)
+      }
       setFbDone(true)
     } catch {
       setFbDone(true)
@@ -678,7 +678,7 @@ export default function HomePage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredBatches.map(batch => {
-              const isClosed = batch.status === "admission_closed"
+              const isClosed = batch.status === "admission_closed" || batch.status === "finished"
               return (
                 <div
                   key={batch.id}
@@ -850,9 +850,9 @@ export default function HomePage() {
               <div>
                 <div className="flex items-start gap-3.5 mb-3">
                   <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center flex-shrink-0 font-bold overflow-hidden border border-amber-200 shadow-xs">
-                    {ach.photo_url ? (
+                    {(ach.photo_url || ach.image_url) ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={ach.photo_url} alt={ach.student_name} className="w-full h-full object-cover" />
+                      <img src={ach.photo_url || ach.image_url} alt={ach.student_name} className="w-full h-full object-cover" />
                     ) : (
                       <Award className="w-7 h-7" />
                     )}
@@ -860,9 +860,9 @@ export default function HomePage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between">
                       <h4 className="font-bold text-gray-900 text-sm truncate">{ach.student_name}</h4>
-                      {ach.exam_year && (
+                      {(ach.exam_year || ach.year) && (
                         <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-bold">
-                          {ach.exam_year}
+                          {ach.exam_year || ach.year}
                         </span>
                       )}
                     </div>
@@ -872,9 +872,9 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                {ach.description && (
+                {(ach.description || ach.result_details) && (
                   <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded-xl border border-gray-100 line-clamp-3 italic">
-                    "{ach.description}"
+                    "{ach.description || ach.result_details}"
                   </p>
                 )}
               </div>
@@ -931,8 +931,8 @@ export default function HomePage() {
                     {blog.title}
                   </h3>
 
-                  {blog.excerpt && (
-                    <p className="text-xs text-gray-600 line-clamp-3 mb-3">{blog.excerpt}</p>
+                  {(blog.excerpt || blog.summary) && (
+                    <p className="text-xs text-gray-600 line-clamp-3 mb-3">{blog.excerpt || blog.summary}</p>
                   )}
                 </div>
 

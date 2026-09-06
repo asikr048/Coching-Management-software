@@ -319,7 +319,7 @@ export default function MarketplaceBrowseClient({
                 const percentFilled = Math.min(100, Math.round((currentSeats / maxSeats) * 100))
                 const isFull = seatsLeft <= 0
                 const isAlmostFull = seatsLeft > 0 && seatsLeft <= 5
-                const isAdmissionClosed = batch.status === "admission_closed" || (batch.name && batch.name.toLowerCase().includes("chemistry"))
+                const isAdmissionClosed = batch.status === "admission_closed" || batch.status === "finished"
 
                 return (
                   <div

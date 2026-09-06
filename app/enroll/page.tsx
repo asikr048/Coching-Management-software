@@ -440,7 +440,7 @@ function EnrollContent() {
         toast.error("Please select a batch to enroll in")
         return
       }
-      const isClosed = selectedBatch.status === "admission_closed" || (selectedBatch.name && selectedBatch.name.toLowerCase().includes("chemistry"))
+      const isClosed = selectedBatch.status === "admission_closed" || selectedBatch.status === "finished"
       if (isClosed) {
         toast.error("Admission for this batch is currently closed. Please select an open batch.")
         return
@@ -1241,7 +1241,7 @@ function EnrollContent() {
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
                     {batches.map(b => {
-                      const isClosed = b.status === "admission_closed" || (b.name && b.name.toLowerCase().includes("chemistry"))
+                      const isClosed = b.status === "admission_closed" || b.status === "finished"
                       return (
                         <option key={b.id} value={b.id}>
                           {b.name} ({b.class_level || "All"}){isClosed ? " — [Admission Closed]" : ""}
@@ -1252,7 +1252,7 @@ function EnrollContent() {
                 )}
                 {!isCourse && (() => {
                   const sel = batches.find(b => b.id === selectedBatchId)
-                  const isClosed = sel && (sel.status === "admission_closed" || (sel.name && sel.name.toLowerCase().includes("chemistry")))
+                  const isClosed = sel && (sel.status === "admission_closed" || sel.status === "finished")
                   if (isClosed) {
                     return (
                       <div className="mt-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2 text-xs font-bold text-amber-800">
