@@ -252,27 +252,26 @@ export async function POST(req: NextRequest) {
         .eq("id", studentDbId)
     }
 
-    // 5. Check for duplicate pending payment submissions or already enrolled
-    if (isCourse && courseId) {
-      const { data: activeCp } = await admin
-        .from("course_purchases")
-        .select("id")
-        .eq("student_id", studentDbId)
-        .eq("course_id", courseId)
+    // 5. Validate duplicate transaction ID
+    if (cleanTrxId) {
+      const { data: existingTrx } = await admin
+        .from("payment_submissions")
+        .select("id, status")
+        .eq("transaction_id", cleanTrxId)
         .maybeSingle()
 
-      if (activeCp) {
-        return NextResponse.json({
-          success: true,
-          alreadyEnrolled: true,
-          studentDbId,
-          studentId: studentCode,
-          accountCreated,
-          accountEmail: targetAuthEmail,
-          message: "You have already purchased this course! You can view it in your dashboard.",
-        })
+      if (existingTrx) {
+        return NextResponse.json(
+          {
+            error: `This Transaction ID (${cleanTrxId}) has already been submitted (Status: ${existingTrx.status}). If this is a new payment, please enter your new Transaction ID.`,
+          },
+          { status: 400 }
+        )
       }
-    } else if (batchId) {
+    }
+
+    let isExistingEnrolled = false
+    if (batchId) {
       const { data: activeEnr } = await admin
         .from("enrollments")
         .select("id")
@@ -282,53 +281,86 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
 
       if (activeEnr) {
-        return NextResponse.json({
-          success: true,
-          alreadyEnrolled: true,
-          studentDbId,
-          studentId: studentCode,
-          accountCreated,
-          accountEmail: targetAuthEmail,
-          message: "You are already enrolled in this batch!",
-        })
-      }
-
-      const { data: existingSub } = await admin
-        .from("payment_submissions")
-        .select("id, transaction_id")
-        .eq("student_id", studentDbId)
-        .eq("batch_id", batchId)
-        .eq("status", "pending")
-        .maybeSingle()
-
-      if (existingSub) {
-        return NextResponse.json({
-          success: true,
-          existingPending: true,
-          studentDbId,
-          studentId: studentCode,
-          accountCreated,
-          accountEmail: targetAuthEmail,
-          message: "You already have a pending payment submitted for this batch.",
-        })
+        isExistingEnrolled = true
       }
     }
 
-    // 6. Insert payment submission
+    // 6. Pre-record or link fee_dues if student has remaining due
+    let linkedFeeDueId: string | null = null
+    const targetDueDate = (() => {
+      const d = new Date()
+      d.setMonth(d.getMonth() + 1)
+      d.setDate(10)
+      return d.toISOString().split("T")[0]
+    })()
+
+    if (batchId && studentDbId && actualDue > 0) {
+      try {
+        const dueMonth = new Date().toISOString().slice(0, 7)
+        const { data: existingDue } = await admin
+          .from("fee_dues")
+          .select("id, due_amount, paid_amount")
+          .eq("student_id", studentDbId)
+          .eq("batch_id", batchId)
+          .eq("due_month", dueMonth)
+          .maybeSingle()
+
+        if (existingDue) {
+          linkedFeeDueId = existingDue.id
+          await admin
+            .from("fee_dues")
+            .update({
+              due_amount: Math.max(Number(existingDue.due_amount) || 0, totalFee),
+              due_date: targetDueDate,
+              status: "pending",
+            })
+            .eq("id", existingDue.id)
+        } else {
+          const { data: createdDue, error: cDueErr } = await admin
+            .from("fee_dues")
+            .insert({
+              student_id: studentDbId,
+              batch_id: batchId,
+              due_month: dueMonth,
+              due_amount: totalFee,
+              paid_amount: 0,
+              due_date: targetDueDate,
+              status: "pending",
+            })
+            .select("id")
+            .maybeSingle()
+
+          if (createdDue?.id) {
+            linkedFeeDueId = createdDue.id
+          } else if (cDueErr) {
+            console.warn("fee_dues initial insert note:", cDueErr.message)
+          }
+        }
+      } catch (dueErr) {
+        console.warn("Fee due pre-record error:", dueErr)
+      }
+    }
+
+    // 7. Insert payment submission
     const notesContent = isCourse
       ? `Online Course: ${courseId}. Student: ${form.name} (Student ID: ${studentCode}, Phone: ${cleanPhone}). Paid: ৳${actualPaid}, Due: ৳${actualDue}. Trx: ${cleanTrxId}`
-      : `Batch Enrollment: ${batchId}. Student: ${form.name} (Student ID: ${studentCode}, Phone: ${cleanPhone}). Paid: ৳${actualPaid}, Due: ৳${actualDue}. Trx: ${cleanTrxId}`
+      : `${isExistingEnrolled ? "Enrolled Student Fee Payment" : "Batch Enrollment"}: ${batchId}. Student: ${form.name} (Student ID: ${studentCode}, Phone: ${cleanPhone}). Paid: ৳${actualPaid}, Due: ৳${actualDue}. Trx: ${cleanTrxId}`
 
     const submissionPayload: Record<string, any> = {
       student_id: studentDbId,
       amount: actualPaid,
       total_fee: totalFee,
       due_amount: actualDue,
+      due_date: targetDueDate,
       payment_method: cleanMethod,
       sender_number: cleanSenderNumber,
       transaction_id: cleanTrxId,
       status: "pending",
       notes: notesContent,
+    }
+
+    if (linkedFeeDueId) {
+      submissionPayload.fee_due_id = linkedFeeDueId
     }
 
     if (batchId) {

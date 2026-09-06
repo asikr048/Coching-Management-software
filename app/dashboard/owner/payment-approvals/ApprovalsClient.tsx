@@ -163,17 +163,21 @@ export default function ApprovalsClient({
   const stats = useMemo(() => {
     let pendingCount = 0
     let pendingTotal = 0
+    let pendingDueTotal = 0
     let approvedCount = 0
     let approvedTotal = 0
+    let approvedDueTotal = 0
     let rejectedCount = 0
 
     for (const s of submissions) {
       if (s.status === "pending") {
         pendingCount++
         pendingTotal += s.amount || 0
+        pendingDueTotal += s.due_amount || 0
       } else if (s.status === "approved") {
         approvedCount++
         approvedTotal += s.amount || 0
+        approvedDueTotal += s.due_amount || 0
       } else if (s.status === "rejected") {
         rejectedCount++
       }
@@ -182,8 +186,10 @@ export default function ApprovalsClient({
     return {
       pendingCount,
       pendingTotal,
+      pendingDueTotal,
       approvedCount,
       approvedTotal,
+      approvedDueTotal,
       rejectedCount,
       totalCount: submissions.length,
     }
@@ -368,92 +374,103 @@ export default function ApprovalsClient({
   return (
     <div className="space-y-5">
       {/* 1. KPI Statistics Overview */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
         <div
           onClick={() => setFilter("pending")}
-          className={`p-4 rounded-2xl border transition-all cursor-pointer backdrop-blur-md ${
+          className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-sm ${
             filter === "pending"
-              ? "border-amber-400 bg-amber-500/10 ring-1 ring-amber-400/30 shadow-lg"
-              : "border-slate-200 bg-white hover:border-slate-700"
+              ? "border-amber-500 bg-amber-50/80 ring-2 ring-amber-500/20 shadow-md"
+              : "border-slate-200 bg-white hover:border-amber-400"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Pending Review</span>
-            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Pending Review</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
           </div>
-          <p className="text-2xl font-black text-amber-300 mt-1">{stats.pendingCount}</p>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">
-            Awaiting: <span className="font-bold text-amber-400">{formatCurrency(stats.pendingTotal)}</span>
+          <p className="text-2xl font-black text-amber-700 mt-1">{stats.pendingCount}</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Awaiting Paid: <strong className="text-amber-700">{formatCurrency(stats.pendingTotal)}</strong>
           </p>
         </div>
 
         <div
+          className="p-4 rounded-2xl border border-rose-200 bg-rose-50/50 shadow-sm"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-700">Pending Dues</span>
+            <AlertCircle className="w-4 h-4 text-rose-500" />
+          </div>
+          <p className="text-2xl font-black text-rose-700 mt-1">{formatCurrency(stats.pendingDueTotal)}</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">Remaining to collect</p>
+        </div>
+
+        <div
           onClick={() => setFilter("approved")}
-          className={`p-4 rounded-2xl border transition-all cursor-pointer backdrop-blur-md ${
+          className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-sm ${
             filter === "approved"
-              ? "border-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-400/30 shadow-lg"
-              : "border-slate-200 bg-white hover:border-slate-700"
+              ? "border-emerald-500 bg-emerald-50/80 ring-2 ring-emerald-500/20 shadow-md"
+              : "border-slate-200 bg-white hover:border-emerald-400"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Approved</span>
-            <CheckCircle className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700">Approved</span>
+            <CheckCircle className="w-4 h-4 text-emerald-500" />
           </div>
-          <p className="text-2xl font-black text-emerald-300 mt-1">{stats.approvedCount}</p>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">
-            Collected: <span className="font-bold text-emerald-400">{formatCurrency(stats.approvedTotal)}</span>
+          <p className="text-2xl font-black text-emerald-700 mt-1">{stats.approvedCount}</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Collected: <strong className="text-emerald-700">{formatCurrency(stats.approvedTotal)}</strong>
           </p>
         </div>
 
         <div
           onClick={() => setFilter("rejected")}
-          className={`p-4 rounded-2xl border transition-all cursor-pointer backdrop-blur-md ${
+          className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-sm ${
             filter === "rejected"
-              ? "border-rose-400 bg-rose-500/10 ring-1 ring-rose-400/30 shadow-lg"
-              : "border-slate-200 bg-white hover:border-slate-700"
+              ? "border-rose-500 bg-rose-50/80 ring-2 ring-rose-500/20 shadow-md"
+              : "border-slate-200 bg-white hover:border-rose-400"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-rose-400">Rejected</span>
-            <XCircle className="w-4 h-4 text-rose-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-700">Rejected</span>
+            <XCircle className="w-4 h-4 text-rose-500" />
           </div>
-          <p className="text-2xl font-black text-rose-300 mt-1">{stats.rejectedCount}</p>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">Disapproved submissions</p>
+          <p className="text-2xl font-black text-rose-700 mt-1">{stats.rejectedCount}</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">Declined payments</p>
         </div>
 
         <div
           onClick={() => setFilter("all")}
-          className={`p-4 rounded-2xl border transition-all cursor-pointer backdrop-blur-md ${
+          className={`p-4 rounded-2xl border transition-all cursor-pointer shadow-sm ${
             filter === "all"
-              ? "border-amber-400 bg-slate-800 ring-1 ring-amber-400/30 shadow-lg"
-              : "border-slate-200 bg-white hover:border-slate-700"
+              ? "border-indigo-500 bg-indigo-50/80 ring-2 ring-indigo-500/20 shadow-md"
+              : "border-slate-200 bg-white hover:border-indigo-400"
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Total Submissions</span>
-            <Banknote className="w-4 h-4 text-amber-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-700">All Submissions</span>
+            <Banknote className="w-4 h-4 text-indigo-600" />
           </div>
-          <p className="text-2xl font-black text-white mt-1">{stats.totalCount}</p>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">All time submissions</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{stats.totalCount}</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">All time submissions</p>
         </div>
       </div>
 
       {/* 2. Search, Sort & Filter Control Panel */}
-      <div className="bg-white backdrop-blur-md p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xl space-y-3.5">
+      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-3.5">
         {/* Real-time search across number, payment sender number, student ID, TrxID, name */}
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             placeholder="Search by student phone, sender number, student ID (MS-...), TrxID, name, batch, course..."
-            className="w-full pl-10 pr-10 py-2.5 text-sm bg-white border border-slate-300 rounded-xl text-white focus:outline-none focus:border-amber-400 transition-all placeholder:text-slate-500 font-medium"
+            className="w-full pl-10 pr-10 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-slate-400 font-medium"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-md cursor-pointer"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 p-1 rounded-md cursor-pointer"
               title="Clear search"
             >
               <X className="w-4 h-4" />
@@ -462,7 +479,7 @@ export default function ApprovalsClient({
         </div>
 
         {/* Filter controls row */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-1 border-t border-slate-200">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-1 border-t border-slate-100">
           {/* Status Tabs */}
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
             <Filter className="w-3.5 h-3.5 text-slate-400 mr-0.5 flex-shrink-0" />
@@ -472,14 +489,14 @@ export default function ApprovalsClient({
                 onClick={() => setFilter(f)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
                   filter === f
-                    ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20"
-                    : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                    ? "bg-amber-600 text-white shadow-sm"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
                 }`}
               >
                 <span>{f.charAt(0).toUpperCase() + f.slice(1)}</span>
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
-                    filter === f ? "bg-slate-950/30 text-slate-950" : "bg-slate-900 text-slate-300"
+                    filter === f ? "bg-amber-800 text-white" : "bg-slate-200 text-slate-700"
                   }`}
                 >
                   {f === "pending"
@@ -497,25 +514,25 @@ export default function ApprovalsClient({
           {/* Sort & Method & Type Dropdowns */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Sort Dropdown */}
-            <div className="flex items-center gap-1.5 text-xs bg-white border border-slate-300 rounded-xl px-3 py-2">
-              <ArrowUpDown className="w-3.5 h-3.5 text-amber-400" />
-              <label htmlFor="sort-select" className="text-slate-400 font-medium">
+            <div className="flex items-center gap-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl px-3 py-2">
+              <ArrowUpDown className="w-3.5 h-3.5 text-amber-600" />
+              <label htmlFor="sort-select" className="text-slate-500 font-medium">
                 Sort:
               </label>
               <select
                 id="sort-select"
                 value={sortOption}
                 onChange={e => setSortOption(e.target.value as SortOption)}
-                className="bg-transparent text-white font-semibold focus:outline-none cursor-pointer pr-1"
+                className="bg-transparent text-slate-900 font-semibold focus:outline-none cursor-pointer pr-1"
               >
-                <option value="date_desc" className="bg-slate-900 text-white">Date: Newest First</option>
-                <option value="date_asc" className="bg-slate-900 text-white">Date: Oldest First</option>
-                <option value="amount_desc" className="bg-slate-900 text-white">Amount: High to Low (৳↓)</option>
-                <option value="amount_asc" className="bg-slate-900 text-white">Amount: Low to High (৳↑)</option>
-                <option value="due_desc" className="bg-slate-900 text-white">Due: High to Low</option>
-                <option value="name_asc" className="bg-slate-900 text-white">Student: A → Z</option>
-                <option value="name_desc" className="bg-slate-900 text-white">Student: Z → A</option>
-                <option value="status_pending" className="bg-slate-900 text-white">Status: Pending First</option>
+                <option value="date_desc" className="bg-white text-slate-900">Date: Newest First</option>
+                <option value="date_asc" className="bg-white text-slate-900">Date: Oldest First</option>
+                <option value="due_desc" className="bg-white text-slate-900">Due: High to Low (৳↓)</option>
+                <option value="amount_desc" className="bg-white text-slate-900">Amount: High to Low (৳↓)</option>
+                <option value="amount_asc" className="bg-white text-slate-900">Amount: Low to High (৳↑)</option>
+                <option value="name_asc" className="bg-white text-slate-900">Student: A → Z</option>
+                <option value="name_desc" className="bg-white text-slate-900">Student: Z → A</option>
+                <option value="status_pending" className="bg-white text-slate-900">Status: Pending First</option>
               </select>
             </div>
 
@@ -523,26 +540,26 @@ export default function ApprovalsClient({
             <select
               value={methodFilter}
               onChange={e => setMethodFilter(e.target.value)}
-              className="text-xs bg-white border border-slate-300 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none cursor-pointer"
+              className="text-xs bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-semibold focus:outline-none cursor-pointer"
             >
-              <option value="all" className="bg-slate-900 text-white">All Methods</option>
-              <option value="bkash" className="bg-slate-900 text-white">bKash</option>
-              <option value="nagad" className="bg-slate-900 text-white">Nagad</option>
-              <option value="rocket" className="bg-slate-900 text-white">Rocket</option>
-              <option value="upay" className="bg-slate-900 text-white">Upay</option>
-              <option value="offline" className="bg-slate-900 text-white">Offline / Cash</option>
-              <option value="referral" className="bg-slate-900 text-white">Referral / Waiver</option>
+              <option value="all" className="bg-white text-slate-900">All Methods</option>
+              <option value="bkash" className="bg-white text-slate-900">bKash</option>
+              <option value="nagad" className="bg-white text-slate-900">Nagad</option>
+              <option value="rocket" className="bg-white text-slate-900">Rocket</option>
+              <option value="upay" className="bg-white text-slate-900">Upay</option>
+              <option value="offline" className="bg-white text-slate-900">Offline / Cash</option>
+              <option value="referral" className="bg-white text-slate-900">Referral / Waiver</option>
             </select>
 
             {/* Item Type Filter */}
             <select
               value={itemTypeFilter}
               onChange={e => setItemTypeFilter(e.target.value)}
-              className="text-xs bg-white border border-slate-300 rounded-xl px-3 py-2 text-white font-semibold focus:outline-none cursor-pointer"
+              className="text-xs bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-900 font-semibold focus:outline-none cursor-pointer"
             >
-              <option value="all" className="bg-slate-900 text-white">All Types</option>
-              <option value="batch" className="bg-slate-900 text-white">Batches Only</option>
-              <option value="course" className="bg-slate-900 text-white">Courses Only</option>
+              <option value="all" className="bg-white text-slate-900">All Types</option>
+              <option value="batch" className="bg-white text-slate-900">Batches Only</option>
+              <option value="course" className="bg-white text-slate-900">Courses Only</option>
             </select>
           </div>
         </div>
@@ -660,16 +677,16 @@ export default function ApprovalsClient({
                         </div>
 
                         {sub.student?.phone && (
-                          <div className="text-xs text-slate-400 font-mono mt-0.5 flex items-center gap-1">
-                            <Phone className="w-3 h-3 text-slate-500" />
-                            <span>Student Phone: <strong className="text-slate-200">{sub.student.phone}</strong></span>
+                          <div className="text-xs text-slate-500 font-mono mt-0.5 flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-slate-400" />
+                            <span>Student Phone: <strong className="text-slate-800">{sub.student.phone}</strong></span>
                             <button
                               onClick={() => copyToClipboard(sub.student!.phone!, "Student phone")}
-                              className="hover:text-white cursor-pointer p-0.5 text-slate-400"
+                              className="hover:text-slate-900 cursor-pointer p-0.5 text-slate-400"
                               title="Copy student phone"
                             >
                               {copiedText === sub.student.phone ? (
-                                <Check className="w-3 h-3 text-emerald-400" />
+                                <Check className="w-3 h-3 text-emerald-600" />
                               ) : (
                                 <Copy className="w-3 h-3" />
                               )}
@@ -681,7 +698,7 @@ export default function ApprovalsClient({
                       {/* Status badge */}
                       <span
                         className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ml-auto sm:ml-0 ${
-                          statusColors[sub.status] || "bg-slate-800 text-slate-300 border-slate-700"
+                          statusColors[sub.status] || "bg-slate-100 text-slate-700 border-slate-300"
                         }`}
                       >
                         {statusIcons[sub.status]}
@@ -690,23 +707,23 @@ export default function ApprovalsClient({
                     </div>
 
                     {/* Details 4-Column Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-slate-200">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mt-3 pt-3 border-t border-slate-100">
                       {/* Enrolled Item */}
                       <div>
-                        <p className="text-xs font-medium text-slate-400 mb-0.5">
+                        <p className="text-xs font-medium text-slate-500 mb-0.5">
                           {isCourse ? "Course" : "Batch"}
                         </p>
-                        <div className="font-semibold text-white truncate flex items-center gap-1.5" title={itemLabel}>
+                        <div className="font-bold text-slate-900 truncate flex items-center gap-1.5" title={itemLabel}>
                           {isCourse ? (
-                            <span className="text-purple-300 flex items-center gap-1 truncate font-bold">
-                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                            <span className="text-purple-700 flex items-center gap-1 truncate font-bold">
+                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
                                 Course
                               </span>
                               <span className="truncate">{sub.course?.title || "Online Course"}</span>
                             </span>
                           ) : (
-                            <span className="text-amber-300 flex items-center gap-1 truncate font-bold">
-                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            <span className="text-amber-800 flex items-center gap-1 truncate font-bold">
+                              <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
                                 Batch
                               </span>
                               <span className="truncate">{sub.batch?.name || "Batch"}</span>
@@ -714,42 +731,49 @@ export default function ApprovalsClient({
                           )}
                         </div>
                         {sub.batch?.subject && !isCourse && (
-                          <p className="text-[11px] text-slate-400 truncate">{sub.batch.subject}</p>
+                          <p className="text-[11px] text-slate-500 truncate">{sub.batch.subject}</p>
                         )}
                       </div>
 
                       {/* Amount Paid */}
                       <div>
-                        <p className="text-xs font-medium text-slate-400 mb-0.5">Amount Paid</p>
-                        <p className="text-base font-extrabold text-emerald-400 tracking-tight">
+                        <p className="text-xs font-medium text-slate-500 mb-0.5">Amount Paid</p>
+                        <p className="text-base font-extrabold text-emerald-600 tracking-tight">
                           {formatCurrency(sub.amount)}
                         </p>
                         {sub.total_fee > sub.amount && (
-                          <p className="text-[11px] text-slate-400">Total: {formatCurrency(sub.total_fee)}</p>
+                          <p className="text-[11px] text-slate-500 font-medium">Total: {formatCurrency(sub.total_fee)}</p>
                         )}
                       </div>
 
                       {/* Due Remaining */}
                       <div>
-                        <p className="text-xs font-medium text-slate-400 mb-0.5">Due Remaining</p>
-                        <p
-                          className={`text-base font-bold ${
-                            sub.due_amount > 0 ? "text-rose-400" : "text-emerald-400"
-                          }`}
-                        >
-                          {sub.due_amount > 0 ? formatCurrency(sub.due_amount) : "৳0 (Paid)"}
-                        </p>
+                        <p className="text-xs font-medium text-slate-500 mb-0.5">Due Remaining</p>
+                        <div className="flex items-center gap-1.5">
+                          <p
+                            className={`text-base font-black ${
+                              sub.due_amount > 0 ? "text-rose-600" : "text-emerald-600"
+                            }`}
+                          >
+                            {sub.due_amount > 0 ? formatCurrency(sub.due_amount) : "৳0 (Paid)"}
+                          </p>
+                          {sub.due_amount > 0 && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-extrabold uppercase bg-rose-100 text-rose-700 border border-rose-300">
+                              Due
+                            </span>
+                          )}
+                        </div>
                         {sub.due_amount > 0 && sub.due_date && (
-                          <p className="text-[11px] text-rose-400">Due by {formatDate(sub.due_date)}</p>
+                          <p className="text-[11px] font-medium text-rose-500">Due by {formatDate(sub.due_date)}</p>
                         )}
                       </div>
 
                       {/* Payment Method */}
                       <div>
-                        <p className="text-xs font-medium text-slate-400 mb-0.5">Payment Method</p>
+                        <p className="text-xs font-medium text-slate-500 mb-0.5">Payment Method</p>
                         <span
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                            methodColors[sub.payment_method] || "bg-slate-800 text-slate-300 border-slate-700"
+                            methodColors[sub.payment_method] || "bg-slate-100 text-slate-700 border-slate-300"
                           }`}
                         >
                           {methodLabels[sub.payment_method] || sub.payment_method}
@@ -763,25 +787,25 @@ export default function ApprovalsClient({
                       {sub.sender_number && (
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-mono font-semibold border ${
                           sub.payment_method === "referral"
-                            ? "bg-purple-500/15 border-purple-500/30 text-purple-300"
-                            : "bg-amber-500/15 border-amber-500/30 text-amber-300"
+                            ? "bg-purple-50 border-purple-200 text-purple-800"
+                            : "bg-amber-50 border-amber-200 text-amber-800"
                         }`}>
                           {sub.payment_method === "referral" ? (
-                            <User className="w-3.5 h-3.5 text-purple-400" />
+                            <User className="w-3.5 h-3.5 text-purple-600" />
                           ) : (
-                            <Phone className="w-3.5 h-3.5 text-amber-400" />
+                            <Phone className="w-3.5 h-3.5 text-amber-600" />
                           )}
                           <span>
                             {sub.payment_method === "referral" ? "Referrer: " : "Sender: "}
-                            <strong className="text-white">{sub.sender_number}</strong>
+                            <strong className="text-slate-900">{sub.sender_number}</strong>
                           </span>
                           <button
                             onClick={() => copyToClipboard(sub.sender_number!, sub.payment_method === "referral" ? "Referrer info" : "Sender number")}
-                            className={`p-0.5 cursor-pointer ${sub.payment_method === "referral" ? "text-purple-400 hover:text-purple-200" : "text-amber-400 hover:text-amber-200"}`}
+                            className={`p-0.5 cursor-pointer ${sub.payment_method === "referral" ? "text-purple-600 hover:text-purple-800" : "text-amber-600 hover:text-amber-800"}`}
                             title={sub.payment_method === "referral" ? "Copy Referrer" : "Copy sender number"}
                           >
                             {copiedText === sub.sender_number ? (
-                              <Check className="w-3 h-3 text-emerald-400" />
+                              <Check className="w-3 h-3 text-emerald-600" />
                             ) : (
                               <Copy className="w-3 h-3" />
                             )}
@@ -794,21 +818,21 @@ export default function ApprovalsClient({
                         const ref = parseReferralNotes(sub.notes)
                         if (!ref?.reason) return null
                         return (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-500/15 border border-purple-500/30 text-purple-300 rounded-lg text-xs font-medium">
-                            <FileText className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-                            <span>Reason: <strong className="text-white">{ref.reason}</strong></span>
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-purple-50 border border-purple-200 text-purple-800 rounded-lg text-xs font-medium">
+                            <FileText className="w-3.5 h-3.5 text-purple-600 flex-shrink-0" />
+                            <span>Reason: <strong className="text-slate-900">{ref.reason}</strong></span>
                           </span>
                         )
                       })()}
 
                       {/* TrxID */}
                       {sub.transaction_id && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-800 border border-slate-700 text-slate-200 rounded-lg font-mono font-semibold">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 border border-slate-800 text-slate-100 rounded-lg font-mono font-semibold">
                           <Hash className="w-3.5 h-3.5 text-amber-400" />
                           <span>TrxID: <strong className="text-amber-300 font-bold">{sub.transaction_id}</strong></span>
                           <button
                             onClick={() => copyToClipboard(sub.transaction_id!, "Transaction ID")}
-                            className="p-0.5 text-slate-400 hover:text-white cursor-pointer"
+                            className="p-0.5 text-slate-400 hover:text-amber-200 cursor-pointer"
                             title="Copy Transaction ID"
                           >
                             {copiedText === sub.transaction_id ? (
@@ -822,15 +846,15 @@ export default function ApprovalsClient({
 
                       {/* Notes snippet */}
                       {sub.notes && (
-                        <span className="flex items-center gap-1 text-slate-400 max-w-xs truncate" title={sub.notes}>
-                          <FileText className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                        <span className="flex items-center gap-1 text-slate-500 max-w-xs truncate" title={sub.notes}>
+                          <FileText className="w-3 h-3 text-slate-400 flex-shrink-0" />
                           <span className="truncate">{sub.notes}</span>
                         </span>
                       )}
 
                       {/* Submission Date */}
                       <span className="text-slate-500 ml-auto flex items-center gap-1">
-                        <Calendar className="w-3 h-3 text-slate-500" />
+                        <Calendar className="w-3 h-3 text-slate-400" />
                         {formatDate(sub.created_at)}
                       </span>
                     </div>
@@ -908,17 +932,17 @@ export default function ApprovalsClient({
 
       {/* 4. Approve Confirmation Modal */}
       {approveModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-white">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-slate-900">
             {/* Header */}
-            <div className="bg-gradient-to-r from-slate-900 via-[#0f172a] to-slate-950 border-b border-slate-200 p-5 text-white">
+            <div className="bg-slate-50 border-b border-slate-200 p-5 text-slate-900">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-xl flex items-center justify-center flex-shrink-0">
-                  <CheckCircle className="w-6 h-6 text-amber-300" />
+                <div className="w-10 h-10 bg-amber-100 text-amber-600 border border-amber-300 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <CheckCircle className="w-6 h-6 text-amber-600" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">Confirm Payment Approval</h3>
-                  <p className="text-slate-400 text-xs mt-0.5">Review student credentials before authorizing admission</p>
+                  <p className="text-slate-500 text-xs mt-0.5">Review student credentials before authorizing admission</p>
                 </div>
               </div>
             </div>
@@ -926,31 +950,31 @@ export default function ApprovalsClient({
             {/* Modal Body */}
             <div className="p-6 space-y-4">
               {/* Student Summary */}
-              <div className="flex items-center gap-3 p-3.5 bg-slate-950 rounded-2xl border border-slate-200">
-                <div className="w-10 h-10 bg-slate-800 border border-slate-700 rounded-full flex items-center justify-center text-amber-400 font-bold flex-shrink-0">
+              <div className="flex items-center gap-3 p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
+                <div className="w-10 h-10 bg-amber-500 text-white rounded-full flex items-center justify-center font-bold flex-shrink-0">
                   {approveModal.student?.name?.charAt(0)?.toUpperCase() || "?"}
                 </div>
                 <div className="min-w-0">
                   <p className="font-bold text-slate-900 text-sm">{approveModal.student?.name || "Student"}</p>
-                  <p className="text-xs text-amber-400/90 font-mono mt-0.5">
-                    {approveModal.student?.student_id} · <span className="text-slate-400">{approveModal.student?.phone || "No phone"}</span>
+                  <p className="text-xs text-slate-600 font-mono mt-0.5">
+                    <strong className="text-amber-700">{approveModal.student?.student_id}</strong> · <span>{approveModal.student?.phone || "No phone"}</span>
                   </p>
                 </div>
               </div>
 
               {/* Amount cards */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3.5 bg-emerald-500/10 rounded-2xl border border-emerald-500/20">
-                  <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">Amount Paid</p>
-                  <p className="text-xl font-black text-emerald-300 mt-0.5">
+                <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-200">
+                  <p className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider">Amount Paid Now</p>
+                  <p className="text-xl font-black text-emerald-700 mt-0.5">
                     {formatCurrency(approveModal.amount)}
                   </p>
                 </div>
-                <div className="p-3.5 bg-slate-950 rounded-2xl border border-slate-200">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Remaining Due</p>
+                <div className="p-3.5 bg-rose-50 rounded-2xl border border-rose-200">
+                  <p className="text-[10px] text-rose-700 font-bold uppercase tracking-wider">Remaining Due</p>
                   <p
                     className={`text-xl font-black mt-0.5 ${
-                      approveModal.due_amount > 0 ? "text-rose-400" : "text-slate-500"
+                      approveModal.due_amount > 0 ? "text-rose-700" : "text-slate-500"
                     }`}
                   >
                     {formatCurrency(approveModal.due_amount)}
@@ -959,19 +983,26 @@ export default function ApprovalsClient({
               </div>
 
               {/* Transaction details breakdown */}
-              <div className="space-y-2 text-xs divide-y divide-slate-100">
+              <div className="space-y-2 text-xs divide-y divide-slate-100 text-slate-700">
                 <div className="flex items-center justify-between py-1.5">
-                  <span className="text-slate-400">Enrolled Item</span>
+                  <span className="text-slate-500">Enrolled Item</span>
                   <span className="font-bold text-slate-900">
                     {approveModal.course?.title || approveModal.batch?.name || "Enrollment"}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between py-1.5">
-                  <span className="text-slate-400">Payment Gateway</span>
+                  <span className="text-slate-500">Total Program Fee</span>
+                  <span className="font-bold text-slate-900">
+                    {formatCurrency(approveModal.total_fee || (approveModal.amount + approveModal.due_amount))}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="text-slate-500">Payment Gateway</span>
                   <span
                     className={`inline-flex px-2.5 py-0.5 rounded-full font-bold text-xs border ${
-                      methodColors[approveModal.payment_method] || "bg-slate-800 text-slate-300 border-slate-700"
+                      methodColors[approveModal.payment_method] || "bg-slate-100 text-slate-700 border-slate-300"
                     }`}
                   >
                     {methodLabels[approveModal.payment_method] || approveModal.payment_method}
@@ -980,13 +1011,13 @@ export default function ApprovalsClient({
 
                 {approveModal.sender_number && (
                   <div className="flex items-center justify-between py-1.5">
-                    <span className="text-slate-400">
+                    <span className="text-slate-500">
                       {approveModal.payment_method === "referral" ? "Referrer Student / ID" : "Sender Number"}
                     </span>
                     <span className={`font-mono font-bold px-2.5 py-0.5 rounded-lg border ${
                       approveModal.payment_method === "referral"
-                        ? "text-purple-300 bg-purple-500/15 border-purple-500/30"
-                        : "text-amber-300 bg-amber-500/15 border-amber-500/30"
+                        ? "text-purple-800 bg-purple-50 border-purple-200"
+                        : "text-amber-800 bg-amber-50 border-amber-200"
                     }`}>
                       {approveModal.sender_number}
                     </span>
@@ -997,16 +1028,16 @@ export default function ApprovalsClient({
                   const ref = parseReferralNotes(approveModal.notes)
                   if (!ref) return null
                   return (
-                    <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-xs space-y-1 my-1">
-                      <p className="font-bold text-purple-300 flex items-center gap-1.5">
-                        <User className="w-3.5 h-3.5 text-purple-400" /> Referral / Waiver Details
+                    <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-xs space-y-1 my-1">
+                      <p className="font-bold text-purple-800 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-purple-600" /> Referral / Waiver Details
                       </p>
-                      <p className="text-slate-300">
-                        Referrer: <strong className="font-mono text-purple-200">{ref.name}</strong>
+                      <p className="text-slate-700">
+                        Referrer: <strong className="font-mono text-purple-900">{ref.name}</strong>
                       </p>
                       {ref.reason && (
-                        <p className="text-slate-400">
-                          Reason: <span className="text-purple-300">{ref.reason}</span>
+                        <p className="text-slate-500">
+                          Reason: <span className="text-purple-800">{ref.reason}</span>
                         </p>
                       )}
                     </div>
@@ -1015,25 +1046,24 @@ export default function ApprovalsClient({
 
                 {approveModal.transaction_id && (
                   <div className="flex items-center justify-between py-1.5">
-                    <span className="text-slate-400">Transaction ID (TrxID)</span>
-                    <span className="font-mono font-bold text-amber-300 bg-slate-800 px-2.5 py-0.5 rounded-lg border border-slate-700">
+                    <span className="text-slate-500">Transaction ID (TrxID)</span>
+                    <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">
                       {approveModal.transaction_id}
                     </span>
                   </div>
                 )}
 
                 <div className="flex items-center justify-between py-1.5">
-                  <span className="text-slate-400">Submitted At</span>
-                  <span className="text-slate-300">{formatDate(approveModal.created_at)}</span>
+                  <span className="text-slate-500">Submitted At</span>
+                  <span className="text-slate-700">{formatDate(approveModal.created_at)}</span>
                 </div>
               </div>
 
               {/* Informational Alert */}
-              <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                 <p>
-                  Approving will automatically activate the student&apos;s enrollment, generate an official financial
-                  receipt, increment the seat counter, and open dashboard access.
+                  Approving will mark ৳{approveModal.amount} as collected, generate a payment receipt, and {approveModal.due_amount > 0 ? `register remaining due ৳${approveModal.due_amount} in Fee Dues` : "clear the fee balance"}.
                 </p>
               </div>
 
@@ -1041,14 +1071,14 @@ export default function ApprovalsClient({
               <div className="flex gap-3 pt-2">
                 <button
                   onClick={() => setApproveModal(null)}
-                  className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 transition-colors cursor-pointer text-sm"
+                  className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 transition-colors cursor-pointer text-sm"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={() => handleApprove(approveModal.id, approveModal)}
                   disabled={processing === approveModal.id}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-amber-500/20 text-sm"
+                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold transition-all disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-amber-600/20 text-sm"
                 >
                   {processing === approveModal.id ? (
                     <>
@@ -1068,27 +1098,27 @@ export default function ApprovalsClient({
 
       {/* 5. Reject Payment Modal */}
       {rejectModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-white">
-            <div className="flex items-center gap-2 text-rose-400">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-md p-6 shadow-2xl space-y-4 text-slate-900">
+            <div className="flex items-center gap-2 text-rose-600">
               <XCircle className="w-5 h-5" />
               <h3 className="text-lg font-bold text-slate-900">Reject Payment Submission</h3>
             </div>
 
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500">
               Please specify the reason for rejecting this payment (e.g. invalid TrxID, sender number mismatch,
               incorrect amount).
             </p>
 
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-1.5 uppercase tracking-wider">
+              <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">
                 Rejection Reason *
               </label>
               <textarea
                 value={rejectReason}
                 onChange={e => setRejectReason(e.target.value)}
                 rows={3}
-                className="w-full px-3.5 py-2.5 border border-slate-700 bg-slate-950 rounded-xl text-sm text-white focus:outline-none focus:border-rose-400 placeholder:text-slate-500"
+                className="w-full px-3.5 py-2.5 border border-slate-300 bg-white rounded-xl text-sm text-slate-900 focus:outline-none focus:border-rose-500 placeholder:text-slate-400"
                 placeholder="e.g. TrxID not found on bKash statement, amount mismatch..."
               />
             </div>
@@ -1099,7 +1129,7 @@ export default function ApprovalsClient({
                   setRejectModal(null)
                   setRejectReason("")
                 }}
-                className="flex-1 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 transition-colors cursor-pointer text-sm"
+                className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 transition-colors cursor-pointer text-sm"
               >
                 Cancel
               </button>
@@ -1123,24 +1153,24 @@ export default function ApprovalsClient({
 
       {/* 6. Full Details View Modal */}
       {detailModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="bg-slate-900 border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-white">
-            <div className="bg-gradient-to-r from-slate-900 via-[#0f172a] to-slate-950 border-b border-slate-200 p-5 text-white flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden text-slate-900">
+            <div className="bg-slate-50 border-b border-slate-200 p-5 text-slate-900 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <Banknote className="w-5 h-5 text-amber-400" />
-                <h3 className="text-base font-bold">Payment Details</h3>
+                <Banknote className="w-5 h-5 text-amber-600" />
+                <h3 className="text-base font-bold text-slate-900">Payment Details</h3>
               </div>
               <button
                 onClick={() => setDetailModal(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg cursor-pointer"
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
+            <div className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs text-slate-700">
               {/* Status Header */}
-              <div className="flex items-center justify-between p-3.5 bg-slate-950 rounded-2xl border border-slate-200">
+              <div className="flex items-center justify-between p-3.5 bg-slate-50 rounded-2xl border border-slate-200">
                 <span className="font-bold text-slate-700 uppercase tracking-wider">Submission Status</span>
                 <span
                   className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${
@@ -1153,11 +1183,11 @@ export default function ApprovalsClient({
               </div>
 
               {/* Student info */}
-              <div className="space-y-2 p-4 bg-slate-950 rounded-2xl border border-slate-200">
+              <div className="space-y-2 p-4 bg-slate-50 rounded-2xl border border-slate-200">
                 <p className="font-bold text-slate-900 text-sm">{detailModal.student?.name || "Unknown Student"}</p>
-                <div className="grid grid-cols-2 gap-2 text-slate-400">
-                  <p>Student ID: <strong className="font-mono text-amber-300">{detailModal.student?.student_id || "—"}</strong></p>
-                  <p>Phone: <strong className="font-mono text-slate-200">{detailModal.student?.phone || "—"}</strong></p>
+                <div className="grid grid-cols-2 gap-2 text-slate-600">
+                  <p>Student ID: <strong className="font-mono text-amber-700">{detailModal.student?.student_id || "—"}</strong></p>
+                  <p>Phone: <strong className="font-mono text-slate-900">{detailModal.student?.phone || "—"}</strong></p>
                   {detailModal.student?.email && <p className="col-span-2">Email: {detailModal.student.email}</p>}
                   {detailModal.student?.guardian_phone && (
                     <p className="col-span-2">Guardian Phone: {detailModal.student.guardian_phone}</p>
@@ -1167,62 +1197,62 @@ export default function ApprovalsClient({
 
               {/* Payment Financial Breakdown */}
               <div className="grid grid-cols-3 gap-2.5 text-center">
-                <div className="p-3 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
-                  <p className="text-[10px] uppercase font-bold text-emerald-400">Amount Paid</p>
-                  <p className="text-base font-extrabold text-emerald-300 mt-0.5">{formatCurrency(detailModal.amount)}</p>
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200">
+                  <p className="text-[10px] uppercase font-bold text-emerald-700">Amount Paid</p>
+                  <p className="text-base font-extrabold text-emerald-700 mt-0.5">{formatCurrency(detailModal.amount)}</p>
                 </div>
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-200">
-                  <p className="text-[10px] uppercase font-bold text-slate-400">Total Fee</p>
-                  <p className="text-base font-bold text-white mt-0.5">{formatCurrency(detailModal.total_fee)}</p>
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <p className="text-[10px] uppercase font-bold text-slate-500">Total Fee</p>
+                  <p className="text-base font-bold text-slate-900 mt-0.5">{formatCurrency(detailModal.total_fee)}</p>
                 </div>
-                <div className="p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
-                  <p className="text-[10px] uppercase font-bold text-rose-400">Due Amount</p>
-                  <p className="text-base font-extrabold text-rose-300 mt-0.5">{formatCurrency(detailModal.due_amount)}</p>
+                <div className="p-3 bg-rose-50 rounded-xl border border-rose-200">
+                  <p className="text-[10px] uppercase font-bold text-rose-700">Due Remaining</p>
+                  <p className="text-base font-extrabold text-rose-700 mt-0.5">{formatCurrency(detailModal.due_amount)}</p>
                 </div>
               </div>
 
               {/* Transaction Meta */}
               <div className="space-y-2 divide-y divide-slate-100">
                 <div className="flex justify-between py-2">
-                  <span className="text-slate-400">Method</span>
-                  <span className={`inline-flex px-2.5 py-0.5 rounded-full font-bold text-xs border ${methodColors[detailModal.payment_method] || "bg-slate-800 text-slate-300"}`}>
+                  <span className="text-slate-500">Method</span>
+                  <span className={`inline-flex px-2.5 py-0.5 rounded-full font-bold text-xs border ${methodColors[detailModal.payment_method] || "bg-slate-100 text-slate-700"}`}>
                     {methodLabels[detailModal.payment_method] || detailModal.payment_method}
                   </span>
                 </div>
                 <div className="flex justify-between py-2">
-                  <span className="text-slate-400">
+                  <span className="text-slate-500">
                     {detailModal.payment_method === "referral" ? "Referrer Student / ID" : "Sender Number"}
                   </span>
-                  <span className="font-mono font-bold text-white">{detailModal.sender_number || "—"}</span>
+                  <span className="font-mono font-bold text-slate-900">{detailModal.sender_number || "—"}</span>
                 </div>
                 <div className="flex justify-between py-2">
-                  <span className="text-slate-400">Transaction ID (TrxID)</span>
-                  <span className="font-mono font-bold text-amber-300">{detailModal.transaction_id || "—"}</span>
+                  <span className="text-slate-500">Transaction ID (TrxID)</span>
+                  <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2.5 py-0.5 rounded-lg border border-slate-200">{detailModal.transaction_id || "—"}</span>
                 </div>
                 <div className="flex justify-between py-2">
-                  <span className="text-slate-400">Item Enrolled</span>
+                  <span className="text-slate-500">Item Enrolled</span>
                   <span className="font-bold text-slate-900">{detailModal.course?.title || detailModal.batch?.name || "—"}</span>
                 </div>
                 <div className="flex justify-between py-2">
-                  <span className="text-slate-400">Submitted On</span>
-                  <span className="text-slate-300">{formatDate(detailModal.created_at)}</span>
+                  <span className="text-slate-500">Submitted On</span>
+                  <span className="text-slate-700">{formatDate(detailModal.created_at)}</span>
                 </div>
                 {detailModal.approved_at && (
                   <div className="flex justify-between py-2">
-                    <span className="text-slate-400">Approved On</span>
-                    <span className="text-emerald-400 font-semibold">{formatDate(detailModal.approved_at)}</span>
+                    <span className="text-slate-500">Approved On</span>
+                    <span className="text-emerald-700 font-semibold">{formatDate(detailModal.approved_at)}</span>
                   </div>
                 )}
                 {detailModal.rejection_reason && (
                   <div className="flex justify-between py-2">
-                    <span className="text-rose-400 font-bold">Rejection Reason</span>
-                    <span className="text-rose-300">{detailModal.rejection_reason}</span>
+                    <span className="text-rose-700 font-bold">Rejection Reason</span>
+                    <span className="text-rose-700">{detailModal.rejection_reason}</span>
                   </div>
                 )}
                 {detailModal.notes && (
                   <div className="py-2">
-                    <span className="text-slate-400 block mb-1">Notes</span>
-                    <p className="text-slate-200 bg-white border border-slate-300 p-2.5 rounded-xl">{detailModal.notes}</p>
+                    <span className="text-slate-500 block mb-1">Notes</span>
+                    <p className="text-slate-800 bg-slate-50 border border-slate-200 p-2.5 rounded-xl">{detailModal.notes}</p>
                   </div>
                 )}
 
@@ -1230,16 +1260,16 @@ export default function ApprovalsClient({
                   const ref = parseReferralNotes(detailModal.notes)
                   if (!ref && detailModal.payment_method !== "referral") return null
                   return (
-                    <div className="p-3.5 bg-purple-500/10 border border-purple-500/20 rounded-xl space-y-1.5 mt-2">
-                      <p className="font-bold text-purple-300 flex items-center gap-1.5 text-xs">
-                        <User className="w-3.5 h-3.5 text-purple-400" /> Referral / Waiver Details
+                    <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl space-y-1.5 mt-2">
+                      <p className="font-bold text-purple-800 flex items-center gap-1.5 text-xs">
+                        <User className="w-3.5 h-3.5 text-purple-600" /> Referral / Waiver Details
                       </p>
-                      <p className="text-slate-300 text-xs">
-                        Referrer: <strong className="font-mono text-purple-200">{ref?.name || detailModal.sender_number || "—"}</strong>
+                      <p className="text-slate-700 text-xs">
+                        Referrer: <strong className="font-mono text-purple-900">{ref?.name || detailModal.sender_number || "—"}</strong>
                       </p>
                       {ref?.reason && (
-                        <p className="text-slate-400 text-xs">
-                          Reason: <span className="text-purple-300">{ref.reason}</span>
+                        <p className="text-slate-500 text-xs">
+                          Reason: <span className="text-purple-800">{ref.reason}</span>
                         </p>
                       )}
                     </div>
@@ -1247,13 +1277,21 @@ export default function ApprovalsClient({
                 })()}
               </div>
 
-              {/* Copy Full summary button */}
-              <button
-                onClick={() => copyFullSummary(detailModal)}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors"
-              >
-                <Copy className="w-4 h-4" /> Copy Complete Summary
-              </button>
+              {/* Modal Action Buttons */}
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  onClick={() => copyFullSummary(detailModal)}
+                  className="flex-1 py-2.5 bg-amber-500/15 hover:bg-amber-500/25 text-amber-800 border border-amber-300 font-bold rounded-xl flex items-center justify-center gap-2 cursor-pointer transition-colors text-sm"
+                >
+                  <Copy className="w-4 h-4 text-amber-600" /> Copy Summary
+                </button>
+                <button
+                  onClick={() => setDetailModal(null)}
+                  className="flex-1 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl font-semibold transition-colors cursor-pointer text-sm"
+                >
+                  Close Details
+                </button>
+              </div>
             </div>
           </div>
         </div>

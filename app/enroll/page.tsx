@@ -552,23 +552,14 @@ function EnrollContent() {
       setSubmittedPaidAmount(actualPaidAmount)
       setSubmittedDueAmount(dueAmount)
 
-      if (data.alreadyEnrolled) {
-        setAlreadyEnrolled(true)
-        setStep("success")
-        toast.info(data.message || "You are already enrolled!")
-        return
-      }
-
-      if (data.existingPending) {
-        setExistingPending(true)
-        setStep("success")
-        toast.info(data.message || "You already have a pending payment submitted!")
-        return
-      }
-
+      setAlreadyEnrolled(false)
       window.scrollTo({ top: 0, behavior: "smooth" })
       setStep("success")
-      toast.success("Payment submitted successfully! Admin will verify and activate your access.")
+      toast.success(
+        dueAmount > 0
+          ? `Payment of ৳${actualPaidAmount} submitted! Remaining due ৳${dueAmount} will be recorded.`
+          : "Payment submitted successfully! Admin will verify and activate your access."
+      )
     } catch (err: unknown) {
       console.error("Submission error:", err)
       toast.error(err instanceof Error ? err.message : "Failed to submit payment. Please try again.")

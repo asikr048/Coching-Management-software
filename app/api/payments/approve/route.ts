@@ -140,16 +140,226 @@ export async function POST(req: NextRequest) {
         receipt_number: receiptNo,
         notes: `Course: ${sub.course_id}. Sender: ${cleanSender || "—"}`,
       })
+    } else if (sub.batch_id) {
+      // 3b. Batch Enrollment or Batch Fee Due
+      const isEnrollment =
+        sub.item_type === "batch" ||
+        sub.item_type === "enrollment" ||
+        sub.raw_payload?.created_via === "enrollment_page_v2" ||
+        sub.notes?.toLowerCase().includes("batch enrollment") ||
+        sub.notes?.toLowerCase().includes("enrollment in") ||
+        !sub.fee_due_id
+
+      // 1. Always ensure active enrollment for batch
+      const { data: existingEnr } = await admin
+        .from("enrollments")
+        .select("id, status")
+        .eq("student_id", sub.student_id)
+        .eq("batch_id", sub.batch_id)
+        .maybeSingle()
+
+      if (existingEnr) {
+        if (existingEnr.status !== "active") {
+          await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
+        }
+      } else {
+        const { error: enrErr } = await admin.from("enrollments").upsert(
+          {
+            student_id: sub.student_id,
+            batch_id: sub.batch_id,
+            status: "active",
+          },
+          { onConflict: "student_id,batch_id" }
+        )
+
+        if (enrErr && !enrErr.message.includes("duplicate")) {
+          console.warn("Enrollment upsert note, trying fallback:", enrErr.message)
+          await admin.from("enrollments").insert({
+            student_id: sub.student_id,
+            batch_id: sub.batch_id,
+            status: "active",
+          })
+        }
+      }
+
+      // 2. Fetch batch fee details & update seat counter if new enrollment
+      let batchMonthlyFee = 0
+      let batchAdmissionFee = 0
+      let batchTotalFee = 0
+      try {
+        const { data: bData } = await admin
+          .from("batches")
+          .select("id, name, monthly_fee, admission_fee, current_seats")
+          .eq("id", sub.batch_id)
+          .maybeSingle()
+
+        if (bData) {
+          batchMonthlyFee = Number(bData.monthly_fee) || 0
+          batchAdmissionFee = Number(bData.admission_fee) || 0
+          batchTotalFee = batchMonthlyFee + batchAdmissionFee
+          if (isEnrollment && (!existingEnr || existingEnr.status !== "active")) {
+            await admin.from("batches").update({ current_seats: (bData.current_seats || 0) + 1 }).eq("id", sub.batch_id)
+          }
+        }
+      } catch (err) {
+        console.warn("Batch lookup note:", err)
+      }
+
+      // 3. Calculate effective remaining due amount
+      let effectiveDue = dueAmountNum
+      if (effectiveDue <= 0) {
+        const match = sub.notes?.match(/Due:\s*৳?\s*([0-9]+(?:\.[0-9]+)?)/i)
+        if (match && Number(match[1]) > 0) {
+          effectiveDue = Number(match[1])
+        } else if (totalFeeNum > amountNum) {
+          effectiveDue = totalFeeNum - amountNum
+        } else if (batchTotalFee > amountNum) {
+          effectiveDue = batchTotalFee - amountNum
+        }
+      }
+
+      // 4. Payment record
+      const receiptNo = `RCP-${Date.now().toString(36).toUpperCase()}`
+      let paymentNotes: string | null = cleanSender ? `Sender: ${cleanSender}` : null
+      if (sub.payment_method === "referral" || (sub.notes && sub.notes.toLowerCase().includes("referral"))) {
+        paymentNotes = sub.notes || (cleanSender ? `Referral: ${cleanSender}` : "Referral payment")
+      } else if (sub.notes) {
+        paymentNotes = sub.notes
+      }
+
+      await admin.from("payments").insert({
+        student_id: sub.student_id,
+        batch_id: sub.batch_id,
+        amount: amountNum,
+        total_paid: amountNum,
+        discount: 0,
+        late_fee: 0,
+        payment_method: sub.payment_method || "cash",
+        transaction_id: cleanTrx,
+        payment_for: isEnrollment ? "enrollment" : "monthly_fee",
+        receipt_number: receiptNo,
+        notes: paymentNotes,
+      })
+
+      // 5. Update or create fee_dues
+      if (sub.fee_due_id) {
+        const { data: dueData } = await admin.from("fee_dues").select("*").eq("id", sub.fee_due_id).maybeSingle()
+        if (dueData) {
+          const newPaid = (Number(dueData.paid_amount) || 0) + amountNum
+          const totalOwed = Math.max(Number(dueData.due_amount) || 0, totalFeeNum, batchTotalFee, newPaid + effectiveDue)
+          const isFull = newPaid >= totalOwed
+          await admin
+            .from("fee_dues")
+            .update({
+              due_amount: totalOwed,
+              paid_amount: newPaid,
+              status: isFull ? "paid" : newPaid > 0 ? "partial" : "pending",
+              ...(sub.due_date ? { due_date: sub.due_date } : {}),
+            })
+            .eq("id", sub.fee_due_id)
+        }
+      } else if (effectiveDue > 0) {
+        const targetDueDate =
+          sub.due_date ||
+          (() => {
+            const d = new Date()
+            d.setMonth(d.getMonth() + 1)
+            d.setDate(10)
+            return d.toISOString().split("T")[0]
+          })()
+        const dueMonth = sub.due_date ? new Date(sub.due_date).toISOString().slice(0, 7) : nowIso.slice(0, 7)
+        const expectedTotal = Math.max(totalFeeNum, batchTotalFee, amountNum + effectiveDue)
+
+        const { data: existingDue } = await admin
+          .from("fee_dues")
+          .select("id, due_amount, paid_amount")
+          .eq("student_id", sub.student_id)
+          .eq("batch_id", sub.batch_id)
+          .eq("due_month", dueMonth)
+          .maybeSingle()
+
+        if (existingDue) {
+          const newPaid = (Number(existingDue.paid_amount) || 0) + amountNum
+          const totalOwed = Math.max(Number(existingDue.due_amount), expectedTotal)
+          const isFull = newPaid >= totalOwed
+          await admin
+            .from("fee_dues")
+            .update({
+              due_amount: totalOwed,
+              paid_amount: newPaid,
+              due_date: targetDueDate,
+              status: isFull ? "paid" : newPaid > 0 ? "partial" : "pending",
+            })
+            .eq("id", existingDue.id)
+        } else {
+          const isFull = amountNum >= expectedTotal
+          const { error: dueErr } = await admin.from("fee_dues").insert({
+            student_id: sub.student_id,
+            batch_id: sub.batch_id,
+            due_month: dueMonth,
+            due_amount: expectedTotal,
+            paid_amount: amountNum,
+            due_date: targetDueDate,
+            status: isFull ? "paid" : amountNum > 0 ? "partial" : "pending",
+          })
+          if (dueErr && !dueErr.message.includes("duplicate")) {
+            console.warn("Fee due insert note:", dueErr.message)
+          }
+        }
+      }
+
+      // 6. Process referral commission if enrollment
+      if (isEnrollment) {
+        try {
+          if (student?.referred_by_student_id || student?.referred_by_code) {
+            let refId = student.referred_by_student_id
+            if (!refId && student.referred_by_code) {
+              const code = student.referred_by_code.trim()
+              const { data: matched } = await admin
+                .from("students")
+                .select("id")
+                .or(`referral_code.eq.${code},student_id.eq.${code},phone.eq.${code}`)
+                .maybeSingle()
+              if (matched) refId = matched.id
+            }
+
+            if (refId) {
+              const { data: existingRef } = await admin
+                .from("referrals")
+                .select("id")
+                .eq("referee_id", sub.student_id)
+                .maybeSingle()
+
+              if (!existingRef) {
+                const commAmt = Math.round(totalFeeNum * 0.1)
+                await admin.from("referrals").insert({
+                  referrer_id: refId,
+                  referee_id: sub.student_id,
+                  commission_rate: 10,
+                  commission_amount: commAmt,
+                  status: "pending",
+                  notes: "Auto-recorded on payment approval",
+                })
+              }
+            }
+          }
+        } catch (refErr) {
+          console.warn("Referral recording note:", refErr)
+        }
+      }
     } else if (sub.fee_due_id) {
-      // 3b. Monthly Fee Due Payment
+      // 3c. Standalone Monthly Fee Due Payment (without batch_id)
       const { data: dueData } = await admin.from("fee_dues").select("*").eq("id", sub.fee_due_id).maybeSingle()
       if (dueData) {
         const newPaid = (Number(dueData.paid_amount) || 0) + amountNum
         const isFull = newPaid >= Number(dueData.due_amount)
-        await admin.from("fee_dues").update({
-          paid_amount: newPaid,
-          status: isFull ? "paid" : "partial"
-        }).eq("id", sub.fee_due_id)
+        await admin
+          .from("fee_dues")
+          .update({
+            paid_amount: newPaid,
+            status: isFull ? "paid" : "partial",
+          })
+          .eq("id", sub.fee_due_id)
       }
 
       const receiptNo = `RCP-D-${Date.now().toString(36).toUpperCase()}`
@@ -173,175 +383,6 @@ export async function POST(req: NextRequest) {
         receipt_number: receiptNo,
         notes: duePayNotes,
       })
-    } else if (sub.batch_id) {
-      // 3c. Batch Enrollment
-      const { data: existingEnr } = await admin
-        .from("enrollments")
-        .select("id, status")
-        .eq("student_id", sub.student_id)
-        .eq("batch_id", sub.batch_id)
-        .maybeSingle()
-
-      if (existingEnr) {
-        if (existingEnr.status !== "active") {
-          await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
-        }
-      } else {
-        const { error: enrErr } = await admin.from("enrollments").upsert({
-          student_id: sub.student_id,
-          batch_id: sub.batch_id,
-          status: "active",
-        }, { onConflict: "student_id,batch_id" })
-
-        if (enrErr && !enrErr.message.includes("duplicate")) {
-          console.warn("Enrollment upsert note, trying fallback:", enrErr.message)
-          await admin.from("enrollments").insert({
-            student_id: sub.student_id,
-            batch_id: sub.batch_id,
-          })
-        }
-      }
-
-      // Fetch batch fee details
-      let batchMonthlyFee = 0
-      let batchAdmissionFee = 0
-      let batchTotalFee = 0
-      try {
-        const { data: bData } = await admin
-          .from("batches")
-          .select("id, name, monthly_fee, admission_fee, current_seats")
-          .eq("id", sub.batch_id)
-          .maybeSingle()
-
-        if (bData) {
-          batchMonthlyFee = Number(bData.monthly_fee) || 0
-          batchAdmissionFee = Number(bData.admission_fee) || 0
-          batchTotalFee = batchMonthlyFee + batchAdmissionFee
-          await admin.from("batches").update({ current_seats: (bData.current_seats || 0) + 1 }).eq("id", sub.batch_id)
-        }
-      } catch (err) {
-        console.warn("Batch lookup note:", err)
-      }
-
-      // Calculate effective remaining due amount
-      let effectiveDue = dueAmountNum
-      if (effectiveDue <= 0) {
-        const match = sub.notes?.match(/Due:\s*৳?\s*([0-9]+(?:\.[0-9]+)?)/i)
-        if (match && Number(match[1]) > 0) {
-          effectiveDue = Number(match[1])
-        } else if (totalFeeNum > amountNum) {
-          effectiveDue = totalFeeNum - amountNum
-        } else if (batchTotalFee > amountNum) {
-          effectiveDue = batchTotalFee - amountNum
-        }
-      }
-
-      // Payment record notes (preserve referral details and sender)
-      const receiptNo = `RCP-${Date.now().toString(36).toUpperCase()}`
-      let paymentNotes: string | null = cleanSender ? `Sender: ${cleanSender}` : null
-      if (sub.payment_method === "referral" || (sub.notes && sub.notes.toLowerCase().includes("referral"))) {
-        paymentNotes = sub.notes || (cleanSender ? `Referral: ${cleanSender}` : "Referral payment")
-      } else if (sub.notes) {
-        paymentNotes = sub.notes
-      }
-
-      await admin.from("payments").insert({
-        student_id: sub.student_id,
-        batch_id: sub.batch_id,
-        amount: amountNum,
-        total_paid: amountNum,
-        discount: 0,
-        late_fee: 0,
-        payment_method: sub.payment_method || "cash",
-        transaction_id: cleanTrx,
-        payment_for: "enrollment",
-        receipt_number: receiptNo,
-        notes: paymentNotes,
-      })
-
-      // Handle remaining due if any
-      if (effectiveDue > 0) {
-        const targetDueDate = sub.due_date || (() => {
-          const d = new Date()
-          d.setMonth(d.getMonth() + 1)
-          d.setDate(10)
-          return d.toISOString().split("T")[0]
-        })()
-        const dueMonth = sub.due_date ? new Date(sub.due_date).toISOString().slice(0, 7) : nowIso.slice(0, 7)
-        const expectedTotal = Math.max(totalFeeNum, batchTotalFee, amountNum + effectiveDue)
-
-        const { data: existingDue } = await admin
-          .from("fee_dues")
-          .select("id, due_amount, paid_amount")
-          .eq("student_id", sub.student_id)
-          .eq("batch_id", sub.batch_id)
-          .eq("due_month", dueMonth)
-          .maybeSingle()
-
-        if (existingDue) {
-          const newPaid = (Number(existingDue.paid_amount) || 0) + amountNum
-          const totalOwed = Math.max(Number(existingDue.due_amount), expectedTotal)
-          const isFull = newPaid >= totalOwed
-          await admin.from("fee_dues").update({
-            due_amount: totalOwed,
-            paid_amount: newPaid,
-            due_date: targetDueDate,
-            status: isFull ? "paid" : (newPaid > 0 ? "partial" : "pending")
-          }).eq("id", existingDue.id)
-        } else {
-          const isFull = amountNum >= expectedTotal
-          const { error: dueErr } = await admin.from("fee_dues").insert({
-            student_id: sub.student_id,
-            batch_id: sub.batch_id,
-            due_month: dueMonth,
-            due_amount: expectedTotal,
-            paid_amount: amountNum,
-            due_date: targetDueDate,
-            status: isFull ? "paid" : (amountNum > 0 ? "partial" : "pending"),
-          })
-          if (dueErr && !dueErr.message.includes("duplicate")) {
-            console.warn("Fee due insert note:", dueErr.message)
-          }
-        }
-      }
-
-      // Process referral commission
-      try {
-        if (student?.referred_by_student_id || student?.referred_by_code) {
-          let refId = student.referred_by_student_id
-          if (!refId && student.referred_by_code) {
-            const code = student.referred_by_code.trim()
-            const { data: matched } = await admin
-              .from("students")
-              .select("id")
-              .or(`referral_code.eq.${code},student_id.eq.${code},phone.eq.${code}`)
-              .maybeSingle()
-            if (matched) refId = matched.id
-          }
-
-          if (refId) {
-            const { data: existingRef } = await admin
-              .from("referrals")
-              .select("id")
-              .eq("referee_id", sub.student_id)
-              .maybeSingle()
-
-            if (!existingRef) {
-              const commAmt = Math.round(totalFeeNum * 0.1)
-              await admin.from("referrals").insert({
-                referrer_id: refId,
-                referee_id: sub.student_id,
-                commission_rate: 10,
-                commission_amount: commAmt,
-                status: "pending",
-                notes: "Auto-recorded on payment approval",
-              })
-            }
-          }
-        }
-      } catch (refErr) {
-        console.warn("Referral recording note:", refErr)
-      }
     }
 
     // 4. Update payment submission status to approved
