@@ -18,8 +18,10 @@ export async function checkFinancialAccess(): Promise<{ hasAccess: boolean; role
 
   if (!staffRow) return { hasAccess: false, role: null }
 
-  // Owner always has financial access
-  if (staffRow.role === "owner") return { hasAccess: true, role: "owner" }
+  // Owner and Branch Director always have financial access
+  if (staffRow.role === "owner" || staffRow.role === "branch_director") {
+    return { hasAccess: true, role: staffRow.role }
+  }
 
   return { hasAccess: !!staffRow.has_financial_access, role: staffRow.role }
 }
@@ -63,6 +65,15 @@ export async function checkSuperFinancialAccess(): Promise<{
     staffRow.branch_ids.forEach((b: string) => {
       if (!branches.includes(b)) branches.push(b)
     })
+  }
+
+  if (staffRow.role === "branch_director") {
+    return {
+      hasSuperAccess: true,
+      role: "branch_director",
+      staffId: staffRow.id,
+      branchIds: branches,
+    }
   }
 
   const isSuperManagerWithAccess = staffRow.role === "super_manager" && !!staffRow.has_super_financial_access

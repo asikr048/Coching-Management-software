@@ -26,6 +26,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
 
   const roleLabel: Record<string, string> = {
     owner: "Owner",
+    branch_director: "Branch Director",
     super_manager: "Super Manager",
     manager: "Manager",
     receptionist: "Receptionist",

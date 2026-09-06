@@ -5,13 +5,15 @@ import { toast } from "sonner"
 import {
   Plus, X, Loader2, UserCheck, Shield, ShieldCheck, Crown,
   ChevronDown, Banknote, Landmark, Check, Award, Sparkles,
-  Search, Filter, Edit2, CheckSquare, Square, Users, Mail, Phone, BookOpen
+  Search, Filter, Edit2, CheckSquare, Square, Users, Mail, Phone, BookOpen,
+  Trash2, AlertTriangle, Building2
 } from "lucide-react"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Staff, Branch } from "@/lib/supabase/types"
 
 const roleLabel: Record<string, string> = {
   owner: "Owner",
+  branch_director: "Branch Director",
   super_manager: "Super Manager",
   manager: "Manager",
   receptionist: "Receptionist",
@@ -21,19 +23,21 @@ const roleLabel: Record<string, string> = {
 }
 
 const roleColor: Record<string, string> = {
-  owner: "bg-indigo-500/20 text-indigo-300 border-indigo-500/40",
-  super_manager: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-  manager: "bg-teal-500/20 text-teal-300 border-teal-500/40",
-  receptionist: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-  teacher: "bg-sky-500/20 text-sky-300 border-sky-500/40",
-  accountant: "bg-purple-500/20 text-purple-300 border-purple-500/40",
-  course_teacher: "bg-blue-500/20 text-blue-300 border-blue-500/40",
+  owner: "bg-indigo-500/20 text-indigo-700 border-indigo-400/50",
+  branch_director: "bg-rose-500/20 text-rose-700 border-rose-500/40",
+  super_manager: "bg-amber-500/20 text-amber-700 border-amber-500/40",
+  manager: "bg-teal-500/20 text-teal-700 border-teal-500/40",
+  receptionist: "bg-emerald-500/20 text-emerald-700 border-emerald-500/40",
+  teacher: "bg-sky-500/20 text-sky-700 border-sky-500/40",
+  accountant: "bg-purple-500/20 text-purple-700 border-purple-500/40",
+  course_teacher: "bg-blue-500/20 text-blue-700 border-blue-500/40",
 }
 
 const roleIcon: Record<string, React.ReactNode> = {
-  owner: <Crown className="w-3.5 h-3.5 text-amber-400" />,
-  super_manager: <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />,
-  manager: <Shield className="w-3.5 h-3.5 text-teal-400" />,
+  owner: <Crown className="w-3.5 h-3.5 text-amber-500" />,
+  branch_director: <Building2 className="w-3.5 h-3.5 text-rose-600" />,
+  super_manager: <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />,
+  manager: <Shield className="w-3.5 h-3.5 text-teal-500" />,
 }
 
 interface Props {
@@ -79,6 +83,10 @@ export default function StaffClient({
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
+  // Delete Staff Modal state
+  const [deletingStaff, setDeletingStaff] = useState<Staff | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const supabase = createClient()
 
   const [form, setForm] = useState({
@@ -94,9 +102,9 @@ export default function StaffClient({
 
   // Determine accessible branches for the current user:
   // Owner and Super Managers without branch restrictions see all branches.
-  // Restricted Super Managers see only their assigned branches.
+  // Branch Directors and restricted Super Managers see only their assigned branches.
   const accessibleBranches = useMemo(() => {
-    if (myRole === "owner" || myBranchIds.length === 0) {
+    if (myRole === "owner" || (myRole === "super_manager" && myBranchIds.length === 0)) {
       return branches
     }
     return branches.filter(b => myBranchIds.includes(b.id))
@@ -107,47 +115,93 @@ export default function StaffClient({
   }
 
   function getAssignableRoles(): string[] {
-    if (myRole === "owner" || !myRole || myRole === "manager") {
-      return ["super_manager", "manager", "receptionist", "teacher", "accountant", "course_teacher"]
+    if (myRole === "owner" || !myRole) {
+      return ["branch_director", "super_manager", "manager", "receptionist", "teacher", "accountant", "course_teacher"]
+    }
+    if (myRole === "branch_director") {
+      return ["manager", "receptionist", "teacher", "accountant", "course_teacher"]
     }
     if (myRole === "super_manager") {
       return ["manager", "receptionist", "teacher", "accountant", "course_teacher"]
     }
-    return ["super_manager", "manager", "receptionist", "teacher", "accountant", "course_teacher"]
+    return ["manager", "receptionist", "teacher", "accountant", "course_teacher"]
   }
 
   function canChangeRole(targetRole: string): boolean {
     if (targetRole === "owner") return false
-    if (myRole === "owner" || !myRole || myRole === "manager") return true
+    if (myRole === "owner" || !myRole) return true
+    if (myRole === "branch_director") {
+      return !["owner", "branch_director", "super_manager"].includes(targetRole)
+    }
     if (myRole === "super_manager") {
-      return !["owner", "super_manager"].includes(targetRole)
+      return !["owner", "branch_director", "super_manager"].includes(targetRole)
     }
     return false
   }
 
   function canEditStaff(target: Staff): boolean {
     if (myRole === "owner") return true
-    if (myRole === "super_manager") {
+    if (myRole === "branch_director") {
       if (target.role === "owner") return false
-      if (target.role === "super_manager" && target.id !== myStaffId) return false
-      return true
+      if (target.role === "branch_director" && target.id !== myStaffId) return false
+      if (myBranchIds.length === 0) return true
+      const targetBranches = target.branch_ids || (target.branch_id ? [target.branch_id] : [])
+      if (targetBranches.length === 0) return true
+      return targetBranches.some(bId => myBranchIds.includes(bId))
     }
+    if (myRole === "super_manager") {
+      if (["owner", "branch_director"].includes(target.role)) return false
+      if (target.role === "super_manager" && target.id !== myStaffId) return false
+      if (myBranchIds.length === 0) return true
+      const targetBranches = target.branch_ids || (target.branch_id ? [target.branch_id] : [])
+      if (targetBranches.length === 0) return true
+      return targetBranches.some(bId => myBranchIds.includes(bId))
+    }
+    return false
+  }
+
+  function canDeleteStaff(target: Staff): boolean {
+    if (target.id === myStaffId) return false
+    if (target.role === "owner") return false
+
+    if (myRole === "owner") return true
+
+    if (myRole === "branch_director") {
+      if (["owner", "branch_director", "super_manager"].includes(target.role)) return false
+      if (myBranchIds.length === 0) return true
+      const targetBranches = target.branch_ids || (target.branch_id ? [target.branch_id] : [])
+      if (targetBranches.length === 0) return true
+      return targetBranches.some(bId => myBranchIds.includes(bId))
+    }
+
+    if (myRole === "super_manager") {
+      if (["owner", "branch_director", "super_manager"].includes(target.role)) return false
+      if (myBranchIds.length === 0) return true
+      const targetBranches = target.branch_ids || (target.branch_id ? [target.branch_id] : [])
+      if (targetBranches.length === 0) return true
+      return targetBranches.some(bId => myBranchIds.includes(bId))
+    }
+
     return false
   }
 
   function canManageBranches(target: Staff): boolean {
     if (myRole === "owner") return true
+    if (myRole === "branch_director") {
+      if (["owner", "branch_director"].includes(target.role)) return false
+      return true
+    }
     if (myRole === "super_manager") {
-      if (target.role === "owner") return false
+      if (["owner", "branch_director"].includes(target.role)) return false
       return true
     }
     return false
   }
 
   function canManageFinancialAccess(targetStaff: Staff): boolean {
-    if (targetStaff.role === "owner") return false
+    if (targetStaff.role === "owner" || targetStaff.role === "branch_director") return false
     if (myRole === "owner") return true
-    if (myRole === "super_manager" && hasSuperFinancial) {
+    if (myRole === "branch_director" || (myRole === "super_manager" && hasSuperFinancial)) {
       if (myBranchIds.length === 0) return true
       const targetBranches = targetStaff.branch_ids || (targetStaff.branch_id ? [targetStaff.branch_id] : [])
       if (targetBranches.length === 0) return true
@@ -191,9 +245,24 @@ export default function StaffClient({
     setChangingRole(staffId)
     try {
       const { error } = await supabase.from("staff").update({ role: newRole }).eq("id", staffId)
-      if (error) throw error
+      if (error) {
+        // Fallback for check constraint: sync via API which manages site_settings.staff_custom_roles
+        await fetch("/api/staff/branches", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ staff_id: staffId, role: newRole }),
+        })
+      } else {
+        // Also update site_settings custom roles
+        await fetch("/api/staff/branches", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ staff_id: staffId, role: newRole }),
+        })
+      }
+
       setStaff(prev => prev.map(s => (s.id === staffId ? { ...s, role: newRole as any } : s)))
-      toast.success(`Role updated to ${roleLabel[newRole]}`)
+      toast.success(`Role updated to ${roleLabel[newRole] || newRole}`)
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to change role")
     } finally {
@@ -242,8 +311,29 @@ export default function StaffClient({
             .insert(insertPayload)
             .select()
             .single()
-          if (retryErr) throw retryErr
-          insertedStaff = retryData
+          if (retryErr) {
+            if (retryErr.message?.includes("staff_role_check") || retryErr.code === "23514") {
+              const { data: fbData, error: fbErr } = await supabase
+                .from("staff")
+                .insert({ ...insertPayload, role: "manager" })
+                .select()
+                .single()
+              if (fbErr) throw fbErr
+              insertedStaff = { ...fbData, role: form.role as any }
+            } else {
+              throw retryErr
+            }
+          } else {
+            insertedStaff = retryData
+          }
+        } else if (error.message?.includes("staff_role_check") || error.code === "23514") {
+          const { data: fbData, error: fbErr } = await supabase
+            .from("staff")
+            .insert({ ...insertPayload, role: "manager" })
+            .select()
+            .single()
+          if (fbErr) throw fbErr
+          insertedStaff = { ...fbData, role: form.role as any }
         } else {
           throw error
         }
@@ -251,8 +341,8 @@ export default function StaffClient({
         insertedStaff = data
       }
 
-      // Sync branches via API route (updates site_settings & junction table)
-      if (insertedStaff && form.branch_ids.length > 0) {
+      // Sync branches & custom role via API route
+      if (insertedStaff) {
         try {
           await fetch("/api/staff/branches", {
             method: "POST",
@@ -261,9 +351,11 @@ export default function StaffClient({
               staff_id: insertedStaff.id,
               branch_id: primaryBranchId,
               branch_ids: form.branch_ids,
+              role: form.role,
             }),
           })
           insertedStaff.branch_ids = form.branch_ids
+          insertedStaff.role = form.role as any
         } catch (e) {
           console.warn("Branch sync API warning during staff create:", e)
         }
@@ -334,8 +426,8 @@ export default function StaffClient({
 
   async function handleToggleSuperFinancialAccess(staffId: string, current: boolean) {
     const target = staff.find(s => s.id === staffId)
-    if (myRole !== "owner" && myRole !== "manager") {
-      toast.error("Only owner can configure Super Financial Access")
+    if (myRole !== "owner" && myRole !== "branch_director") {
+      toast.error("Only owner or branch director can configure Super Financial Access")
       return
     }
 
@@ -365,7 +457,6 @@ export default function StaffClient({
   function openBranchModal(s: Staff) {
     setBranchModalStaff(s)
     const existing = s.branch_ids || (s.branch_id ? [s.branch_id] : [])
-    // Select branches that are within accessibleBranches
     setSelectedBranchIds(existing.filter(id => accessibleBranches.some(ab => ab.id === id)))
   }
 
@@ -373,7 +464,6 @@ export default function StaffClient({
     if (!branchModalStaff) return
     setSavingBranches(true)
     try {
-      // Preserve branches outside current user's accessible scope
       const existingBranchIds = branchModalStaff.branch_ids || (branchModalStaff.branch_id ? [branchModalStaff.branch_id] : [])
       const accessibleBranchIds = new Set(accessibleBranches.map(b => b.id))
       const preservedOtherBranches = (myRole === "owner" || myBranchIds.length === 0)
@@ -436,7 +526,6 @@ export default function StaffClient({
     if (!editModalStaff) return
     setSavingEdit(true)
     try {
-      // 1. Calculate branches preserving out-of-scope branches
       const existingBranchIds = editModalStaff.branch_ids || (editModalStaff.branch_id ? [editModalStaff.branch_id] : [])
       const accessibleBranchIds = new Set(accessibleBranches.map(b => b.id))
       const preservedOtherBranches = (myRole === "owner" || myBranchIds.length === 0)
@@ -472,13 +561,21 @@ export default function StaffClient({
             .from("staff")
             .update(updatePayload)
             .eq("id", editModalStaff.id)
-          if (retryErr) throw retryErr
+          if (retryErr) {
+            if (retryErr.message?.includes("staff_role_check") || retryErr.code === "23514") {
+              await supabase.from("staff").update({ ...updatePayload, role: "manager" }).eq("id", editModalStaff.id)
+            } else {
+              throw retryErr
+            }
+          }
+        } else if (staffErr.message?.includes("staff_role_check") || staffErr.code === "23514") {
+          await supabase.from("staff").update({ ...updatePayload, role: "manager" }).eq("id", editModalStaff.id)
         } else {
           throw staffErr
         }
       }
 
-      // Sync branches via API route
+      // Sync branches & role via API route
       try {
         await fetch("/api/staff/branches", {
           method: "POST",
@@ -487,6 +584,7 @@ export default function StaffClient({
             staff_id: editModalStaff.id,
             branch_id: primary,
             branch_ids: finalBranchIds,
+            role: updatePayload.role,
           }),
         })
       } catch (e) {
@@ -519,9 +617,35 @@ export default function StaffClient({
     }
   }
 
+  async function handleDeleteStaff(target: Staff) {
+    setIsDeleting(true)
+    try {
+      const res = await fetch("/api/staff/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staff_id: target.id }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to delete staff member")
+      }
+
+      setStaff(prev => prev.filter(s => s.id !== target.id))
+      toast.success(json.message || `${target.name} deleted successfully`)
+      setDeletingStaff(null)
+      if (editModalStaff?.id === target.id) {
+        setEditModalStaff(null)
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete staff member")
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
   const assignableRoles = getAssignableRoles()
-  const canAddStaff = myRole === "owner" || myRole === "super_manager"
+  const canAddStaff = myRole === "owner" || myRole === "branch_director" || myRole === "super_manager"
 
   return (
     <div className="space-y-6">
@@ -532,7 +656,7 @@ export default function StaffClient({
           <span className="text-[11px] font-bold text-amber-500 uppercase tracking-wider mr-2">
             Role Hierarchy:
           </span>
-          {["owner", "super_manager", "manager", "receptionist", "teacher", "accountant"].map(r => (
+          {["owner", "branch_director", "super_manager", "manager", "receptionist", "teacher", "accountant"].map(r => (
             <span
               key={r}
               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${roleColor[r]}`}
@@ -606,6 +730,7 @@ export default function StaffClient({
           const staffBranchIds = s.branch_ids || (s.branch_id ? [s.branch_id] : [])
           const staffBranches = branches.filter(b => staffBranchIds.includes(b.id))
           const isSuperManager = s.role === "super_manager"
+          const isBranchDirector = s.role === "branch_director"
 
           return (
             <div
@@ -615,13 +740,15 @@ export default function StaffClient({
               } p-5 hover:shadow-xl transition-all relative flex flex-col justify-between`}
             >
               <div>
-                {/* Header: Avatar, Name, Email, and Edit Button */}
+                {/* Header: Avatar, Name, Email, Edit & Delete Buttons */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex items-center gap-3 min-w-0">
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center font-extrabold text-sm shadow-md flex-shrink-0 ${
                         s.role === "owner"
                           ? "bg-amber-500 text-slate-950"
+                          : s.role === "branch_director"
+                          ? "bg-rose-500/20 text-rose-600 border border-rose-500/40"
                           : s.role === "super_manager"
                           ? "bg-amber-400/20 text-amber-500 border border-amber-400/40"
                           : s.role === "manager"
@@ -645,16 +772,27 @@ export default function StaffClient({
                     </div>
                   </div>
 
-                  {/* Edit Staff Details button */}
-                  {canEditStaff(s) && (
-                    <button
-                      onClick={() => openEditModal(s)}
-                      className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors flex-shrink-0 cursor-pointer border border-transparent hover:border-amber-200"
-                      title="Edit Staff Member & Branches"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  {/* Actions: Edit & Delete buttons */}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {canEditStaff(s) && (
+                      <button
+                        onClick={() => openEditModal(s)}
+                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-amber-200"
+                        title="Edit Staff Member & Branches"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {canDeleteStaff(s) && (
+                      <button
+                        onClick={() => setDeletingStaff(s)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                        title="Delete Staff Member"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Role and Subject row */}
@@ -699,7 +837,11 @@ export default function StaffClient({
                       staffBranches.map(b => (
                         <span
                           key={b.id}
-                          className="text-[11px] bg-indigo-50 text-indigo-700 border border-indigo-200 px-2 py-0.5 rounded-md font-semibold"
+                          className={`text-[11px] px-2 py-0.5 rounded-md font-semibold ${
+                            s.role === "branch_director"
+                              ? "bg-rose-50 text-rose-700 border border-rose-200 font-bold"
+                              : "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                          }`}
                         >
                           {b.name}
                         </span>
@@ -772,7 +914,7 @@ export default function StaffClient({
                 )}
 
                 {/* Standard Financial Access Toggle Button */}
-                {s.role !== "owner" ? (
+                {s.role !== "owner" && s.role !== "branch_director" ? (
                   <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2 min-w-0">
                       <div
@@ -836,7 +978,9 @@ export default function StaffClient({
                       </div>
                       <div>
                         <p className="text-xs font-bold text-slate-800 leading-tight">Financial Access</p>
-                        <p className="text-[11px] font-semibold text-amber-600">Full Access (Owner)</p>
+                        <p className="text-[11px] font-semibold text-amber-600">
+                          {s.role === "owner" ? "Full Access (Owner)" : "Branch Owner Access (Director)"}
+                        </p>
                       </div>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
@@ -957,7 +1101,7 @@ export default function StaffClient({
                     value={form.subject}
                     onChange={e => update("subject", e.target.value)}
                     className={inputClass}
-                    placeholder="e.g. Physics, Reception, Math"
+                    placeholder="e.g. Physics, Reception, Math, Director"
                   />
                 </div>
                 <div>
@@ -1230,28 +1374,39 @@ export default function StaffClient({
                 </div>
               )}
 
-              <div className="flex gap-3 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setEditModalStaff(null)}
-                  disabled={savingEdit}
-                  className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 text-xs cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={savingEdit}
-                  className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {savingEdit ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" /> Saving Changes...
-                    </>
-                  ) : (
-                    "Save Changes"
-                  )}
-                </button>
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-200">
+                {canDeleteStaff(editModalStaff) && (
+                  <button
+                    type="button"
+                    onClick={() => setDeletingStaff(editModalStaff)}
+                    className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Staff
+                  </button>
+                )}
+                <div className="flex items-center gap-2 ml-auto">
+                  <button
+                    type="button"
+                    onClick={() => setEditModalStaff(null)}
+                    disabled={savingEdit}
+                    className="px-4 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 text-xs cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingEdit}
+                    className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {savingEdit ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" /> Saving Changes...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1357,6 +1512,50 @@ export default function StaffClient({
               >
                 {savingBranches ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
                 Save Permissions
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Staff Confirmation Modal */}
+      {deletingStaff && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white text-slate-900 rounded-3xl w-full max-w-md p-6 shadow-2xl border border-slate-200/90">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 text-rose-600 border border-rose-200 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Delete Staff Member</h3>
+                <p className="text-xs text-slate-500">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-700 mb-2">
+              Are you sure you want to delete <strong className="text-slate-900">{deletingStaff.name}</strong> ({roleLabel[deletingStaff.role] || deletingStaff.role})?
+            </p>
+            <p className="text-xs text-slate-500 mb-5 leading-relaxed bg-slate-50 p-3 rounded-xl border border-slate-200">
+              This will permanently delete their staff record, unassign associated batches, and revoke system access.
+            </p>
+
+            <div className="flex justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeletingStaff(null)}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => handleDeleteStaff(deletingStaff)}
+                className="px-5 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl flex items-center gap-2 shadow-md shadow-rose-500/20 cursor-pointer disabled:opacity-50"
+              >
+                {isDeleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                Confirm Delete
               </button>
             </div>
           </div>

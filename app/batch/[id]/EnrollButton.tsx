@@ -117,7 +117,7 @@ export default function EnrollButton({
 
   // Admin/staff account — show dashboard link, not enroll
   if (status === "is_staff") {
-    const dashboardHref = ["owner", "super_manager", "manager"].includes(staffRole)
+    const dashboardHref = ["owner", "branch_director", "super_manager", "manager"].includes(staffRole)
       ? "/dashboard/owner"
       : staffRole === "teacher"
       ? "/dashboard/teacher"

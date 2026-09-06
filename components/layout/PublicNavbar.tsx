@@ -23,14 +23,14 @@ export default function PublicNavbar() {
     checkAuth()
   }, [])
 
-  const dashboardHref = ["owner", "super_manager", "manager"].includes(userRole || "")
+  const dashboardHref = ["owner", "branch_director", "super_manager", "manager"].includes(userRole || "")
     ? "/dashboard/owner"
     : userRole === "teacher" ? "/dashboard/teacher"
     : userRole === "receptionist" ? "/dashboard/reception"
     : userRole === "accountant" ? "/dashboard/accountant"
     : "/student/profile"
 
-  const buttonLabel = ["owner", "super_manager", "manager"].includes(userRole || "") ? "Admin Panel" : "My Profile"
+  const buttonLabel = ["owner", "branch_director", "super_manager", "manager"].includes(userRole || "") ? "Admin Panel" : "My Profile"
 
   return (
     <nav className="bg-white border-b border-gray-100 px-4 py-4">

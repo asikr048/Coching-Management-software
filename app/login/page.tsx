@@ -178,7 +178,7 @@ function LoginFormContent() {
         return
       }
 
-      if (role === "owner" || role === "super_manager" || role === "manager") {
+      if (role === "owner" || role === "branch_director" || role === "super_manager" || role === "manager") {
         window.location.href = "/dashboard/owner"
       } else if (role === "receptionist") {
         window.location.href = "/dashboard/reception"

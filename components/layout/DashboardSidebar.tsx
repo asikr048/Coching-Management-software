@@ -60,6 +60,7 @@ const accountantNav = [
 
 const navByRole: Record<string, typeof ownerNav> = {
   owner: ownerNav,
+  branch_director: ownerNav,
   super_manager: ownerNav,
   manager: ownerNav,
   receptionist: receptionNav,
@@ -125,7 +126,9 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-              {role === "super_manager"
+              {role === "branch_director"
+                ? "Branch Director"
+                : role === "super_manager"
                 ? "Super Manager"
                 : role === "course_teacher"
                 ? "Course Teacher"

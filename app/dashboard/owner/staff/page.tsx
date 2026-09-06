@@ -30,33 +30,43 @@ export default async function StaffPage() {
     }
   }
 
-  // Load persistent multi-branch assignments from site_settings as resilient backup
+  // Load persistent multi-branch assignments and custom roles from site_settings as resilient backup
   let branchAssignmentsMap: Record<string, string[]> = {}
+  let customRolesMap: Record<string, string> = {}
   try {
-    const { data: settingRow } = await supabase
+    const { data: settingRows } = await supabase
       .from("site_settings")
-      .select("value")
-      .eq("key", "staff_branch_assignments")
-      .maybeSingle()
-    if (settingRow?.value) {
-      branchAssignmentsMap = JSON.parse(settingRow.value)
+      .select("key, value")
+      .in("key", ["staff_branch_assignments", "staff_custom_roles"])
+    
+    if (settingRows) {
+      settingRows.forEach(row => {
+        if (row.key === "staff_branch_assignments" && row.value) {
+          try { branchAssignmentsMap = JSON.parse(row.value) } catch {}
+        }
+        if (row.key === "staff_custom_roles" && row.value) {
+          try { customRolesMap = JSON.parse(row.value) } catch {}
+        }
+      })
     }
   } catch (e) {}
 
-  // Enrich staff with multi-branch assignments
+  // Enrich staff with multi-branch assignments and custom roles
   const enrichedStaff = (staff || []).map((s: any) => {
     const customBranches = branchAssignmentsMap[s.id]
+    const customRole = customRolesMap[s.id]
     const existingBranchIds = Array.isArray(s.branch_ids) && s.branch_ids.length > 0 
       ? s.branch_ids 
       : (s.branch_id ? [s.branch_id] : [])
     return {
       ...s,
+      role: customRole || s.role,
       branch_ids: customBranches !== undefined ? customBranches : existingBranchIds
     }
   })
 
-  const myRole = currentStaff?.role || "owner"
-  const hasSuperFinancial = myRole === "owner" || !!currentStaff?.has_super_financial_access
+  const effectiveCallerRole = (currentStaff?.id && customRolesMap[currentStaff.id]) || currentStaff?.role || "owner"
+  const hasSuperFinancial = effectiveCallerRole === "owner" || effectiveCallerRole === "branch_director" || !!currentStaff?.has_super_financial_access
   const myBranchIds = (currentStaff?.id && branchAssignmentsMap[currentStaff.id]) ||
     currentStaff?.branch_ids ||
     (currentStaff?.branch_id ? [currentStaff.branch_id] : [])
@@ -68,13 +78,13 @@ export default async function StaffPage() {
           Staff Management (কর্মী ও শিক্ষক ব্যবস্থাপনা)
         </h2>
         <p className="text-sm text-slate-500 font-medium mt-1">
-          Manage teachers, receptionists, accountants, managers, multi-branch access, and financial permissions.
+          Manage teachers, receptionists, accountants, managers, branch directors, multi-branch access, and permissions.
         </p>
       </div>
       <StaffClient
         staff={enrichedStaff}
         branches={(branches as Branch[]) || []}
-        myRole={myRole}
+        myRole={effectiveCallerRole}
         myStaffId={currentStaff?.id || ""}
         hasSuperFinancial={hasSuperFinancial}
         myBranchIds={myBranchIds}

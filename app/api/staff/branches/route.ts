@@ -4,7 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { staff_id, branch_ids = [] } = body
+    const { staff_id, branch_ids = [], role } = body
 
     if (!staff_id) {
       return NextResponse.json({ error: "Staff ID is required." }, { status: 400 })
@@ -13,6 +13,49 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient()
     const selectedBranches: string[] = Array.isArray(branch_ids) ? branch_ids : []
     const primaryBranchId = selectedBranches.length > 0 ? selectedBranches[0] : null
+
+    // 0. Handle role update if provided
+    if (role) {
+      let roleSavedInDb = false
+      try {
+        const { error: roleErr } = await admin
+          .from("staff")
+          .update({ role })
+          .eq("id", staff_id)
+        if (!roleErr) roleSavedInDb = true
+      } catch (e) {}
+
+      if (!roleSavedInDb) {
+        // Fallback: save fallback role in DB and custom role in site_settings
+        const fallbackDbRole = role === "branch_director" ? "manager" : "teacher"
+        try {
+          await admin.from("staff").update({ role: fallbackDbRole }).eq("id", staff_id)
+        } catch (e) {}
+      }
+
+      // Sync site_settings.staff_custom_roles
+      try {
+        const { data: roleRow } = await admin
+          .from("site_settings")
+          .select("value")
+          .eq("key", "staff_custom_roles")
+          .maybeSingle()
+        let rMap: Record<string, string> = {}
+        if (roleRow?.value) {
+          try { rMap = JSON.parse(roleRow.value) } catch {}
+        }
+        if (role === "branch_director") {
+          rMap[staff_id] = "branch_director"
+        } else {
+          delete rMap[staff_id]
+        }
+        await admin.from("site_settings").upsert({
+          key: "staff_custom_roles",
+          value: JSON.stringify(rMap),
+          updated_at: new Date().toISOString(),
+        })
+      } catch (e) {}
+    }
 
     // 1. Attempt to update staff with both branch_id and branch_ids
     let updateSuccess = false

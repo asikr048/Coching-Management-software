@@ -23,7 +23,7 @@ export default async function PaymentApprovalsPage() {
   }
 
   // Determine approval rights
-  const isOwnerOrManager = ["owner", "super_manager", "manager"].includes(currentStaff?.role || "")
+  const isOwnerOrManager = ["owner", "branch_director", "super_manager", "manager"].includes(currentStaff?.role || "")
   let canApprove = isOwnerOrManager
   if (!canApprove && currentStaff?.id) {
     const { data: approverCheck } = await admin

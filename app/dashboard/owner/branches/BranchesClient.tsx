@@ -46,7 +46,7 @@ export default function BranchesClient({
   const [showSqlGuide, setShowSqlGuide] = useState(false)
   const [fallbackWarning, setFallbackWarning] = useState<string | null>(null)
 
-  const isOwnerOrSuper = myRole === "owner" || myRole === "super_manager"
+  const isOwnerOrSuper = myRole === "owner" || myRole === "branch_director" || myRole === "super_manager"
   const supabase = createClient()
 
   // Form State

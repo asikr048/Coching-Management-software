@@ -93,9 +93,9 @@ export function BranchProvider({
                 setIsAllBranchesPermitted(false)
                 setPermittedBranchIds(bList)
 
-                // If user only has access to specific branches and current selection is "all", default to first branch
-                if (bList.length === 1) {
-                  setSelectedBranchIdState(bList[0])
+                // If user only has access to specific branches and current selection is "all" or invalid, default to first branch
+                if (bList.length > 0) {
+                  setSelectedBranchIdState(prev => (prev === "all" || !bList.includes(prev) ? bList[0] : prev))
                 }
               }
             }
