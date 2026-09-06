@@ -34,8 +34,23 @@ import {
   Users,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  Package,
+  Layers,
+  ClipboardList,
+  Building2,
+  PlayCircle,
+  Sparkles
 } from 'lucide-react'
+
+const materialTypeBadge: Record<string, { label: string; icon: any; color: string; bg: string; border: string }> = {
+  sheet: { label: "Lecture Sheet", icon: FileText, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
+  book: { label: "Book", icon: BookOpen, color: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200" },
+  notes: { label: "Class Notes", icon: ClipboardList, color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200" },
+  worksheet: { label: "Worksheet", icon: Layers, color: "text-purple-700", bg: "bg-purple-50", border: "border-purple-200" },
+  exam_paper: { label: "Question Paper", icon: FileText, color: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200" },
+  other: { label: "Material", icon: Package, color: "text-slate-700", bg: "bg-slate-50", border: "border-slate-200" },
+}
 
 export default function StudentBatchDetailPage() {
   const params = useParams()
@@ -54,6 +69,10 @@ export default function StudentBatchDetailPage() {
   const [dues, setDues] = useState<any[]>([])
   const [examResults, setExamResults] = useState<any[]>([])
   const [materials, setMaterials] = useState<any[]>([])
+  const [allExams, setAllExams] = useState<any[]>([])
+  const [allBatchMaterials, setAllBatchMaterials] = useState<any[]>([])
+  const [examFilter, setExamFilter] = useState<'all' | 'upcoming' | 'completed'>('all')
+  const [materialFilter, setMaterialFilter] = useState<'all' | 'received' | 'pending'>('all')
 
   // Pay Due modal state
   const [payingDue, setPayingDue] = useState<any>(null)  // the due being paid
@@ -93,6 +112,10 @@ export default function StudentBatchDetailPage() {
       const myRes = resultsList.find((r: any) => r.is_current_student || (student && r.student_id === student.id))
       if (myRes && myRes.rank) {
         setExamResults(prev => prev.map(e => {
+          const match = e.id === myRes.id || e.exam_id === examId || e.exam?.id === examId
+          return match ? { ...e, rank: myRes.rank } : e
+        }))
+        setAllExams(prev => prev.map(e => {
           const match = e.id === myRes.id || e.exam_id === examId || e.exam?.id === examId
           return match ? { ...e, rank: myRes.rank } : e
         }))
@@ -248,7 +271,7 @@ export default function StudentBatchDetailPage() {
           
         if (dueData) setDues(dueData)
         
-        // 6. Get exam results (combining server verified results and database query)
+        // 6. Get batch exams (scheduled & conducted) + match with student exam results
         let mergedExams: any[] = []
         if (profileExamResults && profileExamResults.length > 0) {
           mergedExams = profileExamResults.filter((r: any) => 
@@ -262,7 +285,7 @@ export default function StudentBatchDetailPage() {
           try {
             const { data: examData } = await supabase
               .from('exam_results')
-              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, batch_ids, subject)')
+              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, batch_ids, subject, is_online, show_all_results, result_note, duration_minutes)')
               .eq('student_id', studentId)
 
             if (examData && examData.length > 0) {
@@ -280,32 +303,209 @@ export default function StudentBatchDetailPage() {
           }
         }
 
-        // Normalize marks so both obtained_marks and marks_obtained are accurate numbers
-        mergedExams = mergedExams.map((r: any) => {
-          const raw = r.obtained_marks ?? r.marks_obtained
-          const obt = raw != null && raw !== "" ? Number(raw) : 0
-          return {
-            ...r,
-            obtained_marks: obt,
-            marks_obtained: obt,
+        // Fetch all batch exams (scheduled, upcoming, or past) from `exams` table
+        let rawBatchExams: any[] = []
+        try {
+          const { data: bExams } = await supabase
+            .from('exams')
+            .select('*, teacher:staff(name)')
+            .or(`batch_id.eq.${batchId},batch_ids.cs.["${batchId}"]`)
+            .order('exam_date', { ascending: false })
+
+          if (bExams && bExams.length > 0) {
+            rawBatchExams = bExams
+          } else {
+            const { data: fbExams } = await supabase
+              .from('exams')
+              .select('*, teacher:staff(name)')
+              .eq('batch_id', batchId)
+              .order('exam_date', { ascending: false })
+            if (fbExams) rawBatchExams = fbExams
+          }
+        } catch {
+          const { data: fbExams } = await supabase
+            .from('exams')
+            .select('*, teacher:staff(name)')
+            .eq('batch_id', batchId)
+            .order('exam_date', { ascending: false })
+          if (fbExams) rawBatchExams = fbExams
+        }
+
+        // Merge scheduled exams with student results
+        const resultMap = new Map<string, any>()
+        mergedExams.forEach((r: any) => {
+          const eId = r.exam_id || r.exam?.id
+          if (eId) resultMap.set(eId, r)
+        })
+
+        const combinedExams: any[] = []
+        const seenExamIds = new Set<string>()
+
+        // Add all batch exams
+        rawBatchExams.forEach((ex: any) => {
+          seenExamIds.add(ex.id)
+          const matched = resultMap.get(ex.id)
+          const total = Number(ex.total_marks) || 100
+          const pass = Number(ex.pass_marks) || 33
+
+          if (matched) {
+            const raw = matched.obtained_marks ?? matched.marks_obtained
+            const obt = raw != null && raw !== "" ? Number(raw) : 0
+            combinedExams.push({
+              id: matched.id || `exam-${ex.id}`,
+              exam_id: ex.id,
+              exam: { ...ex, ...matched.exam },
+              has_result: true,
+              obtained_marks: obt,
+              marks_obtained: obt,
+              grade: matched.grade || (obt >= pass ? 'Pass' : 'Fail'),
+              rank: matched.rank || null,
+              exam_date: ex.exam_date || matched.exam?.exam_date,
+              status: 'completed',
+              is_public: ex.show_all_results !== false && !ex.result_note?.includes('[SHOW_ALL_RESULTS:false]'),
+            })
+          } else {
+            const isUpcoming = !ex.exam_date || new Date(ex.exam_date) >= new Date(new Date().setHours(0,0,0,0))
+            combinedExams.push({
+              id: `sched-${ex.id}`,
+              exam_id: ex.id,
+              exam: ex,
+              has_result: false,
+              obtained_marks: null,
+              marks_obtained: null,
+              grade: null,
+              rank: null,
+              exam_date: ex.exam_date,
+              status: isUpcoming ? 'upcoming' : 'pending_result',
+              is_public: false,
+            })
           }
         })
-        setExamResults(mergedExams)
-        
-        // 7. Get material issues
-        const { data: materialData } = await supabase
-          .from('material_issues')
-          .select('*, material:materials(name, type, batch_id, batch_ids)')
-          .eq('student_id', studentId)
-          
-        if (materialData) {
-          const batchMaterials = materialData.filter((m: any) => 
-            m.material?.batch_id === batchId || 
-            (Array.isArray(m.material?.batch_ids) && m.material.batch_ids.includes(batchId)) ||
-            !m.material?.batch_id
-          )
-          setMaterials(batchMaterials)
+
+        // Add any standalone student results not in rawBatchExams
+        mergedExams.forEach((r: any) => {
+          const eId = r.exam_id || r.exam?.id
+          if (eId && !seenExamIds.has(eId)) {
+            const raw = r.obtained_marks ?? r.marks_obtained
+            const obt = raw != null && raw !== "" ? Number(raw) : 0
+            const pass = Number(r.exam?.pass_marks) || 33
+            combinedExams.push({
+              id: r.id || `res-${eId}`,
+              exam_id: eId,
+              exam: r.exam || { id: eId, title: 'Exam', total_marks: 100 },
+              has_result: true,
+              obtained_marks: obt,
+              marks_obtained: obt,
+              grade: r.grade || (obt >= pass ? 'Pass' : 'Fail'),
+              rank: r.rank || null,
+              exam_date: r.exam?.exam_date,
+              status: 'completed',
+              is_public: r.exam?.show_all_results !== false && !r.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]'),
+            })
+          }
+        })
+
+        setAllExams(combinedExams)
+        setExamResults(combinedExams.filter(e => e.has_result))
+
+        // 7. Get batch materials & student material issues
+        let rawBatchMaterials: any[] = []
+        try {
+          const { data: bMats } = await supabase
+            .from('materials')
+            .select('*')
+            .or(`batch_id.eq.${batchId},batch_ids.cs.["${batchId}"]`)
+            .order('created_at', { ascending: false })
+
+          if (bMats && bMats.length > 0) {
+            rawBatchMaterials = bMats
+          } else {
+            const { data: fbMats } = await supabase
+              .from('materials')
+              .select('*')
+              .eq('batch_id', batchId)
+              .order('created_at', { ascending: false })
+            if (fbMats) rawBatchMaterials = fbMats
+          }
+        } catch {
+          const { data: fbMats } = await supabase
+            .from('materials')
+            .select('*')
+            .eq('batch_id', batchId)
+            .order('created_at', { ascending: false })
+          if (fbMats) rawBatchMaterials = fbMats
         }
+
+        let studentIssues: any[] = []
+        if (studentId) {
+          try {
+            const { data: materialData } = await supabase
+              .from('material_issues')
+              .select('*, material:materials(*)')
+              .eq('student_id', studentId)
+
+            if (materialData) {
+              studentIssues = materialData
+            }
+          } catch (mErr) {
+            console.warn('Material issues fetch note:', mErr)
+          }
+        }
+
+        // Map received materials
+        const issuesMap = new Map<string, any>()
+        studentIssues.forEach((iss: any) => {
+          if (iss.material_id) issuesMap.set(iss.material_id, iss)
+        })
+
+        const combinedMaterials: any[] = []
+        const seenMatIds = new Set<string>()
+
+        rawBatchMaterials.forEach((mat: any) => {
+          seenMatIds.add(mat.id)
+          const iss = issuesMap.get(mat.id)
+          combinedMaterials.push({
+            id: mat.id,
+            material: mat,
+            is_received: !!iss && iss.status !== 'returned',
+            is_returned: !!iss?.returned_at || iss?.status === 'returned',
+            issue_record: iss || null,
+            issued_at: iss?.issued_at || null,
+            return_due_date: iss?.return_due_date || null,
+            returned_at: iss?.returned_at || null,
+          })
+        })
+
+        // Also add any student issues that might not be in rawBatchMaterials
+        studentIssues.forEach((iss: any) => {
+          if (iss.material_id && !seenMatIds.has(iss.material_id)) {
+            const isThisBatch = iss.batch_id === batchId || 
+              iss.material?.batch_id === batchId || 
+              (Array.isArray(iss.material?.batch_ids) && iss.material.batch_ids.includes(batchId)) ||
+              !iss.material?.batch_id
+
+            if (isThisBatch) {
+              combinedMaterials.push({
+                id: iss.material_id,
+                material: iss.material || { name: 'Study Material', type: 'sheet' },
+                is_received: iss.status !== 'returned',
+                is_returned: !!iss.returned_at || iss.status === 'returned',
+                issue_record: iss,
+                issued_at: iss.issued_at,
+                return_due_date: iss.return_due_date,
+                returned_at: iss.returned_at,
+              })
+            }
+          }
+        })
+
+        setAllBatchMaterials(combinedMaterials)
+        setMaterials(studentIssues.filter((m: any) => 
+          m.batch_id === batchId || 
+          m.material?.batch_id === batchId || 
+          (Array.isArray(m.material?.batch_ids) && m.material.batch_ids.includes(batchId)) ||
+          !m.material?.batch_id
+        ))
 
         // 8. Get payment accounts (bKash, Nagad, etc.)
         const { data: acctData } = await supabase
@@ -494,11 +694,17 @@ export default function StudentBatchDetailPage() {
         >
           <div className="flex items-center gap-2 text-slate-500 mb-2">
             <GraduationCap className="h-4 w-4 text-indigo-500" />
-            <span className="text-sm font-medium">Exams Taken</span>
+            <span className="text-sm font-medium">Exams & Schedule</span>
           </div>
-          <div className="text-2xl font-bold text-slate-800">{examResults.length}</div>
-          <div className="text-xs text-slate-400 mt-1">Recorded results</div>
-          <div className="text-xs text-indigo-600 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">View results →</div>
+          <div className="text-2xl font-bold text-slate-800">
+            {allExams.filter(e => e.has_result).length} <span className="text-sm font-normal text-slate-400">/ {allExams.length}</span>
+          </div>
+          <div className="text-xs text-slate-400 mt-1">
+            {allExams.filter(e => !e.has_result && e.status === 'upcoming').length > 0
+              ? `${allExams.filter(e => !e.has_result && e.status === 'upcoming').length} upcoming scheduled`
+              : `${allExams.filter(e => e.has_result).length} results recorded`}
+          </div>
+          <div className="text-xs text-indigo-600 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">View schedule & results →</div>
         </button>
 
         <button
@@ -507,11 +713,15 @@ export default function StudentBatchDetailPage() {
         >
           <div className="flex items-center gap-2 text-slate-500 mb-2">
             <BookOpen className="h-4 w-4 text-blue-500" />
-            <span className="text-sm font-medium">Materials</span>
+            <span className="text-sm font-medium">Materials & Sheets</span>
           </div>
-          <div className="text-2xl font-bold text-slate-800">{materials.length}</div>
-          <div className="text-xs text-slate-400 mt-1">Issued items</div>
-          <div className="text-xs text-blue-600 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">View items →</div>
+          <div className="text-2xl font-bold text-slate-800">
+            {allBatchMaterials.filter(m => m.is_received).length} <span className="text-sm font-normal text-slate-400">/ {allBatchMaterials.length}</span>
+          </div>
+          <div className="text-xs text-slate-400 mt-1">
+            {allBatchMaterials.filter(m => m.is_received).length} received ({allBatchMaterials.filter(m => !m.is_received).length} available)
+          </div>
+          <div className="text-xs text-blue-600 font-semibold mt-2 opacity-0 group-hover:opacity-100 transition-opacity">View items & status →</div>
         </button>
       </div>
 
@@ -521,7 +731,7 @@ export default function StudentBatchDetailPage() {
           { id: 'info', label: 'Info', icon: Info },
           { id: 'attendance', label: 'Attendance', icon: CheckCircle2 },
           { id: 'fees', label: 'Fees & Dues', icon: CreditCard },
-          { id: 'exams', label: 'Exam Results', icon: GraduationCap },
+          { id: 'exams', label: 'Exams & Results', icon: GraduationCap },
           { id: 'materials', label: 'Materials', icon: BookOpen },
         ].map(tab => (
           <button
@@ -801,180 +1011,396 @@ export default function StudentBatchDetailPage() {
           </div>
         )}
 
-        {/* EXAM RESULTS TAB */}
+        {/* EXAMS & RESULTS TAB */}
         {activeTab === 'exams' && (
           <div>
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <GraduationCap className="h-5 w-5 text-indigo-500" />
-                Exam Results & Batch Merit List
-              </h3>
-              <p className="text-xs text-slate-500">
-                Click <strong className="font-semibold text-indigo-600">Batch Merit List</strong> to view class ranks
-              </p>
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <GraduationCap className="h-5 w-5 text-indigo-500" />
+                  Exam Schedule & Results (পরীক্ষার সময়সূচী ও ফলাফল)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  View scheduled tests, dates, and your marks with batch ranking.
+                </p>
+              </div>
+
+              {/* Filter pills */}
+              <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 self-start sm:self-auto shadow-xs">
+                <button
+                  onClick={() => setExamFilter('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    examFilter === 'all' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  All ({allExams.length})
+                </button>
+                <button
+                  onClick={() => setExamFilter('upcoming')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    examFilter === 'upcoming' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Upcoming ({allExams.filter(e => !e.has_result && e.status === 'upcoming').length})
+                </button>
+                <button
+                  onClick={() => setExamFilter('completed')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    examFilter === 'completed' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  Results Given ({allExams.filter(e => e.has_result).length})
+                </button>
+              </div>
             </div>
             
-            {examResults.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4 font-medium">Exam Name</th>
-                      <th className="px-6 py-4 font-medium">Date</th>
-                      <th className="px-6 py-4 font-medium">My Marks</th>
-                      <th className="px-6 py-4 font-medium">%</th>
-                      <th className="px-6 py-4 font-medium">Grade</th>
-                      <th className="px-6 py-4 font-medium text-right">Batch Results</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {examResults.map((result: any, idx: number) => {
-                      const totalMarks = Number(result.exam?.total_marks) || 100
-                      const rawObtained = result.obtained_marks ?? result.marks_obtained
-                      const obtained = rawObtained != null && rawObtained !== "" ? Number(rawObtained) : 0
-                      const percentage = totalMarks > 0 ? Math.round((obtained / totalMarks) * 100) : 0
-                      const passMarks = Number(result.exam?.pass_marks) || 0
-                      const passed = obtained >= passMarks
-                      
-                      // Check if results are public to batch or private
-                      const isPublic = result.exam?.show_all_results !== false && !result.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')
+            {(() => {
+              const filteredExams = allExams.filter((item: any) => {
+                if (examFilter === 'upcoming') return !item.has_result && item.status === 'upcoming'
+                if (examFilter === 'completed') return item.has_result
+                return true
+              })
 
-                      return (
-                        <tr key={result.id || idx} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-slate-800">
-                            <div>
-                              <span>{result.exam?.title || 'Unknown Exam'}</span>
-                              {result.exam?.subject && (
-                                <span className="ml-2 text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-medium">
-                                  {result.exam.subject}
+              return filteredExams.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Exam Name & Subject</th>
+                        <th className="px-6 py-4 font-medium">Date & Schedule</th>
+                        <th className="px-6 py-4 font-medium">Status</th>
+                        <th className="px-6 py-4 font-medium">My Result / Marks</th>
+                        <th className="px-6 py-4 font-medium">Grade & Rank</th>
+                        <th className="px-6 py-4 font-medium text-right">Batch Results</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredExams.map((item: any, idx: number) => {
+                        const totalMarks = Number(item.exam?.total_marks) || 100
+                        const passMarks = Number(item.exam?.pass_marks) || 0
+                        const rawObtained = item.obtained_marks ?? item.marks_obtained
+                        const obtained = rawObtained != null && rawObtained !== "" ? Number(rawObtained) : 0
+                        const percentage = totalMarks > 0 ? Math.round((obtained / totalMarks) * 100) : 0
+                        const passed = obtained >= passMarks
+                        const isPublic = item.is_public !== false && item.exam?.show_all_results !== false && !item.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')
+
+                        return (
+                          <tr key={item.id || idx} className="hover:bg-slate-50/50 transition-colors">
+                            {/* Exam Name & Subject */}
+                            <td className="px-6 py-4 font-medium text-slate-800">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-900">{item.exam?.title || 'Unknown Exam'}</span>
+                                  {item.exam?.subject && (
+                                    <span className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded font-semibold">
+                                      {item.exam.subject}
+                                    </span>
+                                  )}
+                                  {item.exam?.exam_type && (
+                                    <span className="text-[11px] text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-medium uppercase">
+                                      {item.exam.exam_type}
+                                    </span>
+                                  )}
+                                  {item.exam?.is_online && (
+                                    <span className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded font-medium">
+                                      Online
+                                    </span>
+                                  )}
+                                </div>
+                                {item.exam?.duration_minutes && (
+                                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
+                                    <Clock className="w-3 h-3 text-slate-400" />
+                                    Duration: {item.exam.duration_minutes} mins • Total: {totalMarks} marks
+                                  </p>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Date & Schedule */}
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-600 text-xs">
+                              {item.exam_date ? (
+                                <div className="flex items-center gap-1.5 font-medium">
+                                  <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                                  <span>{formatDate(item.exam_date)}</span>
+                                </div>
+                              ) : (
+                                <span className="text-slate-400 italic">Schedule TBA</span>
+                              )}
+                            </td>
+
+                            {/* Schedule Status */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {item.has_result ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs">
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                                  Result Published
+                                </span>
+                              ) : item.status === 'upcoming' ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                                  Scheduled (Upcoming)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                                  <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                  Result Pending
                                 </span>
                               )}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-slate-500">
-                            {result.exam?.exam_date ? formatDate(result.exam.exam_date) : '-'}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="font-semibold text-slate-900">{obtained}</span>
-                            <span className="text-slate-400"> / {totalMarks}</span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`font-semibold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>
-                              {percentage}%
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="inline-flex px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                              {result.grade || (passed ? 'Pass' : 'Fail')}
-                            </span>
-                            {result.rank && (
-                              <span className="ml-1.5 inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                                Rank #{result.rank}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-right whitespace-nowrap">
-                            {isPublic ? (
-                              <button
-                                onClick={() => handleOpenLeaderboard(result.exam || { id: result.exam_id, title: result.exam?.title, total_marks: totalMarks, pass_marks: passMarks, subject: result.exam?.subject })}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition-colors border border-indigo-200/80 shadow-xs cursor-pointer active:scale-95"
-                              >
-                                <Users className="w-3.5 h-3.5 text-indigo-600" />
-                                Batch Merit List
-                              </button>
-                            ) : (
-                              <span 
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 font-semibold rounded-xl text-xs border border-amber-200/80"
-                                title="Exam marks are kept private. Only your own score is visible."
-                              >
-                                <Lock className="w-3.5 h-3.5 text-amber-600" />
-                                Private (Only You)
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="p-16 text-center text-slate-500">
-                <FileText className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-                <p>No exam results recorded for this batch yet.</p>
-              </div>
-            )}
+                            </td>
+
+                            {/* My Marks (Beside it) */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {item.has_result ? (
+                                <div className="flex items-baseline gap-1">
+                                  <span className="font-extrabold text-slate-900 text-base">{obtained}</span>
+                                  <span className="text-slate-400 text-xs font-medium"> / {totalMarks}</span>
+                                  <span className={`ml-2 text-xs font-bold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                    ({percentage}%)
+                                  </span>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-slate-400 font-medium italic">
+                                  {item.status === 'upcoming' ? 'Scheduled Exam' : 'Evaluating Marks...'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Grade & Rank */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {item.has_result ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                    {item.grade || (passed ? 'Pass' : 'Fail')}
+                                  </span>
+                                  {item.rank && (
+                                    <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                      Rank #{item.rank}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-300 text-xs">—</span>
+                              )}
+                            </td>
+
+                            {/* Batch Results / Action */}
+                            <td className="px-6 py-4 text-right whitespace-nowrap">
+                              {item.has_result ? (
+                                isPublic ? (
+                                  <button
+                                    onClick={() => handleOpenLeaderboard(item.exam || { id: item.exam_id, title: item.exam?.title, total_marks: totalMarks, pass_marks: passMarks, subject: item.exam?.subject })}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition-colors border border-indigo-200/80 shadow-xs cursor-pointer active:scale-95"
+                                  >
+                                    <Users className="w-3.5 h-3.5 text-indigo-600" />
+                                    Batch Merit List
+                                  </button>
+                                ) : (
+                                  <span 
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 font-semibold rounded-xl text-xs border border-amber-200/80"
+                                    title="Exam marks are kept private. Only your own score is visible."
+                                  >
+                                    <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                    Private (Only You)
+                                  </span>
+                                )
+                              ) : item.exam?.is_online && item.status === 'upcoming' ? (
+                                <Link
+                                  href={`/student/exam/${item.exam_id}`}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
+                                >
+                                  <PlayCircle className="w-3.5 h-3.5" />
+                                  Start Exam →
+                                </Link>
+                              ) : (
+                                <span className="text-xs text-slate-400 font-medium">Classroom Exam</span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-16 text-center text-slate-500">
+                  <GraduationCap className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                  <p className="font-semibold text-slate-700">No exams match the selected filter.</p>
+                  <p className="text-xs text-slate-400 mt-1">Scheduled tests and published results will appear here.</p>
+                </div>
+              )
+            })()}
           </div>
         )}
 
         {/* MATERIALS TAB */}
         {activeTab === 'materials' && (
           <div>
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
-              <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-indigo-500" />
-                Issued Materials
-              </h3>
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-indigo-500" />
+                  Batch Study Materials (লেকচার শিট ও বইসমূহ)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  All materials for this batch. Items marked with a green tick (<strong className="text-emerald-600">✓ Received</strong>) are already issued to you.
+                </p>
+              </div>
+
+              {/* Filter pills */}
+              <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 self-start sm:self-auto shadow-xs">
+                <button
+                  onClick={() => setMaterialFilter('all')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    materialFilter === 'all' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  All ({allBatchMaterials.length})
+                </button>
+                <button
+                  onClick={() => setMaterialFilter('received')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    materialFilter === 'received' ? 'bg-emerald-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  ✓ Received ({allBatchMaterials.filter(m => m.is_received).length})
+                </button>
+                <button
+                  onClick={() => setMaterialFilter('pending')}
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    materialFilter === 'pending' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  ⏳ Pending ({allBatchMaterials.filter(m => !m.is_received).length})
+                </button>
+              </div>
             </div>
             
-            {materials.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm text-slate-600">
-                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
-                    <tr>
-                      <th className="px-6 py-4 font-medium">Item</th>
-                      <th className="px-6 py-4 font-medium">Type</th>
-                      <th className="px-6 py-4 font-medium">Issued Date</th>
-                      <th className="px-6 py-4 font-medium">Due Date</th>
-                      <th className="px-6 py-4 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {materials.map((item: any, idx: number) => {
-                      const isReturned = !!item.returned_at
-                      const isOverdue = !isReturned && item.return_due_date && new Date(item.return_due_date) < new Date()
-                      
-                      return (
-                        <tr key={item.id || idx} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-6 py-4 font-medium text-slate-800">
-                            {item.material?.name || 'Unknown Item'}
-                          </td>
-                          <td className="px-6 py-4 capitalize text-slate-500">
-                            {item.material?.type || '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {item.issued_at ? formatDate(item.issued_at) : '-'}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {item.return_due_date ? formatDate(item.return_due_date) : '-'}
-                          </td>
-                          <td className="px-6 py-4">
-                            {isReturned ? (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                                Returned on {formatDate(item.returned_at)}
+            {(() => {
+              const filteredMaterials = allBatchMaterials.filter((item: any) => {
+                if (materialFilter === 'received') return item.is_received
+                if (materialFilter === 'pending') return !item.is_received
+                return true
+              })
+
+              return filteredMaterials.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm text-slate-600">
+                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
+                      <tr>
+                        <th className="px-6 py-4 font-medium">Material Name & Details</th>
+                        <th className="px-6 py-4 font-medium">Type</th>
+                        <th className="px-6 py-4 font-medium">Status (Got / Available)</th>
+                        <th className="px-6 py-4 font-medium">Issued / Available Date</th>
+                        <th className="px-6 py-4 font-medium text-right">Office Collection</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredMaterials.map((item: any, idx: number) => {
+                        const mat = item.material || {}
+                        const typeConfig = materialTypeBadge[mat.type] || materialTypeBadge.other
+                        const IconComp = typeConfig.icon
+
+                        return (
+                          <tr key={item.id || idx} className="hover:bg-slate-50/50 transition-colors">
+                            {/* Material Name & Details */}
+                            <td className="px-6 py-4 font-medium text-slate-800">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-slate-900">{mat.name || 'Study Material'}</span>
+                                  {mat.subject && (
+                                    <span className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded font-semibold">
+                                      {mat.subject}
+                                    </span>
+                                  )}
+                                </div>
+                                {mat.description && (
+                                  <p className="text-xs text-slate-400 mt-1 max-w-md line-clamp-1">{mat.description}</p>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Material Type */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${typeConfig.bg} ${typeConfig.color} ${typeConfig.border}`}>
+                                <IconComp className="w-3.5 h-3.5" />
+                                {typeConfig.label}
                               </span>
-                            ) : isOverdue ? (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700">
-                                Overdue
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700">
-                                Issued
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <div className="p-16 text-center text-slate-500">
-                <BookOpen className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-                <p>No materials have been issued to you for this batch.</p>
-              </div>
-            )}
+                            </td>
+
+                            {/* Status (THE GREEN TICK IF RECEIVED!) */}
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {item.is_received ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs w-fit">
+                                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                    ✓ Got / Received (সংগৃহীত)
+                                  </span>
+                                  {item.return_due_date && (
+                                    <span className="text-[11px] text-slate-500 ml-1">
+                                      Return Due: {formatDate(item.return_due_date)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : item.is_returned ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
+                                  Returned on {formatDate(item.returned_at)}
+                                </span>
+                              ) : (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 w-fit">
+                                    <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                    Available (সংগ্রহ বাকি)
+                                  </span>
+                                  <span className="text-[11px] text-amber-700 font-medium ml-1">
+                                    Not collected yet
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Issued or Available Date */}
+                            <td className="px-6 py-4 whitespace-nowrap text-slate-500 text-xs">
+                              {item.is_received ? (
+                                <div>
+                                  <span className="font-semibold text-slate-700">{formatDate(item.issued_at)}</span>
+                                  <p className="text-[11px] text-slate-400">Date issued</p>
+                                </div>
+                              ) : (
+                                <div>
+                                  <span className="text-slate-600">{mat.created_at ? formatDate(mat.created_at) : '-'}</span>
+                                  <p className="text-[11px] text-slate-400">Available since</p>
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Office Collection Status */}
+                            <td className="px-6 py-4 text-right whitespace-nowrap">
+                              {item.is_received ? (
+                                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  In Your Possession
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 bg-amber-50 px-3 py-1 rounded-lg border border-amber-200">
+                                  <Building2 className="w-3.5 h-3.5 text-amber-600" />
+                                  Collect from Office
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="p-16 text-center text-slate-500">
+                  <BookOpen className="h-12 w-12 mx-auto text-slate-300 mb-4" />
+                  <p className="font-semibold text-slate-700">No materials match the selected filter.</p>
+                  <p className="text-xs text-slate-400 mt-1">Check back later or collect from the front desk reception.</p>
+                </div>
+              )
+            })()}
           </div>
         )}
       </div>

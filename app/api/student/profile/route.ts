@@ -395,6 +395,42 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 5b. Fetch scheduled batch exams & materials for enrolled batches
+    const studentEnrolledBatchIds = Array.from(new Set(enrollments.map((e: any) => e.batch_id).filter(Boolean)))
+    let batchExams: any[] = []
+    let batchMaterials: any[] = []
+    let materialIssues: any[] = []
+
+    if (studentEnrolledBatchIds.length > 0) {
+      try {
+        const [bExamsRes, bMatsRes, mIssRes] = await Promise.all([
+          admin
+            .from("exams")
+            .select("id, title, total_marks, pass_marks, exam_date, duration_minutes, subject, batch_id, is_online, show_all_results, result_note, is_published, created_at, teacher:staff(name)")
+            .in("batch_id", studentEnrolledBatchIds)
+            .order("exam_date", { ascending: false }),
+          admin
+            .from("materials")
+            .select("*")
+            .in("batch_id", studentEnrolledBatchIds)
+            .order("created_at", { ascending: false }),
+          studentDbIdArray.length > 0
+            ? admin
+                .from("material_issues")
+                .select("*, material:materials(*)")
+                .in("student_id", studentDbIdArray)
+                .order("issued_at", { ascending: false })
+            : Promise.resolve({ data: [] })
+        ])
+
+        if (bExamsRes.data) batchExams = bExamsRes.data
+        if (bMatsRes.data) batchMaterials = bMatsRes.data
+        if (mIssRes.data) materialIssues = mIssRes.data
+      } catch (extraErr) {
+        console.warn("Scheduled exams & materials profile fetch notice:", extraErr)
+      }
+    }
+
     // 6. Course Purchases
     const courseMap = new Map<string, any>()
     const addCoursePurchase = (cp: any) => {
@@ -553,6 +589,9 @@ export async function GET(req: NextRequest) {
       attendance,
       dues,
       examResults,
+      batchExams,
+      materials: batchMaterials,
+      materialIssues,
       paymentAccounts,
     })
   } catch (error: any) {
