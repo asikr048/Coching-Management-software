@@ -1429,7 +1429,7 @@ export default function ExamResultsPage() {
         body: JSON.stringify({ 
           is_weekly_published: nextVal,
           is_published: isPub,
-          is_public_result: nextVal
+          is_public_result: isPub
         }),
       })
 
@@ -1437,12 +1437,12 @@ export default function ExamResultsPage() {
         const updatedNote = (exam.result_note || "")
           .replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "")
           .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
-          .trim() + ` [IS_WEEKLY_PUBLISHED:${nextVal}] [PUBLIC_RESULT:${nextVal}]`
+          .trim() + ` [IS_WEEKLY_PUBLISHED:${nextVal}] [PUBLIC_RESULT:${isPub}]`
         await supabase.from("exams").update({ 
           result_note: updatedNote,
           is_weekly_published: nextVal,
           is_published: isPub,
-          is_public_result: nextVal
+          is_public_result: isPub
         }).eq("id", params.id)
       }
 
@@ -1451,7 +1451,7 @@ export default function ExamResultsPage() {
         ...prev, 
         is_weekly_published: nextVal, 
         is_published: isPub,
-        is_public_result: nextVal
+        is_public_result: isPub
       }))
       toast.success(
         nextVal

@@ -442,32 +442,24 @@ export default function OnlineResultPortalPage() {
           }
         }
 
-        // 1. IF WEEKLY RESULTS ARE PUBLISHED: Add the Weekly Consolidated card FIRST
-        const isWeeklyPub =
-          ex.is_weekly_published !== false &&
-          (ex.is_weekly_published === true ||
-            (ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:true]") ||
-            ex.is_public_result === true ||
-            ex.is_published === true ||
-            !(ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:false]"))
-        if (isWeeklyPub) {
-          items.push({
-            id: `${ex.id}-weekly`,
-            parentExam: ex,
-            type: "weekly",
-            title: ex.title,
-            subTitle: "সাপ্তাহিক সামগ্রিক মূল্যায়ন ও সকল দিনের সম্মিলিত ফলাফল",
-            subject: ex.subject,
-            batchName: ex.batch?.name || "All Enrolled Batches",
-            branchName: ex.branch?.name,
-            branchId: ex.branch?.id,
-            routineText: "প্রতি সাপ্তাহিক দিন (শনিবার হতে শুক্রবার)",
-            totalMarks,
-            passMarks,
-            dayKey: null,
-            dayConfig: null,
-          })
-        }
+        // 1. WEEKLY CONSOLIDATED EXAM CARD (350 marks):
+        // Any published weekly exam in the portal ALWAYS shows its weekly aggregate result card
+        items.push({
+          id: `${ex.id}-weekly`,
+          parentExam: ex,
+          type: "weekly",
+          title: ex.title,
+          subTitle: "সাপ্তাহিক সামগ্রিক মূল্যায়ন ও সকল দিনের সম্মিলিত ফলাফল",
+          subject: ex.subject,
+          batchName: ex.batch?.name || "All Enrolled Batches",
+          branchName: ex.branch?.name,
+          branchId: ex.branch?.id,
+          routineText: "প্রতি সাপ্তাহিক দিন (শনিবার হতে শুক্রবার)",
+          totalMarks,
+          passMarks,
+          dayKey: null,
+          dayConfig: null,
+        })
 
         // 2. FOR EACH PUBLISHED DAY: Add a Daily Exam card
         for (const dayConf of days) {

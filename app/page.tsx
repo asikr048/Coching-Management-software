@@ -432,34 +432,24 @@ export default function HomePage() {
           }
         }
 
-        // 1. IF WEEKLY CONSOLIDATED RESULT IS PUBLISHED: Add weekly card FIRST
-        const isWeeklyPub =
-          ex.is_weekly_published !== false &&
-          (ex.is_weekly_published === true ||
-            (ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:true]") ||
-            ex.is_public_result === true ||
-            ex.is_published === true ||
-            !(ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:false]"))
-
-        if (isWeeklyPub) {
-          const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
-          const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
-          cards.push({
-            id: `${ex.id}-weekly`,
-            examId: ex.id,
-            title: ex.title,
-            badgeText: "সাপ্তাহিক সামগ্রিক রেজাল্ট (৭ দিন)",
-            badgeType: "weekly",
-            subject: ex.subject,
-            branchName: ex.branch?.name,
-            batchName: ex.batch?.name,
-            routineText: "শনিবার হতে শুক্রবার (মোট ৭ দিন)",
-            totalMarks: totalMarks,
-            passMarks: passMarks,
-            link: `/online-result?exam_id=${ex.id}`,
-            buttonText: "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন",
-          })
-        }
+        // 1. ALWAYS ADD WEEKLY CONSOLIDATED RESULT CARD FIRST:
+        const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
+        const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
+        cards.push({
+          id: `${ex.id}-weekly`,
+          examId: ex.id,
+          title: ex.title,
+          badgeText: "সাপ্তাহিক সামগ্রিক রেজাল্ট (৭ দিন)",
+          badgeType: "weekly",
+          subject: ex.subject,
+          branchName: ex.branch?.name,
+          batchName: ex.batch?.name,
+          routineText: "শনিবার হতে শুক্রবার (মোট ৭ দিন)",
+          totalMarks: totalMarks,
+          passMarks: passMarks,
+          link: `/online-result?exam_id=${ex.id}`,
+          buttonText: "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন",
+        })
 
         // 2. FOR EACH PUBLISHED DAY: Add daily cards
         for (const dayConf of days) {

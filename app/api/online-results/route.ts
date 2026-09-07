@@ -51,21 +51,8 @@ function normalizeExam(ex: any) {
     recDays.length > 0 ||
     Boolean(ex.title?.includes("সাপ্তাহিক"))
 
-  // Parse is_weekly_published: if weekly exam is public/published, it is weekly published unless explicitly marked false
-  let isWeeklyPub = false
-  if (isWeekly) {
-    if (ex.is_weekly_published === false || note.includes("[IS_WEEKLY_PUBLISHED:false]")) {
-      isWeeklyPub = false
-    } else {
-      isWeeklyPub =
-        ex.is_weekly_published === true ||
-        note.includes("[IS_WEEKLY_PUBLISHED:true]") ||
-        ex.is_public_result === true ||
-        ex.is_published === true ||
-        note.includes("[PUBLIC_RESULT:true]") ||
-        !note.includes("[IS_WEEKLY_PUBLISHED:false]")
-    }
-  }
+  // Parse is_weekly_published: any weekly exam in online results portal has its weekly result published
+  let isWeeklyPub = Boolean(isWeekly)
 
   // Parse published_days
   let pubDays: string[] = []
