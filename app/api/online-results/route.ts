@@ -110,7 +110,65 @@ export async function GET(req: NextRequest) {
         } catch {}
       }
 
-      // Sort by obtained_marks descending
+      // If batch_id is present, ensure all enrolled students are included
+      if (rawExam.batch_id) {
+        try {
+          const { data: enrollments } = await admin
+            .from("enrollments")
+            .select("student:students(id, name, student_id)")
+            .eq("batch_id", rawExam.batch_id)
+            .eq("status", "active")
+
+          const enrolledStudents = (enrollments || []).map((e: any) => e.student).filter(Boolean)
+          const existingIds = new Set(allResults.map((r) => r.student_id))
+
+          for (const s of enrolledStudents) {
+            if (!existingIds.has(s.id)) {
+              allResults.push({
+                id: `enr-${s.id}`,
+                student_id: s.id,
+                student_name: s.name,
+                roll: s.student_id,
+                obtained_marks: 0,
+                student: s,
+                day_marks: fallbackDayMarks[s.id] || {},
+              })
+            }
+          }
+        } catch (enrErr) {
+          console.warn("Could not fetch enrolled students:", enrErr)
+        }
+      }
+
+      // If students have entries in fallbackDayMarks but not in allResults
+      if (Object.keys(fallbackDayMarks).length > 0) {
+        const existingIds = new Set(allResults.map((r) => r.student_id))
+        for (const sId of Object.keys(fallbackDayMarks)) {
+          if (!existingIds.has(sId)) {
+            try {
+              const { data: st } = await admin.from("students").select("id, name, student_id").eq("id", sId).maybeSingle()
+              if (st) {
+                allResults.push({
+                  id: `fb-${sId}`,
+                  student_id: sId,
+                  student_name: st.name,
+                  roll: st.student_id,
+                  obtained_marks: 0,
+                  student: st,
+                  day_marks: fallbackDayMarks[sId] || {},
+                })
+              }
+            } catch {}
+          }
+        }
+      }
+
+      // Sort by obtained_marks descending (taking day marks into account for weekly exams)
+      const isWeekly =
+        exam.exam_schedule_type === "weekly" ||
+        (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+        exam.is_weekly_published === true
+
       const sorted = allResults
         .map((r) => {
           let sDayMarks = r.day_marks
@@ -120,12 +178,28 @@ export async function GET(req: NextRequest) {
           ) {
             sDayMarks = fallbackDayMarks[r.student_id]
           }
+
+          let dayTotal = 0
+          let hasDayMark = false
+          if (sDayMarks && typeof sDayMarks === "object") {
+            for (const v of Object.values(sDayMarks)) {
+              const m = typeof v === "object" && v !== null ? Number((v as any).marks) : Number(v)
+              if (!isNaN(m)) {
+                dayTotal += m
+                hasDayMark = true
+              }
+            }
+          }
+
+          const rawObt = Number(r.obtained_marks ?? r.marks_obtained ?? 0)
+          const finalObt = isWeekly && hasDayMark ? (dayTotal > 0 ? dayTotal : rawObt) : rawObt
+
           return {
             id: r.id,
             student_id: r.student?.id || r.student_id,
-            student_name: r.student?.name || "Student",
-            roll: r.student?.student_id || "N/A",
-            obtained_marks: Number(r.obtained_marks ?? r.marks_obtained ?? 0),
+            student_name: r.student?.name || r.student_name || "Student",
+            roll: r.student?.student_id || r.roll || "N/A",
+            obtained_marks: finalObt,
             grade: r.grade || "",
             rank: r.rank || null,
             day_marks: sDayMarks || {},
@@ -141,7 +215,7 @@ export async function GET(req: NextRequest) {
         }
         return {
           ...item,
-          rank: item.rank || curRank,
+          rank: curRank,
         }
       })
 

@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { formatDate } from "@/lib/utils"
+import { formatDate, getGrade, cn } from "@/lib/utils"
 import {
   Trophy,
   Award,
@@ -24,6 +24,73 @@ import {
   User,
   GraduationCap
 } from "lucide-react"
+
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+interface ParsedWeeklyDay {
+  key: string
+  day_bn: string
+  day_en: string
+  exam_name: string
+  subject: string
+  total_marks: number
+  pass_marks: number
+}
+
+function getDayMarkItem(
+  studentDays: Record<string, any> | undefined,
+  dayKey?: string,
+  dayBn?: string,
+  dayEn?: string
+): { marks: number | string; total?: number; grade?: string; subject?: string; exam_name?: string } | undefined {
+  if (!studentDays || typeof studentDays !== "object") return undefined
+  if (dayKey && studentDays[dayKey] !== undefined) {
+    const val = studentDays[dayKey]
+    return typeof val === "object" && val !== null ? val : { marks: val }
+  }
+  const lKey = dayKey?.toLowerCase()
+  if (lKey && studentDays[lKey] !== undefined) {
+    const val = studentDays[lKey]
+    return typeof val === "object" && val !== null ? val : { marks: val }
+  }
+  if (lKey) {
+    const capKey = lKey.charAt(0).toUpperCase() + lKey.slice(1)
+    if (studentDays[capKey] !== undefined) {
+      const val = studentDays[capKey]
+      return typeof val === "object" && val !== null ? val : { marks: val }
+    }
+  }
+  if (dayBn && studentDays[dayBn] !== undefined) {
+    const val = studentDays[dayBn]
+    return typeof val === "object" && val !== null ? val : { marks: val }
+  }
+  if (dayEn && studentDays[dayEn] !== undefined) {
+    const val = studentDays[dayEn]
+    return typeof val === "object" && val !== null ? val : { marks: val }
+  }
+  if (dayEn) {
+    const lEn = dayEn.toLowerCase()
+    if (studentDays[lEn] !== undefined) {
+      const val = studentDays[lEn]
+      return typeof val === "object" && val !== null ? val : { marks: val }
+    }
+  }
+  for (const [k, v] of Object.entries(studentDays)) {
+    const lk = k.toLowerCase()
+    if ((lKey && lk === lKey) || (dayBn && k === dayBn) || (dayEn && lk === dayEn.toLowerCase())) {
+      return typeof v === "object" && v !== null ? v : { marks: v }
+    }
+  }
+  return undefined
+}
 
 interface PublicExam {
   id: string
@@ -77,9 +144,13 @@ export default function OnlineResultPortalPage() {
       try {
         const res = await fetch("/api/online-results")
         const json = await res.json()
+        let loadedExams: PublicExam[] = []
         if (json.success) {
           if (json.branches) setBranches(json.branches)
-          if (json.exams) setExams(json.exams)
+          if (json.exams) {
+            setExams(json.exams)
+            loadedExams = json.exams
+          }
         } else {
           // Fallback to client supabase if api error
           const supabase = createClient()
@@ -92,7 +163,28 @@ export default function OnlineResultPortalPage() {
             .or("is_public_result.eq.true,is_published.eq.true")
             .order("exam_date", { ascending: false })
 
-          if (exList) setExams(exList)
+          if (exList) {
+            setExams(exList)
+            loadedExams = exList
+          }
+        }
+        const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
+        const targetExamId = urlParams?.get("exam_id") || urlParams?.get("id")
+
+        if (targetExamId) {
+          let found = loadedExams.find((e: any) => e.id === targetExamId)
+          if (!found) {
+            try {
+              const singleRes = await fetch(`/api/online-results?exam_id=${targetExamId}`)
+              const singleJson = await singleRes.json()
+              if (singleJson.success && singleJson.exam) {
+                found = singleJson.exam
+              }
+            } catch {}
+          }
+          if (found) {
+            handleOpenMeritList(found)
+          }
         }
       } catch (err) {
         console.error("Error loading public online results:", err)
@@ -184,6 +276,269 @@ export default function OnlineResultPortalPage() {
     const q = studentSearchInModal.toLowerCase()
     return examResults.filter((r) => r.student_name.toLowerCase().includes(q) || r.roll.toLowerCase().includes(q))
   }, [examResults, studentSearchInModal])
+
+  // Is the selected exam in the modal a weekly exam?
+  const isWeeklyExam = useMemo(() => {
+    if (!selectedExam) return false
+    return (
+      selectedExam.exam_schedule_type === "weekly" ||
+      (Array.isArray(selectedExam.recurring_days) && selectedExam.recurring_days.length > 0) ||
+      selectedExam.is_weekly_published === true ||
+      Boolean(selectedExam.title?.includes("সাপ্তাহিক"))
+    )
+  }, [selectedExam])
+
+  // Parse structured days for weekly exams
+  const parsedWeeklyDays = useMemo<ParsedWeeklyDay[]>(() => {
+    if (!selectedExam) return []
+
+    // 1. Check recurring_days array
+    if (Array.isArray(selectedExam.recurring_days) && selectedExam.recurring_days.length > 0) {
+      return selectedExam.recurring_days.map((item: any) => {
+        const isObj = typeof item === "object" && item !== null
+        const rawKey = isObj ? item.day || item.day_bn || item.day_en || "" : String(item)
+        const dayKey = String(rawKey).toLowerCase()
+        const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+        const bnName = matched?.bn || (isObj ? item.day_bn : rawKey)
+        const enName = matched?.en || (isObj ? item.day_en : rawKey)
+        return {
+          key: matched?.id || dayKey,
+          day_bn: bnName,
+          day_en: enName,
+          exam_name: isObj && item.exam_name ? item.exam_name : `${bnName}ের পরীক্ষা`,
+          subject: isObj && item.subject ? item.subject : selectedExam.subject || "",
+          total_marks: isObj && item.total_marks ? Number(item.total_marks) : 50,
+          pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : 20,
+        }
+      })
+    }
+
+    // 2. Check result_note fallback tag [WEEKLY_SCHEDULE:...]
+    const note = (selectedExam as any).result_note || ""
+    if (note.includes("[WEEKLY_SCHEDULE:")) {
+      try {
+        const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+        if (match && match[1]) {
+          const parsed = JSON.parse(match[1])
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.map((item: any) => {
+              const rawKey = item.day || item.day_bn || ""
+              const dayKey = String(rawKey).toLowerCase()
+              const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === item.day_bn)
+              return {
+                key: matched?.id || dayKey,
+                day_bn: matched?.bn || item.day_bn || item.day,
+                day_en: matched?.en || item.day_en || item.day,
+                exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+                subject: item.subject || selectedExam.subject || "",
+                total_marks: Number(item.total_marks) || 50,
+                pass_marks: Number(item.pass_marks) || 20,
+              }
+            })
+          }
+        }
+      } catch (e) {
+        console.warn("Error parsing weekly schedule fallback:", e)
+      }
+    }
+
+    // 3. Extract days from title
+    const foundDaysInTitle = ALL_WEEK_DAYS.filter(
+      (d) => selectedExam.title?.includes(d.bn) || selectedExam.title?.toLowerCase()?.includes(d.id)
+    )
+    if (foundDaysInTitle.length > 0) {
+      const subjectList = (selectedExam.subject || "")
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+
+      return foundDaysInTitle.map((d, idx) => {
+        const assignedSubj = subjectList[idx] || selectedExam.subject || ""
+        return {
+          key: d.id,
+          day_bn: d.bn,
+          day_en: d.en,
+          exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
+          subject: assignedSubj,
+          total_marks: 50,
+          pass_marks: 20,
+        }
+      })
+    }
+
+    // 4. Scan examResults for day keys
+    const detectedDayKeys = new Set<string>()
+    for (const r of examResults) {
+      if (r.day_marks) {
+        for (const k of Object.keys(r.day_marks)) {
+          detectedDayKeys.add(k.toLowerCase())
+        }
+      }
+    }
+    if (detectedDayKeys.size > 0) {
+      const matchedDays = ALL_WEEK_DAYS.filter(
+        (d) => detectedDayKeys.has(d.id) || detectedDayKeys.has(d.en.toLowerCase()) || detectedDayKeys.has(d.bn)
+      )
+      if (matchedDays.length > 0) {
+        return matchedDays.map((d) => ({
+          key: d.id,
+          day_bn: d.bn,
+          day_en: d.en,
+          exam_name: `${d.bn}ের পরীক্ষা`,
+          subject: selectedExam.subject || "",
+          total_marks: 50,
+          pass_marks: 20,
+        }))
+      }
+    }
+
+    // 5. Default to 6 active days if weekly
+    if (isWeeklyExam) {
+      return ALL_WEEK_DAYS.slice(0, 6).map((d) => ({
+        key: d.id,
+        day_bn: d.bn,
+        day_en: d.en,
+        exam_name: `${d.bn}ের পরীক্ষা`,
+        subject: selectedExam.subject || "",
+        total_marks: 50,
+        pass_marks: 20,
+      }))
+    }
+
+    return []
+  }, [selectedExam, isWeeklyExam, examResults])
+
+  // Total possible weekly marks
+  const totalWeeklyMaxMarks = useMemo(() => {
+    if (!selectedExam) return 100
+    if (parsedWeeklyDays.length > 0) {
+      return parsedWeeklyDays.reduce((acc, d) => acc + (d.total_marks || 0), 0)
+    }
+    return selectedExam.total_marks || 100
+  }, [selectedExam, parsedWeeklyDays])
+
+  // Weekly grand total toppers (Top 3 for podium cards)
+  const weeklyTotalToppers = useMemo(() => {
+    if (!isWeeklyExam || examResults.length === 0) return []
+
+    const scoredList = examResults
+      .map((r) => {
+        let grandTotal = 0
+        let hasMark = false
+
+        if (r.day_marks && Object.keys(r.day_marks).length > 0) {
+          grandTotal = Object.values(r.day_marks).reduce((acc: number, curr: any) => {
+            const m = typeof curr === "object" && curr !== null ? Number(curr.marks) : Number(curr)
+            if (!isNaN(m)) {
+              hasMark = true
+              return acc + m
+            }
+            return acc
+          }, 0)
+        }
+
+        if (!hasMark && r.obtained_marks !== undefined && r.obtained_marks !== null && !isNaN(r.obtained_marks)) {
+          grandTotal = Number(r.obtained_marks)
+          hasMark = true
+        }
+
+        const obt = hasMark ? grandTotal : 0
+        const pct = Math.round((obt / totalWeeklyMaxMarks) * 100)
+        const grade = getGrade(obt, totalWeeklyMaxMarks)
+
+        return {
+          id: r.id,
+          student_id: r.student_id,
+          student_name: r.student_name,
+          roll: r.roll,
+          obtained_marks: obt,
+          pct,
+          grade,
+          hasMark,
+        }
+      })
+      .filter((x) => x.hasMark)
+      .sort((a, b) => b.obtained_marks - a.obtained_marks)
+
+    let curRank = 1
+    return scoredList.slice(0, 3).map((item, idx) => {
+      if (idx > 0 && item.obtained_marks < scoredList[idx - 1].obtained_marks) {
+        curRank = idx + 1
+      }
+      return { ...item, rank: curRank }
+    })
+  }, [isWeeklyExam, examResults, totalWeeklyMaxMarks])
+
+  // Subject-wise toppers (for each scheduled day)
+  const weeklySubjectToppers = useMemo(() => {
+    if (!isWeeklyExam || parsedWeeklyDays.length === 0) return []
+
+    return parsedWeeklyDays.map((d) => {
+      let topStudentName = ""
+      let topStudentRoll = ""
+      let topScore = -1
+
+      for (const r of examResults) {
+        const dObj = getDayMarkItem(r.day_marks, d.key, d.day_bn, d.day_en)
+        if (dObj && !isNaN(Number(dObj.marks))) {
+          const score = Number(dObj.marks)
+          if (score > topScore) {
+            topScore = score
+            topStudentName = r.student_name
+            topStudentRoll = r.roll
+          }
+        }
+      }
+
+      return {
+        day: d,
+        studentName: topStudentName,
+        studentRoll: topStudentRoll,
+        score: topScore,
+      }
+    })
+  }, [isWeeklyExam, parsedWeeklyDays, examResults])
+
+  // Multi-column table rows for weekly view
+  const weeklyTableRows = useMemo(() => {
+    return filteredModalResults
+      .map((r) => {
+        let grandTotal = 0
+        let hasMark = false
+
+        if (r.day_marks && Object.keys(r.day_marks).length > 0) {
+          grandTotal = Object.values(r.day_marks).reduce((acc: number, curr: any) => {
+            const m = typeof curr === "object" && curr !== null ? Number(curr.marks) : Number(curr)
+            if (!isNaN(m)) {
+              hasMark = true
+              return acc + m
+            }
+            return acc
+          }, 0)
+        }
+
+        if (!hasMark && r.obtained_marks !== undefined && r.obtained_marks !== null && !isNaN(r.obtained_marks)) {
+          grandTotal = Number(r.obtained_marks)
+          hasMark = true
+        }
+
+        const obt = hasMark ? grandTotal : null
+        const pct = obt !== null ? Math.round((obt / totalWeeklyMaxMarks) * 100) : null
+        const grade = obt !== null ? getGrade(obt, totalWeeklyMaxMarks) : "-"
+
+        return {
+          id: r.id,
+          student_id: r.student_id,
+          student_name: r.student_name,
+          roll: r.roll,
+          obtained_marks: obt,
+          pct,
+          grade,
+          day_marks: r.day_marks || {},
+        }
+      })
+      .sort((a, b) => (b.obtained_marks ?? -1) - (a.obtained_marks ?? -1))
+  }, [filteredModalResults, totalWeeklyMaxMarks])
 
   const top3 = examResults.slice(0, 3)
 
@@ -434,20 +789,34 @@ export default function OnlineResultPortalPage() {
 
       {/* Full Merit List Modal */}
       {selectedExam && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl my-8 flex flex-col max-h-[90vh] border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+          <div
+            className={cn(
+              "bg-white rounded-3xl w-full shadow-2xl my-4 sm:my-8 flex flex-col max-h-[92vh] border border-slate-200 animate-in fade-in zoom-in-95 duration-150",
+              isWeeklyExam ? "max-w-6xl" : "max-w-4xl"
+            )}
+          >
             {/* Modal Header */}
-            <div className="flex items-start justify-between p-5 border-b border-slate-200 bg-slate-50 rounded-t-3xl shrink-0">
+            <div className="flex items-start justify-between p-4 sm:p-5 border-b border-slate-200 bg-slate-50 rounded-t-3xl shrink-0">
               <div className="flex items-start gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md">
-                  <Trophy className="w-6 h-6" />
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-md">
+                  <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-black text-slate-900">
-                    {selectedExam.title} - মেধাতালিকা
-                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-base sm:text-lg font-black text-slate-900">
+                      {selectedExam.title} - {isWeeklyExam ? "সাপ্তাহিক মূল্যায়ন ও মেধাতালিকা" : "মেধাতালিকা"}
+                    </h3>
+                    {isWeeklyExam && (
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200">
+                        সাপ্তাহিক মূল্যায়ন
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    বিষয়: {selectedExam.subject || "সাধারণ"} • পূর্ণমান: {selectedExam.total_marks} • পাস: {selectedExam.pass_marks || 33}
+                    {selectedExam.branch?.name && <span>শাখা: {selectedExam.branch.name} • </span>}
+                    {selectedExam.batch?.name && <span>ব্যাচ: {selectedExam.batch.name} • </span>}
+                    মোট পূর্ণমান: {isWeeklyExam ? totalWeeklyMaxMarks : selectedExam.total_marks} নম্বর • মোট পরীক্ষার্থী: {examResults.length} জন
                   </p>
                 </div>
               </div>
@@ -461,156 +830,413 @@ export default function OnlineResultPortalPage() {
             </div>
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-6">
-              {/* Top 3 Podium Cards */}
-              {top3.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {top3.map((r, idx) => {
-                    const isGold = idx === 0
-                    const isSilver = idx === 1
-
-                    return (
-                      <div
-                        key={r.id}
-                        className={`p-4 rounded-2xl border flex items-center gap-3.5 ${
-                          isGold
-                            ? "bg-gradient-to-br from-amber-50 to-amber-100/60 border-amber-300 shadow-sm"
-                            : isSilver
-                            ? "bg-gradient-to-br from-slate-50 to-slate-100 border-slate-300 shadow-sm"
-                            : "bg-gradient-to-br from-orange-50 to-orange-100/50 border-orange-300 shadow-sm"
-                        }`}
-                      >
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shadow-xs ${
-                            isGold
-                              ? "bg-amber-500 text-white"
-                              : isSilver
-                              ? "bg-slate-600 text-white"
-                              : "bg-amber-700 text-white"
-                          }`}
-                        >
-                          {isGold ? "১ম" : isSilver ? "২য়" : "৩য়"}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">
-                            {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
-                          </p>
-                          <p className="font-extrabold text-sm text-slate-900 truncate">{r.student_name}</p>
-                          <p className="text-xs font-bold text-amber-700">
-                            প্রাপ্ত নম্বর: {r.obtained_marks} / {selectedExam.total_marks}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+              {loadingResults ? (
+                <div className="py-16 text-center text-slate-500">
+                  <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                  <p className="text-sm font-semibold">ফলাফল ও মেধাতালিকা সাজানো হচ্ছে...</p>
+                </div>
+              ) : isWeeklyExam ? (
+                /* WEEKLY EXAM VIEW: MATCHING OWNER DASHBOARD EXACTLY */
+                <div className="space-y-6">
+                  {/* 1. TOTAL TOPPERS (GRAND MERIT PODIUM) */}
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className="p-2 rounded-xl bg-amber-500 text-white font-bold shadow-xs">
+                          <Trophy className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <h2 className="text-sm sm:text-base font-black text-slate-900">
+                            সামগ্রিক শীর্ষ মেধা (Weekly Grand Total Toppers)
+                          </h2>
+                          <p className="text-xs text-slate-500">
+                            সকল বিষয়ের মোট নম্বরের ভিত্তিতে ১ম, ২য় ও ৩য় স্থান অর্জনকারী শিক্ষার্থী
                           </p>
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-300"
+                      >
+                        <Printer className="w-3.5 h-3.5" /> প্রিন্ট মেধা তালিকা
+                      </button>
+                    </div>
 
-              {/* Student Search & Stats in Modal */}
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="relative flex-1 sm:max-w-xs">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="text"
-                    placeholder="নিজের রোল বা নাম দিয়ে খুঁজুন..."
-                    value={studentSearchInModal}
-                    onChange={(e) => setStudentSearchInModal(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-amber-500"
-                  />
-                </div>
+                    {weeklyTotalToppers.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 text-xs">
+                        এখনও কোনো শিক্ষার্থীর নম্বর দেওয়া হয়নি।
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {weeklyTotalToppers.map((t, idx) => {
+                          const isGold = idx === 0
+                          const isSilver = idx === 1
 
-                <div className="text-xs text-slate-500 font-bold">
-                  মোট পরীক্ষার্থী: <span className="text-slate-900">{examResults.length}</span> জন
-                </div>
-              </div>
-
-              {/* Leaderboard Table */}
-              {loadingResults ? (
-                <div className="py-12 text-center text-slate-500">
-                  <div className="w-6 h-6 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
-                  <p className="text-xs font-semibold">মেধাতালিকা সাজানো হচ্ছে...</p>
-                </div>
-              ) : filteredModalResults.length === 0 ? (
-                <div className="p-8 text-center text-slate-400 border border-dashed rounded-xl text-xs">
-                  কোনো পরীক্ষার্থীর ফলাফল পাওয়া যায়নি।
-                </div>
-              ) : (
-                <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-slate-600 font-extrabold uppercase border-b border-slate-200">
-                      <tr>
-                        <th className="px-4 py-3 text-center w-16">মেধা (Rank)</th>
-                        <th className="px-4 py-3">শিক্ষার্থীর নাম</th>
-                        <th className="px-4 py-3">রোল / Student ID</th>
-                        <th className="px-4 py-3 text-center">প্রাপ্ত নম্বর</th>
-                        <th className="px-4 py-3 text-center">গ্রেড</th>
-                        <th className="px-4 py-3 text-center">ফলাফল</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredModalResults.map((r) => {
-                        const pass = r.obtained_marks >= (selectedExam.pass_marks || 33)
-                        return (
-                          <tr key={r.id} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-4 py-3 text-center font-black">
-                              <span
-                                className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] ${
-                                  r.rank === 1
-                                    ? "bg-amber-500 text-white font-bold"
-                                    : r.rank === 2
-                                    ? "bg-slate-500 text-white font-bold"
-                                    : r.rank === 3
-                                    ? "bg-amber-700 text-white font-bold"
-                                    : "bg-slate-100 text-slate-700"
-                                }`}
-                              >
-                                {r.rank}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 font-bold text-slate-900">
-                              <div>{r.student_name}</div>
-                              {r.day_marks && Object.keys(r.day_marks).length > 0 && (
-                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                                  {Object.entries(r.day_marks).map(([dKey, dVal]: any) => {
-                                    const mVal = typeof dVal === "object" && dVal !== null ? (dVal.marks ?? 0) : dVal
-                                    const tVal = typeof dVal === "object" && dVal !== null ? (dVal.total ?? "") : ""
-                                    return (
-                                      <span
-                                        key={dKey}
-                                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700"
-                                      >
-                                        <span className="capitalize">{dKey}:</span>
-                                        <strong className="text-indigo-700">{mVal}{tVal ? `/${tVal}` : ""}</strong>
-                                      </span>
-                                    )
-                                  })}
-                                </div>
+                          return (
+                            <div
+                              key={t.id || t.student_id}
+                              className={cn(
+                                "p-4 rounded-2xl border flex items-center gap-3.5 transition-all shadow-xs",
+                                isGold
+                                  ? "bg-gradient-to-br from-amber-50 via-amber-100/50 to-amber-200/40 border-amber-300 ring-2 ring-amber-400/30"
+                                  : isSilver
+                                  ? "bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/50 border-slate-300"
+                                  : "bg-gradient-to-br from-orange-50 via-orange-100/50 to-orange-200/40 border-orange-300"
                               )}
-                            </td>
-                            <td className="px-4 py-3 text-slate-600 font-mono font-medium">{r.roll}</td>
-                            <td className="px-4 py-3 text-center font-black text-amber-700 text-sm">
-                              {r.obtained_marks} / {selectedExam.total_marks}
-                            </td>
-                            <td className="px-4 py-3 text-center font-extrabold text-slate-800">
-                              {r.grade || "-"}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <span
-                                className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  pass
-                                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                                    : "bg-rose-100 text-rose-800 border border-rose-300"
-                                }`}
+                            >
+                              <div
+                                className={cn(
+                                  "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm shrink-0",
+                                  isGold ? "bg-amber-500 text-white" : isSilver ? "bg-slate-600 text-white" : "bg-amber-700 text-white"
+                                )}
                               >
-                                {pass ? "উত্তীর্ণ" : "অনুত্তীর্ণ"}
+                                {isGold ? "১ম" : isSilver ? "২য়" : "৩য়"}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                  {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
+                                </span>
+                                <h3 className="font-black text-sm text-slate-900 truncate">{t.student_name}</h3>
+                                <p className="text-[11px] font-mono text-slate-500">ID: {t.roll}</p>
+                                <p className="text-xs font-bold text-amber-700 mt-1">
+                                  মোট প্রাপ্ত: {t.obtained_marks} / {totalWeeklyMaxMarks} ({t.pct}%, গ্রেড: {t.grade})
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. SUBJECT-WISE TOPPERS */}
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
+                      <span className="p-2 rounded-xl bg-purple-100 text-purple-700 font-bold">
+                        <BookOpen className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <h2 className="text-sm sm:text-base font-black text-slate-900">
+                          বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী (Subject-wise Toppers)
+                        </h2>
+                        <p className="text-xs text-slate-500">
+                          প্রতিটি দিনের নির্ধারিত বিষয়ে সর্বোচ্চ নম্বর অর্জনকারী শিক্ষার্থী
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {weeklySubjectToppers.map((st) => {
+                        const hasWinner = Boolean(st.studentName && st.score >= 0)
+
+                        return (
+                          <div key={st.day.key} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                                <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                                {st.day.day_bn}
                               </span>
-                            </td>
-                          </tr>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                                পূর্ণমান: {st.day.total_marks}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-purple-900 font-bold truncate">
+                              {st.day.subject || st.day.exam_name}
+                            </p>
+
+                            {hasWinner ? (
+                              <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
+                                <div className="truncate">
+                                  <p className="font-bold text-slate-800 truncate">🏆 {st.studentName}</p>
+                                  <p className="text-[10px] text-slate-500 font-mono">ID: {st.studentRoll}</p>
+                                </div>
+                                <span className="font-black text-amber-700 shrink-0 ml-2">
+                                  {st.score}/{st.day.total_marks}
+                                </span>
+                              </div>
+                            ) : (
+                              <p className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-200">
+                                নম্বর এখনও যুক্ত হয়নি
+                              </p>
+                            )}
+                          </div>
                         )
                       })}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
+                  {/* 3. CONSOLIDATED MULTI-COLUMN WEEKLY MARKS TABLE */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-0">
+                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-wrap gap-3">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-900">
+                          সাপ্তাহিক সামগ্রিক মূল্যায়ন টেবিল (Day-by-Day Marks Breakdown)
+                        </h3>
+                        <p className="text-xs text-slate-500">প্রতিটি শিক্ষার্থীর প্রতিদিনের নম্বর এবং মোট প্রাপ্তির বিস্তারিত বিবরণ</p>
+                      </div>
+
+                      {/* Live Search in Modal Table */}
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="নিজের রোল বা নাম দিয়ে খুঁজুন..."
+                          value={studentSearchInModal}
+                          onChange={(e) => setStudentSearchInModal(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-3 text-center w-12">#</th>
+                            <th className="px-4 py-3">Student Name</th>
+                            <th className="px-4 py-3">Student ID</th>
+                            {parsedWeeklyDays.map((d) => (
+                              <th key={d.key} className="px-3 py-3 text-center whitespace-nowrap">
+                                {d.day_bn} ({d.total_marks})
+                              </th>
+                            ))}
+                            <th className="px-4 py-3 text-center bg-amber-50/60 font-black text-amber-900 whitespace-nowrap">
+                              মোট প্রাপ্ত ({totalWeeklyMaxMarks})
+                            </th>
+                            <th className="px-3 py-3 text-center whitespace-nowrap">শতকরা (%)</th>
+                            <th className="px-3 py-3 text-center">গ্রেড</th>
+                            <th className="px-3 py-3 text-center whitespace-nowrap">মেধা (Rank)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {weeklyTableRows.length === 0 ? (
+                            <tr>
+                              <td colSpan={parsedWeeklyDays.length + 7} className="py-8 text-center text-slate-400">
+                                কোনো শিক্ষার্থীর তথ্য পাওয়া যায়নি।
+                              </td>
+                            </tr>
+                          ) : (
+                            weeklyTableRows.map((row, idx) => {
+                              const obt = row.obtained_marks
+                              const pct = row.pct
+                              const grade = row.grade
+
+                              return (
+                                <tr key={row.id || row.student_id} className="hover:bg-slate-50 transition-colors">
+                                  <td className="px-4 py-3 text-center font-mono text-slate-500 font-bold">{idx + 1}</td>
+                                  <td className="px-4 py-3 font-bold text-slate-900">{row.student_name}</td>
+                                  <td className="px-4 py-3 font-mono text-slate-600 font-semibold">{row.roll}</td>
+                                  {parsedWeeklyDays.map((d) => {
+                                    const dObj = getDayMarkItem(row.day_marks, d.key, d.day_bn, d.day_en)
+                                    return (
+                                      <td key={d.key} className="px-3 py-3 text-center font-semibold">
+                                        {dObj && !isNaN(Number(dObj.marks)) ? (
+                                          <span className="text-slate-800 font-black">{dObj.marks}</span>
+                                        ) : (
+                                          <span className="text-slate-300">—</span>
+                                        )}
+                                      </td>
+                                    )
+                                  })}
+                                  <td className="px-4 py-3 text-center font-black text-amber-800 bg-amber-50/40 text-sm">
+                                    {obt !== null ? obt : "—"}
+                                  </td>
+                                  <td className="px-3 py-3 text-center font-bold text-slate-700">
+                                    {pct !== null ? `${pct}%` : "—"}
+                                  </td>
+                                  <td className="px-3 py-3 text-center font-black">
+                                    <span
+                                      className={cn(
+                                        "px-2 py-0.5 rounded-md text-[11px]",
+                                        grade === "A+" || grade === "A"
+                                          ? "bg-emerald-100 text-emerald-800 font-bold"
+                                          : "bg-slate-100 text-slate-700"
+                                      )}
+                                    >
+                                      {grade}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-3 text-center font-black">
+                                    {obt !== null ? (
+                                      <span
+                                        className={cn(
+                                          "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold",
+                                          idx === 0
+                                            ? "bg-amber-500 text-white"
+                                            : idx === 1
+                                            ? "bg-slate-500 text-white"
+                                            : idx === 2
+                                            ? "bg-amber-700 text-white"
+                                            : "bg-slate-100 text-slate-700"
+                                        )}
+                                      >
+                                        {idx + 1}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 </div>
+              ) : (
+                /* ONE-TIME EXAM VIEW */
+                <>
+                  {/* Top 3 Podium Cards */}
+                  {top3.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {top3.map((r, idx) => {
+                        const isGold = idx === 0
+                        const isSilver = idx === 1
+
+                        return (
+                          <div
+                            key={r.id}
+                            className={`p-4 rounded-2xl border flex items-center gap-3.5 ${
+                              isGold
+                                ? "bg-gradient-to-br from-amber-50 to-amber-100/60 border-amber-300 shadow-sm"
+                                : isSilver
+                                ? "bg-gradient-to-br from-slate-50 to-slate-100 border-slate-300 shadow-sm"
+                                : "bg-gradient-to-br from-orange-50 to-orange-100/50 border-orange-300 shadow-sm"
+                            }`}
+                          >
+                            <div
+                              className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shadow-xs ${
+                                isGold
+                                  ? "bg-amber-500 text-white"
+                                  : isSilver
+                                  ? "bg-slate-600 text-white"
+                                  : "bg-amber-700 text-white"
+                              }`}
+                            >
+                              {isGold ? "১ম" : isSilver ? "২য়" : "৩য়"}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">
+                                {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
+                              </p>
+                              <p className="font-extrabold text-sm text-slate-900 truncate">{r.student_name}</p>
+                              <p className="text-xs font-bold text-amber-700">
+                                প্রাপ্ত নম্বর: {r.obtained_marks} / {selectedExam.total_marks}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Student Search & Stats in Modal */}
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="relative flex-1 sm:max-w-xs">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="নিজের রোল বা নাম দিয়ে খুঁজুন..."
+                        value={studentSearchInModal}
+                        onChange={(e) => setStudentSearchInModal(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="text-xs text-slate-500 font-bold">
+                      মোট পরীক্ষার্থী: <span className="text-slate-900">{examResults.length}</span> জন
+                    </div>
+                  </div>
+
+                  {/* Leaderboard Table */}
+                  {filteredModalResults.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 border border-dashed rounded-xl text-xs">
+                      কোনো পরীক্ষার্থীর ফলাফল পাওয়া যায়নি।
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto border border-slate-200 rounded-2xl shadow-2xs">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-600 font-extrabold uppercase border-b border-slate-200">
+                          <tr>
+                            <th className="px-4 py-3 text-center w-16">মেধা (Rank)</th>
+                            <th className="px-4 py-3">শিক্ষার্থীর নাম</th>
+                            <th className="px-4 py-3">রোল / Student ID</th>
+                            <th className="px-4 py-3 text-center">প্রাপ্ত নম্বর</th>
+                            <th className="px-4 py-3 text-center">গ্রেড</th>
+                            <th className="px-4 py-3 text-center">ফলাফল</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredModalResults.map((r) => {
+                            const pass = r.obtained_marks >= (selectedExam.pass_marks || 33)
+                            return (
+                              <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                                <td className="px-4 py-3 text-center font-black">
+                                  <span
+                                    className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] ${
+                                      r.rank === 1
+                                        ? "bg-amber-500 text-white font-bold"
+                                        : r.rank === 2
+                                        ? "bg-slate-500 text-white font-bold"
+                                        : r.rank === 3
+                                        ? "bg-amber-700 text-white font-bold"
+                                        : "bg-slate-100 text-slate-700"
+                                    }`}
+                                  >
+                                    {r.rank}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 font-bold text-slate-900">
+                                  <div>{r.student_name}</div>
+                                  {r.day_marks && Object.keys(r.day_marks).length > 0 && (
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                      {Object.entries(r.day_marks).map(([dKey, dVal]: any) => {
+                                        const mVal = typeof dVal === "object" && dVal !== null ? (dVal.marks ?? 0) : dVal
+                                        const tVal = typeof dVal === "object" && dVal !== null ? (dVal.total ?? "") : ""
+                                        return (
+                                          <span
+                                            key={dKey}
+                                            className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700"
+                                          >
+                                            <span className="capitalize">{dKey}:</span>
+                                            <strong className="text-indigo-700">{mVal}{tVal ? `/${tVal}` : ""}</strong>
+                                          </span>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600 font-mono font-medium">{r.roll}</td>
+                                <td className="px-4 py-3 text-center font-black text-amber-700 text-sm">
+                                  {r.obtained_marks} / {selectedExam.total_marks}
+                                </td>
+                                <td className="px-4 py-3 text-center font-extrabold text-slate-800">
+                                  {r.grade || "-"}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <span
+                                    className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                      pass
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                        : "bg-rose-100 text-rose-800 border border-rose-300"
+                                    }`}
+                                  >
+                                    {pass ? "উত্তীর্ণ" : "অনুত্তীর্ণ"}
+                                  </span>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
