@@ -105,17 +105,46 @@ export async function GET(
     // 4. Fetch results
     if (isStaffOrAdmin || showAllToStudents) {
       // Public mode or Admin view: return all students' results with ranking
-      const { data: allResults, error: resErr } = await admin
+      let allResults: any[] | null = null
+      const { data: resultsData, error: resErr } = await admin
         .from("exam_results")
-        .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, phone)")
+        .select("*, student:students(id, name, student_id, phone)")
         .eq("exam_id", examId)
 
       if (resErr) {
-        return NextResponse.json({ error: resErr.message }, { status: 500 })
+        // Fallback without wildcard if newer columns aren't in schema cache
+        const { data: fbData, error: fbErr } = await admin
+          .from("exam_results")
+          .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, phone)")
+          .eq("exam_id", examId)
+        if (fbErr) return NextResponse.json({ error: fbErr.message }, { status: 500 })
+        allResults = fbData
+      } else {
+        allResults = resultsData
+      }
+
+      // Extract day marks fallback note if available
+      let fallbackStudentDayMarks: Record<string, any> = {}
+      if (exam.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+        try {
+          const match = exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+          if (match && match[1]) {
+            fallbackStudentDayMarks = JSON.parse(match[1])
+          }
+        } catch {}
       }
 
       // Sort strictly by obtained_marks descending (highest to lowest)
-      const sorted = [...(allResults || [])].sort((a: any, b: any) => {
+      const sorted = [...(allResults || [])].map((item: any) => {
+        let sDayMarks = item.day_marks
+        if ((!sDayMarks || typeof sDayMarks !== "object" || Object.keys(sDayMarks).length === 0) && fallbackStudentDayMarks[item.student_id]) {
+          sDayMarks = fallbackStudentDayMarks[item.student_id]
+        }
+        return {
+          ...item,
+          day_marks: sDayMarks || {},
+        }
+      }).sort((a: any, b: any) => {
         const marksA = Number(a.obtained_marks) || 0
         const marksB = Number(b.obtained_marks) || 0
         return marksB - marksA
@@ -303,3 +332,145 @@ export async function PATCH(
     return NextResponse.json({ error: err.message || "Failed to update" }, { status: 500 })
   }
 }
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+  try {
+    const resolvedParams = await params
+    const examId = resolvedParams.id
+    if (!examId) {
+      return NextResponse.json({ error: "Exam ID is required" }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await req.json().catch(() => ({}))
+    const admin = createAdminClient()
+
+    // 1. Fetch current exam
+    const { data: currentExam, error: examErr } = await admin
+      .from("exams")
+      .select("id, total_marks, recurring_days, exam_schedule_type, result_note")
+      .eq("id", examId)
+      .maybeSingle()
+
+    if (examErr || !currentExam) {
+      return NextResponse.json({ error: "Exam not found" }, { status: 404 })
+    }
+
+    // Support both single student save and batch save
+    const updates: Array<{
+      student_id: string
+      obtained_marks: number
+      grade: string
+      day_marks?: Record<string, any>
+    }> = []
+
+    if (Array.isArray(body.batch_updates)) {
+      for (const u of body.batch_updates) {
+        if (u.student_id) {
+          updates.push({
+            student_id: u.student_id,
+            obtained_marks: Number(u.obtained_marks) || 0,
+            grade: u.grade || "",
+            day_marks: u.day_marks || {},
+          })
+        }
+      }
+    } else if (body.student_id) {
+      updates.push({
+        student_id: body.student_id,
+        obtained_marks: Number(body.obtained_marks) || 0,
+        grade: body.grade || "",
+        day_marks: body.day_marks || {},
+      })
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json({ error: "No student marks provided" }, { status: 400 })
+    }
+
+    // Upsert into exam_results with day_marks
+    const payloadWithDayMarks = updates.map((u) => ({
+      exam_id: examId,
+      student_id: u.student_id,
+      obtained_marks: u.obtained_marks,
+      grade: u.grade,
+      day_marks: u.day_marks || {},
+    }))
+
+    const { error: upsertErr } = await admin
+      .from("exam_results")
+      .upsert(payloadWithDayMarks, { onConflict: "exam_id,student_id" })
+
+    if (upsertErr) {
+      console.warn("Attempting exam_results upsert without day_marks column:", upsertErr.message)
+      // Fallback without day_marks column
+      const payloadWithoutDayMarks = updates.map((u) => ({
+        exam_id: examId,
+        student_id: u.student_id,
+        obtained_marks: u.obtained_marks,
+        grade: u.grade,
+      }))
+
+      const { error: fbErr } = await admin
+        .from("exam_results")
+        .upsert(payloadWithoutDayMarks, { onConflict: "exam_id,student_id" })
+
+      if (fbErr) {
+        return NextResponse.json({ error: fbErr.message }, { status: 500 })
+      }
+    }
+
+    // Always ensure day marks are backed up into exams.result_note [STUDENT_DAY_MARKS:...]
+    let existingMap: Record<string, Record<string, any>> = {}
+    if (currentExam.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+      try {
+        const m = currentExam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+        if (m && m[1]) {
+          existingMap = JSON.parse(m[1])
+        }
+      } catch {}
+    }
+
+    // Merge provided all_day_marks or the updates
+    const mergedMap: Record<string, Record<string, any>> = {
+      ...existingMap,
+      ...(body.all_day_marks || {}),
+    }
+    for (const u of updates) {
+      if (u.day_marks && Object.keys(u.day_marks).length > 0) {
+        mergedMap[u.student_id] = {
+          ...(mergedMap[u.student_id] || {}),
+          ...u.day_marks,
+        }
+      }
+    }
+
+    const currentNote = currentExam.result_note || ""
+    const updatedNote = currentNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() +
+      ` [STUDENT_DAY_MARKS:${JSON.stringify(mergedMap)}]`
+
+    await admin
+      .from("exams")
+      .update({ result_note: updatedNote })
+      .eq("id", examId)
+
+    return NextResponse.json({
+      success: true,
+      message: "Marks saved successfully",
+      saved_count: updates.length,
+      all_day_marks: mergedMap,
+    })
+  } catch (err: any) {
+    console.error("Exam results POST error:", err)
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 })
+  }
+}
+

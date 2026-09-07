@@ -79,6 +79,35 @@ const ALL_WEEK_DAYS = [
   { id: "friday", bn: "শুক্রবার", en: "Friday" },
 ]
 
+function getDayMarkItem(
+  studentDays: Record<string, DayMarkItem> | undefined,
+  dayKey?: string,
+  dayBn?: string,
+  dayEn?: string
+): DayMarkItem | undefined {
+  if (!studentDays) return undefined
+  if (dayKey && studentDays[dayKey]) return studentDays[dayKey]
+  const lKey = dayKey?.toLowerCase()
+  if (lKey && studentDays[lKey]) return studentDays[lKey]
+  if (lKey) {
+    const capKey = lKey.charAt(0).toUpperCase() + lKey.slice(1)
+    if (studentDays[capKey]) return studentDays[capKey]
+  }
+  if (dayBn && studentDays[dayBn]) return studentDays[dayBn]
+  if (dayEn && studentDays[dayEn]) return studentDays[dayEn]
+  if (dayEn) {
+    const lEn = dayEn.toLowerCase()
+    if (studentDays[lEn]) return studentDays[lEn]
+  }
+  for (const [k, v] of Object.entries(studentDays)) {
+    const lk = k.toLowerCase()
+    if ((lKey && lk === lKey) || (dayBn && k === dayBn) || (dayEn && lk === dayEn.toLowerCase())) {
+      return v
+    }
+  }
+  return undefined
+}
+
 export default function ExamResultsPage() {
   const params = useParams()
   const router = useRouter()
@@ -329,6 +358,10 @@ export default function ExamResultsPage() {
           let sDayMarks: Record<string, DayMarkItem> = {}
           if (r.day_marks && typeof r.day_marks === "object") {
             sDayMarks = r.day_marks
+          } else if (typeof r.day_marks === "string") {
+            try {
+              sDayMarks = JSON.parse(r.day_marks)
+            } catch {}
           }
           dayMarks[r.student_id] = sDayMarks
         }
@@ -342,11 +375,51 @@ export default function ExamResultsPage() {
               for (const [stId, sMap] of Object.entries(parsedAll)) {
                 if (!dayMarks[stId] || Object.keys(dayMarks[stId]).length === 0) {
                   dayMarks[stId] = sMap as Record<string, DayMarkItem>
+                } else {
+                  // Merge days from fallback note
+                  dayMarks[stId] = {
+                    ...(sMap as Record<string, DayMarkItem>),
+                    ...dayMarks[stId],
+                  }
                 }
               }
             }
           } catch (err) {
             console.warn("Could not parse exam fallback day marks:", err)
+          }
+        }
+
+        // Smart Recovery for weekly exams:
+        // If a student already has an obtained_mark (e.g. from Saturday's entry)
+        // but dayMarks[sId] is empty, assign it to the first day so Day 1 is never lost
+        const isWeekly = ex?.exam_schedule_type === "weekly" || (Array.isArray(ex?.recurring_days) && ex?.recurring_days.length > 0) || ex?.result_note?.includes("[WEEKLY_SCHEDULE:") || ex?.title?.includes("সাপ্তাহিক")
+        if (isWeekly) {
+          let firstKey = "saturday"
+          let firstTotal = ex?.total_marks || 50
+          let firstSubj = ex?.subject || ""
+          let firstExamName = "পরীক্ষা"
+          if (Array.isArray(ex?.recurring_days) && ex.recurring_days.length > 0) {
+            const d0 = ex.recurring_days[0]
+            const rawKey = typeof d0 === "object" ? (d0.day || d0.day_bn || "saturday") : d0
+            firstKey = String(rawKey).toLowerCase()
+            firstTotal = typeof d0 === "object" && d0.total_marks ? Number(d0.total_marks) : ex.total_marks || 50
+            firstSubj = typeof d0 === "object" && d0.subject ? d0.subject : ex.subject || ""
+            firstExamName = typeof d0 === "object" && d0.exam_name ? d0.exam_name : "পরীক্ষা"
+          }
+          for (const [sId, res] of Object.entries(map)) {
+            const currentDays = dayMarks[sId] || {}
+            if (Object.keys(currentDays).length === 0 && res.obtained_marks !== "" && !isNaN(parseFloat(res.obtained_marks))) {
+              const numVal = parseFloat(res.obtained_marks)
+              dayMarks[sId] = {
+                [firstKey]: {
+                  marks: numVal,
+                  total: firstTotal,
+                  grade: res.grade || getGrade(numVal, firstTotal),
+                  subject: firstSubj,
+                  exam_name: firstExamName,
+                }
+              }
+            }
           }
         }
 
@@ -371,7 +444,9 @@ export default function ExamResultsPage() {
 
   // Sync draft marks whenever selectedTab or active day changes
   useEffect(() => {
-    if (!isWeeklyExam) {
+    if (fetching) return
+
+    if (!isWeeklyExam || selectedTab === "weekly_aggregate") {
       const drafts: Record<string, string> = {}
       for (const s of students) {
         drafts[s.id] = savedResults[s.id]?.obtained_marks ?? ""
@@ -380,24 +455,15 @@ export default function ExamResultsPage() {
       return
     }
 
-    if (selectedTab === "weekly_aggregate") {
-      const drafts: Record<string, string> = {}
-      for (const s of students) {
-        drafts[s.id] = savedResults[s.id]?.obtained_marks ?? ""
-      }
-      setDraftMarks(drafts)
-      return
-    }
-
-    const activeKey = activeDayConfig?.key || selectedTab
+    const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
     const drafts: Record<string, string> = {}
     for (const s of students) {
-      const studentDays = dayMarksMap[s.id] || {}
-      const dMark = studentDays[activeKey] || studentDays[activeDayConfig?.day_bn || ""]
-      drafts[s.id] = dMark ? String(dMark.marks) : ""
+      const studentDays = dayMarksMap[s.id]
+      const dMark = getDayMarkItem(studentDays, activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+      drafts[s.id] = dMark && !isNaN(Number(dMark.marks)) ? String(dMark.marks) : ""
     }
     setDraftMarks(drafts)
-  }, [selectedTab, isWeeklyExam, students, savedResults, dayMarksMap, activeDayConfig])
+  }, [selectedTab, isWeeklyExam, students, fetching, activeDayConfig?.key])
 
   // Close search dropdown on outside click
   useEffect(() => {
@@ -428,7 +494,13 @@ export default function ExamResultsPage() {
     setIsSearchDropdownOpen(false)
     setStudentSearchQuery("")
 
-    const existing = draftMarks[student.id] ?? ""
+    const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
+    const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
+      ? getDayMarkItem(dayMarksMap[student.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+      : null
+    const existing = isWeeklyExam && selectedTab !== "weekly_aggregate"
+      ? (draftMarks[student.id] || (dayObj && !isNaN(Number(dayObj.marks)) ? String(dayObj.marks) : ""))
+      : (draftMarks[student.id] || savedResults[student.id]?.obtained_marks || "")
     setQuickMarkInput(existing)
 
     setTimeout(() => {
@@ -493,7 +565,7 @@ export default function ExamResultsPage() {
     const dayGrade = getGrade(numMarks, activeMax)
 
     if (isWeeklyExam && activeDayConfig && selectedTab !== "weekly_aggregate") {
-      const activeKey = activeDayConfig.key
+      const activeKey = (activeDayConfig.key || selectedTab).toLowerCase()
       const currentStudentDays = { ...(dayMarksMap[student.id] || {}) }
       currentStudentDays[activeKey] = {
         marks: numMarks,
@@ -506,38 +578,38 @@ export default function ExamResultsPage() {
       const grandTotal = Object.values(currentStudentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
       const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
 
+      const updatedAllDayMarks = {
+        ...dayMarksMap,
+        [student.id]: currentStudentDays,
+      }
+
       try {
-        const payload: any = {
-          exam_id: exam.id,
-          student_id: student.id,
-          obtained_marks: grandTotal,
-          grade: overallGrade,
-          day_marks: currentStudentDays,
-        }
+        // Save via our server API endpoint for guaranteed admin persistence of day_marks & fallback notes
+        const res = await fetch(`/api/exams/${exam.id}/results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            student_id: student.id,
+            obtained_marks: grandTotal,
+            grade: overallGrade,
+            day_marks: currentStudentDays,
+            all_day_marks: updatedAllDayMarks,
+          }),
+        })
 
-        let { error } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
-
-        if (error) {
-          // If day_marks column does not exist in exam_results schema cache yet
-          console.warn("Attempting exam_results fallback without day_marks column:", error.message)
-          delete payload.day_marks
-          const { error: fbErr } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
-          if (fbErr) throw fbErr
-        }
-
-        // Sync day marks fallback into exams.result_note
-        const updatedAllDayMarks = {
-          ...dayMarksMap,
-          [student.id]: currentStudentDays,
-        }
-        try {
-          const currentNote = exam.result_note || ""
-          const newNote = currentNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() +
-            ` [STUDENT_DAY_MARKS:${JSON.stringify(updatedAllDayMarks)}]`
-          supabase.from("exams").update({ result_note: newNote }).eq("id", exam.id).then(() => {})
-          setExam((prev: any) => prev ? { ...prev, result_note: newNote } : prev)
-        } catch (noteErr) {
-          console.warn("Could not sync student day marks fallback note:", noteErr)
+        if (!res.ok) {
+          const payload: any = {
+            exam_id: exam.id,
+            student_id: student.id,
+            obtained_marks: grandTotal,
+            grade: overallGrade,
+            day_marks: currentStudentDays,
+          }
+          let { error } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          if (error) {
+            delete payload.day_marks
+            await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          }
         }
 
         setDayMarksMap((prev) => ({
@@ -644,6 +716,79 @@ export default function ExamResultsPage() {
 
   // Clear student mark
   async function clearStudentMark(studentId: string, studentName: string) {
+    if (!exam) return
+
+    if (isWeeklyExam && activeDayConfig && selectedTab !== "weekly_aggregate") {
+      if (!confirm(`Are you sure you want to clear ${activeDayConfig.day_bn} mark for ${studentName}?`)) return
+      try {
+        const activeKey = (activeDayConfig.key || selectedTab).toLowerCase()
+        const currentStudentDays = { ...(dayMarksMap[studentId] || {}) }
+        delete currentStudentDays[activeKey]
+        delete currentStudentDays[activeDayConfig.key]
+        if (activeDayConfig.day_bn) delete currentStudentDays[activeDayConfig.day_bn]
+        if (activeDayConfig.day_en) delete currentStudentDays[activeDayConfig.day_en.toLowerCase()]
+
+        const remainingValues = Object.values(currentStudentDays)
+        const grandTotal = remainingValues.reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+        const overallGrade = remainingValues.length > 0 ? getGrade(grandTotal, totalWeeklyMaxMarks) : ""
+
+        const updatedAllDayMarks = {
+          ...dayMarksMap,
+          [studentId]: currentStudentDays,
+        }
+
+        await fetch(`/api/exams/${exam.id}/results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            student_id: studentId,
+            obtained_marks: grandTotal,
+            grade: overallGrade,
+            day_marks: currentStudentDays,
+            all_day_marks: updatedAllDayMarks,
+          }),
+        })
+
+        if (remainingValues.length === 0) {
+          await supabase.from("exam_results").delete().eq("exam_id", exam.id).eq("student_id", studentId)
+          setSavedResults((prev) => {
+            const next = { ...prev }
+            delete next[studentId]
+            return next
+          })
+        } else {
+          setSavedResults((prev) => ({
+            ...prev,
+            [studentId]: {
+              student_id: studentId,
+              obtained_marks: String(grandTotal),
+              grade: overallGrade,
+            },
+          }))
+        }
+
+        setDayMarksMap((prev) => ({
+          ...prev,
+          [studentId]: currentStudentDays,
+        }))
+        setDraftMarks((prev) => ({
+          ...prev,
+          [studentId]: "",
+        }))
+        setJustSavedIds((prev) => {
+          const next = new Set(prev)
+          next.delete(studentId)
+          return next
+        })
+
+        toast.success(`Cleared ${activeDayConfig.day_bn} mark for ${studentName}`)
+      } catch (err: any) {
+        console.error("Clear mark error:", err)
+        toast.error("Failed to clear mark")
+      }
+      return
+    }
+
     if (!confirm(`Are you sure you want to clear results for ${studentName}?`)) return
     try {
       await supabase.from("exam_results").delete().eq("exam_id", exam.id).eq("student_id", studentId)
@@ -662,6 +807,11 @@ export default function ExamResultsPage() {
         delete next[studentId]
         return next
       })
+      setJustSavedIds((prev) => {
+        const next = new Set(prev)
+        next.delete(studentId)
+        return next
+      })
       toast.success(`Cleared results for ${studentName}`)
     } catch (err: any) {
       toast.error("Failed to clear result")
@@ -670,18 +820,92 @@ export default function ExamResultsPage() {
 
   // Save All entered marks at once
   async function handleSaveAll() {
+    if (!exam) return
     setLoading(true)
     try {
-      let savedCount = 0
-      for (let i = 0; i < students.length; i++) {
-        const s = students[i]
-        const raw = draftMarks[s.id]?.trim()
-        if (raw && raw !== "") {
-          await saveStudentMark(s, raw)
-          savedCount++
+      if (isWeeklyExam && activeDayConfig && selectedTab !== "weekly_aggregate") {
+        const activeKey = (activeDayConfig.key || selectedTab).toLowerCase()
+        const activeMax = activeDayConfig.total_marks
+        const batchUpdates: any[] = []
+        const nextDayMarksMap: Record<string, Record<string, DayMarkItem>> = { ...dayMarksMap }
+
+        for (const s of students) {
+          const raw = draftMarks[s.id]?.trim()
+          if (raw && raw !== "") {
+            const numMarks = parseFloat(raw)
+            if (!isNaN(numMarks) && numMarks >= 0 && numMarks <= activeMax) {
+              const dayGrade = getGrade(numMarks, activeMax)
+              const sDays = { ...(nextDayMarksMap[s.id] || {}) }
+              sDays[activeKey] = {
+                marks: numMarks,
+                total: activeMax,
+                grade: dayGrade,
+                subject: activeDayConfig.subject,
+                exam_name: activeDayConfig.exam_name,
+              }
+              nextDayMarksMap[s.id] = sDays
+              const grandTotal = Object.values(sDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+              const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
+
+              batchUpdates.push({
+                student_id: s.id,
+                obtained_marks: grandTotal,
+                grade: overallGrade,
+                day_marks: sDays,
+              })
+            }
+          }
         }
+
+        if (batchUpdates.length === 0) {
+          toast.error("কোনো বৈধ নম্বর পাওয়া যায়নি (No valid marks to save)")
+          return
+        }
+
+        const res = await fetch(`/api/exams/${exam.id}/results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            batch_updates: batchUpdates,
+            all_day_marks: nextDayMarksMap,
+          }),
+        })
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || "Failed to batch save")
+        }
+
+        setDayMarksMap(nextDayMarksMap)
+        setSavedResults((prev) => {
+          const next = { ...prev }
+          for (const u of batchUpdates) {
+            next[u.student_id] = {
+              student_id: u.student_id,
+              obtained_marks: String(u.obtained_marks),
+              grade: u.grade,
+            }
+          }
+          return next
+        })
+        setJustSavedIds((prev) => {
+          const next = new Set(prev)
+          for (const u of batchUpdates) next.add(u.student_id)
+          return next
+        })
+        toast.success(`✓ ${batchUpdates.length} জন শিক্ষার্থীর নম্বর সফলভাবে সংরক্ষিত হয়েছে!`)
+      } else {
+        let savedCount = 0
+        for (let i = 0; i < students.length; i++) {
+          const s = students[i]
+          const raw = draftMarks[s.id]?.trim()
+          if (raw && raw !== "") {
+            await saveStudentMark(s, raw)
+            savedCount++
+          }
+        }
+        toast.success(`Results saved for ${savedCount} students!`)
       }
-      toast.success(`Results saved for ${savedCount} students!`)
     } catch (err: any) {
       toast.error(err.message || "Failed to save all")
     } finally {
@@ -929,7 +1153,7 @@ export default function ExamResultsPage() {
     for (const s of students) {
       let markVal: number | null = null
       if (isWeeklyExam && selectedTab !== "weekly_aggregate" && activeDayConfig) {
-        const dObj = dayMarksMap[s.id]?.[activeDayConfig.key] || dayMarksMap[s.id]?.[activeDayConfig.day_bn]
+        const dObj = getDayMarkItem(dayMarksMap[s.id], activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
         if (dObj && !isNaN(Number(dObj.marks))) {
           markVal = Number(dObj.marks)
         }
@@ -991,7 +1215,7 @@ export default function ExamResultsPage() {
       let topScore = -1
 
       for (const s of students) {
-        const dObj = dayMarksMap[s.id]?.[d.key] || dayMarksMap[s.id]?.[d.day_bn]
+        const dObj = getDayMarkItem(dayMarksMap[s.id], d.key, d.day_bn, d.day_en)
         if (dObj) {
           const score = Number(dObj.marks)
           if (score > topScore) {
@@ -1019,9 +1243,12 @@ export default function ExamResultsPage() {
         if (!nameMatch && !idMatch) return false
       }
 
-      const activeKey = activeDayConfig?.key || selectedTab
+      const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
+      const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
+        ? getDayMarkItem(dayMarksMap[s.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+        : null
       const hasEntered = isWeeklyExam && selectedTab !== "weekly_aggregate"
-        ? Boolean(dayMarksMap[s.id]?.[activeKey] || dayMarksMap[s.id]?.[activeDayConfig?.day_bn || ""])
+        ? Boolean(dayObj && !isNaN(Number(dayObj.marks)))
         : Boolean(savedResults[s.id] && savedResults[s.id].obtained_marks !== "")
 
       const isJustSaved = justSavedIds.has(s.id)
@@ -1030,13 +1257,13 @@ export default function ExamResultsPage() {
       if (statusFilter === "pending") return isJustSaved || !hasEntered
       if (statusFilter === "passed") {
         const mark = isWeeklyExam && selectedTab !== "weekly_aggregate"
-          ? (dayMarksMap[s.id]?.[activeKey]?.marks ?? null)
+          ? (dayObj ? Number(dayObj.marks) : null)
           : (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
         return mark !== null && mark >= stats.pass
       }
       if (statusFilter === "failed") {
         const mark = isWeeklyExam && selectedTab !== "weekly_aggregate"
-          ? (dayMarksMap[s.id]?.[activeKey]?.marks ?? null)
+          ? (dayObj ? Number(dayObj.marks) : null)
           : (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
         return mark !== null && mark < stats.pass
       }
@@ -1071,7 +1298,11 @@ export default function ExamResultsPage() {
   }
 
   const isWeeklyActive = isWeeklyExam && selectedTab === "weekly_aggregate"
-  const isSelectedDayPublished = activeDayConfig ? (publishedDays.includes(activeDayConfig.key) || publishedDays.includes(activeDayConfig.day_bn)) : false
+  const isSelectedDayPublished = activeDayConfig
+    ? (publishedDays.some((p) => p.toLowerCase() === activeDayConfig.key.toLowerCase()) ||
+       publishedDays.some((p) => p.toLowerCase() === activeDayConfig.day_bn.toLowerCase()) ||
+       (activeDayConfig.day_en ? publishedDays.some((p) => p.toLowerCase() === activeDayConfig.day_en.toLowerCase()) : false))
+    : false
   const activeTotalMarks = isWeeklyExam ? (isWeeklyActive ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50)) : exam.total_marks
   const activePassMarks = isWeeklyExam ? (isWeeklyActive ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20)) : exam.pass_marks
 
@@ -1305,7 +1536,13 @@ export default function ExamResultsPage() {
                 <button
                   key={d.key}
                   type="button"
-                  onClick={() => setSelectedTab(d.key)}
+                  onClick={() => {
+                    setSelectedTab(d.key)
+                    setJustSavedIds(new Set())
+                    setSelectedStudent(null)
+                    setQuickMarkInput("")
+                    setStudentSearchQuery("")
+                  }}
                   className={cn(
                     "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[130px] sm:min-w-[155px] cursor-pointer",
                     isSelected
@@ -1349,7 +1586,13 @@ export default function ExamResultsPage() {
             {/* FINAL TAB: WEEKLY AGGREGATE RESULT */}
             <button
               type="button"
-              onClick={() => setSelectedTab("weekly_aggregate")}
+              onClick={() => {
+                setSelectedTab("weekly_aggregate")
+                setJustSavedIds(new Set())
+                setSelectedStudent(null)
+                setQuickMarkInput("")
+                setStudentSearchQuery("")
+              }}
               className={cn(
                 "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[180px] sm:min-w-[210px] cursor-pointer",
                 selectedTab === "weekly_aggregate"
@@ -1617,10 +1860,10 @@ export default function ExamResultsPage() {
                           <td className="px-4 py-3 font-bold text-slate-900">{row.student.name}</td>
                           <td className="px-4 py-3 font-mono text-slate-600 font-semibold">{row.student.student_id}</td>
                           {parsedWeeklyDays.map((d) => {
-                            const dObj = row.days[d.key] || row.days[d.day_bn]
+                            const dObj = getDayMarkItem(row.days, d.key, d.day_bn, d.day_en)
                             return (
                               <td key={d.key} className="px-3 py-3 text-center font-semibold">
-                                {dObj ? (
+                                {dObj && !isNaN(Number(dObj.marks)) ? (
                                   <span className="text-slate-800 font-black">{dObj.marks}</span>
                                 ) : (
                                   <span className="text-slate-300">—</span>
@@ -1736,9 +1979,13 @@ export default function ExamResultsPage() {
                       </div>
                     ) : (
                       filteredSearchStudents.map((s) => {
-                        const activeKey = activeDayConfig?.key || selectedTab
-                        const dayObj = isWeeklyExam ? (dayMarksMap[s.id]?.[activeKey] || dayMarksMap[s.id]?.[activeDayConfig?.day_bn || ""]) : null
-                        const markToShow = isWeeklyExam ? (dayObj ? String(dayObj.marks) : "") : (draftMarks[s.id] || savedResults[s.id]?.obtained_marks || "")
+                        const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
+                        const dayObj = isWeeklyExam
+                          ? getDayMarkItem(dayMarksMap[s.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+                          : null
+                        const markToShow = isWeeklyExam
+                          ? (dayObj && !isNaN(Number(dayObj.marks)) ? String(dayObj.marks) : "")
+                          : (draftMarks[s.id] || savedResults[s.id]?.obtained_marks || "")
                         const hasMark = Boolean(markToShow !== "")
                         const isSelected = selectedStudent?.id === s.id
 
@@ -1759,7 +2006,7 @@ export default function ExamResultsPage() {
                                 <p className="text-xs font-bold text-slate-900 truncate">{s.name}</p>
                                 <p className="text-[11px] text-slate-500 font-mono">
                                   <span className="font-semibold text-amber-700">{s.student_id}</span>
-                                  {s.phone && <span> • ${s.phone}</span>}
+                                  {s.phone && <span> • {s.phone}</span>}
                                 </p>
                               </div>
                             </div>
@@ -1767,7 +2014,7 @@ export default function ExamResultsPage() {
                             <div className="shrink-0 ml-2">
                               {hasMark ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  <Check className="w-3 h-3" /> ${markToShow}/${activeTotalMarks}
+                                  <Check className="w-3 h-3" /> {markToShow}/{activeTotalMarks}
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-500">
@@ -1952,10 +2199,18 @@ export default function ExamResultsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {tableStudents.map((s, idx) => {
-                    const activeKey = activeDayConfig?.key || selectedTab
-                    const dayObj = isWeeklyExam ? (dayMarksMap[s.id]?.[activeKey] || dayMarksMap[s.id]?.[activeDayConfig?.day_bn || ""]) : null
+                    const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
+                    const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
+                      ? getDayMarkItem(dayMarksMap[s.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+                      : null
                     const draftVal = draftMarks[s.id] ?? ""
-                    const currentMarksNum = draftVal !== "" ? parseFloat(draftVal) : (dayObj ? Number(dayObj.marks) : (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null))
+                    const currentMarksNum = draftVal !== ""
+                      ? parseFloat(draftVal)
+                      : (dayObj && !isNaN(Number(dayObj.marks)))
+                      ? Number(dayObj.marks)
+                      : (!isWeeklyExam || selectedTab === "weekly_aggregate")
+                      ? (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
+                      : null
                     const hasEntered = Boolean(currentMarksNum !== null && !isNaN(currentMarksNum))
                     const isJustSaved = justSavedIds.has(s.id)
                     const passed = hasEntered && currentMarksNum! >= activePassMarks

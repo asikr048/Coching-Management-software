@@ -91,6 +91,17 @@ export async function POST(
           }).join("\n")
       }
 
+      // Extract day marks fallback note if available
+      let fallbackStudentDayMarks: Record<string, any> = {}
+      if (exam.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+        try {
+          const match = exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+          if (match && match[1]) {
+            fallbackStudentDayMarks = JSON.parse(match[1])
+          }
+        } catch {}
+      }
+
       // Subject-wise Toppers
       let subjectToppersText = ""
       if (daysInfo.length > 0 && results && results.length > 0) {
@@ -101,7 +112,21 @@ export async function POST(
           let topScore = -1
 
           for (const r of results) {
-            let dayMarkObj = r.day_marks?.[d.key] || r.day_marks?.[d.label]
+            const studentDays = (r.day_marks && typeof r.day_marks === "object" && Object.keys(r.day_marks).length > 0)
+              ? r.day_marks
+              : (fallbackStudentDayMarks[r.student_id] || {})
+
+            let dayMarkObj = studentDays[d.key] || studentDays[d.label]
+            if (!dayMarkObj && d.key) {
+              const lowerKey = d.key.toLowerCase()
+              for (const [k, v] of Object.entries(studentDays)) {
+                if (k.toLowerCase() === lowerKey || k === d.label) {
+                  dayMarkObj = v
+                  break
+                }
+              }
+            }
+
             if (!dayMarkObj && r.result_note) {
               try {
                 const m = r.result_note.match(/\[DAY_MARKS:(.*?)\]/)
