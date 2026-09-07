@@ -309,6 +309,11 @@ export default function OnlineResultPortalPage() {
         const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
         const targetExamId = urlParams?.get("exam_id") || urlParams?.get("id")
         const targetDay = urlParams?.get("day")
+        const targetTab = urlParams?.get("tab")
+
+        if (targetTab === "weekly" || targetTab === "everyday" || targetTab === "all") {
+          setActiveTab(targetTab)
+        }
 
         if (targetExamId) {
           let found = loadedExams.find((e: any) => e.id === targetExamId)
@@ -437,30 +442,7 @@ export default function OnlineResultPortalPage() {
           }
         }
 
-        // 1. FOR EACH PUBLISHED DAY: Add a Daily Exam card
-        for (const dayConf of days) {
-          const isDayPub = pubDays.some((p) => p === dayConf.key.toLowerCase() || p === dayConf.day_bn.toLowerCase() || p === dayConf.day_en.toLowerCase())
-          if (isDayPub) {
-            items.push({
-              id: `${ex.id}-day-${dayConf.key}`,
-              parentExam: ex,
-              type: "daily",
-              title: `${ex.title} - ${dayConf.day_bn}`,
-              subTitle: dayConf.subject ? `${dayConf.subject} (${dayConf.exam_name})` : dayConf.exam_name,
-              subject: dayConf.subject || ex.subject,
-              batchName: ex.batch?.name || "All Enrolled Batches",
-              branchName: ex.branch?.name,
-              branchId: ex.branch?.id,
-              routineText: `${dayConf.day_bn}ের পরীক্ষা`,
-              totalMarks: dayConf.total_marks || 50,
-              passMarks: dayConf.pass_marks || 20,
-              dayKey: dayConf.key,
-              dayConfig: dayConf,
-            })
-          }
-        }
-
-        // 2. IF WEEKLY RESULTS ARE PUBLISHED: Add the Weekly Consolidated card
+        // 1. IF WEEKLY RESULTS ARE PUBLISHED: Add the Weekly Consolidated card FIRST
         const isWeeklyPub =
           ex.is_weekly_published !== false &&
           (ex.is_weekly_published === true ||
@@ -485,6 +467,29 @@ export default function OnlineResultPortalPage() {
             dayKey: null,
             dayConfig: null,
           })
+        }
+
+        // 2. FOR EACH PUBLISHED DAY: Add a Daily Exam card
+        for (const dayConf of days) {
+          const isDayPub = pubDays.some((p) => p === dayConf.key.toLowerCase() || p === dayConf.day_bn.toLowerCase() || p === dayConf.day_en.toLowerCase())
+          if (isDayPub) {
+            items.push({
+              id: `${ex.id}-day-${dayConf.key}`,
+              parentExam: ex,
+              type: "daily",
+              title: `${ex.title} - ${dayConf.day_bn}`,
+              subTitle: dayConf.subject ? `${dayConf.subject} (${dayConf.exam_name})` : dayConf.exam_name,
+              subject: dayConf.subject || ex.subject,
+              batchName: ex.batch?.name || "All Enrolled Batches",
+              branchName: ex.branch?.name,
+              branchId: ex.branch?.id,
+              routineText: `${dayConf.day_bn}ের পরীক্ষা`,
+              totalMarks: dayConf.total_marks || 50,
+              passMarks: dayConf.pass_marks || 20,
+              dayKey: dayConf.key,
+              dayConfig: dayConf,
+            })
+          }
         }
       }
     }
@@ -1015,7 +1020,7 @@ export default function OnlineResultPortalPage() {
                       className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Trophy className="w-4 h-4 text-amber-200" />
-                      <span>{isDaily ? `${card.dayConfig?.day_bn || "দিন"}ের মেরিট লিস্ট দেখুন` : "সম্পূর্ণ মেরিট লিস্ট দেখুন"}</span>
+                      <span>{isWeekly ? "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন" : isDaily ? `${card.dayConfig?.day_bn || "দিন"}ের মেরিট লিস্ট দেখুন` : "সম্পূর্ণ মেরিট লিস্ট দেখুন"}</span>
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>

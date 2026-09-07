@@ -3,7 +3,7 @@ import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
 import {
-  BookOpen, Users, User, Clock, Calendar, MapPin, Star,
+  BookOpen, Users, User, Clock, Calendar, CalendarDays, MapPin, Star,
   ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, CheckCircle, TrendingUp,
   Shield, Bell, MessageSquare, Send, Loader2, Megaphone, ExternalLink,
   Landmark, Award, Check, ChevronDown, Sparkles, Share2, Eye, FileText, Trophy
@@ -39,6 +39,7 @@ export default function HomePage() {
   const [blogs, setBlogs] = useState<any[]>([])
   const [publicExams, setPublicExams] = useState<any[]>([])
   const [loadingExams, setLoadingExams] = useState(true)
+  const [homepageResultTab, setHomepageResultTab] = useState<"all" | "weekly" | "daily">("all")
 
   // Modal states for full view
   const [activeNoticeModal, setActiveNoticeModal] = useState<any | null>(null)
@@ -431,7 +432,36 @@ export default function HomePage() {
           }
         }
 
-        // Add daily cards for each published day
+        // 1. IF WEEKLY CONSOLIDATED RESULT IS PUBLISHED: Add weekly card FIRST
+        const isWeeklyPub =
+          ex.is_weekly_published !== false &&
+          (ex.is_weekly_published === true ||
+            (ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:true]") ||
+            ex.is_public_result === true ||
+            ex.is_published === true ||
+            !(ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:false]"))
+
+        if (isWeeklyPub) {
+          const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
+          const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
+          cards.push({
+            id: `${ex.id}-weekly`,
+            examId: ex.id,
+            title: ex.title,
+            badgeText: "সাপ্তাহিক সামগ্রিক রেজাল্ট (৭ দিন)",
+            badgeType: "weekly",
+            subject: ex.subject,
+            branchName: ex.branch?.name,
+            batchName: ex.batch?.name,
+            routineText: "শনিবার হতে শুক্রবার (মোট ৭ দিন)",
+            totalMarks: totalMarks,
+            passMarks: passMarks,
+            link: `/online-result?exam_id=${ex.id}`,
+            buttonText: "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন",
+          })
+        }
+
+        // 2. FOR EACH PUBLISHED DAY: Add daily cards
         for (const dayConf of days) {
           const isDayPub = pubDays.some((p) => p === dayConf.key.toLowerCase() || p === dayConf.day_bn.toLowerCase() || p === dayConf.day_en.toLowerCase())
           if (isDayPub) {
@@ -453,40 +483,31 @@ export default function HomePage() {
             })
           }
         }
-
-        // If weekly consolidated result is published, add weekly card
-        const isWeeklyPub =
-          ex.is_weekly_published !== false &&
-          (ex.is_weekly_published === true ||
-            (ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:true]") ||
-            ex.is_public_result === true ||
-            ex.is_published === true ||
-            !(ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:false]"))
-
-        if (isWeeklyPub) {
-          const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
-          const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
-          cards.push({
-            id: `${ex.id}-weekly`,
-            examId: ex.id,
-            title: ex.title,
-            badgeText: "সাপ্তাহিক (৭ দিন)",
-            badgeType: "weekly",
-            subject: ex.subject,
-            branchName: ex.branch?.name,
-            batchName: ex.batch?.name,
-            routineText: "শনিবার হতে শুক্রবার",
-            totalMarks: totalMarks,
-            passMarks: passMarks,
-            link: `/online-result?exam_id=${ex.id}`,
-            buttonText: "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন",
-          })
-        }
       }
     }
 
     return cards
   }, [publicExams, selectedBranchId])
+
+  // Filtered public result cards for homepage results bar
+  const filteredHomepageResultCards = useMemo(() => {
+    if (homepageResultTab === "weekly") {
+      return publicResultCards.filter((c) => c.badgeType === "weekly")
+    }
+    if (homepageResultTab === "daily") {
+      return publicResultCards.filter((c) => c.badgeType === "daily" || c.badgeType === "one_time")
+    }
+    // "all": shows both weekly and daily results
+    return publicResultCards
+  }, [publicResultCards, homepageResultTab])
+
+  const weeklyResultCardsCount = useMemo(() => {
+    return publicResultCards.filter((c) => c.badgeType === "weekly").length
+  }, [publicResultCards])
+
+  const dailyResultCardsCount = useMemo(() => {
+    return publicResultCards.filter((c) => c.badgeType !== "weekly").length
+  }, [publicResultCards])
 
   async function handleFeedbackSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -721,9 +742,21 @@ export default function HomePage() {
             <a href="#batches" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
               ব্যাচসমূহ (Batches)
             </a>
-            <a href="#results" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-amber-300 font-bold transition-colors flex items-center gap-1">
+            <a 
+              href="#results" 
+              onClick={() => setHomepageResultTab("all")}
+              className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-amber-300 font-bold transition-colors flex items-center gap-1"
+            >
               <Trophy className="w-3.5 h-3.5 text-amber-300" />
               <span>পরীক্ষার রেজাল্ট (Results)</span>
+            </a>
+            <a 
+              href="#results" 
+              onClick={() => setHomepageResultTab("weekly")}
+              className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-purple-200 hover:text-purple-100 font-bold transition-colors flex items-center gap-1"
+            >
+              <CalendarDays className="w-3.5 h-3.5 text-purple-300" />
+              <span>সাপ্তাহিক রেজাল্ট (Weekly)</span>
             </a>
             <a href="#courses" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
               কোর্সসমূহ (Courses)
@@ -1072,34 +1105,106 @@ export default function HomePage() {
             </div>
           </div>
 
+          {/* Interactive Results Filter Bar on Homepage */}
+          <div className="bg-white p-2.5 rounded-2xl border border-indigo-100 shadow-xs mb-8 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-1.5 sm:gap-2 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 w-full sm:w-auto overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setHomepageResultTab("all")}
+                className={`px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-extrabold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                  homepageResultTab === "all"
+                    ? "bg-indigo-700 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <Trophy className="w-4 h-4 text-amber-300" />
+                <span>সকল ফলাফল ({publicResultCards.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setHomepageResultTab("weekly")}
+                className={`px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-extrabold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                  homepageResultTab === "weekly"
+                    ? "bg-purple-700 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <CalendarDays className="w-4 h-4 text-purple-300" />
+                <span>সাপ্তাহিক রেজাল্ট ({weeklyResultCardsCount})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setHomepageResultTab("daily")}
+                className={`px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-extrabold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
+                  homepageResultTab === "daily"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <Calendar className="w-4 h-4 text-amber-200" />
+                <span>দৈনিক পরীক্ষা ({dailyResultCardsCount})</span>
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-500 font-medium px-2 hidden md:block">
+              {homepageResultTab === "all" && "সকল সাপ্তাহিক ও দৈনিক পরীক্ষার সমন্বিত মেধা তালিকা"}
+              {homepageResultTab === "weekly" && "৭ দিনের মোট নম্বরের ভিত্তিতে প্রকাশিত সাপ্তাহিক ফলাফল"}
+              {homepageResultTab === "daily" && "প্রতিদিনের বিষয়ভিত্তিক পরীক্ষার ফলাফল ও মেরিট লিস্ট"}
+            </div>
+          </div>
+
           {loadingExams ? (
             <div className="py-12 text-center text-gray-500">
               <Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto mb-2" />
               <p className="text-xs font-semibold">ফলাফল লোড হচ্ছে...</p>
             </div>
-          ) : publicResultCards.length === 0 ? (
+          ) : filteredHomepageResultCards.length === 0 ? (
             <div className="bg-white rounded-3xl border border-dashed border-indigo-200 p-10 text-center text-gray-500 shadow-xs max-w-xl mx-auto space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto">
                 <Trophy className="w-6 h-6" />
               </div>
-              <h4 className="font-bold text-gray-800 text-base">বর্তমানে কোনো নতুন পরীক্ষার রেজাল্ট প্রকাশ হয়নি</h4>
-              <p className="text-xs text-gray-500">পরীক্ষা সম্পন্ন হওয়ার পর শাখাভিত্তিক ফলাফল সরাসরি এখানে এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান হবে।</p>
-              <Link
-                href="/online-result"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 pt-1"
-              >
-                <span>অনলাইন রেজাল্ট আর্কাইভ দেখুন</span> <ChevronRight className="w-3.5 h-3.5" />
-              </Link>
+              <h4 className="font-bold text-gray-800 text-base">
+                {homepageResultTab === "weekly"
+                  ? "বর্তমানে কোনো সাপ্তাহিক পরীক্ষার ফলাফল প্রকাশ হয়নি"
+                  : homepageResultTab === "daily"
+                  ? "বর্তমানে কোনো দৈনিক পরীক্ষার ফলাফল প্রকাশ হয়নি"
+                  : "বর্তমানে কোনো নতুন পরীক্ষার রেজাল্ট প্রকাশ হয়নি"}
+              </h4>
+              <p className="text-xs text-gray-500">
+                পরীক্ষা সম্পন্ন হওয়ার পর শাখাভিত্তিক ফলাফল সরাসরি এখানে এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান হবে।
+              </p>
+              {homepageResultTab !== "all" ? (
+                <button
+                  type="button"
+                  onClick={() => setHomepageResultTab("all")}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 pt-1 cursor-pointer"
+                >
+                  <span>সকল ফলাফল দেখুন</span> <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <Link
+                  href="/online-result"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 pt-1"
+                >
+                  <span>অনলাইন রেজাল্ট আর্কাইভ দেখুন</span> <ChevronRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {publicResultCards.slice(0, 6).map((card) => {
+              {filteredHomepageResultCards.map((card) => {
                 const isWeekly = card.badgeType === "weekly"
 
                 return (
                   <div
                     key={card.id}
-                    className="bg-white rounded-2xl border border-indigo-100/80 hover:border-amber-400/80 shadow-md hover:shadow-xl transition-all p-5 flex flex-col justify-between group relative overflow-hidden"
+                    className={`rounded-2xl border p-5 flex flex-col justify-between group relative overflow-hidden transition-all shadow-md hover:shadow-xl ${
+                      isWeekly
+                        ? "bg-gradient-to-b from-purple-50/50 via-white to-white border-purple-200/90 hover:border-purple-400"
+                        : "bg-white border-indigo-100/80 hover:border-amber-400/80"
+                    }`}
                   >
                     <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-400/10 via-transparent to-transparent pointer-events-none"></div>
 
@@ -1107,8 +1212,8 @@ export default function HomePage() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {isWeekly ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
-                              <Calendar className="w-3 h-3 text-purple-600" />
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-300">
+                              <CalendarDays className="w-3 h-3 text-purple-700" />
                               {card.badgeText}
                             </span>
                           ) : (
@@ -1143,7 +1248,9 @@ export default function HomePage() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100/60 text-xs">
+                      <div className={`grid grid-cols-2 gap-2 p-3 rounded-xl border text-xs ${
+                        isWeekly ? "bg-purple-50/50 border-purple-100" : "bg-indigo-50/50 border-indigo-100/60"
+                      }`}>
                         <div>
                           <span className="text-[10px] text-gray-500 font-medium block">তারিখ / সূচি</span>
                           <span className="font-bold text-gray-800 truncate block">
@@ -1162,7 +1269,11 @@ export default function HomePage() {
                     <div className="pt-4 mt-4 border-t border-gray-100">
                       <Link
                         href={card.link}
-                        className="w-full py-2.5 bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer group-hover:bg-amber-600"
+                        className={`w-full py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                          isWeekly
+                            ? "bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white"
+                            : "bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-amber-600 hover:to-amber-700 text-white"
+                        }`}
                       >
                         <Trophy className="w-4 h-4 text-amber-400" />
                         <span>{card.buttonText}</span>
