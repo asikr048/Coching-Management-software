@@ -8,7 +8,7 @@ import {
   Clock, CheckCircle, AlertCircle, Award, DollarSign, 
   ChevronRight, MapPin, Copy, ShieldCheck, Lock, Save, Loader2, Eye, EyeOff, Pencil,
   X, Hash, Send, CheckCircle2, GraduationCap, Video, PlayCircle, Sparkles, Users,
-  Calendar, Package, Layers, FileText
+  Calendar, Package, Layers, FileText, CalendarDays, Trophy
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -1051,6 +1051,10 @@ export default function StudentProfilePage() {
                   duration_minutes: be.duration_minutes,
                   total_marks: Number(be.total_marks || res?.exam?.total_marks) || 100,
                   pass_marks: Number(be.pass_marks || res?.exam?.pass_marks) || 0,
+                  exam_schedule_type: be.exam_schedule_type || res?.exam?.exam_schedule_type,
+                  recurring_days: be.recurring_days || res?.exam?.recurring_days,
+                  published_days: be.published_days || res?.exam?.published_days,
+                  is_weekly_published: be.is_weekly_published ?? res?.exam?.is_weekly_published,
                   has_result: !!res,
                   result: res || null,
                 })
@@ -1067,6 +1071,10 @@ export default function StudentProfilePage() {
                     duration_minutes: res.exam?.duration_minutes,
                     total_marks: Number(res.exam?.total_marks) || 100,
                     pass_marks: Number(res.exam?.pass_marks) || 0,
+                    exam_schedule_type: res.exam?.exam_schedule_type,
+                    recurring_days: res.exam?.recurring_days,
+                    published_days: res.exam?.published_days,
+                    is_weekly_published: res.exam?.is_weekly_published,
                     has_result: true,
                     result: res,
                   })
@@ -1135,6 +1143,10 @@ export default function StudentProfilePage() {
                         const pct = obtained != null && total > 0 ? Math.round((obtained / total) * 100) : null
                         const passed = obtained != null && obtained >= (exam.pass_marks || 0)
                         const isPublic = r?.exam?.show_all_results !== false && !r?.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')
+                        const isWeekly =
+                          exam.exam_schedule_type === "weekly" ||
+                          (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+                          exam.is_weekly_published === true
 
                         return (
                           <div
@@ -1145,9 +1157,20 @@ export default function StudentProfilePage() {
                                 : "bg-blue-50/40 border-blue-100 hover:border-blue-200"
                             } flex flex-col sm:flex-row sm:items-center justify-between gap-3`}
                           >
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <p className="font-bold text-gray-900">{exam.title || "Exam"}</p>
+                                {isWeekly ? (
+                                  <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded border border-purple-200 flex items-center gap-1">
+                                    <CalendarDays className="w-3 h-3" />
+                                    সাপ্তাহিক মডেল টেস্ট
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">
+                                    <Calendar className="w-3 h-3" />
+                                    এককালীন পরীক্ষা
+                                  </span>
+                                )}
                                 {exam.subject && (
                                   <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
                                     {exam.subject}
@@ -1182,9 +1205,28 @@ export default function StudentProfilePage() {
                                 <span>• Total: {total} marks</span>
                                 {r?.rank && <span className="text-amber-600 font-bold">• Rank #{r.rank}</span>}
                               </div>
+
+                              {/* Day-by-day score breakdown for weekly exams */}
+                              {r?.day_marks && Object.keys(r.day_marks).length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                  {Object.entries(r.day_marks).map(([dKey, dVal]: any) => {
+                                    const mVal = typeof dVal === "object" && dVal !== null ? (dVal.marks ?? 0) : dVal
+                                    const tVal = typeof dVal === "object" && dVal !== null ? (dVal.total ?? "") : ""
+                                    return (
+                                      <span
+                                        key={dKey}
+                                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-800"
+                                      >
+                                        <span className="capitalize">{dKey}:</span>
+                                        <strong className="text-purple-950 font-black">{mVal}{tVal ? `/${tVal}` : ""}</strong>
+                                      </span>
+                                    )
+                                  })}
+                                </div>
+                              )}
                             </div>
 
-                            <div className="flex items-center gap-3 self-end sm:self-center justify-between sm:justify-end w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                            <div className="flex items-center gap-2.5 self-end sm:self-center justify-between sm:justify-end w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-gray-100 flex-wrap">
                               {exam.has_result ? (
                                 <div className="text-right">
                                   <div className="flex items-center justify-end gap-2">
@@ -1214,14 +1256,24 @@ export default function StudentProfilePage() {
                                 </div>
                               )}
 
-                              {exam.batch_id && (
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <Link
-                                  href={`/student/batch/${exam.batch_id}`}
-                                  className="px-3 py-1 bg-white hover:bg-indigo-50 text-indigo-600 font-semibold rounded-xl text-xs border border-indigo-200 transition-colors shadow-xs flex-shrink-0"
+                                  href={`/student/exam/${exam.id}/results`}
+                                  className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs flex items-center gap-1 flex-shrink-0 cursor-pointer"
                                 >
-                                  Batch Page →
+                                  <Trophy className="w-3.5 h-3.5 text-amber-300" />
+                                  <span>ফলাফল ও মেরিট</span>
                                 </Link>
-                              )}
+
+                                {exam.batch_id && (
+                                  <Link
+                                    href={`/student/batch/${exam.batch_id}`}
+                                    className="px-2.5 py-1.5 bg-white hover:bg-indigo-50 text-indigo-600 font-semibold rounded-xl text-xs border border-indigo-200 transition-colors shadow-xs flex-shrink-0"
+                                  >
+                                    ব্যাচ →
+                                  </Link>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )

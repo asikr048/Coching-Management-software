@@ -1257,12 +1257,26 @@ export default function StudentBatchDetailPage() {
                             {/* My Marks (Beside it) */}
                             <td className="px-6 py-4 whitespace-nowrap">
                               {item.has_result ? (
-                                <div className="flex items-baseline gap-1">
-                                  <span className="font-extrabold text-slate-900 text-base">{obtained}</span>
-                                  <span className="text-slate-400 text-xs font-medium"> / {totalMarks}</span>
-                                  <span className={`ml-2 text-xs font-bold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                    ({percentage}%)
-                                  </span>
+                                <div>
+                                  <div className="flex items-baseline gap-1">
+                                    <span className="font-extrabold text-slate-900 text-base">{obtained}</span>
+                                    <span className="text-slate-400 text-xs font-medium"> / {totalMarks}</span>
+                                    <span className={`ml-2 text-xs font-bold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      ({percentage}%)
+                                    </span>
+                                  </div>
+                                  {item.day_marks && Object.keys(item.day_marks).length > 0 && (
+                                    <div className="flex items-center gap-1 flex-wrap mt-1">
+                                      {Object.entries(item.day_marks).map(([dKey, dVal]: any) => {
+                                        const mVal = typeof dVal === "object" && dVal !== null ? (dVal.marks ?? 0) : dVal
+                                        return (
+                                          <span key={dKey} className="text-[10px] px-1.5 py-0.2 rounded bg-purple-50 border border-purple-200 text-purple-800 font-semibold">
+                                            {dKey}: <strong>{mVal}</strong>
+                                          </span>
+                                        )
+                                      })}
+                                    </div>
+                                  )}
                                 </div>
                               ) : (
                                 <span className="text-xs text-slate-400 font-medium italic">
@@ -1787,6 +1801,18 @@ export default function StudentBatchDetailPage() {
                                   </span>
                                 )}
                               </div>
+                              {r.day_marks && Object.keys(r.day_marks).length > 0 && (
+                                <div className="flex items-center gap-1 flex-wrap mt-1">
+                                  {Object.entries(r.day_marks).map(([dKey, dVal]: any) => {
+                                    const mVal = typeof dVal === "object" && dVal !== null ? (dVal.marks ?? 0) : dVal
+                                    return (
+                                      <span key={dKey} className="text-[10px] px-1.5 py-0.2 rounded bg-purple-50 border border-purple-200 text-purple-800 font-semibold">
+                                        {dKey}: <strong>{mVal}</strong>
+                                      </span>
+                                    )
+                                  })}
+                                </div>
+                              )}
                             </td>
                             <td className="px-4 py-3 font-mono text-xs text-gray-500">
                               {r.student?.student_id || "-"}

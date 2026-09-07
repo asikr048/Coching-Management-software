@@ -212,7 +212,7 @@ export async function GET(req: NextRequest) {
       studentDbIdArray.length > 0
         ? admin
             .from("exam_results")
-            .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, show_all_results, result_note)")
+            .select("*, exam:exams(*)")
             .in("student_id", studentDbIdArray)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] }),
@@ -347,7 +347,67 @@ export async function GET(req: NextRequest) {
     examResults = examResults.map((r: any) => {
       const raw = r.obtained_marks ?? r.marks_obtained
       const obt = raw != null && raw !== "" ? Number(raw) : 0
-      return { ...r, obtained_marks: obt, marks_obtained: obt }
+
+      // Extract fallback day marks from exam.result_note if needed
+      let sDayMarks = r.day_marks
+      if (
+        (!sDayMarks || typeof sDayMarks !== "object" || Object.keys(sDayMarks).length === 0) &&
+        r.exam?.result_note?.includes("[STUDENT_DAY_MARKS:")
+      ) {
+        try {
+          const match = r.exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+          if (match && match[1]) {
+            const parsed = JSON.parse(match[1])
+            if (parsed[r.student_id]) {
+              sDayMarks = parsed[r.student_id]
+            }
+          }
+        } catch {}
+      }
+
+      // Normalize exam inside result
+      let normalizedExam = r.exam
+      if (normalizedExam) {
+        const note = normalizedExam.result_note || ""
+        let recDays = normalizedExam.recurring_days
+        if ((!recDays || (Array.isArray(recDays) && recDays.length === 0)) && note.includes("[RECURRING_DAYS:")) {
+          try {
+            const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+            if (match && match[1]) recDays = JSON.parse(match[1])
+          } catch {}
+        }
+        const isWeeklyPub = normalizedExam.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
+        const isPubRes = normalizedExam.is_public_result === true || note.includes("[PUBLIC_RESULT:true]") || isWeeklyPub
+        let pubDays = normalizedExam.published_days || []
+        if (note.includes("[PUBLISHED_DAYS:")) {
+          try {
+            const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+            if (match && match[1]) pubDays = match[1].split(",").filter(Boolean)
+          } catch {}
+        }
+        normalizedExam = {
+          ...normalizedExam,
+          recurring_days: recDays,
+          is_weekly_published: isWeeklyPub,
+          is_public_result: isPubRes,
+          published_days: pubDays,
+          is_published: normalizedExam.is_published === true || isWeeklyPub || isPubRes || pubDays.length > 0,
+          exam_schedule_type:
+            normalizedExam.exam_schedule_type === "weekly" ||
+            (Array.isArray(recDays) && recDays.length > 0) ||
+            isWeeklyPub
+              ? "weekly"
+              : normalizedExam.exam_schedule_type || "one_time",
+        }
+      }
+
+      return {
+        ...r,
+        obtained_marks: obt,
+        marks_obtained: obt,
+        day_marks: sDayMarks || {},
+        exam: normalizedExam,
+      }
     })
 
     // Dynamic Rank Computation
@@ -401,6 +461,7 @@ export async function GET(req: NextRequest) {
       ...(primaryStudent?.batch_id ? [primaryStudent.batch_id] : []),
       ...subResults.flatMap((sr: any) => sr.data || []).filter((s: any) => s.batch_id).map((s: any) => s.batch_id),
     ]))
+    const studentBatchIdSet = new Set(studentEnrolledBatchIds.map(String))
     let batchExams: any[] = []
     let batchMaterials: any[] = []
     let materialIssues: any[] = []
@@ -412,8 +473,7 @@ export async function GET(req: NextRequest) {
         studentEnrolledBatchIds.length > 0
           ? admin
               .from("exams")
-              .select("id, title, total_marks, pass_marks, exam_date, duration_minutes, subject, batch_id, is_online, show_all_results, result_note, is_published, created_at, teacher:staff(name)")
-              .in("batch_id", studentEnrolledBatchIds)
+              .select("*, teacher:staff(name)")
               .order("exam_date", { ascending: false })
           : Promise.resolve({ data: [] }),
         admin
@@ -429,7 +489,59 @@ export async function GET(req: NextRequest) {
             : Promise.resolve({ data: [] })
       ])
 
-      if (bExamsRes.data) batchExams = bExamsRes.data
+      if (bExamsRes.data) {
+        const rawExams = bExamsRes.data || []
+        batchExams = rawExams
+          .filter((ex: any) => {
+            if (ex.batch_id && studentBatchIdSet.has(String(ex.batch_id))) return true
+            if (ex.batch_ids) {
+              if (Array.isArray(ex.batch_ids)) {
+                if (ex.batch_ids.some((bid: any) => studentBatchIdSet.has(String(bid)))) return true
+              } else if (typeof ex.batch_ids === "string") {
+                try {
+                  const parsed = JSON.parse(ex.batch_ids)
+                  if (Array.isArray(parsed) && parsed.some((bid: any) => studentBatchIdSet.has(String(bid)))) return true
+                } catch {
+                  if (Array.from(studentBatchIdSet).some((bid) => ex.batch_ids.includes(bid))) return true
+                }
+              }
+            }
+            return false
+          })
+          .map((ex: any) => {
+            const note = ex.result_note || ""
+            let recDays = ex.recurring_days
+            if ((!recDays || (Array.isArray(recDays) && recDays.length === 0)) && note.includes("[RECURRING_DAYS:")) {
+              try {
+                const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+                if (match && match[1]) recDays = JSON.parse(match[1])
+              } catch {}
+            }
+            const isWeeklyPub = ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
+            const isPubRes = ex.is_public_result === true || note.includes("[PUBLIC_RESULT:true]") || isWeeklyPub
+            let pubDays = ex.published_days || []
+            if (note.includes("[PUBLISHED_DAYS:")) {
+              try {
+                const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+                if (match && match[1]) pubDays = match[1].split(",").filter(Boolean)
+              } catch {}
+            }
+            return {
+              ...ex,
+              recurring_days: recDays,
+              is_weekly_published: isWeeklyPub,
+              is_public_result: isPubRes,
+              published_days: pubDays,
+              is_published: ex.is_published === true || isWeeklyPub || isPubRes || pubDays.length > 0,
+              exam_schedule_type:
+                ex.exam_schedule_type === "weekly" ||
+                (Array.isArray(recDays) && recDays.length > 0) ||
+                isWeeklyPub
+                  ? "weekly"
+                  : ex.exam_schedule_type || "one_time",
+            }
+          })
+      }
       if (mIssRes.data) materialIssues = mIssRes.data
 
       const rawMats = bMatsRes.data || []

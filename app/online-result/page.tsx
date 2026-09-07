@@ -32,8 +32,10 @@ interface PublicExam {
   total_marks: number
   pass_marks?: number
   exam_date?: string
-  exam_schedule_type?: "one_time" | "weekly"
-  recurring_days?: string[] | null
+  exam_schedule_type?: "one_time" | "weekly" | string
+  recurring_days?: any[] | null
+  published_days?: string[] | null
+  is_weekly_published?: boolean
   is_paused?: boolean
   is_public_result?: boolean
   is_published?: boolean
@@ -51,6 +53,7 @@ interface StudentRank {
   obtained_marks: number
   grade?: string
   rank: number
+  day_marks?: Record<string, any>
 }
 
 export default function OnlineResultPortalPage() {
@@ -58,8 +61,8 @@ export default function OnlineResultPortalPage() {
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   
-  // Filters
-  const [activeTab, setActiveTab] = useState<"all" | "everyday" | "weekly">("everyday")
+  // Filters: default to "all" so published weekly and daily exams are immediately visible
+  const [activeTab, setActiveTab] = useState<"all" | "everyday" | "weekly">("all")
   const [selectedBranch, setSelectedBranch] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -71,21 +74,25 @@ export default function OnlineResultPortalPage() {
 
   useEffect(() => {
     async function loadData() {
-      const supabase = createClient()
       try {
-        // 1. Load branches
-        const { data: bList } = await supabase.from("branches").select("id, name").eq("is_active", true)
-        if (bList) setBranches(bList)
+        const res = await fetch("/api/online-results")
+        const json = await res.json()
+        if (json.success) {
+          if (json.branches) setBranches(json.branches)
+          if (json.exams) setExams(json.exams)
+        } else {
+          // Fallback to client supabase if api error
+          const supabase = createClient()
+          const { data: bList } = await supabase.from("branches").select("id, name").eq("is_active", true)
+          if (bList) setBranches(bList)
 
-        // 2. Load exams where is_public_result is true OR is_published is true
-        const { data: exList } = await supabase
-          .from("exams")
-          .select("*, branch:branches(id, name), batch:batches(id, name)")
-          .or("is_public_result.eq.true,is_published.eq.true")
-          .order("exam_date", { ascending: false })
+          const { data: exList } = await supabase
+            .from("exams")
+            .select("*, branch:branches(id, name), batch:batches(id, name)")
+            .or("is_public_result.eq.true,is_published.eq.true")
+            .order("exam_date", { ascending: false })
 
-        if (exList) {
-          setExams(exList)
+          if (exList) setExams(exList)
         }
       } catch (err) {
         console.error("Error loading public online results:", err)
@@ -103,31 +110,39 @@ export default function OnlineResultPortalPage() {
     setStudentSearchInModal("")
     setExamResults([])
 
-    const supabase = createClient()
     try {
-      const { data: results } = await supabase
-        .from("exam_results")
-        .select("*, student:students(id, name, student_id)")
-        .eq("exam_id", exam.id)
-        .order("obtained_marks", { ascending: false })
+      const res = await fetch(`/api/online-results?exam_id=${exam.id}`)
+      const json = await res.json()
+      if (json.success && json.results) {
+        setExamResults(json.results)
+      } else {
+        // Fallback
+        const supabase = createClient()
+        const { data: results } = await supabase
+          .from("exam_results")
+          .select("*, student:students(id, name, student_id)")
+          .eq("exam_id", exam.id)
+          .order("obtained_marks", { ascending: false })
 
-      if (results && results.length > 0) {
-        let curRank = 1
-        const list: StudentRank[] = results.map((r, i) => {
-          if (i > 0 && Number(r.obtained_marks) < Number(results[i - 1].obtained_marks)) {
-            curRank = i + 1
-          }
-          return {
-            id: r.id,
-            student_id: r.student?.id || r.student_id,
-            student_name: r.student?.name || "Student",
-            roll: r.student?.student_id || "N/A",
-            obtained_marks: Number(r.obtained_marks || 0),
-            grade: r.grade || "",
-            rank: r.rank || curRank,
-          }
-        })
-        setExamResults(list)
+        if (results && results.length > 0) {
+          let curRank = 1
+          const list: StudentRank[] = results.map((r, i) => {
+            if (i > 0 && Number(r.obtained_marks) < Number(results[i - 1].obtained_marks)) {
+              curRank = i + 1
+            }
+            return {
+              id: r.id,
+              student_id: r.student?.id || r.student_id,
+              student_name: r.student?.name || "Student",
+              roll: r.student?.student_id || "N/A",
+              obtained_marks: Number(r.obtained_marks || 0),
+              grade: r.grade || "",
+              rank: r.rank || curRank,
+              day_marks: r.day_marks || {},
+            }
+          })
+          setExamResults(list)
+        }
       }
     } catch (err) {
       console.error("Error fetching exam results:", err)
@@ -139,7 +154,11 @@ export default function OnlineResultPortalPage() {
   // Filter exams by tab, branch, and search
   const filteredExams = useMemo(() => {
     return exams.filter((ex) => {
-      const isWeekly = ex.exam_schedule_type === "weekly" || (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0)
+      const isWeekly =
+        ex.exam_schedule_type === "weekly" ||
+        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
+        ex.is_weekly_published === true
+
       if (activeTab === "everyday" && isWeekly) return false
       if (activeTab === "weekly" && !isWeekly) return false
 
@@ -251,15 +270,15 @@ export default function OnlineResultPortalPage() {
           {/* Main Merit List Tabs */}
           <div className="flex p-1 bg-slate-100 rounded-xl border border-slate-200 overflow-x-auto">
             <button
-              onClick={() => setActiveTab("everyday")}
+              onClick={() => setActiveTab("all")}
               className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 ${
-                activeTab === "everyday"
-                  ? "bg-amber-500 text-white shadow-xs"
+                activeTab === "all"
+                  ? "bg-indigo-700 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
               }`}
             >
-              <Calendar className="w-4 h-4" />
-              <span>দৈনিক পরীক্ষার মেরিট লিস্ট (Everyday)</span>
+              <Trophy className="w-4 h-4" />
+              <span>সকল পরীক্ষা ({exams.length})</span>
             </button>
             <button
               onClick={() => setActiveTab("weekly")}
@@ -273,14 +292,15 @@ export default function OnlineResultPortalPage() {
               <span>সাপ্তাহিক পরীক্ষার মেরিট লিস্ট (Weekly)</span>
             </button>
             <button
-              onClick={() => setActiveTab("all")}
+              onClick={() => setActiveTab("everyday")}
               className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 ${
-                activeTab === "all"
-                  ? "bg-indigo-700 text-white shadow-xs"
+                activeTab === "everyday"
+                  ? "bg-amber-500 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
               }`}
             >
-              <span>সকল পরীক্ষা ({exams.length})</span>
+              <Calendar className="w-4 h-4" />
+              <span>দৈনিক পরীক্ষার মেরিট লিস্ট (Everyday)</span>
             </button>
           </div>
 
@@ -547,7 +567,26 @@ export default function OnlineResultPortalPage() {
                                 {r.rank}
                               </span>
                             </td>
-                            <td className="px-4 py-3 font-bold text-slate-900">{r.student_name}</td>
+                            <td className="px-4 py-3 font-bold text-slate-900">
+                              <div>{r.student_name}</div>
+                              {r.day_marks && Object.keys(r.day_marks).length > 0 && (
+                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                  {Object.entries(r.day_marks).map(([dKey, dVal]: any) => {
+                                    const mVal = typeof dVal === "object" && dVal !== null ? (dVal.marks ?? 0) : dVal
+                                    const tVal = typeof dVal === "object" && dVal !== null ? (dVal.total ?? "") : ""
+                                    return (
+                                      <span
+                                        key={dKey}
+                                        className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-100 border border-slate-200 text-slate-700"
+                                      >
+                                        <span className="capitalize">{dKey}:</span>
+                                        <strong className="text-indigo-700">{mVal}{tVal ? `/${tVal}` : ""}</strong>
+                                      </span>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-slate-600 font-mono font-medium">{r.roll}</td>
                             <td className="px-4 py-3 text-center font-black text-amber-700 text-sm">
                               {r.obtained_marks} / {selectedExam.total_marks}

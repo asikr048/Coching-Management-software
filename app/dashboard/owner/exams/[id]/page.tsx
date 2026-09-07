@@ -1007,6 +1007,9 @@ export default function ExamResultsPage() {
       ? publishedDays.filter((d) => d.toLowerCase() !== dayKey.toLowerCase())
       : [...publishedDays, dayKey.toLowerCase()]
 
+    const shouldBePublic = nextPubDays.length > 0 || isWeeklyPublished
+    const shouldBePublished = nextPubDays.length > 0 || isWeeklyPublished
+
     setPublishingExam(true)
     try {
       const res = await fetch(`/api/exams/${params.id}`, {
@@ -1014,24 +1017,35 @@ export default function ExamResultsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           published_days: nextPubDays,
-          is_published: nextPubDays.length > 0
+          is_published: shouldBePublished,
+          is_public_result: shouldBePublic
         }),
       })
 
       if (!res.ok) {
         const updatedNote = (exam.result_note || "")
           .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
-          .trim() + ` [PUBLISHED_DAYS:${nextPubDays.join(",")}]`
-        await supabase.from("exams").update({ result_note: updatedNote, is_published: nextPubDays.length > 0 }).eq("id", params.id)
+          .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
+          .trim() + ` [PUBLISHED_DAYS:${nextPubDays.join(",")}] [PUBLIC_RESULT:${shouldBePublic}]`
+        await supabase.from("exams").update({ 
+          result_note: updatedNote, 
+          is_published: shouldBePublished,
+          is_public_result: shouldBePublic
+        }).eq("id", params.id)
       }
 
       setPublishedDays(nextPubDays)
-      setExam((prev: any) => ({ ...prev, published_days: nextPubDays, is_published: nextPubDays.length > 0 }))
+      setExam((prev: any) => ({ 
+        ...prev, 
+        published_days: nextPubDays, 
+        is_published: shouldBePublished,
+        is_public_result: shouldBePublic
+      }))
       const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey.toLowerCase())
       const dayName = matched?.bn || dayKey
       toast.success(
         !isCurrentlyPub
-          ? `✓ ${dayName}ের ফলাফল শিক্ষার্থীদের জন্য প্রকাশিত হয়েছে!`
+          ? `✓ ${dayName}ের ফলাফল শিক্ষার্থীদের জন্য ও অনলাইন রেজাল্টে প্রকাশিত হয়েছে!`
           : `${dayName}ের ফলাফল ড্রাফট করা হয়েছে।`
       )
     } catch (err: any) {
@@ -1044,28 +1058,41 @@ export default function ExamResultsPage() {
   // Publish / Unpublish Consolidated Weekly Result
   async function handleTogglePublishWeekly(nextVal: boolean) {
     setPublishingExam(true)
+    const isPub = nextVal || publishedDays.length > 0
     try {
       const res = await fetch(`/api/exams/${params.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           is_weekly_published: nextVal,
-          is_published: nextVal || publishedDays.length > 0
+          is_published: isPub,
+          is_public_result: nextVal
         }),
       })
 
       if (!res.ok) {
         const updatedNote = (exam.result_note || "")
           .replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "")
-          .trim() + ` [IS_WEEKLY_PUBLISHED:${nextVal}]`
-        await supabase.from("exams").update({ result_note: updatedNote }).eq("id", params.id)
+          .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
+          .trim() + ` [IS_WEEKLY_PUBLISHED:${nextVal}] [PUBLIC_RESULT:${nextVal}]`
+        await supabase.from("exams").update({ 
+          result_note: updatedNote,
+          is_weekly_published: nextVal,
+          is_published: isPub,
+          is_public_result: nextVal
+        }).eq("id", params.id)
       }
 
       setIsWeeklyPublished(nextVal)
-      setExam((prev: any) => ({ ...prev, is_weekly_published: nextVal }))
+      setExam((prev: any) => ({ 
+        ...prev, 
+        is_weekly_published: nextVal, 
+        is_published: isPub,
+        is_public_result: nextVal
+      }))
       toast.success(
         nextVal
-          ? "✓ সামগ্রিক সাপ্তাহিক ফলাফল সফলভাবে প্রকাশিত হয়েছে!"
+          ? "✓ সামগ্রিক সাপ্তাহিক ফলাফল সফলভাবে প্রকাশিত হয়েছে! হোমপেজ এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান।"
           : "সাপ্তাহিক সামগ্রিক ফলাফল ড্রাফট করা হয়েছে।"
       )
     } catch (err: any) {
@@ -1082,13 +1109,31 @@ export default function ExamResultsPage() {
       const res = await fetch(`/api/exams/${params.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_published: nextPublished }),
+        body: JSON.stringify({ 
+          is_published: nextPublished,
+          is_public_result: nextPublished
+        }),
       })
       if (!res.ok) {
-        await supabase.from("exams").update({ is_published: nextPublished }).eq("id", params.id)
+        const updatedNote = (exam?.result_note || "")
+          .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
+          .trim() + ` [PUBLIC_RESULT:${nextPublished}]`
+        await supabase.from("exams").update({ 
+          is_published: nextPublished,
+          is_public_result: nextPublished,
+          result_note: updatedNote
+        }).eq("id", params.id)
       }
-      setExam((prev: any) => ({ ...prev, is_published: nextPublished }))
-      toast.success(nextPublished ? "✓ ফলাফল শিক্ষার্থীদের জন্য প্রকাশিত হয়েছে!" : "ফলাফল ড্রাফট করা হয়েছে।")
+      setExam((prev: any) => ({ 
+        ...prev, 
+        is_published: nextPublished,
+        is_public_result: nextPublished
+      }))
+      toast.success(
+        nextPublished 
+          ? "✓ ফলাফল শিক্ষার্থীদের জন্য ও অনলাইন রেজাল্ট পোর্টালে প্রকাশিত হয়েছে!" 
+          : "ফলাফল ড্রাফট করা হয়েছে।"
+      )
     } catch (err: any) {
       toast.error(err.message || "Failed to update publish status")
     } finally {

@@ -81,6 +81,19 @@ export async function PATCH(
       updatedNote = updatedNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [IS_WEEKLY_PUBLISHED:${body.is_weekly_published}]`.trim()
     }
+    // If weekly or day results are published, automatically publish public results unless explicitly set to false
+    if (
+      body.is_weekly_published === true ||
+      (Array.isArray(body.published_days) && body.published_days.length > 0) ||
+      body.is_published === true
+    ) {
+      if (body.is_public_result !== false) {
+        payload.is_public_result = true
+        payload.is_published = true
+        updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
+        updatedNote = `${updatedNote} [PUBLIC_RESULT:true]`.trim()
+      }
+    }
     payload.result_note = updatedNote
 
     // Attempt update with column fallback
