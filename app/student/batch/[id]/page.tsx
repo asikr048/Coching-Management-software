@@ -42,7 +42,151 @@ import {
   PlayCircle,
   Sparkles,
   CalendarDays,
+  ExternalLink,
+  Award,
+  ChevronRight,
 } from 'lucide-react'
+
+export const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+export function parseWeeklyDays(exam: any): any[] {
+  if (!exam) return []
+  const isWeekly =
+    exam.exam_schedule_type === "weekly" ||
+    (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+    exam.is_weekly_published === true ||
+    Boolean(exam.title?.includes("সাপ্তাহিক"))
+
+  const dayConfigMap: Record<string, any> = {}
+
+  if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+    for (const item of exam.recurring_days) {
+      const isObj = typeof item === "object" && item !== null
+      const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
+      const dayKey = String(rawKey).toLowerCase()
+      const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+      const canonicalKey = matched?.id || dayKey
+      const bnName = matched?.bn || (isObj ? item.day_bn : rawKey)
+      const enName = matched?.en || (isObj ? item.day_en : rawKey)
+      dayConfigMap[canonicalKey] = {
+        key: canonicalKey,
+        day_bn: bnName,
+        day_en: enName,
+        exam_name: isObj && item.exam_name ? item.exam_name : `${bnName}ের পরীক্ষা`,
+        subject: isObj && item.subject ? item.subject : exam.subject || "",
+        total_marks: isObj && item.total_marks ? Number(item.total_marks) : 50,
+        pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : 20,
+      }
+    }
+  }
+
+  const note = exam.result_note || ""
+  if (note.includes("[WEEKLY_SCHEDULE:")) {
+    try {
+      const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+      if (match && match[1]) {
+        const parsed = JSON.parse(match[1])
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          for (const item of parsed) {
+            const rawKey = item.day || item.day_bn || item.day_en || ""
+            const dayKey = String(rawKey).toLowerCase()
+            const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+            const canonicalKey = matched?.id || dayKey
+            if (!dayConfigMap[canonicalKey]) {
+              dayConfigMap[canonicalKey] = {
+                key: canonicalKey,
+                day_bn: matched?.bn || item.day_bn || item.day,
+                day_en: matched?.en || item.day_en || item.day,
+                exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+                subject: item.subject || exam.subject || "",
+                total_marks: Number(item.total_marks) || 50,
+                pass_marks: Number(item.pass_marks) || 20,
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const foundDaysInTitle = ALL_WEEK_DAYS.filter(
+    (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
+  )
+  if (foundDaysInTitle.length > 0) {
+    const subjectList = (exam.subject || "")
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean)
+
+    foundDaysInTitle.forEach((d, idx) => {
+      if (!dayConfigMap[d.id]) {
+        const assignedSubj = subjectList[idx] || exam.subject || ""
+        dayConfigMap[d.id] = {
+          key: d.id,
+          day_bn: d.bn,
+          day_en: d.en,
+          exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
+          subject: assignedSubj,
+          total_marks: 50,
+          pass_marks: 20,
+        }
+      }
+    })
+  }
+
+  if (isWeekly) {
+    return ALL_WEEK_DAYS.map((w) => {
+      if (dayConfigMap[w.id]) {
+        return dayConfigMap[w.id]
+      }
+      return {
+        key: w.id,
+        day_bn: w.bn,
+        day_en: w.en,
+        exam_name: `${w.bn}ের পরীক্ষা`,
+        subject: exam.subject || "",
+        total_marks: 50,
+        pass_marks: 20,
+      }
+    })
+  }
+  return []
+}
+
+export function getExamMarksConfig(exam: any) {
+  const isWeekly =
+    exam?.exam_schedule_type === "weekly" ||
+    (Array.isArray(exam?.recurring_days) && exam?.recurring_days.length > 0) ||
+    exam?.is_weekly_published === true ||
+    Boolean(exam?.title?.includes("সাপ্তাহিক"))
+
+  if (isWeekly) {
+    const days = parseWeeklyDays(exam)
+    const sumTotal = days.reduce((acc, d) => acc + (Number(d.total_marks) || 50), 0)
+    const sumPass = days.reduce((acc, d) => acc + (Number(d.pass_marks) || 20), 0)
+    return {
+      isWeekly: true,
+      totalMarks: sumTotal > 0 ? sumTotal : 350,
+      passMarks: sumPass > 0 ? sumPass : 140,
+      days,
+    }
+  }
+
+  return {
+    isWeekly: false,
+    totalMarks: Number(exam?.total_marks) || 100,
+    passMarks: Number(exam?.pass_marks) || 33,
+    days: [],
+  }
+}
 
 const materialTypeBadge: Record<string, { label: string; icon: any; color: string; bg: string; border: string }> = {
   sheet: { label: "Lecture Sheet", icon: FileText, color: "text-blue-700", bg: "bg-blue-50", border: "border-blue-200" },
@@ -73,6 +217,7 @@ export default function StudentBatchDetailPage() {
   const [allExams, setAllExams] = useState<any[]>([])
   const [allBatchMaterials, setAllBatchMaterials] = useState<any[]>([])
   const [examFilter, setExamFilter] = useState<'all' | 'upcoming' | 'completed'>('all')
+  const [examSubTab, setExamSubTab] = useState<'schedule' | 'results'>('results')
   const [materialFilter, setMaterialFilter] = useState<'all' | 'received' | 'pending'>('all')
 
   // Pay Due modal state
@@ -93,12 +238,20 @@ export default function StudentBatchDetailPage() {
   const [leaderboardError, setLeaderboardError] = useState<string | null>(null)
 
   async function handleOpenLeaderboard(exam: any) {
-    setSelectedLeaderboardExam(exam)
+    const marksConfig = getExamMarksConfig(exam)
+    const examId = exam?.id || exam?.exam_id
+    setSelectedLeaderboardExam({
+      ...exam,
+      id: examId,
+      total_marks: marksConfig.totalMarks,
+      pass_marks: marksConfig.passMarks,
+      is_weekly: marksConfig.isWeekly,
+      recurring_days: marksConfig.days.length > 0 ? marksConfig.days : exam?.recurring_days,
+    })
     setLeaderboardLoading(true)
     setLeaderboardError(null)
     setLeaderboardResults([])
     try {
-      const examId = exam?.id || exam?.exam_id
       const res = await fetch(`/api/exams/${examId}/results`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Failed to load leaderboard")
@@ -348,39 +501,94 @@ export default function StudentBatchDetailPage() {
         rawBatchExams.forEach((ex: any) => {
           seenExamIds.add(ex.id)
           const matched = resultMap.get(ex.id)
-          const total = Number(ex.total_marks) || 100
-          const pass = Number(ex.pass_marks) || 33
+          const marksConfig = getExamMarksConfig(ex)
+          const total = marksConfig.totalMarks
+          const pass = marksConfig.passMarks
 
           if (matched) {
+            let studentDayMarks = matched.day_marks || null
+            if (!studentDayMarks && ex.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+              try {
+                const match = ex.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+                if (match && match[1]) {
+                  const parsed = JSON.parse(match[1])
+                  if (studentId && parsed[studentId]) {
+                    studentDayMarks = parsed[studentId]
+                  }
+                }
+              } catch {}
+            }
+
             const raw = matched.obtained_marks ?? matched.marks_obtained
-            const obt = raw != null && raw !== "" ? Number(raw) : 0
+            let obt = raw != null && raw !== "" ? Number(raw) : 0
+
+            if (marksConfig.isWeekly && studentDayMarks && typeof studentDayMarks === 'object') {
+              let dSum = 0
+              for (const v of Object.values(studentDayMarks)) {
+                const m = typeof v === 'object' && v !== null ? Number((v as any).marks) : Number(v)
+                if (!isNaN(m)) dSum += m
+              }
+              if (dSum > 0 && (obt === 0 || dSum > obt)) {
+                obt = dSum
+              }
+            }
+
+            const pct = total > 0 ? (obt / total) * 100 : 0
+            let autoGrade = matched.grade
+            if (!autoGrade || autoGrade === 'Pass' || autoGrade === 'Fail') {
+              if (pct >= 80) autoGrade = 'A+'
+              else if (pct >= 70) autoGrade = 'A'
+              else if (pct >= 60) autoGrade = 'A-'
+              else if (pct >= 50) autoGrade = 'B'
+              else if (pct >= 40) autoGrade = 'C'
+              else if (pct >= 33) autoGrade = 'D'
+              else autoGrade = 'F'
+            }
+
             combinedExams.push({
               id: matched.id || `exam-${ex.id}`,
               exam_id: ex.id,
-              exam: { ...ex, ...matched.exam },
+              exam: {
+                ...ex,
+                ...matched.exam,
+                total_marks: total,
+                pass_marks: pass,
+                recurring_days: marksConfig.days.length > 0 ? marksConfig.days : ex.recurring_days,
+              },
               has_result: true,
               obtained_marks: obt,
               marks_obtained: obt,
-              grade: matched.grade || (obt >= pass ? 'Pass' : 'Fail'),
-              rank: matched.rank || null,
+              grade: autoGrade,
+              rank: matched.rank || 1,
+              day_marks: studentDayMarks,
               exam_date: ex.exam_date || matched.exam?.exam_date,
               status: 'completed',
               is_public: ex.show_all_results !== false && !ex.result_note?.includes('[SHOW_ALL_RESULTS:false]'),
+              is_weekly: marksConfig.isWeekly,
+              weekly_days: marksConfig.days,
             })
           } else {
-            const isUpcoming = !ex.exam_date || new Date(ex.exam_date) >= new Date(new Date().setHours(0,0,0,0))
+            const isUpcoming = !ex.exam_date || new Date(ex.exam_date) >= new Date(new Date().setHours(0,0,0,0)) || marksConfig.isWeekly
             combinedExams.push({
               id: `sched-${ex.id}`,
               exam_id: ex.id,
-              exam: ex,
+              exam: {
+                ...ex,
+                total_marks: total,
+                pass_marks: pass,
+                recurring_days: marksConfig.days.length > 0 ? marksConfig.days : ex.recurring_days,
+              },
               has_result: false,
               obtained_marks: null,
               marks_obtained: null,
               grade: null,
               rank: null,
+              day_marks: null,
               exam_date: ex.exam_date,
               status: isUpcoming ? 'upcoming' : 'pending_result',
               is_public: false,
+              is_weekly: marksConfig.isWeekly,
+              weekly_days: marksConfig.days,
             })
           }
         })
@@ -389,21 +597,56 @@ export default function StudentBatchDetailPage() {
         mergedExams.forEach((r: any) => {
           const eId = r.exam_id || r.exam?.id
           if (eId && !seenExamIds.has(eId)) {
+            const marksConfig = getExamMarksConfig(r.exam || { id: eId, title: 'Exam' })
+            const total = marksConfig.totalMarks
+            const pass = marksConfig.passMarks
             const raw = r.obtained_marks ?? r.marks_obtained
-            const obt = raw != null && raw !== "" ? Number(raw) : 0
-            const pass = Number(r.exam?.pass_marks) || 33
+            let obt = raw != null && raw !== "" ? Number(raw) : 0
+
+            let studentDayMarks = r.day_marks || null
+            if (marksConfig.isWeekly && studentDayMarks && typeof studentDayMarks === 'object') {
+              let dSum = 0
+              for (const v of Object.values(studentDayMarks)) {
+                const m = typeof v === 'object' && v !== null ? Number((v as any).marks) : Number(v)
+                if (!isNaN(m)) dSum += m
+              }
+              if (dSum > 0 && (obt === 0 || dSum > obt)) {
+                obt = dSum
+              }
+            }
+
+            const pct = total > 0 ? (obt / total) * 100 : 0
+            let autoGrade = r.grade
+            if (!autoGrade || autoGrade === 'Pass' || autoGrade === 'Fail') {
+              if (pct >= 80) autoGrade = 'A+'
+              else if (pct >= 70) autoGrade = 'A'
+              else if (pct >= 60) autoGrade = 'A-'
+              else if (pct >= 50) autoGrade = 'B'
+              else if (pct >= 40) autoGrade = 'C'
+              else if (pct >= 33) autoGrade = 'D'
+              else autoGrade = 'F'
+            }
+
             combinedExams.push({
               id: r.id || `res-${eId}`,
               exam_id: eId,
-              exam: r.exam || { id: eId, title: 'Exam', total_marks: 100 },
+              exam: {
+                ...(r.exam || { id: eId, title: 'Exam', total_marks: 100 }),
+                total_marks: total,
+                pass_marks: pass,
+                recurring_days: marksConfig.days.length > 0 ? marksConfig.days : r.exam?.recurring_days,
+              },
               has_result: true,
               obtained_marks: obt,
               marks_obtained: obt,
-              grade: r.grade || (obt >= pass ? 'Pass' : 'Fail'),
-              rank: r.rank || null,
+              grade: autoGrade,
+              rank: r.rank || 1,
+              day_marks: studentDayMarks,
               exam_date: r.exam?.exam_date,
               status: 'completed',
               is_public: r.exam?.show_all_results !== false && !r.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]'),
+              is_weekly: marksConfig.isWeekly,
+              weekly_days: marksConfig.days,
             })
           }
         })
@@ -1097,270 +1340,513 @@ export default function StudentBatchDetailPage() {
         )}
 
         {/* EXAMS & RESULTS TAB */}
-        {activeTab === 'exams' && (
-          <div>
-            <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
-                  <GraduationCap className="h-5 w-5 text-indigo-500" />
-                  Exam Schedule & Results (পরীক্ষার সময়সূচী ও ফলাফল)
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  View scheduled tests, dates, and your marks with batch ranking.
-                </p>
+        {activeTab === 'exams' && (() => {
+          const completedResults = allExams.filter((item: any) => item.has_result)
+          const weeklyRoutineExams = allExams.filter((item: any) => item.is_weekly)
+          const upcomingOneTimeExams = allExams.filter((item: any) => !item.has_result && item.status === 'upcoming' && !item.is_weekly)
+          const scheduledCount = weeklyRoutineExams.length + upcomingOneTimeExams.length
+
+          // Performance metrics for Results KPI
+          const totalRecorded = completedResults.length
+          const totalPct = completedResults.reduce((acc: number, item: any) => {
+            const totM = Number(item.exam?.total_marks) || 100
+            const obt = Number(item.obtained_marks) || 0
+            return acc + (totM > 0 ? (obt / totM) * 100 : 0)
+          }, 0)
+          const averageScore = totalRecorded > 0 ? Math.round(totalPct / totalRecorded) : 0
+          const passedCount = completedResults.filter((item: any) => {
+            const passM = Number(item.exam?.pass_marks) || 0
+            const obt = Number(item.obtained_marks) || 0
+            return obt >= passM
+          }).length
+          const bestRank = completedResults.length > 0 
+            ? Math.min(...completedResults.map((r: any) => Number(r.rank) || 999).filter((rk: number) => rk > 0))
+            : 1
+
+          return (
+            <div>
+              {/* Header & Sub-navigation bar */}
+              <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
+                    <GraduationCap className="h-5 w-5 text-indigo-500" />
+                    Exam Schedule & Results (পরীক্ষার সময়সূচী ও ফলাফল)
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    সময়সূচী (Schedule) এবং অনলাইন ও অফলাইন পরীক্ষার ফলাফল (Result) দেখুন।
+                  </p>
+                </div>
+
+                {/* Sub-Tabs: Schedule vs Result */}
+                <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-2xl border border-slate-200 self-start sm:self-auto shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => setExamSubTab('schedule')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                      examSubTab === 'schedule'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                    }`}
+                  >
+                    <CalendarDays className="w-4 h-4 text-indigo-600" />
+                    <span>📅 Schedule (সময়সূচী)</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                      examSubTab === 'schedule' ? 'bg-indigo-100 text-indigo-800' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {scheduledCount}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExamSubTab('results')}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                      examSubTab === 'results'
+                        ? 'bg-white text-emerald-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                    }`}
+                  >
+                    <Trophy className="w-4 h-4 text-amber-500" />
+                    <span>🏆 Result (ফলাফল)</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                      examSubTab === 'results' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                    }`}>
+                      {completedResults.length}
+                    </span>
+                  </button>
+                </div>
               </div>
 
-              {/* Filter pills */}
-              <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 self-start sm:self-auto shadow-xs">
-                <button
-                  onClick={() => setExamFilter('all')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    examFilter === 'all' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  All ({allExams.length})
-                </button>
-                <button
-                  onClick={() => setExamFilter('upcoming')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    examFilter === 'upcoming' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  Upcoming ({allExams.filter(e => !e.has_result && e.status === 'upcoming').length})
-                </button>
-                <button
-                  onClick={() => setExamFilter('completed')}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    examFilter === 'completed' ? 'bg-indigo-600 text-white shadow-xs' : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  Results Given ({allExams.filter(e => e.has_result).length})
-                </button>
-              </div>
-            </div>
-            
-            {(() => {
-              const filteredExams = allExams.filter((item: any) => {
-                if (examFilter === 'upcoming') return !item.has_result && item.status === 'upcoming'
-                if (examFilter === 'completed') return item.has_result
-                return true
-              })
+              {/* 1. SCHEDULE SUB-VIEW */}
+              {examSubTab === 'schedule' && (
+                <div className="p-6 space-y-6">
+                  {/* Weekly Exam Routine Cards */}
+                  {weeklyRoutineExams.map((exItem: any) => {
+                    const routineDays = exItem.weekly_days && exItem.weekly_days.length > 0
+                      ? exItem.weekly_days
+                      : parseWeeklyDays(exItem.exam)
+                    const routineTotalMarks = routineDays.reduce((acc: number, d: any) => acc + (Number(d.total_marks) || 50), 0) || 350
+                    const routinePassMarks = routineDays.reduce((acc: number, d: any) => acc + (Number(d.pass_marks) || 20), 0) || 140
 
-              return filteredExams.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="bg-slate-50 text-xs uppercase text-slate-500 border-b border-slate-200">
-                      <tr>
-                        <th className="px-6 py-4 font-medium">Exam Name & Subject</th>
-                        <th className="px-6 py-4 font-medium">Date & Schedule</th>
-                        <th className="px-6 py-4 font-medium">Status</th>
-                        <th className="px-6 py-4 font-medium">My Result / Marks</th>
-                        <th className="px-6 py-4 font-medium">Grade & Rank</th>
-                        <th className="px-6 py-4 font-medium text-right">Batch Results</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredExams.map((item: any, idx: number) => {
-                        const isWeeklyExam =
+                    return (
+                      <div key={`routine-${exItem.exam_id}`} className="bg-gradient-to-br from-indigo-50/60 via-white to-purple-50/40 rounded-3xl border border-indigo-100 p-6 shadow-xs">
+                        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-indigo-100/70">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-purple-100 text-purple-800 border border-purple-200">
+                                <CalendarDays className="w-3.5 h-3.5 text-purple-600" />
+                                সাপ্তাহিক পরীক্ষার রুটিন (Weekly Exam Routine)
+                              </span>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                চলমান সূচি (Active)
+                              </span>
+                            </div>
+                            <h4 className="text-xl font-bold text-slate-900 mt-2">
+                              {exItem.exam?.title || "সাপ্তাহিক নিয়মিত পরীক্ষা"}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              প্রতি সপ্তাহে শনিবার হতে শুক্রবার পর্যন্ত প্রতিদিনের নির্ধারিত বিষয়ে পরীক্ষা অনুষ্ঠিত হয়।
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-3 bg-white p-3.5 rounded-2xl border border-indigo-100 shadow-2xs">
+                            <div className="text-right">
+                              <div className="text-[11px] text-slate-400 font-semibold uppercase">সাপ্তাহিক পূর্ণমান</div>
+                              <div className="text-lg font-black text-indigo-700">{routineTotalMarks} নম্বর</div>
+                            </div>
+                            <div className="h-8 w-px bg-slate-200"></div>
+                            <div className="text-left">
+                              <div className="text-[11px] text-slate-400 font-semibold uppercase">পাস মার্ক</div>
+                              <div className="text-lg font-black text-emerald-600">{routinePassMarks} নম্বর</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 7 Days Routine Grid */}
+                        <div className="mt-5">
+                          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                            ৭ দিনের পরীক্ষার সময়সূচী ও বিষয় তালিকা (Saturday – Friday)
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {routineDays.map((dayItem: any, dIdx: number) => {
+                              return (
+                                <div 
+                                  key={dayItem.key || dIdx}
+                                  className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs hover:border-indigo-300 hover:shadow-xs transition-all flex flex-col justify-between"
+                                >
+                                  <div>
+                                    <div className="flex items-center justify-between gap-2 mb-2">
+                                      <span className="px-2.5 py-1 rounded-lg text-xs font-black bg-indigo-50 text-indigo-800 border border-indigo-100">
+                                        {dayItem.day_bn || dayItem.day}
+                                      </span>
+                                      <span className="text-[11px] font-semibold text-slate-400 font-mono">
+                                        {dayItem.day_en}
+                                      </span>
+                                    </div>
+                                    <h5 className="text-sm font-bold text-slate-900 line-clamp-1">
+                                      {dayItem.subject || dayItem.exam_name || "বিষয় পরীক্ষা"}
+                                    </h5>
+                                    <p className="text-[11px] text-slate-500 mt-1 line-clamp-1">
+                                      {dayItem.exam_name || `${dayItem.day_bn}ের পরীক্ষা`}
+                                    </p>
+                                  </div>
+
+                                  <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                                    <span className="text-slate-500 font-medium">পূর্ণমান:</span>
+                                    <span className="font-bold text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded border border-indigo-100">
+                                      {dayItem.total_marks || 50} নম্বর
+                                    </span>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="mt-5 pt-4 border-t border-indigo-100/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                            সাপ্তাহিক পরীক্ষার মূল্যায়ন শেষে মেধা তালিকা ও ফলাফল প্রস্তুত করা হয়।
+                          </span>
+                          {exItem.has_result && (
+                            <button
+                              onClick={() => setExamSubTab('results')}
+                              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer bg-white px-3 py-1.5 rounded-xl border border-indigo-200 shadow-2xs"
+                            >
+                              🏆 এই পরীক্ষার ফলাফল দেখুন →
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+
+                  {/* Upcoming / One-time Exams */}
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-indigo-600" />
+                      আসন্ন অন্যান্য পরীক্ষাসমূহ (Upcoming One-time Exams)
+                    </h4>
+                    {upcomingOneTimeExams.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {upcomingOneTimeExams.map((item: any) => {
+                          const totM = Number(item.exam?.total_marks) || 100
+                          const passM = Number(item.exam?.pass_marks) || 33
+                          return (
+                            <div key={item.id} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between">
+                              <div>
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    নির্ধারিত পরীক্ষা
+                                  </span>
+                                  {item.exam?.is_online && (
+                                    <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                      Online Exam
+                                    </span>
+                                  )}
+                                </div>
+                                <h5 className="text-base font-bold text-slate-900">{item.exam?.title}</h5>
+                                {item.exam?.subject && (
+                                  <p className="text-xs font-semibold text-indigo-600 mt-1">{item.exam?.subject}</p>
+                                )}
+                                <div className="flex items-center gap-4 text-xs text-slate-500 mt-3">
+                                  <span className="flex items-center gap-1">
+                                    <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                                    {item.exam_date ? formatDate(item.exam_date) : "তারিখ শীঘ্রই জানানো হবে"}
+                                  </span>
+                                  {item.exam?.duration_minutes && (
+                                    <span className="flex items-center gap-1">
+                                      <Clock className="w-3.5 h-3.5 text-slate-400" />
+                                      {item.exam.duration_minutes} মিনিট
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                                <span className="text-xs text-slate-500 font-medium">
+                                  পূর্ণমান: <strong>{totM}</strong> • পাস: <strong>{passM}</strong>
+                                </span>
+                                {item.exam?.is_online ? (
+                                  <Link
+                                    href={`/student/exam/${item.exam_id}`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
+                                  >
+                                    <PlayCircle className="w-3.5 h-3.5" />
+                                    পরীক্ষা দিন →
+                                  </Link>
+                                ) : (
+                                  <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-1 rounded-lg">
+                                    ক্লাসরুম পরীক্ষা
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    ) : weeklyRoutineExams.length === 0 ? (
+                      <div className="p-12 text-center text-slate-500 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                        <Calendar className="w-10 h-10 mx-auto text-slate-300 mb-2" />
+                        <p className="font-semibold text-slate-700">বর্তমানে নতুন কোনো পরীক্ষার তারিখ নির্ধারিত নেই।</p>
+                        <p className="text-xs text-slate-400 mt-0.5">নতুন পরীক্ষা যোগ করা হলে তা এখানে দেখা যাবে।</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+
+              {/* 2. RESULT SUB-VIEW (Accurate Homepage Result Values) */}
+              {examSubTab === 'results' && (
+                <div className="p-6 space-y-6">
+                  {/* KPI Summary Cards */}
+                  {completedResults.length > 0 && (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/80">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 mb-1">
+                          <GraduationCap className="w-4 h-4 text-indigo-600" />
+                          মোট পরীক্ষা
+                        </div>
+                        <div className="text-2xl font-black text-slate-900">{completedResults.length} টি</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">ফলাফল প্রকাশিত</div>
+                      </div>
+
+                      <div className="bg-emerald-50/50 rounded-2xl p-4 border border-emerald-100">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 mb-1">
+                          <Sparkles className="w-4 h-4 text-emerald-600" />
+                          গড় প্রাপ্ত নম্বর
+                        </div>
+                        <div className="text-2xl font-black text-emerald-700">{averageScore}%</div>
+                        <div className="text-[11px] text-emerald-600/80 mt-0.5">সামগ্রিক পারফর্ম্যান্স</div>
+                      </div>
+
+                      <div className="bg-amber-50/50 rounded-2xl p-4 border border-amber-100">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 mb-1">
+                          <Trophy className="w-4 h-4 text-amber-600" />
+                          সেরা অবস্থান
+                        </div>
+                        <div className="text-2xl font-black text-amber-700">Rank #{bestRank || 1}</div>
+                        <div className="text-[11px] text-amber-600/80 mt-0.5">ব্যাচ মেধা তালিকায়</div>
+                      </div>
+
+                      <div className="bg-purple-50/50 rounded-2xl p-4 border border-purple-100">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-700 mb-1">
+                          <Award className="w-4 h-4 text-purple-600" />
+                          পাস ফলাফল
+                        </div>
+                        <div className="text-2xl font-black text-purple-700">{passedCount} / {completedResults.length}</div>
+                        <div className="text-[11px] text-purple-600/80 mt-0.5">কৃতকার্য হয়েছেন</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Result Cards / Table */}
+                  {completedResults.length > 0 ? (
+                    <div className="space-y-4">
+                      {completedResults.map((item: any, idx: number) => {
+                        const isWeeklyExam = item.is_weekly ||
                           item.exam?.exam_schedule_type === 'weekly' ||
                           (Array.isArray(item.exam?.recurring_days) && item.exam?.recurring_days.length > 0) ||
-                          item.exam?.is_weekly_published === true
-                        const weeklyTotalMarks = isWeeklyExam && Array.isArray(item.exam?.recurring_days) && item.exam.recurring_days.length > 0
-                          ? item.exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-                          : 0
-                        const weeklyPassMarks = isWeeklyExam && Array.isArray(item.exam?.recurring_days) && item.exam.recurring_days.length > 0
-                          ? item.exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
-                          : 0
-                        const totalMarks = weeklyTotalMarks > 0 ? weeklyTotalMarks : (Number(item.exam?.total_marks) || 100)
-                        const passMarks = weeklyPassMarks > 0 ? weeklyPassMarks : (Number(item.exam?.pass_marks) || 0)
+                          item.exam?.is_weekly_published === true ||
+                          Boolean(item.exam?.title?.includes('সাপ্তাহিক'))
+
+                        const weeklyDays = isWeeklyExam ? (item.weekly_days || parseWeeklyDays(item.exam)) : []
+                        const totalMarks = isWeeklyExam
+                          ? (weeklyDays.reduce((sum: number, d: any) => sum + (Number(d.total_marks) || 50), 0) || 350)
+                          : (Number(item.exam?.total_marks) || 100)
+                        const passMarks = isWeeklyExam
+                          ? (weeklyDays.reduce((sum: number, d: any) => sum + (Number(d.pass_marks) || 20), 0) || 140)
+                          : (Number(item.exam?.pass_marks) || 33)
+
                         const rawObtained = item.obtained_marks ?? item.marks_obtained
-                        const obtained = rawObtained != null && rawObtained !== "" ? Number(rawObtained) : 0
+                        let obtained = rawObtained != null && rawObtained !== "" ? Number(rawObtained) : 0
+
+                        // Check day_marks sum if available
+                        if (isWeeklyExam && item.day_marks && typeof item.day_marks === 'object') {
+                          let dSum = 0
+                          for (const v of Object.values(item.day_marks)) {
+                            const m = typeof v === 'object' && v !== null ? Number((v as any).marks) : Number(v)
+                            if (!isNaN(m)) dSum += m
+                          }
+                          if (dSum > 0 && (obtained === 0 || dSum > obtained)) {
+                            obtained = dSum
+                          }
+                        }
+
                         const percentage = totalMarks > 0 ? Math.round((obtained / totalMarks) * 100) : 0
                         const passed = obtained >= passMarks
                         const isPublic = item.is_public !== false && item.exam?.show_all_results !== false && !item.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')
 
                         return (
-                          <tr key={item.id || idx} className="hover:bg-slate-50/50 transition-colors">
-                            {/* Exam Name & Subject */}
-                            <td className="px-6 py-4 font-medium text-slate-800">
-                              <div>
+                          <div 
+                            key={item.id || idx}
+                            className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs hover:shadow-md transition-shadow"
+                          >
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                              {/* Left: Exam Info & Badges */}
+                              <div className="space-y-2 max-w-xl">
                                 <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-bold text-slate-900">{item.exam?.title || 'Unknown Exam'}</span>
+                                  {isWeeklyExam ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-purple-100 text-purple-800 border border-purple-200">
+                                      <Sparkles className="w-3 h-3 text-purple-600" />
+                                      সাপ্তাহিক পরীক্ষা (Weekly Result)
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                                      মডেল টেস্ট / ক্লাস টেস্ট
+                                    </span>
+                                  )}
+
                                   {item.exam?.subject && (
                                     <span className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded font-semibold">
                                       {item.exam.subject}
                                     </span>
                                   )}
-                                  {item.exam?.exam_type && (
-                                    <span className="text-[11px] text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-medium uppercase">
-                                      {item.exam.exam_type}
-                                    </span>
-                                  )}
-                                  {item.exam?.is_online && (
-                                    <span className="text-[11px] text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded font-medium">
-                                      Online
+
+                                  {item.exam_date && (
+                                    <span className="text-[11px] text-slate-500 flex items-center gap-1">
+                                      <Calendar className="w-3 h-3 text-slate-400" />
+                                      {formatDate(item.exam_date)}
                                     </span>
                                   )}
                                 </div>
-                                {item.exam?.duration_minutes && (
-                                  <p className="text-xs text-slate-400 mt-1 flex items-center gap-1">
-                                    <Clock className="w-3 h-3 text-slate-400" />
-                                    Duration: {item.exam.duration_minutes} mins • Total: {totalMarks} marks
-                                  </p>
-                                )}
-                              </div>
-                            </td>
 
-                            {/* Date & Schedule */}
-                            <td className="px-6 py-4 whitespace-nowrap text-slate-600 text-xs">
-                              {item.exam?.exam_schedule_type === 'weekly' || (Array.isArray(item.exam?.recurring_days) && item.exam?.recurring_days.length > 0) ? (
-                                <div className="space-y-1">
-                                  <div className="flex items-start gap-1.5 font-bold text-purple-700">
-                                    <CalendarDays className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
-                                    <div className="flex flex-col gap-0.5">
-                                      <span className="text-xs">
-                                        প্রতি {Array.isArray(item.exam?.recurring_days)
-                                          ? item.exam.recurring_days.map((d: any) => typeof d === "object" && d !== null ? `${d.day_bn || d.day} (${d.exam_name || "পরীক্ষা"} - ${d.total_marks || ""} নম্বর)` : d).join(", ")
-                                          : (item.exam?.recurring_days || "সাপ্তাহিক নির্ধারিত দিন")}
-                                      </span>
+                                <h4 className="text-lg font-bold text-slate-900">
+                                  {item.exam?.title || "Exam Result"}
+                                </h4>
+
+                                <div className="text-xs text-slate-500 flex items-center gap-3 flex-wrap">
+                                  <span>পূর্ণমান: <strong>{totalMarks}</strong> নম্বর</span>
+                                  <span>•</span>
+                                  <span>পাস মার্ক: <strong>{passMarks}</strong> নম্বর</span>
+                                  {item.exam?.duration_minutes && (
+                                    <>
+                                      <span>•</span>
+                                      <span>সময়: {item.exam.duration_minutes} মিনিট</span>
+                                    </>
+                                  )}
+                                </div>
+
+                                {/* Day-wise marks pills if available */}
+                                {item.day_marks && Object.keys(item.day_marks).length > 0 && (
+                                  <div className="mt-3 pt-3 border-t border-slate-100">
+                                    <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                      <CalendarDays className="w-3 h-3 text-indigo-500" />
+                                      দিনভিত্তিক প্রাপ্ত নম্বর (Day-wise Breakdown):
                                     </div>
-                                  </div>
-                                  <span className="inline-block text-[10px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 font-bold">
-                                    Weekly Exam (সাপ্তাহিক পরীক্ষা)
-                                  </span>
-                                </div>
-                              ) : item.exam_date ? (
-                                <div className="flex items-center gap-1.5 font-medium">
-                                  <Calendar className="w-3.5 h-3.5 text-indigo-500" />
-                                  <span>{formatDate(item.exam_date)}</span>
-                                </div>
-                              ) : (
-                                <span className="text-slate-400 italic">Schedule TBA</span>
-                              )}
-                            </td>
-
-                            {/* Schedule Status */}
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              {item.exam?.is_paused ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs">
-                                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                                  Exam Paused (স্থগিত)
-                                </span>
-                              ) : item.has_result ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs">
-                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                                  Result Published
-                                </span>
-                              ) : item.status === 'upcoming' ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                  <Calendar className="w-3.5 h-3.5 text-blue-600" />
-                                  Scheduled (Upcoming)
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                                  <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                  Result Pending
-                                </span>
-                              )}
-                            </td>
-
-                            {/* My Marks (Beside it) */}
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              {item.has_result ? (
-                                <div>
-                                  <div className="flex items-baseline gap-1">
-                                    <span className="font-extrabold text-slate-900 text-base">{obtained}</span>
-                                    <span className="text-slate-400 text-xs font-medium"> / {totalMarks}</span>
-                                    <span className={`ml-2 text-xs font-bold ${passed ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      ({percentage}%)
-                                    </span>
-                                  </div>
-                                  {item.day_marks && Object.keys(item.day_marks).length > 0 && (
-                                    <div className="flex items-center gap-1 flex-wrap mt-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
                                       {Object.entries(item.day_marks).map(([dKey, dVal]: any) => {
                                         const mVal = typeof dVal === "object" && dVal !== null ? (dVal.marks ?? 0) : dVal
+                                        const matchedDay = ALL_WEEK_DAYS.find(w => w.id === dKey.toLowerCase() || w.bn === dKey)
+                                        const label = matchedDay ? matchedDay.bn : dKey
                                         return (
-                                          <span key={dKey} className="text-[10px] px-1.5 py-0.2 rounded bg-purple-50 border border-purple-200 text-purple-800 font-semibold">
-                                            {dKey}: <strong>{mVal}</strong>
+                                          <span 
+                                            key={dKey} 
+                                            className="text-xs px-2.5 py-1 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 font-semibold flex items-center gap-1"
+                                          >
+                                            <span>{label}:</span>
+                                            <strong className="text-purple-700 font-bold">{mVal}</strong>
                                           </span>
                                         )
                                       })}
                                     </div>
-                                  )}
-                                </div>
-                              ) : (
-                                <span className="text-xs text-slate-400 font-medium italic">
-                                  {item.status === 'upcoming' ? 'Scheduled Exam' : 'Evaluating Marks...'}
-                                </span>
-                              )}
-                            </td>
+                                  </div>
+                                )}
+                              </div>
 
-                            {/* Grade & Rank */}
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              {item.has_result ? (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="inline-flex px-2 py-0.5 rounded text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                                    {item.grade || (passed ? 'Pass' : 'Fail')}
+                              {/* Right: Scores, Grade, Rank, and Actions */}
+                              <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-4 border-t lg:border-t-0 pt-4 lg:pt-0 border-slate-100">
+                                {/* Score & Badges */}
+                                <div className="flex items-baseline gap-2">
+                                  <div className="text-right">
+                                    <div className="text-2xl sm:text-3xl font-black text-slate-900">
+                                      {obtained}
+                                      <span className="text-slate-400 text-sm font-semibold"> / {totalMarks}</span>
+                                    </div>
+                                  </div>
+                                  <span className={`px-2.5 py-1 rounded-full text-xs font-black border shadow-2xs ${
+                                    passed 
+                                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
+                                      : 'bg-rose-100 text-rose-800 border-rose-300'
+                                  }`}>
+                                    {percentage}% {passed ? '• উত্তীর্ণ' : '• অনুত্তীর্ণ'}
                                   </span>
-                                  {item.rank && (
-                                    <span className="inline-flex px-2 py-0.5 rounded text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                                      Rank #{item.rank}
+                                </div>
+
+                                {/* Grade and Rank pills */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="px-3 py-1 rounded-xl text-xs font-black bg-slate-100 text-slate-800 border border-slate-200">
+                                    Grade: {item.grade || (percentage >= 80 ? 'A+' : percentage >= 70 ? 'A' : percentage >= 60 ? 'A-' : percentage >= 50 ? 'B' : percentage >= 40 ? 'C' : percentage >= 33 ? 'D' : 'F')}
+                                  </span>
+                                  <span className="px-3 py-1 rounded-xl text-xs font-black bg-amber-50 text-amber-900 border border-amber-300 shadow-2xs flex items-center gap-1">
+                                    <Trophy className="w-3.5 h-3.5 text-amber-600" />
+                                    Rank #{item.rank || 1}
+                                  </span>
+                                </div>
+
+                                {/* Actions: Batch Merit List & Online Result Portal */}
+                                <div className="flex items-center gap-2 mt-1">
+                                  {isPublic ? (
+                                    <button
+                                      onClick={() => handleOpenLeaderboard({
+                                        ...(item.exam || {}),
+                                        id: item.exam_id || item.exam?.id,
+                                        title: item.exam?.title,
+                                        total_marks: totalMarks,
+                                        pass_marks: passMarks,
+                                        subject: item.exam?.subject,
+                                        recurring_days: item.exam?.recurring_days,
+                                      })}
+                                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition-all border border-indigo-200/80 shadow-xs cursor-pointer active:scale-95"
+                                    >
+                                      <Users className="w-3.5 h-3.5 text-indigo-600" />
+                                      Batch Merit List (মেধা তালিকা)
+                                    </button>
+                                  ) : (
+                                    <span 
+                                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 font-semibold rounded-xl text-xs border border-amber-200/80"
+                                      title="Exam marks are kept private. Only your own score is visible."
+                                    >
+                                      <Lock className="w-3.5 h-3.5 text-amber-600" />
+                                      ব্যক্তিগত (Private)
                                     </span>
                                   )}
-                                </div>
-                              ) : (
-                                <span className="text-slate-300 text-xs">—</span>
-                              )}
-                            </td>
 
-                            {/* Batch Results / Action */}
-                            <td className="px-6 py-4 text-right whitespace-nowrap">
-                              {item.has_result ? (
-                                isPublic ? (
-                                  <button
-                                    onClick={() => handleOpenLeaderboard(item.exam || { id: item.exam_id, title: item.exam?.title, total_marks: totalMarks, pass_marks: passMarks, subject: item.exam?.subject })}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold rounded-xl text-xs transition-colors border border-indigo-200/80 shadow-xs cursor-pointer active:scale-95"
+                                  <Link
+                                    href={`/online-result?exam_id=${item.exam_id}`}
+                                    target="_blank"
+                                    className="inline-flex items-center gap-1 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs transition-colors border border-slate-200"
                                   >
-                                    <Users className="w-3.5 h-3.5 text-indigo-600" />
-                                    Batch Merit List
-                                  </button>
-                                ) : (
-                                  <span 
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 font-semibold rounded-xl text-xs border border-amber-200/80"
-                                    title="Exam marks are kept private. Only your own score is visible."
-                                  >
-                                    <Lock className="w-3.5 h-3.5 text-amber-600" />
-                                    Private (Only You)
-                                  </span>
-                                )
-                              ) : item.exam?.is_online && item.status === 'upcoming' ? (
-                                <Link
-                                  href={`/student/exam/${item.exam_id}`}
-                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition-colors shadow-xs"
-                                >
-                                  <PlayCircle className="w-3.5 h-3.5" />
-                                  Start Exam →
-                                </Link>
-                              ) : (
-                                <span className="text-xs text-slate-400 font-medium">Classroom Exam</span>
-                              )}
-                            </td>
-                          </tr>
+                                    <span>পোর্টাল</span>
+                                    <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
+                                  </Link>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         )
                       })}
-                    </tbody>
-                  </table>
+                    </div>
+                  ) : (
+                    <div className="p-16 text-center text-slate-500 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                      <Trophy className="h-12 w-12 mx-auto text-slate-300 mb-3" />
+                      <p className="font-semibold text-slate-700">এখনো কোনো পরীক্ষার ফলাফল প্রকাশিত হয়নি।</p>
+                      <p className="text-xs text-slate-400 mt-1">শিক্ষক মূল্যায়ন শেষ করে ফলাফল প্রকাশ করলে এখানে আপনার নম্বর ও মেধা তালিকা দেখতে পাবেন।</p>
+                      <button
+                        onClick={() => setExamSubTab('schedule')}
+                        className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-indigo-700 transition-colors cursor-pointer"
+                      >
+                        পরীক্ষার সময়সূচী দেখুন →
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="p-16 text-center text-slate-500">
-                  <GraduationCap className="h-12 w-12 mx-auto text-slate-300 mb-4" />
-                  <p className="font-semibold text-slate-700">No exams match the selected filter.</p>
-                  <p className="text-xs text-slate-400 mt-1">Scheduled tests and published results will appear here.</p>
-                </div>
-              )
-            })()}
-          </div>
-        )}
+              )}
+            </div>
+          )
+        })()}
 
         {/* MATERIALS TAB */}
         {activeTab === 'materials' && (
