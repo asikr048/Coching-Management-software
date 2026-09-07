@@ -461,7 +461,13 @@ export default function OnlineResultPortalPage() {
         }
 
         // 2. IF WEEKLY RESULTS ARE PUBLISHED: Add the Weekly Consolidated card
-        const isWeeklyPub = ex.is_weekly_published === true || (ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:true]")
+        const isWeeklyPub =
+          ex.is_weekly_published !== false &&
+          (ex.is_weekly_published === true ||
+            (ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:true]") ||
+            ex.is_public_result === true ||
+            ex.is_published === true ||
+            !(ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:false]"))
         if (isWeeklyPub) {
           items.push({
             id: `${ex.id}-weekly`,

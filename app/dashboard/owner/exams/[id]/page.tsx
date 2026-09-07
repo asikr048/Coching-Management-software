@@ -366,7 +366,11 @@ export default function ExamResultsPage() {
         setPublishedDays(pubDays)
 
         // Parse is_weekly_published
-        const isWPub = ex?.is_weekly_published === true || ex?.result_note?.includes("[IS_WEEKLY_PUBLISHED:true]")
+        const isWPub =
+          ex?.is_weekly_published === true ||
+          ex?.result_note?.includes("[IS_WEEKLY_PUBLISHED:true]") ||
+          (ex?.is_public_result === true && !ex?.result_note?.includes("[IS_WEEKLY_PUBLISHED:false]")) ||
+          (ex?.is_published === true && !ex?.result_note?.includes("[IS_WEEKLY_PUBLISHED:false]"))
         setIsWeeklyPublished(Boolean(isWPub))
 
         setSelectedSessionDate(ex?.exam_date || new Date().toISOString().split("T")[0])

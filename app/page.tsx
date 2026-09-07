@@ -455,7 +455,15 @@ export default function HomePage() {
         }
 
         // If weekly consolidated result is published, add weekly card
-        if (ex.is_weekly_published === true) {
+        const isWeeklyPub =
+          ex.is_weekly_published !== false &&
+          (ex.is_weekly_published === true ||
+            (ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:true]") ||
+            ex.is_public_result === true ||
+            ex.is_published === true ||
+            !(ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:false]"))
+
+        if (isWeeklyPub) {
           const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
           const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
           cards.push({

@@ -79,18 +79,41 @@ export async function PATCH(
       updatedNote = updatedNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
       updatedNote = `${updatedNote} [PUBLISHED_DAYS:${pubList.join(",")}]`.trim()
     }
+    const isWeekly =
+      currentExam.exam_schedule_type === "weekly" ||
+      (Array.isArray(currentExam.recurring_days) && currentExam.recurring_days.length > 0) ||
+      Boolean(currentExam.title?.includes("সাপ্তাহিক"))
+
     if (typeof body.is_weekly_published === "boolean") {
       payload.is_weekly_published = body.is_weekly_published
       updatedNote = updatedNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [IS_WEEKLY_PUBLISHED:${body.is_weekly_published}]`.trim()
+      if (body.is_weekly_published === true) {
+        payload.is_published = true
+        payload.is_public_result = true
+        updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
+        updatedNote = `${updatedNote} [PUBLIC_RESULT:true]`.trim()
+      }
     }
 
-    // If is_public_result is enabled, ensure is_published is true
+    // If is_public_result is enabled, ensure is_published is true and weekly exams are published
     if (body.is_public_result === true) {
       payload.is_published = true
       payload.is_public_result = true
       updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [PUBLIC_RESULT:true]`.trim()
+      if (isWeekly && body.is_weekly_published !== false) {
+        payload.is_weekly_published = true
+        updatedNote = updatedNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
+        updatedNote = `${updatedNote} [IS_WEEKLY_PUBLISHED:true]`.trim()
+      }
+    }
+
+    // If exam is published, also ensure weekly publication for weekly exams
+    if (body.is_published === true && isWeekly && body.is_weekly_published !== false) {
+      payload.is_weekly_published = true
+      updatedNote = updatedNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
+      updatedNote = `${updatedNote} [IS_WEEKLY_PUBLISHED:true]`.trim()
     }
 
     // If weekly or day results are published, automatically publish public results unless explicitly set to false

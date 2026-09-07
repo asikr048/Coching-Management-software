@@ -33,10 +33,39 @@ export function normalizeDayMarks(days: Record<string, any> | undefined | null):
 function normalizeExam(ex: any) {
   const note = ex.result_note || ""
 
-  // Parse is_weekly_published
-  const isWeeklyPub =
-    ex.is_weekly_published === true ||
-    note.includes("[IS_WEEKLY_PUBLISHED:true]")
+  // Parse recurring_days
+  let recDays: any[] = []
+  if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
+    recDays = ex.recurring_days
+  } else if (note.includes("[RECURRING_DAYS:")) {
+    try {
+      const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+      if (match && match[1]) {
+        recDays = JSON.parse(match[1])
+      }
+    } catch {}
+  }
+
+  const isWeekly =
+    ex.exam_schedule_type === "weekly" ||
+    recDays.length > 0 ||
+    Boolean(ex.title?.includes("সাপ্তাহিক"))
+
+  // Parse is_weekly_published: if weekly exam is public/published, it is weekly published unless explicitly marked false
+  let isWeeklyPub = false
+  if (isWeekly) {
+    if (ex.is_weekly_published === false || note.includes("[IS_WEEKLY_PUBLISHED:false]")) {
+      isWeeklyPub = false
+    } else {
+      isWeeklyPub =
+        ex.is_weekly_published === true ||
+        note.includes("[IS_WEEKLY_PUBLISHED:true]") ||
+        ex.is_public_result === true ||
+        ex.is_published === true ||
+        note.includes("[PUBLIC_RESULT:true]") ||
+        !note.includes("[IS_WEEKLY_PUBLISHED:false]")
+    }
+  }
 
   // Parse published_days
   let pubDays: string[] = []
@@ -68,26 +97,8 @@ function normalizeExam(ex: any) {
     ex.is_public_result === true ||
     note.includes("[PUBLIC_RESULT:true]") ||
     isWeeklyPub ||
-    pubDays.length > 0
-
-  // Parse recurring_days
-  let recDays: any[] = []
-  if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
-    recDays = ex.recurring_days
-  } else if (note.includes("[RECURRING_DAYS:")) {
-    try {
-      const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
-      if (match && match[1]) {
-        recDays = JSON.parse(match[1])
-      }
-    } catch {}
-  }
-
-  const isWeekly =
-    ex.exam_schedule_type === "weekly" ||
-    recDays.length > 0 ||
-    isWeeklyPub ||
-    Boolean(ex.title?.includes("সাপ্তাহিক"))
+    pubDays.length > 0 ||
+    ex.is_published === true
 
   // Guarantee all 7 days for weekly exams
   let totalMarks = Number(ex.total_marks) || 100
