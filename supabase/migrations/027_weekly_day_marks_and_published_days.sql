@@ -4,6 +4,7 @@
 -- 1. Add day_marks JSONB column to exam_results to store day-by-day marks
 -- e.g. { "Saturday": { "marks": 45, "total": 50, "grade": "A+", "exam_name": "Math" } }
 ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS day_marks JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS result_note TEXT;
 
 -- 2. Add published_days JSONB to exams to track which individual days are published to students
 -- e.g. ["Saturday", "Monday"]

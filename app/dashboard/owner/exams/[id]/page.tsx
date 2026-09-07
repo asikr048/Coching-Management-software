@@ -325,17 +325,29 @@ export default function ExamResultsPage() {
             grade: r.grade || "",
           }
 
-          // Parse day_marks
+          // Parse day_marks from row if available
           let sDayMarks: Record<string, DayMarkItem> = {}
           if (r.day_marks && typeof r.day_marks === "object") {
             sDayMarks = r.day_marks
-          } else if (r.result_note?.includes("[DAY_MARKS:")) {
-            try {
-              const m = r.result_note.match(/\[DAY_MARKS:(.*?)\]/)
-              if (m && m[1]) sDayMarks = JSON.parse(m[1])
-            } catch {}
           }
           dayMarks[r.student_id] = sDayMarks
+        }
+
+        // Also load day marks from exam.result_note fallback [STUDENT_DAY_MARKS:...]
+        if (ex?.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+          try {
+            const m = ex.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+            if (m && m[1]) {
+              const parsedAll = JSON.parse(m[1])
+              for (const [stId, sMap] of Object.entries(parsedAll)) {
+                if (!dayMarks[stId] || Object.keys(dayMarks[stId]).length === 0) {
+                  dayMarks[stId] = sMap as Record<string, DayMarkItem>
+                }
+              }
+            }
+          } catch (err) {
+            console.warn("Could not parse exam fallback day marks:", err)
+          }
         }
 
         setSavedResults(map)
@@ -493,7 +505,6 @@ export default function ExamResultsPage() {
 
       const grandTotal = Object.values(currentStudentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
       const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
-      const fallbackNote = `[DAY_MARKS:${JSON.stringify(currentStudentDays)}]`
 
       try {
         const payload: any = {
@@ -502,15 +513,31 @@ export default function ExamResultsPage() {
           obtained_marks: grandTotal,
           grade: overallGrade,
           day_marks: currentStudentDays,
-          result_note: fallbackNote,
         }
 
         let { error } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
 
         if (error) {
+          // If day_marks column does not exist in exam_results schema cache yet
+          console.warn("Attempting exam_results fallback without day_marks column:", error.message)
           delete payload.day_marks
           const { error: fbErr } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
           if (fbErr) throw fbErr
+        }
+
+        // Sync day marks fallback into exams.result_note
+        const updatedAllDayMarks = {
+          ...dayMarksMap,
+          [student.id]: currentStudentDays,
+        }
+        try {
+          const currentNote = exam.result_note || ""
+          const newNote = currentNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() +
+            ` [STUDENT_DAY_MARKS:${JSON.stringify(updatedAllDayMarks)}]`
+          supabase.from("exams").update({ result_note: newNote }).eq("id", exam.id).then(() => {})
+          setExam((prev: any) => prev ? { ...prev, result_note: newNote } : prev)
+        } catch (noteErr) {
+          console.warn("Could not sync student day marks fallback note:", noteErr)
         }
 
         setDayMarksMap((prev) => ({
