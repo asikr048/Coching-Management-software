@@ -1,6 +1,114 @@
-﻿import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+  try {
+    const resolvedParams = await params
+    const examId = resolvedParams.id
+    if (!examId) {
+      return NextResponse.json({ error: "Exam ID is required" }, { status: 400 })
+    }
+
+    const admin = createAdminClient()
+    const { data: exam, error } = await admin
+      .from("exams")
+      .select("*, batch:batches(name, branch_id), branch:branches(name)")
+      .eq("id", examId)
+      .single()
+
+    if (error || !exam) {
+      return NextResponse.json({ error: "Exam not found" }, { status: 404 })
+    }
+
+    return NextResponse.json({ success: true, exam })
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 })
+  }
+}
+
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+  try {
+    const resolvedParams = await params
+    const examId = resolvedParams.id
+    if (!examId) {
+      return NextResponse.json({ error: "Exam ID is required" }, { status: 400 })
+    }
+
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const body = await req.json().catch(() => ({}))
+    const admin = createAdminClient()
+
+    // 1. Fetch current exam to handle fallback notes
+    const { data: currentExam } = await admin.from("exams").select("*").eq("id", examId).single()
+    if (!currentExam) {
+      return NextResponse.json({ error: "Exam not found" }, { status: 404 })
+    }
+
+    let payload: Record<string, any> = { ...body }
+    delete payload.id
+
+    // Ensure metadata tags in result_note for guaranteed persistence
+    let updatedNote = currentExam.result_note || ""
+    if (typeof body.is_paused === "boolean") {
+      updatedNote = updatedNote.replace(/\[IS_PAUSED:(true|false)\]/g, "").trim()
+      updatedNote = `${updatedNote} [IS_PAUSED:${body.is_paused}]`.trim()
+    }
+    if (typeof body.is_public_result === "boolean") {
+      updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
+      updatedNote = `${updatedNote} [PUBLIC_RESULT:${body.is_public_result}]`.trim()
+    }
+    if (typeof body.show_all_results === "boolean") {
+      updatedNote = updatedNote.replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "").trim()
+      updatedNote = `${updatedNote} [SHOW_ALL_RESULTS:${body.show_all_results}]`.trim()
+    }
+    payload.result_note = updatedNote
+
+    // Attempt update with column fallback
+    let { data: updatedExam, error } = await admin
+      .from("exams")
+      .update(payload)
+      .eq("id", examId)
+      .select("*")
+      .maybeSingle()
+
+    if (error) {
+      console.warn("Exam update first attempt failed:", error.message)
+      // Prune newer columns if Postgres rejected them
+      if ("is_paused" in payload) delete payload.is_paused
+      if ("is_public_result" in payload) delete payload.is_public_result
+      if ("exam_schedule_type" in payload) delete payload.exam_schedule_type
+      if ("recurring_days" in payload) delete payload.recurring_days
+      if ("schedule_notice_id" in payload) delete payload.schedule_notice_id
+
+      const { data: fbExam, error: fbErr } = await admin
+        .from("exams")
+        .update(payload)
+        .eq("id", examId)
+        .select("*")
+        .maybeSingle()
+
+      if (fbErr) throw fbErr
+      updatedExam = fbExam
+    }
+
+    return NextResponse.json({ success: true, exam: updatedExam })
+  } catch (err: any) {
+    console.error("Exam PATCH error:", err)
+    return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 })
+  }
+}
 
 export async function DELETE(
   req: NextRequest,

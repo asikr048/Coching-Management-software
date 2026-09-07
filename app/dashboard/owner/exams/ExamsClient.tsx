@@ -4,12 +4,23 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { 
   Plus, X, Loader2, FileText, Trophy, Clock, CheckCircle, GripVertical, 
-  Trash2, Edit2, PlayCircle, Eye, Globe, MessageSquare, Landmark, Building2, BookOpen
+  Trash2, Edit2, PlayCircle, Eye, Globe, MessageSquare, Landmark, Building2, BookOpen,
+  Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle
 } from "lucide-react"
 import { formatDate, cn } from "@/lib/utils"
 import Link from "next/link"
 import { useBranch } from "@/components/providers/BranchContext"
 import type { Branch } from "@/lib/supabase/types"
+
+export const WEEK_DAYS = [
+  { id: "Saturday", bn: "শনিবার", short: "শনি" },
+  { id: "Sunday", bn: "রবিবার", short: "রবি" },
+  { id: "Monday", bn: "সোমবার", short: "সোম" },
+  { id: "Tuesday", bn: "মঙ্গলবার", short: "মঙ্গল" },
+  { id: "Wednesday", bn: "বুধবার", short: "বুধ" },
+  { id: "Thursday", bn: "বৃহস্পতিবার", short: "বৃহস্পতি" },
+  { id: "Friday", bn: "শুক্রবার", short: "শুক্র" },
+]
 
 interface ExamRow { 
   id: string
@@ -28,6 +39,12 @@ interface ExamRow {
   branch_id?: string | null
   branch?: { id?: string; name: string } | null
   exam_questions?: { count: number }[]
+  exam_schedule_type?: "one_time" | "weekly"
+  recurring_days?: string[] | null
+  is_paused?: boolean
+  is_public_result?: boolean
+  schedule_notice_id?: string | null
+  result_note?: string | null
 }
 
 interface BatchOpt { 
@@ -64,10 +81,11 @@ export default function ExamsClient({
   const [publishing, setPublishing] = useState<string | null>(null)
   const [deleteConfirmExam, setDeleteConfirmExam] = useState<ExamRow | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [pausingId, setPausingId] = useState<string | null>(null)
   const { selectedBranchId, currentBranch } = useBranch()
   
   // Filters
-  const [statusFilter, setStatusFilter] = useState<"all" | "published" | "draft" | "online">("all")
+  const [statusFilter, setStatusFilter] = useState<"all" | "one_time" | "weekly" | "published" | "draft" | "online">("all")
   const [batchFilter, setBatchFilter] = useState<string>("all")
   
   // Modal State
@@ -79,6 +97,9 @@ export default function ExamsClient({
     branch_id: selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || ""),
     batch_id: "", 
     batch_ids: [] as string[],
+    exam_schedule_type: "one_time" as "one_time" | "weekly",
+    recurring_days: [] as string[],
+    publish_to_notice: false,
     exam_type: "written", 
     subject: "", 
     total_marks: "100", 
@@ -138,9 +159,34 @@ export default function ExamsClient({
       if (statusFilter === "published" && !ex.is_published) return false
       if (statusFilter === "draft" && ex.is_published) return false
       if (statusFilter === "online" && !ex.is_online) return false
+      if (statusFilter === "one_time" && (ex.exam_schedule_type === "weekly" || (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0))) return false
+      if (statusFilter === "weekly" && ex.exam_schedule_type !== "weekly" && (!Array.isArray(ex.recurring_days) || ex.recurring_days.length === 0)) return false
       return true
     })
   }, [exams, statusFilter, batchFilter, selectedBranchId])
+
+  async function handleTogglePause(exam: ExamRow) {
+    const nextPaused = !exam.is_paused
+    setPausingId(exam.id)
+    try {
+      const res = await fetch(`/api/exams/${exam.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_paused: nextPaused }),
+      })
+      if (!res.ok) {
+        // Direct Supabase fallback
+        await supabase.from("exams").update({ is_paused: nextPaused }).eq("id", exam.id)
+      }
+      setExams(prev => prev.map(ex => ex.id === exam.id ? { ...ex, is_paused: nextPaused } : ex))
+      toast.success(nextPaused ? `✓ "${exam.title}" is now PAUSED (স্থগিত)` : `✓ "${exam.title}" is now ACTIVE (সচল)`)
+    } catch (err: any) {
+      console.error("Toggle pause error:", err)
+      toast.error(err?.message || "Failed to toggle pause status")
+    } finally {
+      setPausingId(null)
+    }
+  }
 
   // Computed Total Marks for Online
   const computedTotal = questions.reduce((acc, q) => acc + q.marks, 0)
@@ -213,27 +259,42 @@ export default function ExamsClient({
       toast.error("Please select at least one batch for this exam")
       return
     }
+    if (form.exam_schedule_type === "one_time" && !form.exam_date) {
+      toast.error("Please select a date for the one-time exam (এককালীন পরীক্ষার তারিখ নির্ধারণ আবশ্যক)")
+      return
+    }
+    if (form.exam_schedule_type === "weekly" && form.recurring_days.length === 0) {
+      toast.error("Please select at least one day of the week for the weekly exam (সাপ্তাহিক পরীক্ষার অন্তত একটি দিন নির্বাচন করুন)")
+      return
+    }
+
     setLoading(true)
     try {
       const selectedBatchIdToUse = form.batch_ids[0] || form.batch_id || null
       const selectedBatchIdsToUse = form.batch_ids.length > 0 ? form.batch_ids : (form.batch_id ? [form.batch_id] : [])
 
-      const examData = {
+      const examData: any = {
         title: form.title, 
         branch_id: form.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null), 
         batch_id: selectedBatchIdToUse, 
         batch_ids: selectedBatchIdsToUse,
+        exam_schedule_type: form.exam_schedule_type,
+        recurring_days: form.recurring_days,
+        is_paused: false,
+        is_public_result: false,
         exam_type: form.exam_type,
         subject: form.subject || null, 
         total_marks: examMode === "online" ? computedTotal : parseInt(form.total_marks), 
         pass_marks: parseInt(form.pass_marks),
-        exam_date: form.exam_date || null, 
+        exam_date: form.exam_schedule_type === "one_time" ? (form.exam_date || null) : (form.exam_date || null), 
         is_online: examMode === "online",
         time_limit_minutes: examMode === "online" ? parseInt(form.duration_minutes) : null,
         duration_minutes: examMode === "offline" ? parseInt(form.duration_minutes) : null,
         show_results_immediately: form.show_results_immediately,
         show_all_results: form.show_all_results,
-        result_note: (form.result_note ? form.result_note + " " : "") + `[SHOW_ALL_RESULTS:${form.show_all_results}]`,
+        result_note: (form.result_note ? form.result_note + " " : "") + 
+          `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
+          (form.exam_schedule_type === "weekly" ? ` [WEEKLY_DAYS:${form.recurring_days.join(",")}]` : ""),
         is_published: false
       }
 
@@ -242,12 +303,29 @@ export default function ExamsClient({
         .insert(examData).select("*, batch:batches(name), branch:branches(id, name)").single()
       
       if (examErr) {
-        // Fallback if column batch_ids/branch_id doesn't exist yet
-        const { batch_ids: _b, branch_id: _br, show_all_results: _omitted, ...fallbackData } = examData
+        // Fallback if column batch_ids/branch_id/exam_schedule_type doesn't exist yet
+        const { 
+          batch_ids: _b, 
+          branch_id: _br, 
+          show_all_results: _omitted, 
+          exam_schedule_type: _st, 
+          recurring_days: _rd, 
+          is_paused: _ip, 
+          is_public_result: _ipr, 
+          ...fallbackData 
+        } = examData
+
         const { data: fbExam, error: fbErr } = await supabase.from("exams")
           .insert(fallbackData).select("*, batch:batches(name)").single()
         if (fbErr) throw fbErr
-        newExam = { ...fbExam, batch_ids: selectedBatchIdsToUse }
+        newExam = { 
+          ...fbExam, 
+          batch_ids: selectedBatchIdsToUse, 
+          exam_schedule_type: form.exam_schedule_type, 
+          recurring_days: form.recurring_days,
+          is_paused: false,
+          is_public_result: false
+        }
       } else {
         newExam = inserted
       }
@@ -267,17 +345,40 @@ export default function ExamsClient({
         if (qErr) throw qErr
       }
 
+      // If user selected "Publish exam schedule to Notice Board"
+      if (form.publish_to_notice && newExam?.id) {
+        try {
+          const nRes = await fetch(`/api/exams/${newExam.id}/publish-notice`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "schedule" }),
+          })
+          if (nRes.ok) {
+            toast.success("Exam created & routine posted to Notice Board!")
+          }
+        } catch (nErr) {
+          console.warn("Notice publish err:", nErr)
+        }
+      }
+
       setExams([{ ...newExam, exam_questions: [{ count: questions.length }] }, ...exams])
       setShowModal(false)
-      toast.success(examMode === "online" ? "Online exam created!" : "Exam created!")
+      toast.success(
+        form.exam_schedule_type === "weekly"
+          ? "Weekly exam schedule created!"
+          : (examMode === "online" ? "Online exam created!" : "Exam created!")
+      )
       
-      // Reset
+      // Reset form
       setQuestions([])
       setForm({ 
         title: "", 
         branch_id: selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || ""),
         batch_id: "", 
         batch_ids: [],
+        exam_schedule_type: "one_time",
+        recurring_days: [],
+        publish_to_notice: false,
         exam_type: "written", 
         subject: "", 
         total_marks: "100", 
@@ -329,10 +430,24 @@ export default function ExamsClient({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex p-1 bg-white border border-slate-300 rounded-xl">
-            {["all", "published", "draft", "online"].map(t => (
-              <button key={t} onClick={() => setStatusFilter(t as any)} className={cn("px-4 py-1.5 text-xs sm:text-sm font-bold rounded-lg capitalize transition-all", statusFilter === t ? "bg-amber-500 text-white shadow-xs" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100")}>
-                {t}
+          <div className="flex p-1 bg-white border border-slate-300 rounded-xl overflow-x-auto">
+            {[
+              { id: "all", label: "All" },
+              { id: "one_time", label: "One-Time" },
+              { id: "weekly", label: "Weekly" },
+              { id: "published", label: "Published" },
+              { id: "draft", label: "Draft" },
+              { id: "online", label: "Online" }
+            ].map(({ id, label }) => (
+              <button 
+                key={id} 
+                onClick={() => setStatusFilter(id as any)} 
+                className={cn(
+                  "px-3.5 py-1.5 text-xs sm:text-sm font-bold rounded-lg capitalize transition-all whitespace-nowrap", 
+                  statusFilter === id ? "bg-amber-500 text-white shadow-xs" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                )}
+              >
+                {label}
               </button>
             ))}
           </div>
@@ -350,7 +465,7 @@ export default function ExamsClient({
             }))
             setShowModal(true)
           }} 
-          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all"
+          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Create Exam
         </button>
@@ -358,119 +473,192 @@ export default function ExamsClient({
 
       {/* Exam Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredExams.map(exam => (
-          <div key={exam.id} className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-500/40 p-5 shadow-xl transition-all flex flex-col h-full">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-start gap-3">
-                <div className={cn("p-2.5 rounded-xl border mt-0.5", exam.is_online ? "bg-blue-50 text-blue-600 border-blue-200" : "bg-amber-50 text-amber-600 border-amber-200")}>
-                  {exam.is_online ? <Globe className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+        {filteredExams.map(exam => {
+          const isWeekly = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)
+          const recurringDaysList = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
+          const daysBengali = recurringDaysList.map(d => WEEK_DAYS.find(w => w.id === d)?.short || d).join(", ")
+
+          return (
+            <div key={exam.id} className={cn(
+              "bg-white rounded-2xl border shadow-sm p-5 shadow-xl transition-all flex flex-col h-full",
+              exam.is_paused ? "border-rose-200 bg-rose-50/20" : "border-slate-200/90 hover:border-amber-500/40"
+            )}>
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    "p-2.5 rounded-xl border mt-0.5", 
+                    exam.is_online 
+                      ? "bg-blue-50 text-blue-600 border-blue-200" 
+                      : isWeekly
+                        ? "bg-purple-50 text-purple-600 border-purple-200"
+                        : "bg-amber-50 text-amber-600 border-amber-200"
+                  )}>
+                    {exam.is_online ? <Globe className="w-5 h-5" /> : isWeekly ? <CalendarDays className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="font-extrabold text-slate-900 text-base leading-snug">{exam.title}</p>
+                      {exam.is_paused && (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
+                          PAUSED (স্থগিত)
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5 font-medium">{exam.subject || "General Subject"}</p>
+                    
+                    {/* Configured Batches & Branch badges */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      {exam.branch?.name && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                          <Landmark className="w-2.5 h-2.5" /> {exam.branch.name}
+                        </span>
+                      )}
+                      {Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? (
+                        exam.batch_ids.map(bId => {
+                          const bName = batches.find(b => b.id === bId)?.name || (exam.batch_id === bId ? exam.batch?.name : null)
+                          if (!bName) return null
+                          return (
+                            <span key={bId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                              <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {bName}
+                            </span>
+                          )
+                        })
+                      ) : exam.batch?.name ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                          <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {exam.batch.name}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                          All Batches
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-extrabold text-slate-900 text-base leading-snug">{exam.title}</p>
-                  <p className="text-xs text-slate-500 mt-0.5 font-medium">{exam.subject || "General Subject"}</p>
-                  
-                  {/* Configured Batches & Branch badges */}
-                  <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                    {exam.branch?.name && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                        <Landmark className="w-2.5 h-2.5" /> {exam.branch.name}
-                      </span>
-                    )}
-                    {Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? (
-                      exam.batch_ids.map(bId => {
-                        const bName = batches.find(b => b.id === bId)?.name || (exam.batch_id === bId ? exam.batch?.name : null)
-                        if (!bName) return null
-                        return (
-                          <span key={bId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
-                            <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {bName}
-                          </span>
-                        )
-                      })
-                    ) : exam.batch?.name ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
-                        <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {exam.batch.name}
+                <div className="flex flex-col gap-1.5 items-end shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", exam.is_published ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
+                      {exam.is_published ? "Published" : "Draft"}
+                    </span>
+                    {/* ONLY UPPER DELETE BUTTON */}
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmExam(exam)}
+                      disabled={deletingId === exam.id}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                      title="Delete Exam"
+                    >
+                      {deletingId === exam.id ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                      ) : (
+                        <Trash2 className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap justify-end">
+                    {isWeekly ? (
+                      <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1">
+                        <CalendarDays className="w-3 h-3" /> WEEKLY
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                        All Batches
+                      <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-bold">
+                        ONE-TIME
+                      </span>
+                    )}
+                    {exam.is_online && <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-extrabold">ONLINE</span>}
+                    {exam.is_public_result && (
+                      <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md font-bold" title="Public in Online Results portal">
+                        PUBLIC RESULT
                       </span>
                     )}
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-1 items-end shrink-0">
-                <div className="flex items-center gap-1.5">
-                  <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", exam.is_published ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
-                    {exam.is_published ? "Published" : "Draft"}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setDeleteConfirmExam(exam)}
-                    disabled={deletingId === exam.id}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
-                    title="Delete Exam"
-                  >
-                    {deletingId === exam.id ? (
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
-                    ) : (
-                      <Trash2 className="w-3.5 h-3.5" />
-                    )}
-                  </button>
+              
+              <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex-grow">
+                <div className="flex flex-col">
+                  <span className="text-[11px] text-slate-500 font-medium">Total Marks</span>
+                  <span className="font-extrabold text-amber-700 text-sm">{exam.total_marks}</span>
                 </div>
-                {exam.is_online && <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-extrabold">ONLINE</span>}
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex-grow">
-              <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Total Marks</span><span className="font-extrabold text-amber-700 text-sm">{exam.total_marks}</span></div>
-              <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Date</span><span className="font-semibold text-slate-800 text-sm">{exam.exam_date ? formatDate(exam.exam_date) : "TBD"}</span></div>
-              {exam.is_online && (
-                <>
-                  <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Duration</span><span className="font-semibold text-slate-800 text-sm">{exam.time_limit_minutes} min</span></div>
-                  <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Questions</span><span className="font-semibold text-slate-800 text-sm">{exam.exam_questions?.[0]?.count || 0}</span></div>
-                </>
-              )}
-            </div>
-
-            <div className="pt-3 border-t border-slate-200 flex flex-col gap-2 mt-auto">
-              <div className="flex items-center gap-2 w-full">
-                {exam.is_online ? (
+                <div className="flex flex-col">
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    {isWeekly ? "Weekly Day(s)" : "Exam Date"}
+                  </span>
+                  <span className="font-semibold text-slate-800 text-sm truncate">
+                    {isWeekly 
+                      ? (daysBengali ? `প্রতি ${daysBengali}` : "সাপ্তাহিক নির্ধারিত দিন")
+                      : (exam.exam_date ? formatDate(exam.exam_date) : "TBD")}
+                  </span>
+                </div>
+                {exam.is_online && (
                   <>
-                    {!exam.is_published && (
-                      <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 font-bold transition-colors">
-                        {publishing === exam.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />} Publish
-                      </button>
-                    )}
-                    <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold transition-colors border border-slate-300">
-                      <Eye className="w-3.5 h-3.5" /> Questions
-                    </Link>
+                    <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Duration</span><span className="font-semibold text-slate-800 text-sm">{exam.time_limit_minutes} min</span></div>
+                    <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Questions</span><span className="font-semibold text-slate-800 text-sm">{exam.exam_questions?.[0]?.count || 0}</span></div>
                   </>
-                ) : (
-                  <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex-1 flex justify-center items-center gap-2 py-2 bg-amber-500/15 text-amber-900 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/25 transition-colors">
-                    <Trophy className="w-4 h-4 text-amber-600" /> Enter Results
-                  </Link>
+                )}
+                {isWeekly && (
+                  <div className="col-span-2 flex items-center justify-between pt-1 border-t border-slate-200 mt-1">
+                    <span className="text-[11px] text-slate-500 font-medium">Weekly Status:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleTogglePause(exam)}
+                      disabled={pausingId === exam.id}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition-colors border cursor-pointer",
+                        exam.is_paused 
+                          ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 shadow-2xs" 
+                          : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
+                      )}
+                    >
+                      {pausingId === exam.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : exam.is_paused ? (
+                        <>
+                          <Play className="w-3 h-3 text-rose-600 fill-rose-600" />
+                          <span>Resume (সচল করুন)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="w-3 h-3 text-amber-700 fill-amber-700" />
+                          <span>Pause (স্থগিত করুন)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                 )}
               </div>
-              <div className="flex items-center gap-2">
-                <Link
-                  href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-                  className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
-                >
-                  <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Send Result SMS
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setDeleteConfirmExam(exam)}
-                  disabled={deletingId === exam.id}
-                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl border border-slate-200 hover:border-rose-200 transition-colors cursor-pointer"
-                  title="Delete Exam"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+
+              <div className="pt-3 border-t border-slate-200 flex flex-col gap-2 mt-auto">
+                <div className="flex items-center gap-2 w-full">
+                  {exam.is_online ? (
+                    <>
+                      {!exam.is_published && (
+                        <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 font-bold transition-colors cursor-pointer">
+                          {publishing === exam.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />} Publish
+                        </button>
+                      )}
+                      <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold transition-colors border border-slate-300">
+                        <Eye className="w-3.5 h-3.5" /> Questions
+                      </Link>
+                    </>
+                  ) : (
+                    <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex-1 flex justify-center items-center gap-2 py-2 bg-amber-500/15 text-amber-900 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/25 transition-colors">
+                      <Trophy className="w-4 h-4 text-amber-600" /> Enter Results & Merit
+                    </Link>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 w-full">
+                  <Link
+                    href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
+                    className="w-full flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Send Result SMS
+                  </Link>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
         {filteredExams.length === 0 && <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 shadow-xs">No exams match your filters.</div>}
       </div>
 
@@ -548,6 +736,90 @@ export default function ExamsClient({
               </div>
 
               <form id="examForm" onSubmit={handleCreate} className="space-y-6">
+                {/* Exam Schedule Type Selector (One-Time vs Weekly) */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
+                      <CalendarDays className="w-4 h-4 text-amber-600" />
+                      Exam Type (পরীক্ষার ধরন নির্বাচন করুন) *
+                    </label>
+                    <select 
+                      value={form.exam_schedule_type} 
+                      onChange={e => update("exam_schedule_type", e.target.value as "one_time" | "weekly")} 
+                      className={inputClass + " font-bold text-indigo-950 bg-white border-amber-300"}
+                    >
+                      <option value="one_time">One time exam (এককালীন পরীক্ষা - নির্দিষ্ট তারিখে)</option>
+                      <option value="weekly">Weekly exam (সাপ্তাহিক পরীক্ষা - প্রতি সপ্তাহে নির্ধারিত দিনে)</option>
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {form.exam_schedule_type === "one_time" 
+                        ? "এককালীন পরীক্ষার একটি নির্দিষ্ট তারিখ থাকবে এবং এটি শিক্ষার্থীদের ব্যাচ প্রোফাইল ও রুটিনে প্রদর্শিত হবে।" 
+                        : "সাপ্তাহিক পরীক্ষা প্রতি সপ্তাহে নির্ধারিত দিনগুলোতে অনুষ্ঠিত হবে। এডমিন প্যানেল থেকে যেকোনো সময় এটি স্থগিত (Pause) করা যাবে।"}
+                    </p>
+                  </div>
+
+                  {form.exam_schedule_type === "weekly" ? (
+                    <div className="space-y-2 pt-2 border-t border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-purple-600" />
+                          Recurring Days (সপ্তাহের কোন কোন দিন পরীক্ষা?) *
+                        </label>
+                        <span className="text-[11px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                          {form.recurring_days.length} দিন নির্বাচিত
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {WEEK_DAYS.map(day => {
+                          const isDaySelected = form.recurring_days.includes(day.id)
+                          return (
+                            <button
+                              key={day.id}
+                              type="button"
+                              onClick={() => {
+                                const updated = isDaySelected
+                                  ? form.recurring_days.filter(d => d !== day.id)
+                                  : [...form.recurring_days, day.id]
+                                update("recurring_days", updated)
+                              }}
+                              className={cn(
+                                "px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5",
+                                isDaySelected
+                                  ? "bg-purple-600 text-white border-purple-700 shadow-xs"
+                                  : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+                              )}
+                            >
+                              {isDaySelected && <CheckCircle className="w-3.5 h-3.5" />}
+                              <span>{day.bn}</span>
+                              <span className="text-[10px] opacity-75">({day.id.slice(0, 3)})</span>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {/* Publish to Notice Board Checkbox */}
+                  <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/90 flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      id="publish_to_notice"
+                      checked={form.publish_to_notice}
+                      onChange={e => update("publish_to_notice", e.target.checked)}
+                      className="w-4 h-4 mt-0.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                    />
+                    <label htmlFor="publish_to_notice" className="cursor-pointer select-none">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                        <Bell className="w-3.5 h-3.5 text-amber-600" />
+                        নোটিশ বোর্ডে রুটিন প্রকাশ করুন (Publish exam routine to Notice Board)
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                        টিক দেওয়া থাকলে পরীক্ষা তৈরির সাথে সাথেই কোচিংয়ের নোটিশ বোর্ডে এই পরীক্ষার সম্পূর্ণ সূচি নোটিশ আকারে স্বয়ংক্রিয়ভাবে প্রকাশিত হবে।
+                      </p>
+                    </label>
+                  </div>
+                </div>
+
                 {/* Branch Selection if multiple */}
                 {branches.length > 1 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -569,20 +841,27 @@ export default function ExamsClient({
                 {/* Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Title *</label>
-                    <input required value={form.title} onChange={e => update("title", e.target.value)} className={inputClass} placeholder="e.g., Monthly Test - Physics" />
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Title (পরীক্ষার নাম) *</label>
+                    <input required value={form.title} onChange={e => update("title", e.target.value)} className={inputClass} placeholder="e.g., Monthly Test - Physics or Weekly Model Test" />
                   </div>
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Subject</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Subject (বিষয়)</label>
                     <input value={form.subject} onChange={e => update("subject", e.target.value)} className={inputClass} placeholder="e.g., Physics 1st Paper" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Date</label>
-                    <input type="date" value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} />
-                  </div>
-                  {examMode === "offline" && <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Total Marks</label><input type="number" required value={form.total_marks} onChange={e => update("total_marks", e.target.value)} className={inputClass} /></div>}
-                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Pass Marks</label><input type="number" required value={form.pass_marks} onChange={e => update("pass_marks", e.target.value)} className={inputClass} /></div>
-                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Duration (minutes)</label><input type="number" required value={form.duration_minutes} onChange={e => update("duration_minutes", e.target.value)} className={inputClass} /></div>
+                  {form.exam_schedule_type === "one_time" ? (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Date (পরীক্ষার তারিখ) *</label>
+                      <input type="date" required value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} />
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Effective From Date (শুরুর তারিখ - ঐচ্ছিক)</label>
+                      <input type="date" value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} />
+                    </div>
+                  )}
+                  {examMode === "offline" && <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Total Marks (মোট নম্বর)</label><input type="number" required value={form.total_marks} onChange={e => update("total_marks", e.target.value)} className={inputClass} /></div>}
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Pass Marks (পাস নম্বর)</label><input type="number" required value={form.pass_marks} onChange={e => update("pass_marks", e.target.value)} className={inputClass} /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Duration (সময় - মিনিট)</label><input type="number" required value={form.duration_minutes} onChange={e => update("duration_minutes", e.target.value)} className={inputClass} /></div>
                 </div>
 
                 {/* Batch Configuration (Multi-Batch Selection) */}

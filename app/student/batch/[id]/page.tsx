@@ -40,7 +40,8 @@ import {
   ClipboardList,
   Building2,
   PlayCircle,
-  Sparkles
+  Sparkles,
+  CalendarDays,
 } from 'lucide-react'
 
 const materialTypeBadge: Record<string, { label: string; icon: any; color: string; bg: string; border: string }> = {
@@ -287,7 +288,7 @@ export default function StudentBatchDetailPage() {
           try {
             const { data: examData } = await supabase
               .from('exam_results')
-              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, batch_ids, subject, is_online, show_all_results, result_note, duration_minutes)')
+              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, batch_ids, subject, is_online, show_all_results, result_note, duration_minutes, exam_schedule_type, recurring_days, is_paused, is_public_result)')
               .eq('student_id', studentId)
 
             if (examData && examData.length > 0) {
@@ -1202,7 +1203,19 @@ export default function StudentBatchDetailPage() {
 
                             {/* Date & Schedule */}
                             <td className="px-6 py-4 whitespace-nowrap text-slate-600 text-xs">
-                              {item.exam_date ? (
+                              {item.exam?.exam_schedule_type === 'weekly' || (Array.isArray(item.exam?.recurring_days) && item.exam?.recurring_days.length > 0) ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-center gap-1.5 font-bold text-purple-700">
+                                    <CalendarDays className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                    <span>
+                                      প্রতি {Array.isArray(item.exam?.recurring_days) ? item.exam.recurring_days.join(", ") : (item.exam?.recurring_days || "সাপ্তাহিক নির্ধারিত দিন")}
+                                    </span>
+                                  </div>
+                                  <span className="inline-block text-[10px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 font-bold">
+                                    Weekly Exam (সাপ্তাহিক পরীক্ষা)
+                                  </span>
+                                </div>
+                              ) : item.exam_date ? (
                                 <div className="flex items-center gap-1.5 font-medium">
                                   <Calendar className="w-3.5 h-3.5 text-indigo-500" />
                                   <span>{formatDate(item.exam_date)}</span>
@@ -1214,7 +1227,12 @@ export default function StudentBatchDetailPage() {
 
                             {/* Schedule Status */}
                             <td className="px-6 py-4 whitespace-nowrap">
-                              {item.has_result ? (
+                              {item.exam?.is_paused ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs">
+                                  <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
+                                  Exam Paused (স্থগিত)
+                                </span>
+                              ) : item.has_result ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs">
                                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                                   Result Published

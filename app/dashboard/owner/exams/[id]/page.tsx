@@ -25,8 +25,14 @@ import {
   EyeOff,
   MessageSquare,
   Trash2,
+  Globe,
+  Bell,
+  Play,
+  Pause,
+  CalendarDays,
+  CheckCircle,
 } from "lucide-react"
-import { getGrade } from "@/lib/utils"
+import { getGrade, cn } from "@/lib/utils"
 
 interface Student {
   id: string
@@ -72,6 +78,16 @@ export default function ExamResultsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
+  // Publishing & Actions State
+  const [publishingExam, setPublishingExam] = useState(false)
+  const [publishingPublic, setPublishingPublic] = useState(false)
+  const [publishingNotice, setPublishingNotice] = useState(false)
+  const [pausingExam, setPausingExam] = useState(false)
+
+  // Weekly Session selection state
+  const [selectedDay, setSelectedDay] = useState<string>("")
+  const [selectedSessionDate, setSelectedSessionDate] = useState<string>("")
+
   // Table Filter & Search State
   const [tableSearchQuery, setTableSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "entered" | "pending" | "passed" | "failed">("all")
@@ -98,6 +114,11 @@ export default function ExamResultsPage() {
         setExam(ex)
         const isPublic = ex?.show_all_results !== false && !ex?.result_note?.includes("[SHOW_ALL_RESULTS:false]")
         setShowAllResults(isPublic)
+
+        if (Array.isArray(ex?.recurring_days) && ex.recurring_days.length > 0) {
+          setSelectedDay(ex.recurring_days[0])
+        }
+        setSelectedSessionDate(ex?.exam_date || new Date().toISOString().split("T")[0])
 
         if (ex?.batch_id) {
           const { data: enrollments } = await supabase
@@ -461,6 +482,98 @@ export default function ExamResultsPage() {
     }
   }
 
+  // 1. Toggle Publish Exam (is_published)
+  async function handleTogglePublish(nextPublished: boolean) {
+    setPublishingExam(true)
+    try {
+      const res = await fetch(`/api/exams/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_published: nextPublished }),
+      })
+      if (!res.ok) {
+        await supabase.from("exams").update({ is_published: nextPublished }).eq("id", params.id)
+      }
+      setExam((prev: any) => ({ ...prev, is_published: nextPublished }))
+      toast.success(nextPublished ? "✓ Exam results published to students!" : "Exam reverted to draft.")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update publish status")
+    } finally {
+      setPublishingExam(false)
+    }
+  }
+
+  // 2. Toggle Publish to Public Online Result (is_public_result)
+  async function handleTogglePublicResult(nextPublic: boolean) {
+    setPublishingPublic(true)
+    try {
+      const res = await fetch(`/api/exams/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public_result: nextPublic }),
+      })
+      if (!res.ok) {
+        await supabase.from("exams").update({ is_public_result: nextPublic }).eq("id", params.id)
+      }
+      setExam((prev: any) => ({ ...prev, is_public_result: nextPublic }))
+      toast.success(
+        nextPublic
+          ? "✓ Merit list is now PUBLIC! Viewable on homepage & Online Result portal."
+          : "Merit list removed from public Online Result portal."
+      )
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update public status")
+    } finally {
+      setPublishingPublic(false)
+    }
+  }
+
+  // 3. Publish to Notice Board
+  async function handlePublishNotice() {
+    setPublishingNotice(true)
+    try {
+      const res = await fetch(`/api/exams/${params.id}/publish-notice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          type: "results",
+          day: selectedDay,
+          session_date: selectedSessionDate
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to publish notice")
+      toast.success("✓ " + (data.message || "Exam merit list published to Notice Board!"))
+    } catch (err: any) {
+      toast.error(err.message || "Failed to publish notice")
+    } finally {
+      setPublishingNotice(false)
+    }
+  }
+
+  // 4. Toggle Pause Weekly Exam
+  async function handleTogglePauseExam() {
+    if (!exam) return
+    const nextPaused = !exam.is_paused
+    setPausingExam(true)
+    try {
+      const res = await fetch(`/api/exams/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_paused: nextPaused }),
+      })
+      if (!res.ok) {
+        await supabase.from("exams").update({ is_paused: nextPaused }).eq("id", params.id)
+      }
+      setExam((prev: any) => ({ ...prev, is_paused: nextPaused }))
+      toast.success(nextPaused ? `✓ "${exam.title}" is now PAUSED (স্থগিত)` : `✓ "${exam.title}" is now RESUMED (সচল)`)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to toggle pause")
+    } finally {
+      setPausingExam(false)
+    }
+  }
+
   // Save all results & calculate rank
   async function handleSaveAll() {
     setLoading(true)
@@ -637,25 +750,116 @@ export default function ExamResultsPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          {/* Publish Exam to Students */}
+          <button
+            type="button"
+            onClick={() => handleTogglePublish(!exam.is_published)}
+            disabled={publishingExam}
+            className={cn(
+              "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
+              exam.is_published
+                ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
+                : "bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-blue-600/20"
+            )}
+            title={exam.is_published ? "Click to unpublish results" : "Publish results to enrolled students"}
+          >
+            {publishingExam ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : exam.is_published ? (
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+            ) : (
+              <Play className="w-3.5 h-3.5" />
+            )}
+            <span>{exam.is_published ? "Results Published" : "Publish Exam"}</span>
+          </button>
+
+          {/* Publish to Public Online Result */}
+          <button
+            type="button"
+            onClick={() => handleTogglePublicResult(!exam.is_public_result)}
+            disabled={publishingPublic}
+            className={cn(
+              "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
+              exam.is_public_result
+                ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 shadow-purple-600/20"
+                : "bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
+            )}
+            title="Publish merit list on public homepage Online Result portal"
+          >
+            {publishingPublic ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Globe className="w-3.5 h-3.5" />
+            )}
+            <span>{exam.is_public_result ? "🌐 Public Online Result" : "Publish to Public"}</span>
+          </button>
+
+          {/* Publish to Notice Board */}
+          <button
+            type="button"
+            onClick={handlePublishNotice}
+            disabled={publishingNotice}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer"
+            title="Generate and post merit list notice to notice board"
+          >
+            {publishingNotice ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Bell className="w-3.5 h-3.5 text-amber-600" />
+            )}
+            <span>Publish to Notice</span>
+          </button>
+
+          {/* Weekly Pause / Resume Toggle */}
+          {(exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)) && (
+            <button
+              type="button"
+              onClick={handleTogglePauseExam}
+              disabled={pausingExam}
+              className={cn(
+                "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
+                exam.is_paused
+                  ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-700 shadow-rose-600/20"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+              )}
+            >
+              {pausingExam ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : exam.is_paused ? (
+                <>
+                  <Play className="w-3.5 h-3.5 fill-white" />
+                  <span>Resume Exam</span>
+                </>
+              ) : (
+                <>
+                  <Pause className="w-3.5 h-3.5 fill-slate-800" />
+                  <span>Pause Exam</span>
+                </>
+              )}
+            </button>
+          )}
+
+          <Link
+            href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
+            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 rounded-xl font-bold text-xs sm:text-sm hover:border-amber-500/50 active:scale-[0.98] shadow-md transition-all cursor-pointer"
+          >
+            <MessageSquare className="w-4 h-4" /> Send Result SMS
+          </Link>
+
           <button
             type="button"
             onClick={() => setShowDeleteModal(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-sm active:scale-[0.98] shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-xs sm:text-sm active:scale-[0.98] shadow-xs transition-all cursor-pointer"
             title="Delete this exam"
           >
             <Trash2 className="w-4 h-4" /> Delete Exam
           </button>
-          <Link
-            href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 rounded-xl font-bold text-sm hover:border-amber-500/50 active:scale-[0.98] shadow-md transition-all cursor-pointer"
-          >
-            <MessageSquare className="w-4 h-4" /> Send Result SMS
-          </Link>
+
           <button
             onClick={handleSaveAll}
             disabled={loading}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm active:scale-[0.98] shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer"
+            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs sm:text-sm active:scale-[0.98] shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer"
           >
             {loading ? (
               <>
@@ -669,6 +873,68 @@ export default function ExamResultsPage() {
           </button>
         </div>
       </div>
+
+      {/* Weekly Exam Session Card */}
+      {(exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)) && (
+        <div className="p-4 sm:p-5 rounded-2xl border border-purple-200 bg-purple-50/70 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 border border-purple-300 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+              <CalendarDays className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                  Weekly Exam Session (সাপ্তাহিক পরীক্ষার সেশন ও দিন নির্বাচন)
+                </h2>
+                {exam.is_paused ? (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
+                    PAUSED (স্থগিত)
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    ACTIVE (সচল)
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-600 mt-1">
+                সপ্তাহের নির্ধারিত দিন সিলেক্ট করে এই সেশনের প্রাপ্ত নম্বর ইনপুট করুন।
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0 && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  বার / দিন (Day)
+                </label>
+                <select
+                  value={selectedDay}
+                  onChange={(e) => setSelectedDay(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-900 focus:outline-none cursor-pointer"
+                >
+                  {exam.recurring_days.map((d: string) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                সেশন তারিখ (Date)
+              </label>
+              <input
+                type="date"
+                value={selectedSessionDate}
+                onChange={(e) => setSelectedSessionDate(e.target.value)}
+                className="px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Batch Marks Visibility Option Card */}
       <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${

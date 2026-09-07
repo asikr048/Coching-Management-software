@@ -105,6 +105,9 @@ export interface Exam {
   exam_type: "mcq" | "written" | "mixed"; subject?: string; total_marks: number
   pass_marks: number; exam_date?: string; duration_minutes: number
   is_published: boolean; is_online?: boolean; batch?: Batch; branch?: Branch; created_at: string
+  exam_schedule_type?: "one_time" | "weekly"; recurring_days?: string[] | null
+  is_paused?: boolean; is_public_result?: boolean; schedule_notice_id?: string | null
+  show_all_results?: boolean; result_note?: string | null
 }
 
 export interface ExamResult {
