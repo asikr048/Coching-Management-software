@@ -100,12 +100,24 @@ export interface Attendance {
   fee_alert_triggered: boolean; student?: Student; created_at: string
 }
 
+export interface WeeklyDaySchedule {
+  day: string
+  day_bn?: string
+  day_en?: string
+  day_short?: string
+  exam_name: string
+  subject?: string
+  total_marks: number
+  pass_marks?: number
+  duration_minutes?: number
+}
+
 export interface Exam {
   id: string; branch_id?: string | null; batch_id?: string; batch_ids?: string[] | null; title: string
   exam_type: "mcq" | "written" | "mixed"; subject?: string; total_marks: number
   pass_marks: number; exam_date?: string; duration_minutes: number
   is_published: boolean; is_online?: boolean; batch?: Batch; branch?: Branch; created_at: string
-  exam_schedule_type?: "one_time" | "weekly"; recurring_days?: string[] | null
+  exam_schedule_type?: "one_time" | "weekly"; recurring_days?: (string | WeeklyDaySchedule)[] | null
   is_paused?: boolean; is_public_result?: boolean; schedule_notice_id?: string | null
   show_all_results?: boolean; result_note?: string | null
 }

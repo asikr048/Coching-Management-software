@@ -40,12 +40,30 @@ interface ExamRow {
   branch?: { id?: string; name: string } | null
   exam_questions?: { count: number }[]
   exam_schedule_type?: "one_time" | "weekly"
-  recurring_days?: string[] | null
+  recurring_days?: any[] | null
   is_paused?: boolean
   is_public_result?: boolean
   schedule_notice_id?: string | null
   result_note?: string | null
 }
+
+export interface WeeklyDayConfig {
+  selected: boolean
+  exam_name: string
+  subject: string
+  total_marks: string
+  pass_marks: string
+}
+
+const defaultWeeklySchedule = () => ({
+  Saturday: { selected: false, exam_name: "", subject: "", total_marks: "50", pass_marks: "20" },
+  Sunday: { selected: false, exam_name: "", subject: "", total_marks: "50", pass_marks: "20" },
+  Monday: { selected: false, exam_name: "", subject: "", total_marks: "50", pass_marks: "20" },
+  Tuesday: { selected: false, exam_name: "", subject: "", total_marks: "50", pass_marks: "20" },
+  Wednesday: { selected: false, exam_name: "", subject: "", total_marks: "50", pass_marks: "20" },
+  Thursday: { selected: false, exam_name: "", subject: "", total_marks: "50", pass_marks: "20" },
+  Friday: { selected: false, exam_name: "", subject: "", total_marks: "50", pass_marks: "20" },
+})
 
 interface BatchOpt { 
   id: string
@@ -111,6 +129,38 @@ export default function ExamsClient({
     result_note: ""
   })
   function update(f: string, v: any) { setForm(x => ({ ...x, [f]: v })) }
+
+  // Weekly Day-by-Day Schedule State
+  const [weeklySchedule, setWeeklySchedule] = useState(defaultWeeklySchedule())
+
+  function toggleDay(dayId: string, selected: boolean) {
+    setWeeklySchedule(prev => {
+      const current = prev[dayId as keyof typeof prev]
+      const dayBn = WEEK_DAYS.find(w => w.id === dayId)?.bn || dayId
+      return {
+        ...prev,
+        [dayId]: {
+          ...current,
+          selected,
+          exam_name: current.exam_name || (selected ? `${dayBn}ের পরীক্ষা` : "")
+        }
+      }
+    })
+  }
+
+  function updateDayField(dayId: string, field: "exam_name" | "subject" | "total_marks" | "pass_marks", value: string) {
+    setWeeklySchedule(prev => ({
+      ...prev,
+      [dayId]: {
+        ...prev[dayId as keyof typeof prev],
+        [field]: value
+      }
+    }))
+  }
+
+  const selectedWeeklyDaysCount = useMemo(() => {
+    return WEEK_DAYS.filter(d => weeklySchedule[d.id as keyof typeof weeklySchedule]?.selected).length
+  }, [weeklySchedule])
   
   const supabase = createClient()
 
@@ -259,13 +309,37 @@ export default function ExamsClient({
       toast.error("Please select at least one batch for this exam")
       return
     }
-    if (form.exam_schedule_type === "one_time" && !form.exam_date) {
-      toast.error("Please select a date for the one-time exam (এককালীন পরীক্ষার তারিখ নির্ধারণ আবশ্যক)")
-      return
-    }
-    if (form.exam_schedule_type === "weekly" && form.recurring_days.length === 0) {
-      toast.error("Please select at least one day of the week for the weekly exam (সাপ্তাহিক পরীক্ষার অন্তত একটি দিন নির্বাচন করুন)")
-      return
+
+    let activeWeeklyDays: any[] = []
+    if (form.exam_schedule_type === "weekly") {
+      activeWeeklyDays = WEEK_DAYS.filter(
+        (w) => weeklySchedule[w.id as keyof typeof weeklySchedule]?.selected
+      ).map((w) => {
+        const cfg = weeklySchedule[w.id as keyof typeof weeklySchedule]
+        return {
+          day: w.id,
+          day_bn: w.bn,
+          day_short: w.short,
+          exam_name: cfg.exam_name.trim() || `${w.bn}ের পরীক্ষা`,
+          subject: cfg.subject.trim() || form.subject || "",
+          total_marks: parseInt(cfg.total_marks) || 50,
+          pass_marks: parseInt(cfg.pass_marks) || 20,
+        }
+      })
+
+      if (activeWeeklyDays.length === 0) {
+        toast.error("সাপ্তাহিক পরীক্ষার জন্য অন্তত একটি দিন সিলেক্ট করুন এবং বিবরণ লিখুন (Please select at least one day and configure exam details)")
+        return
+      }
+    } else {
+      if (!form.title.trim()) {
+        toast.error("Please enter exam title (পরীক্ষার নাম লিখুন)")
+        return
+      }
+      if (!form.exam_date) {
+        toast.error("Please select a date for the one-time exam (এককালীন পরীক্ষার তারিখ নির্ধারণ আবশ্যক)")
+        return
+      }
     }
 
     setLoading(true)
@@ -273,20 +347,36 @@ export default function ExamsClient({
       const selectedBatchIdToUse = form.batch_ids[0] || form.batch_id || null
       const selectedBatchIdsToUse = form.batch_ids.length > 0 ? form.batch_ids : (form.batch_id ? [form.batch_id] : [])
 
+      const finalTitle = form.exam_schedule_type === "weekly"
+        ? (form.title.trim() || `সাপ্তাহিক পরীক্ষা (${activeWeeklyDays.map(d => d.day_bn).join(", ")})`)
+        : form.title
+
+      const finalTotalMarks = form.exam_schedule_type === "weekly"
+        ? (activeWeeklyDays[0]?.total_marks || 50)
+        : (examMode === "online" ? computedTotal : parseInt(form.total_marks))
+
+      const finalPassMarks = form.exam_schedule_type === "weekly"
+        ? (activeWeeklyDays[0]?.pass_marks || 20)
+        : parseInt(form.pass_marks)
+
+      const finalSubject = form.exam_schedule_type === "weekly"
+        ? (form.subject.trim() || activeWeeklyDays.map(d => d.subject).filter(Boolean).join(", ") || "সাপ্তাহিক বিষয়সমূহ")
+        : (form.subject || null)
+
       const examData: any = {
-        title: form.title, 
+        title: finalTitle, 
         branch_id: form.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null), 
         batch_id: selectedBatchIdToUse, 
         batch_ids: selectedBatchIdsToUse,
         exam_schedule_type: form.exam_schedule_type,
-        recurring_days: form.recurring_days,
+        recurring_days: form.exam_schedule_type === "weekly" ? activeWeeklyDays : [],
         is_paused: false,
         is_public_result: false,
         exam_type: form.exam_type,
-        subject: form.subject || null, 
-        total_marks: examMode === "online" ? computedTotal : parseInt(form.total_marks), 
-        pass_marks: parseInt(form.pass_marks),
-        exam_date: form.exam_schedule_type === "one_time" ? (form.exam_date || null) : (form.exam_date || null), 
+        subject: finalSubject, 
+        total_marks: finalTotalMarks, 
+        pass_marks: finalPassMarks,
+        exam_date: form.exam_schedule_type === "one_time" ? (form.exam_date || null) : null, 
         is_online: examMode === "online",
         time_limit_minutes: examMode === "online" ? parseInt(form.duration_minutes) : null,
         duration_minutes: examMode === "offline" ? parseInt(form.duration_minutes) : null,
@@ -294,7 +384,9 @@ export default function ExamsClient({
         show_all_results: form.show_all_results,
         result_note: (form.result_note ? form.result_note + " " : "") + 
           `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
-          (form.exam_schedule_type === "weekly" ? ` [WEEKLY_DAYS:${form.recurring_days.join(",")}]` : ""),
+          (form.exam_schedule_type === "weekly" 
+            ? ` [WEEKLY_SCHEDULE:${JSON.stringify(activeWeeklyDays)}] [WEEKLY_DAYS:${activeWeeklyDays.map(d => d.day).join(",")}]` 
+            : ""),
         is_published: false
       }
 
@@ -389,6 +481,7 @@ export default function ExamsClient({
         show_all_results: true, 
         result_note: "" 
       })
+      setWeeklySchedule(defaultWeeklySchedule())
     } catch (err: any) { 
       toast.error(err.message || "Failed") 
     } finally { 
@@ -476,7 +569,12 @@ export default function ExamsClient({
         {filteredExams.map(exam => {
           const isWeekly = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)
           const recurringDaysList = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
-          const daysBengali = recurringDaysList.map(d => WEEK_DAYS.find(w => w.id === d)?.short || d).join(", ")
+          const daysBengali = recurringDaysList.map((d: any) => {
+            if (typeof d === "object" && d !== null) {
+              return `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (${d.total_marks || ""} নম্বর)`
+            }
+            return WEEK_DAYS.find(w => w.id === d)?.short || d
+          }).join(", ")
 
           return (
             <div key={exam.id} className={cn(
@@ -737,7 +835,7 @@ export default function ExamsClient({
 
               <form id="examForm" onSubmit={handleCreate} className="space-y-6">
                 {/* Exam Schedule Type Selector (One-Time vs Weekly) */}
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-4">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/90 space-y-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-800 mb-1.5 flex items-center gap-1.5">
                       <CalendarDays className="w-4 h-4 text-amber-600" />
@@ -754,115 +852,257 @@ export default function ExamsClient({
                     <p className="text-[11px] text-slate-500 mt-1">
                       {form.exam_schedule_type === "one_time" 
                         ? "এককালীন পরীক্ষার একটি নির্দিষ্ট তারিখ থাকবে এবং এটি শিক্ষার্থীদের ব্যাচ প্রোফাইল ও রুটিনে প্রদর্শিত হবে।" 
-                        : "সাপ্তাহিক পরীক্ষা প্রতি সপ্তাহে নির্ধারিত দিনগুলোতে অনুষ্ঠিত হবে। এডমিন প্যানেল থেকে যেকোনো সময় এটি স্থগিত (Pause) করা যাবে।"}
+                        : "সাপ্তাহিক পরীক্ষা প্রতি সপ্তাহে নির্ধারিত দিনগুলোতে অনুষ্ঠিত হবে। প্রতিটি দিনের জন্য আলাদা পরীক্ষার নাম ও নম্বর নির্ধারণ করা যাবে।"}
                     </p>
-                  </div>
-
-                  {form.exam_schedule_type === "weekly" ? (
-                    <div className="space-y-2 pt-2 border-t border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-purple-600" />
-                          Recurring Days (সপ্তাহের কোন কোন দিন পরীক্ষা?) *
-                        </label>
-                        <span className="text-[11px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-                          {form.recurring_days.length} দিন নির্বাচিত
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {WEEK_DAYS.map(day => {
-                          const isDaySelected = form.recurring_days.includes(day.id)
-                          return (
-                            <button
-                              key={day.id}
-                              type="button"
-                              onClick={() => {
-                                const updated = isDaySelected
-                                  ? form.recurring_days.filter(d => d !== day.id)
-                                  : [...form.recurring_days, day.id]
-                                update("recurring_days", updated)
-                              }}
-                              className={cn(
-                                "px-3 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer flex items-center gap-1.5",
-                                isDaySelected
-                                  ? "bg-purple-600 text-white border-purple-700 shadow-xs"
-                                  : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
-                              )}
-                            >
-                              {isDaySelected && <CheckCircle className="w-3.5 h-3.5" />}
-                              <span>{day.bn}</span>
-                              <span className="text-[10px] opacity-75">({day.id.slice(0, 3)})</span>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ) : null}
-
-                  {/* Publish to Notice Board Checkbox */}
-                  <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/90 flex items-start gap-3">
-                    <input
-                      type="checkbox"
-                      id="publish_to_notice"
-                      checked={form.publish_to_notice}
-                      onChange={e => update("publish_to_notice", e.target.checked)}
-                      className="w-4 h-4 mt-0.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
-                    />
-                    <label htmlFor="publish_to_notice" className="cursor-pointer select-none">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
-                        <Bell className="w-3.5 h-3.5 text-amber-600" />
-                        নোটিশ বোর্ডে রুটিন প্রকাশ করুন (Publish exam routine to Notice Board)
-                      </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                        টিক দেওয়া থাকলে পরীক্ষা তৈরির সাথে সাথেই কোচিংয়ের নোটিশ বোর্ডে এই পরীক্ষার সম্পূর্ণ সূচি নোটিশ আকারে স্বয়ংক্রিয়ভাবে প্রকাশিত হবে।
-                      </p>
-                    </label>
                   </div>
                 </div>
 
                 {/* Branch Selection if multiple */}
                 {branches.length > 1 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Branch (শাখা)</label>
-                      <select 
-                        value={form.branch_id} 
-                        onChange={e => update("branch_id", e.target.value)} 
-                        className={inputClass + " font-bold"}
-                      >
-                        {branches.map(b => (
-                          <option key={b.id} value={b.id}>{b.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Branch (শাখা)</label>
+                    <select 
+                      value={form.branch_id} 
+                      onChange={e => update("branch_id", e.target.value)} 
+                      className={inputClass + " font-bold"}
+                    >
+                      {branches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
                   </div>
                 )}
 
-                {/* Basic Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Title (পরীক্ষার নাম) *</label>
-                    <input required value={form.title} onChange={e => update("title", e.target.value)} className={inputClass} placeholder="e.g., Monthly Test - Physics or Weekly Model Test" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1.5">Subject (বিষয়)</label>
-                    <input value={form.subject} onChange={e => update("subject", e.target.value)} className={inputClass} placeholder="e.g., Physics 1st Paper" />
-                  </div>
-                  {form.exam_schedule_type === "one_time" ? (
+                {/* WEEKLY EXAM CONFIGURATION */}
+                {form.exam_schedule_type === "weekly" ? (
+                  <div className="space-y-4">
+                    {/* Routine Title */}
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Date (পরীক্ষার তারিখ) *</label>
-                      <input type="date" required value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} />
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Weekly Routine Title (সাপ্তাহিক রুটিন / সিরিজের নাম - ঐচ্ছিক)
+                      </label>
+                      <input 
+                        value={form.title} 
+                        onChange={e => update("title", e.target.value)} 
+                        className={inputClass} 
+                        placeholder="যেমন: HSC 2026 সাপ্তাহিক মডেল টেস্ট সিরিজ (ফাঁকা রাখলে স্বয়ংক্রিয় নাম তৈরি হবে)" 
+                      />
                     </div>
-                  ) : (
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1.5">Effective From Date (শুরুর তারিখ - ঐচ্ছিক)</label>
-                      <input type="date" value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} />
+
+                    {/* Day by Day Schedule Configuration */}
+                    <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <label className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase tracking-wider">
+                            <Clock className="w-3.5 h-3.5 text-purple-600" />
+                            সাপ্তাহিক পরীক্ষার দিন, নাম ও নম্বর নির্ধারণ (Weekly Days & Marks) *
+                          </label>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            বামে দিন নির্বাচন করুন এবং ডানে সেই দিনের পরীক্ষার নাম, বিষয় ও নম্বর লিখুন।
+                          </p>
+                        </div>
+                        <span className="text-xs text-purple-700 font-extrabold bg-purple-100/90 px-2.5 py-1 rounded-full border border-purple-200">
+                          {selectedWeeklyDaysCount} দিন নির্বাচিত
+                        </span>
+                      </div>
+
+                      {/* Day Rows */}
+                      <div className="space-y-2.5">
+                        {WEEK_DAYS.map((day) => {
+                          const config = weeklySchedule[day.id as keyof typeof weeklySchedule]
+                          const isSelected = config?.selected
+
+                          return (
+                            <div
+                              key={day.id}
+                              className={cn(
+                                "p-3 rounded-xl border transition-all",
+                                isSelected
+                                  ? "bg-purple-50/50 border-purple-300 shadow-2xs"
+                                  : "bg-white border-slate-200 hover:border-slate-300"
+                              )}
+                            >
+                              <div className="flex flex-col md:flex-row md:items-center gap-3">
+                                {/* Left: Day Selector */}
+                                <div className="md:w-44 shrink-0 flex items-center gap-2.5">
+                                  <input
+                                    type="checkbox"
+                                    id={`day_check_${day.id}`}
+                                    checked={isSelected}
+                                    onChange={(e) => toggleDay(day.id, e.target.checked)}
+                                    className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                                  />
+                                  <label
+                                    htmlFor={`day_check_${day.id}`}
+                                    className="cursor-pointer select-none flex-1"
+                                  >
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-sm text-slate-900">{day.bn}</span>
+                                      <span className="text-xs text-slate-500 font-medium">({day.id})</span>
+                                    </div>
+                                    <span
+                                      className={cn(
+                                        "text-[10px] font-bold px-1.5 py-0.5 rounded inline-block mt-0.5",
+                                        isSelected
+                                          ? "bg-purple-200/80 text-purple-800"
+                                          : "bg-slate-100 text-slate-500 border border-slate-200"
+                                      )}
+                                    >
+                                      {isSelected ? "✓ নির্বাচিত" : "অনির্ধারিত"}
+                                    </span>
+                                  </label>
+                                </div>
+
+                                {/* Right: Exam Name, Subject, Total Mark, Pass Mark */}
+                                <div className="flex-1">
+                                  {isSelected ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                                      <div className="sm:col-span-5">
+                                        <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                          Exam Name (পরীক্ষার নাম) *
+                                        </label>
+                                        <input
+                                          type="text"
+                                          required={isSelected}
+                                          value={config.exam_name}
+                                          onChange={(e) => updateDayField(day.id, "exam_name", e.target.value)}
+                                          placeholder={`যেমন: ${day.bn}ের গণিত পরীক্ষা`}
+                                          className="w-full px-3 py-1.5 text-xs bg-white border border-purple-300 rounded-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        />
+                                      </div>
+
+                                      <div className="sm:col-span-3">
+                                        <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                          Subject (বিষয়)
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={config.subject}
+                                          onChange={(e) => updateDayField(day.id, "subject", e.target.value)}
+                                          placeholder="যেমন: গণিত / পদার্থ"
+                                          className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                        />
+                                      </div>
+
+                                      <div className="sm:col-span-2">
+                                        <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                          Total (নম্বর) *
+                                        </label>
+                                        <input
+                                          type="number"
+                                          required={isSelected}
+                                          value={config.total_marks}
+                                          onChange={(e) => updateDayField(day.id, "total_marks", e.target.value)}
+                                          placeholder="50"
+                                          className="w-full px-2 py-1.5 text-xs bg-white border border-purple-300 rounded-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500 text-center"
+                                        />
+                                      </div>
+
+                                      <div className="sm:col-span-2">
+                                        <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                          Pass (পাস)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          value={config.pass_marks}
+                                          onChange={(e) => updateDayField(day.id, "pass_marks", e.target.value)}
+                                          placeholder="20"
+                                          className="w-full px-2 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-purple-500 text-center"
+                                        />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div
+                                      onClick={() => toggleDay(day.id, true)}
+                                      className="cursor-pointer text-xs text-slate-400 py-2 px-3 rounded-lg border border-dashed border-slate-200 hover:border-purple-300 hover:text-purple-700 hover:bg-purple-50/40 transition-all flex items-center justify-between"
+                                    >
+                                      <span>দিনটি রুটিনে অন্তর্ভুক্ত করতে ক্লিক করুন বা বামের চেকবক্সে টিক দিন</span>
+                                      <span className="text-[11px] font-bold text-purple-600 bg-purple-100 px-2 py-0.5 rounded">
+                                        + যুক্ত করুন
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
-                  )}
-                  {examMode === "offline" && <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Total Marks (মোট নম্বর)</label><input type="number" required value={form.total_marks} onChange={e => update("total_marks", e.target.value)} className={inputClass} /></div>}
-                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Pass Marks (পাস নম্বর)</label><input type="number" required value={form.pass_marks} onChange={e => update("pass_marks", e.target.value)} className={inputClass} /></div>
-                  <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Duration (সময় - মিনিট)</label><input type="number" required value={form.duration_minutes} onChange={e => update("duration_minutes", e.target.value)} className={inputClass} /></div>
-                </div>
+
+                    {/* Publish to Notice Board Checkbox for Weekly */}
+                    <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/90 flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="publish_to_notice_weekly"
+                        checked={form.publish_to_notice}
+                        onChange={e => update("publish_to_notice", e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <label htmlFor="publish_to_notice_weekly" className="cursor-pointer select-none">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                          <Bell className="w-3.5 h-3.5 text-amber-600" />
+                          নোটিশ বোর্ডে সাপ্তাহিক রুটিন প্রকাশ করুন (Publish exam routine to Notice Board)
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                          টিক দেওয়া থাকলে পরীক্ষা তৈরির সাথে সাথেই কোচিংয়ের নোটিশ বোর্ডে এই সাপ্তাহিক পরীক্ষার সম্পূর্ণ সূচি ও মানবণ্টন নোটিশ আকারে স্বয়ংক্রিয়ভাবে প্রকাশিত হবে।
+                        </p>
+                      </label>
+                    </div>
+                  </div>
+                ) : (
+                  /* ONE-TIME EXAM CONFIGURATION */
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Title (পরীক্ষার নাম) *</label>
+                        <input required value={form.title} onChange={e => update("title", e.target.value)} className={inputClass} placeholder="e.g., Monthly Test - Physics" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Subject (বিষয়)</label>
+                        <input value={form.subject} onChange={e => update("subject", e.target.value)} className={inputClass} placeholder="e.g., Physics 1st Paper" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Date (পরীক্ষার তারিখ) *</label>
+                        <input type="date" required value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} />
+                      </div>
+                      {examMode === "offline" && (
+                        <div>
+                          <label className="block text-xs font-bold text-slate-700 mb-1.5">Total Marks (মোট নম্বর)</label>
+                          <input type="number" required value={form.total_marks} onChange={e => update("total_marks", e.target.value)} className={inputClass} />
+                        </div>
+                      )}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Pass Marks (পাস নম্বর)</label>
+                        <input type="number" required value={form.pass_marks} onChange={e => update("pass_marks", e.target.value)} className={inputClass} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">Duration (সময় - মিনিট)</label>
+                        <input type="number" required value={form.duration_minutes} onChange={e => update("duration_minutes", e.target.value)} className={inputClass} />
+                      </div>
+                    </div>
+
+                    {/* Publish to Notice Board Checkbox for One-Time */}
+                    <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/90 flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="publish_to_notice_one_time"
+                        checked={form.publish_to_notice}
+                        onChange={e => update("publish_to_notice", e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <label htmlFor="publish_to_notice_one_time" className="cursor-pointer select-none">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                          <Bell className="w-3.5 h-3.5 text-amber-600" />
+                          নোটিশ বোর্ডে রুটিন প্রকাশ করুন (Publish exam routine to Notice Board)
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                          টিক দেওয়া থাকলে পরীক্ষা তৈরির সাথে সাথেই কোচিংয়ের নোটিশ বোর্ডে এই পরীক্ষার সম্পূর্ণ সূচি নোটিশ আকারে স্বয়ংক্রিয়ভাবে প্রকাশিত হবে।
+                        </p>
+                      </label>
+                    </div>
+                  </div>
+                )}
 
                 {/* Batch Configuration (Multi-Batch Selection) */}
                 <div className="space-y-2 pt-2 border-t border-slate-200">

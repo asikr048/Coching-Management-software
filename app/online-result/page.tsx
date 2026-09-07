@@ -331,7 +331,7 @@ export default function OnlineResultPortalPage() {
             {filteredExams.map((exam) => {
               const isWeekly = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)
               const daysText = Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                ? exam.recurring_days.join(", ")
+                ? exam.recurring_days.map((d: any) => typeof d === "object" && d !== null ? `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (${d.total_marks || ""} নম্বর)` : d).join(", ")
                 : "সাপ্তাহিক দিন"
 
               return (

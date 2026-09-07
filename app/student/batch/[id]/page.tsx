@@ -1205,11 +1205,15 @@ export default function StudentBatchDetailPage() {
                             <td className="px-6 py-4 whitespace-nowrap text-slate-600 text-xs">
                               {item.exam?.exam_schedule_type === 'weekly' || (Array.isArray(item.exam?.recurring_days) && item.exam?.recurring_days.length > 0) ? (
                                 <div className="space-y-1">
-                                  <div className="flex items-center gap-1.5 font-bold text-purple-700">
-                                    <CalendarDays className="w-3.5 h-3.5 text-purple-600 shrink-0" />
-                                    <span>
-                                      প্রতি {Array.isArray(item.exam?.recurring_days) ? item.exam.recurring_days.join(", ") : (item.exam?.recurring_days || "সাপ্তাহিক নির্ধারিত দিন")}
-                                    </span>
+                                  <div className="flex items-start gap-1.5 font-bold text-purple-700">
+                                    <CalendarDays className="w-3.5 h-3.5 text-purple-600 shrink-0 mt-0.5" />
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="text-xs">
+                                        প্রতি {Array.isArray(item.exam?.recurring_days)
+                                          ? item.exam.recurring_days.map((d: any) => typeof d === "object" && d !== null ? `${d.day_bn || d.day} (${d.exam_name || "পরীক্ষা"} - ${d.total_marks || ""} নম্বর)` : d).join(", ")
+                                          : (item.exam?.recurring_days || "সাপ্তাহিক নির্ধারিত দিন")}
+                                      </span>
+                                    </div>
                                   </div>
                                   <span className="inline-block text-[10px] text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200 font-bold">
                                     Weekly Exam (সাপ্তাহিক পরীক্ষা)

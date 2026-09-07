@@ -20,7 +20,7 @@ export async function POST(
     }
 
     const body = await req.json().catch(() => ({}))
-    const { type = "schedule", day, session_date } = body
+    const { type = "schedule", day, session_date, day_exam_name, day_total_marks } = body
 
     const admin = createAdminClient()
 
@@ -64,6 +64,9 @@ export async function POST(
       const passMarks = exam.pass_marks || 0
       const passedCount = results?.filter((r) => Number(r.obtained_marks) >= passMarks).length || 0
 
+      const activeTitle = day_exam_name ? `${exam.title} (${day_exam_name})` : exam.title
+      const activeTotalMarks = day_total_marks || exam.total_marks
+
       // Top 3
       const top3 = (results || []).slice(0, 3)
       let topText = ""
@@ -71,19 +74,19 @@ export async function POST(
         topText = "\n\n🏆 শীর্ষ মেধাতালিকা (Top Rankers):\n" +
           top3.map((r, idx) => {
             const medal = idx === 0 ? "🥇 ১ম:" : idx === 1 ? "🥈 ২য়:" : "🥉 ৩য়:"
-            return `${medal} ${r.student?.name || "Student"} (ID: ${r.student?.student_id || "N/A"}) - ${r.obtained_marks}/${exam.total_marks}`
+            return `${medal} ${r.student?.name || "Student"} (ID: ${r.student?.student_id || "N/A"}) - ${r.obtained_marks}/${activeTotalMarks}`
           }).join("\n")
       }
 
-      const sessionInfo = session_date ? ` (${session_date})` : (day ? ` (${day})` : "")
+      const sessionInfo = session_date ? ` [${session_date}]` : (day ? ` [${day}]` : "")
 
-      noticeTitle = `🏆 পরীক্ষার ফলাফল ও মেরিট লিস্ট: ${exam.title}${sessionInfo}`
-      noticeContent = `মেধাশিরী কোচিংয়ের শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, "${exam.title}" পরীক্ষার ফলাফল প্রকাশিত হয়েছে।
+      noticeTitle = `🏆 পরীক্ষার ফলাফল ও মেরিট লিস্ট: ${activeTitle}${sessionInfo}`
+      noticeContent = `মেধাশিরী কোচিংয়ের শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, "${activeTitle}" পরীক্ষার ফলাফল প্রকাশিত হয়েছে।
 
 📋 পরীক্ষার তথ্য:
 • বিষয়: ${exam.subject || "সাধারণ"}
 • ব্যাচ: ${batchNames}
-• মোট নম্বর: ${exam.total_marks} | পাস নম্বর: ${exam.pass_marks}
+• মোট নম্বর: ${activeTotalMarks} | পাস নম্বর: ${exam.pass_marks}
 • মোট পরীক্ষার্থী: ${count} জন | উত্তীর্ণ: ${passedCount} জন
 • সর্বোচ্চ নম্বর: ${highest}${topText}
 
@@ -97,21 +100,27 @@ export async function POST(
     } else {
       // Schedule notice
       let dateText = exam.exam_date || "শীঘ্রই জানানো হবে"
+      let scheduleBreakdown = ""
       if (exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)) {
-        const days = Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0 
-          ? exam.recurring_days.join(", ") 
-          : (exam.recurring_days || "সাপ্তাহিক নির্ধারিত দিন")
-        dateText = `প্রতি সপ্তাহে (${days})`
+        if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+          const lines = exam.recurring_days.map((item: any) => {
+            if (typeof item === "object" && item !== null) {
+              const subj = item.subject ? ` [${item.subject}]` : ""
+              return `  • ${item.day_bn || item.day}: ${item.exam_name || "পরীক্ষা"}${subj} (মোট নম্বর: ${item.total_marks || 50}, পাস নম্বর: ${item.pass_marks || 20})`
+            }
+            return `  • প্রতি ${item}`
+          })
+          dateText = `প্রতি সপ্তাহে নির্ধারিত দিনসমূহে`
+          scheduleBreakdown = `\n\n📅 সাপ্তাহিক পরীক্ষার সূচি ও মানবণ্টন:\n` + lines.join("\n")
+        }
       }
 
-      noticeTitle = `📋 পরীক্ষার রুটিন নোটিশ: ${exam.title} (${exam.subject || "সাধারণ"})`
+      noticeTitle = `📋 পরীক্ষার রুটিন নোটিশ: ${exam.title}`
       noticeContent = `মেধাশিরী কোচিংয়ের সংশ্লিষ্ট শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, নিম্নোক্ত সূচি অনুযায়ী পরীক্ষা অনুষ্ঠিত হবে:
 
 📌 পরীক্ষার নাম: ${exam.title}
 📚 বিষয়: ${exam.subject || "সাধারণ"}
-📅 পরীক্ষার সময়/তারিখ: ${dateText}
-⏱️ সময়কাল: ${exam.duration_minutes || exam.time_limit_minutes || 60} মিনিট
-💯 মোট নম্বর: ${exam.total_marks} | পাস নম্বর: ${exam.pass_marks}
+📅 পরীক্ষার সময়/তারিখ: ${dateText}${scheduleBreakdown}
 🎯 টার্গেট ব্যাচ: ${batchNames}
 
 সকল শিক্ষার্থীকে যথাসময়ে উপস্থিত হয়ে পরীক্ষায় অংশগ্রহণের জন্য বিশেষ নির্দেশ দেওয়া যাচ্ছে। কোনো প্রকার অনুপস্থিতি গ্রহণযোগ্য হবে না।`

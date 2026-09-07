@@ -116,7 +116,9 @@ export default function ExamResultsPage() {
         setShowAllResults(isPublic)
 
         if (Array.isArray(ex?.recurring_days) && ex.recurring_days.length > 0) {
-          setSelectedDay(ex.recurring_days[0])
+          const first = ex.recurring_days[0]
+          const defaultDay = typeof first === "object" && first !== null ? (first.day_bn || first.day) : first
+          setSelectedDay(defaultDay)
         }
         setSelectedSessionDate(ex?.exam_date || new Date().toISOString().split("T")[0])
 
@@ -532,13 +534,24 @@ export default function ExamResultsPage() {
   async function handlePublishNotice() {
     setPublishingNotice(true)
     try {
+      const activeSchedule = Array.isArray(exam?.recurring_days)
+        ? exam.recurring_days.find((d: any) => {
+            if (typeof d === "object" && d !== null) {
+              return d.day === selectedDay || d.day_bn === selectedDay || d.day_en === selectedDay
+            }
+            return d === selectedDay
+          })
+        : null
+
       const res = await fetch(`/api/exams/${params.id}/publish-notice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           type: "results",
           day: selectedDay,
-          session_date: selectedSessionDate
+          session_date: selectedSessionDate,
+          day_exam_name: typeof activeSchedule === "object" && activeSchedule?.exam_name ? activeSchedule.exam_name : undefined,
+          day_total_marks: typeof activeSchedule === "object" && activeSchedule?.total_marks ? activeSchedule.total_marks : undefined
         }),
       })
       const data = await res.json()
@@ -876,63 +889,104 @@ export default function ExamResultsPage() {
 
       {/* Weekly Exam Session Card */}
       {(exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)) && (
-        <div className="p-4 sm:p-5 rounded-2xl border border-purple-200 bg-purple-50/70 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-start gap-3.5">
-            <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 border border-purple-300 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
-              <CalendarDays className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                  Weekly Exam Session (সাপ্তাহিক পরীক্ষার সেশন ও দিন নির্বাচন)
-                </h2>
-                {exam.is_paused ? (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
-                    PAUSED (স্থগিত)
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    ACTIVE (সচল)
-                  </span>
-                )}
+        <div className="p-4 sm:p-5 rounded-2xl border border-purple-200 bg-purple-50/70 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 border border-purple-300 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                <CalendarDays className="w-5 h-5" />
               </div>
-              <p className="text-xs text-slate-600 mt-1">
-                সপ্তাহের নির্ধারিত দিন সিলেক্ট করে এই সেশনের প্রাপ্ত নম্বর ইনপুট করুন।
-              </p>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
+                    Weekly Exam Session (সাপ্তাহিক পরীক্ষার সেশন ও দিন নির্বাচন)
+                  </h2>
+                  {exam.is_paused ? (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
+                      PAUSED (স্থগিত)
+                    </span>
+                  ) : (
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      ACTIVE (সচল)
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-600 mt-1">
+                  সপ্তাহের নির্ধারিত দিন সিলেক্ট করে এই সেশনের প্রাপ্ত নম্বর ইনপুট করুন।
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              {Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0 && (
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    বার / দিন (Day)
+                  </label>
+                  <select
+                    value={selectedDay}
+                    onChange={(e) => setSelectedDay(e.target.value)}
+                    className="px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-900 focus:outline-none cursor-pointer"
+                  >
+                    {exam.recurring_days.map((d: any, idx: number) => {
+                      const isObj = typeof d === "object" && d !== null
+                      const dayVal = isObj ? (d.day_bn || d.day) : d
+                      const label = isObj
+                        ? `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (নম্বর: ${d.total_marks || exam.total_marks})`
+                        : d
+                      return (
+                        <option key={idx} value={dayVal}>
+                          {label}
+                        </option>
+                      )
+                    })}
+                  </select>
+                </div>
+              )}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  সেশন তারিখ (Date)
+                </label>
+                <input
+                  type="date"
+                  value={selectedSessionDate}
+                  onChange={(e) => setSelectedSessionDate(e.target.value)}
+                  className="px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 flex-wrap">
-            {Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0 && (
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  বার / দিন (Day)
-                </label>
-                <select
-                  value={selectedDay}
-                  onChange={(e) => setSelectedDay(e.target.value)}
-                  className="px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-900 focus:outline-none cursor-pointer"
-                >
-                  {exam.recurring_days.map((d: string) => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
+          {(() => {
+            const activeDaySchedule = Array.isArray(exam.recurring_days)
+              ? exam.recurring_days.find((d: any) => {
+                  if (typeof d === "object" && d !== null) {
+                    return d.day === selectedDay || d.day_bn === selectedDay || d.day_en === selectedDay
+                  }
+                  return d === selectedDay
+                })
+              : null
+
+            if (!activeDaySchedule || typeof activeDaySchedule !== "object") return null
+
+            return (
+              <div className="pt-2.5 border-t border-purple-200/80 flex items-center gap-3 flex-wrap text-xs text-purple-900">
+                <span className="font-bold flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-purple-200">
+                  📝 {activeDaySchedule.exam_name}
+                </span>
+                {activeDaySchedule.subject && (
+                  <span className="bg-white px-2.5 py-1 rounded-lg border border-purple-200 font-medium">
+                    বিষয়: {activeDaySchedule.subject}
+                  </span>
+                )}
+                <span className="bg-white px-2.5 py-1 rounded-lg border border-purple-200 font-bold">
+                  মোট নম্বর: {activeDaySchedule.total_marks}
+                </span>
+                <span className="bg-white px-2.5 py-1 rounded-lg border border-purple-200 font-medium">
+                  পাস নম্বর: {activeDaySchedule.pass_marks}
+                </span>
               </div>
-            )}
-            <div>
-              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                সেশন তারিখ (Date)
-              </label>
-              <input
-                type="date"
-                value={selectedSessionDate}
-                onChange={(e) => setSelectedSessionDate(e.target.value)}
-                className="px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-              />
-            </div>
-          </div>
+            )
+          })()}
         </div>
       )}
 
