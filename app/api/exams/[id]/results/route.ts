@@ -5,6 +5,31 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+export function normalizeDayMarks(days: Record<string, any> | undefined | null): Record<string, any> {
+  if (!days || typeof days !== "object") return {}
+  const normalized: Record<string, any> = {}
+  for (const [key, val] of Object.entries(days)) {
+    if (!val) continue
+    const lowerKey = key.trim().toLowerCase()
+    const matched = ALL_WEEK_DAYS.find((d) => d.id === lowerKey || d.bn === key || d.en.toLowerCase() === lowerKey)
+    const canonicalKey = matched ? matched.id : lowerKey
+    if (!normalized[canonicalKey] || (typeof val === "object" && val !== null && "marks" in val)) {
+      normalized[canonicalKey] = val
+    }
+  }
+  return normalized
+}
+
 // Helper to check if exam results are public to the entire batch
 export function isExamPublic(exam: any): boolean {
   if (!exam) return true
@@ -49,13 +74,36 @@ export async function GET(
       return NextResponse.json({ error: "Exam not found" }, { status: 404 })
     }
 
-    // Compute cumulative total_marks and pass_marks if weekly recurring_days is present
+    // Compute cumulative total_marks and pass_marks for weekly exams (all 7 days)
     let cumulativeTotal = Number(exam.total_marks) || 100
     let cumulativePass = Number(exam.pass_marks) || 40
-    const isWeeklyExam = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) || exam.is_weekly_published === true
-    if (isWeeklyExam && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
-      const sumTotal = exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-      const sumPass = exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+    const isWeeklyExam =
+      exam.exam_schedule_type === "weekly" ||
+      (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+      exam.is_weekly_published === true ||
+      Boolean(exam.title?.includes("সাপ্তাহিক"))
+
+    if (isWeeklyExam) {
+      const recDays = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
+      const confMap: Record<string, any> = {}
+      for (const d of recDays) {
+        const isObj = typeof d === "object" && d !== null
+        const rawKey = isObj ? (d.day || d.day_bn || d.day_en || "") : String(d)
+        const lowerKey = String(rawKey).toLowerCase()
+        const matched = ALL_WEEK_DAYS.find((w) => w.id === lowerKey || w.bn === rawKey || w.en.toLowerCase() === lowerKey)
+        const canonicalKey = matched?.id || lowerKey
+        confMap[canonicalKey] = d
+      }
+
+      let sumTotal = 0
+      let sumPass = 0
+      for (const w of ALL_WEEK_DAYS) {
+        const conf = confMap[w.id]
+        const dTotal = conf && typeof conf === "object" && conf.total_marks ? Number(conf.total_marks) : 50
+        const dPass = conf && typeof conf === "object" && conf.pass_marks ? Number(conf.pass_marks) : 20
+        sumTotal += dTotal
+        sumPass += dPass
+      }
       if (sumTotal > 0) cumulativeTotal = sumTotal
       if (sumPass > 0) cumulativePass = sumPass
     }
@@ -147,13 +195,13 @@ export async function GET(
 
       // Sort strictly by obtained_marks descending (highest to lowest)
       const sorted = [...(allResults || [])].map((item: any) => {
-        let sDayMarks = item.day_marks
-        if ((!sDayMarks || typeof sDayMarks !== "object" || Object.keys(sDayMarks).length === 0) && fallbackStudentDayMarks[item.student_id]) {
-          sDayMarks = fallbackStudentDayMarks[item.student_id]
+        let sDayMarks = normalizeDayMarks(item.day_marks)
+        if (Object.keys(sDayMarks).length === 0 && fallbackStudentDayMarks[item.student_id]) {
+          sDayMarks = normalizeDayMarks(fallbackStudentDayMarks[item.student_id])
         }
         return {
           ...item,
-          day_marks: sDayMarks || {},
+          day_marks: sDayMarks,
         }
       }).sort((a: any, b: any) => {
         const marksA = Number(a.obtained_marks) || 0
@@ -259,9 +307,9 @@ export async function GET(
         } catch {}
       }
 
-      let ownDayMarks = ownResult?.day_marks
-      if ((!ownDayMarks || typeof ownDayMarks !== "object" || Object.keys(ownDayMarks).length === 0) && fallbackStudentDayMarks[currentStudentId]) {
-        ownDayMarks = fallbackStudentDayMarks[currentStudentId]
+      let ownDayMarks = normalizeDayMarks(ownResult?.day_marks)
+      if (Object.keys(ownDayMarks).length === 0 && fallbackStudentDayMarks[currentStudentId]) {
+        ownDayMarks = normalizeDayMarks(fallbackStudentDayMarks[currentStudentId])
       }
 
       if (ownResult && ownResult.rank !== computedRank) {
@@ -388,7 +436,7 @@ export async function POST(
     // 1. Fetch current exam
     const { data: currentExam, error: examErr } = await admin
       .from("exams")
-      .select("id, total_marks, recurring_days, exam_schedule_type, result_note")
+      .select("id, title, total_marks, recurring_days, exam_schedule_type, result_note")
       .eq("id", examId)
       .maybeSingle()
 
@@ -452,21 +500,38 @@ export async function POST(
       } catch {}
     }
 
-    // Calculate weekly max marks
+    // Calculate weekly max marks (all 7 days)
     const isWeekly =
       currentExam.exam_schedule_type === "weekly" ||
       (Array.isArray(currentExam.recurring_days) && currentExam.recurring_days.length > 0) ||
       currentExam.result_note?.includes("[WEEKLY_SCHEDULE:") ||
-      currentExam.result_note?.includes("[WEEKLY_DAYS:")
+      currentExam.result_note?.includes("[WEEKLY_DAYS:") ||
+      Boolean(currentExam.title?.includes("সাপ্তাহিক"))
 
     let calculatedWeeklyMax = 0
     let calculatedWeeklyPass = 0
-    if (isWeekly && Array.isArray(currentExam.recurring_days) && currentExam.recurring_days.length > 0) {
-      calculatedWeeklyMax = currentExam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-      calculatedWeeklyPass = currentExam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+    if (isWeekly) {
+      const recDays = Array.isArray(currentExam.recurring_days) ? currentExam.recurring_days : []
+      const confMap: Record<string, any> = {}
+      for (const d of recDays) {
+        const isObj = typeof d === "object" && d !== null
+        const rawKey = isObj ? (d.day || d.day_bn || d.day_en || "") : String(d)
+        const lowerKey = String(rawKey).toLowerCase()
+        const matched = ALL_WEEK_DAYS.find((w) => w.id === lowerKey || w.bn === rawKey || w.en.toLowerCase() === lowerKey)
+        const canonicalKey = matched?.id || lowerKey
+        confMap[canonicalKey] = d
+      }
+
+      for (const w of ALL_WEEK_DAYS) {
+        const conf = confMap[w.id]
+        const dTotal = conf && typeof conf === "object" && conf.total_marks ? Number(conf.total_marks) : 50
+        const dPass = conf && typeof conf === "object" && conf.pass_marks ? Number(conf.pass_marks) : 20
+        calculatedWeeklyMax += dTotal
+        calculatedWeeklyPass += dPass
+      }
     }
 
-    // Auto-heal exam.total_marks in database if it was wrongly saved as 50 instead of 300!
+    // Auto-heal exam.total_marks in database if it was wrongly saved as 50 or 300 instead of 350!
     if (calculatedWeeklyMax > 0 && (!currentExam.total_marks || Number(currentExam.total_marks) < calculatedWeeklyMax)) {
       admin.from("exams").update({
         total_marks: calculatedWeeklyMax,
@@ -491,10 +556,10 @@ export async function POST(
         existingDays = { ...existingNoteMap[u.student_id] }
       }
 
-      // Merge existing days with incoming updates
+      // Merge existing days with incoming updates with canonical lowercase keys
       const mergedDays: Record<string, any> = {
-        ...existingDays,
-        ...(u.day_marks || {}),
+        ...normalizeDayMarks(existingDays),
+        ...normalizeDayMarks(u.day_marks),
       }
 
       // Recalculate true cumulative grand total across all merged days
@@ -563,15 +628,23 @@ export async function POST(
     }
 
     // Backup day marks into exams.result_note [STUDENT_DAY_MARKS:...]
-    const mergedMap: Record<string, Record<string, any>> = {
-      ...existingNoteMap,
-      ...(body.all_day_marks || {}),
+    const mergedMap: Record<string, Record<string, any>> = {}
+    for (const [stId, dMap] of Object.entries(existingNoteMap)) {
+      mergedMap[stId] = normalizeDayMarks(dMap)
+    }
+    if (body.all_day_marks && typeof body.all_day_marks === "object") {
+      for (const [stId, dMap] of Object.entries(body.all_day_marks)) {
+        mergedMap[stId] = {
+          ...(mergedMap[stId] || {}),
+          ...normalizeDayMarks(dMap as any),
+        }
+      }
     }
     for (const u of mergedUpdates) {
       if (u.day_marks && Object.keys(u.day_marks).length > 0) {
         mergedMap[u.student_id] = {
           ...(mergedMap[u.student_id] || {}),
-          ...u.day_marks,
+          ...normalizeDayMarks(u.day_marks),
         }
       }
     }

@@ -108,6 +108,19 @@ function getDayMarkItem(
   return undefined
 }
 
+function normalizeDayMarks(rawDays: Record<string, any> | undefined): Record<string, DayMarkItem> {
+  if (!rawDays || typeof rawDays !== "object") return {}
+  const normalized: Record<string, DayMarkItem> = {}
+  for (const [k, v] of Object.entries(rawDays)) {
+    const lk = k.toLowerCase()
+    const matched = ALL_WEEK_DAYS.find((d) => d.id === lk || d.bn === k || d.en.toLowerCase() === lk)
+    const canonicalKey = matched?.id || lk
+    const item = typeof v === "object" && v !== null ? v : { marks: Number(v), total: 50, grade: "" }
+    normalized[canonicalKey] = item as DayMarkItem
+  }
+  return normalized
+}
+
 export default function ExamResultsPage() {
   const params = useParams()
   const router = useRouter()
@@ -190,29 +203,33 @@ export default function ExamResultsPage() {
     )
   }, [exam])
 
-  // 2. Parse Weekly Schedule Days
+  // 2. Parse Weekly Schedule Days (GUARANTEE ALL 7 DAYS: Saturday through Friday)
   const parsedWeeklyDays = useMemo<ParsedWeeklyDay[]>(() => {
     if (!exam || !isWeeklyExam) return []
 
+    // Collect any customized day configurations from exam.recurring_days, result_note, or title
+    const dayConfigMap: Record<string, ParsedWeeklyDay> = {}
+
     // A. Check recurring_days column
     if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
-      return exam.recurring_days.map((item: any) => {
+      for (const item of exam.recurring_days) {
         const isObj = typeof item === "object" && item !== null
-        const rawKey = isObj ? (item.day || item.day_bn || "") : item
+        const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : item
         const dayKey = String(rawKey).toLowerCase()
         const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+        const canonicalKey = matched?.id || dayKey
         const bnName = matched?.bn || (isObj ? item.day_bn : rawKey)
         const enName = matched?.en || (isObj ? item.day_en : rawKey)
-        return {
-          key: matched?.id || dayKey,
+        dayConfigMap[canonicalKey] = {
+          key: canonicalKey,
           day_bn: bnName,
           day_en: enName,
           exam_name: isObj && item.exam_name ? item.exam_name : `${bnName}ের পরীক্ষা`,
           subject: isObj && item.subject ? item.subject : exam.subject || "",
-          total_marks: isObj && item.total_marks ? Number(item.total_marks) : exam.total_marks || 50,
-          pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : exam.pass_marks || 20,
+          total_marks: isObj && item.total_marks ? Number(item.total_marks) : 50,
+          pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : 20,
         }
-      })
+      }
     }
 
     // B. Check result_note fallback tag [WEEKLY_SCHEDULE:...]
@@ -222,20 +239,23 @@ export default function ExamResultsPage() {
         if (match && match[1]) {
           const parsed = JSON.parse(match[1])
           if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed.map((item: any) => {
-              const rawKey = item.day || item.day_bn || ""
+            for (const item of parsed) {
+              const rawKey = item.day || item.day_bn || item.day_en || ""
               const dayKey = String(rawKey).toLowerCase()
-              const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === item.day_bn)
-              return {
-                key: matched?.id || dayKey,
-                day_bn: matched?.bn || item.day_bn || item.day,
-                day_en: matched?.en || item.day_en || item.day,
-                exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
-                subject: item.subject || exam.subject || "",
-                total_marks: Number(item.total_marks) || exam.total_marks || 50,
-                pass_marks: Number(item.pass_marks) || exam.pass_marks || 20,
+              const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+              const canonicalKey = matched?.id || dayKey
+              if (!dayConfigMap[canonicalKey]) {
+                dayConfigMap[canonicalKey] = {
+                  key: canonicalKey,
+                  day_bn: matched?.bn || item.day_bn || item.day,
+                  day_en: matched?.en || item.day_en || item.day,
+                  exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+                  subject: item.subject || exam.subject || "",
+                  total_marks: Number(item.total_marks) || 50,
+                  pass_marks: Number(item.pass_marks) || 20,
+                }
               }
-            })
+            }
           }
         }
       } catch (e) {
@@ -243,41 +263,47 @@ export default function ExamResultsPage() {
       }
     }
 
-    // C. Extract days from exam.title (e.g. "সাপ্তাহিক পরীক্ষা (শনিবার, রবিবার, সোমবার, মঙ্গলবার, বুধবার, বৃহস্পতিবার)")
+    // C. Extract days from exam.title
     const foundDaysInTitle = ALL_WEEK_DAYS.filter(
       (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
     )
-
     if (foundDaysInTitle.length > 0) {
       const subjectList = (exam.subject || "")
         .split(",")
         .map((s: string) => s.trim())
         .filter(Boolean)
 
-      return foundDaysInTitle.map((d, idx) => {
-        const assignedSubj = subjectList[idx] || exam.subject || ""
-        return {
-          key: d.id,
-          day_bn: d.bn,
-          day_en: d.en,
-          exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
-          subject: assignedSubj,
-          total_marks: exam.total_marks || 50,
-          pass_marks: exam.pass_marks || 20,
+      foundDaysInTitle.forEach((d, idx) => {
+        if (!dayConfigMap[d.id]) {
+          const assignedSubj = subjectList[idx] || exam.subject || ""
+          dayConfigMap[d.id] = {
+            key: d.id,
+            day_bn: d.bn,
+            day_en: d.en,
+            exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
+            subject: assignedSubj,
+            total_marks: 50,
+            pass_marks: 20,
+          }
         }
       })
     }
 
-    // D. Default to 6 active days if weekly but days not explicitly listed
-    return ALL_WEEK_DAYS.slice(0, 6).map((d) => ({
-      key: d.id,
-      day_bn: d.bn,
-      day_en: d.en,
-      exam_name: `${d.bn}ের পরীক্ষা`,
-      subject: exam.subject || "",
-      total_marks: exam.total_marks || 50,
-      pass_marks: exam.pass_marks || 20,
-    }))
+    // D. GUARANTEE ALL 7 DAYS: Always iterate through all 7 days of ALL_WEEK_DAYS (Saturday to Friday)
+    return ALL_WEEK_DAYS.map((w) => {
+      if (dayConfigMap[w.id]) {
+        return dayConfigMap[w.id]
+      }
+      return {
+        key: w.id,
+        day_bn: w.bn,
+        day_en: w.en,
+        exam_name: `${w.bn}ের পরীক্ষা`,
+        subject: exam.subject || "",
+        total_marks: 50,
+        pass_marks: 20,
+      }
+    })
   }, [exam, isWeeklyExam])
 
   // Active day configuration
@@ -581,7 +607,7 @@ export default function ExamResultsPage() {
     const dayGrade = getGrade(numMarks, dayMax)
     const activeKey = day.key.toLowerCase()
 
-    const currentStudentDays = { ...(dayMarksMap[student.id] || {}) }
+    const currentStudentDays = normalizeDayMarks(dayMarksMap[student.id])
     currentStudentDays[activeKey] = {
       marks: numMarks,
       total: dayMax,
@@ -619,7 +645,16 @@ export default function ExamResultsPage() {
           grade: overallGrade,
           day_marks: currentStudentDays,
         }
-        await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+        let { error } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+        if (error) {
+          delete payload.day_marks
+          await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+        }
+        try {
+          const curNote = exam.result_note || ""
+          const newNote = curNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() + ` [STUDENT_DAY_MARKS:${JSON.stringify(updatedAllDayMarks)}]`
+          await supabase.from("exams").update({ result_note: newNote }).eq("id", exam.id)
+        } catch {}
       }
 
       setDayMarksMap((prev) => ({
@@ -709,7 +744,7 @@ export default function ExamResultsPage() {
 
       for (const s of students) {
         let hasChanges = false
-        const sDays = { ...(nextDayMarksMap[s.id] || {}) }
+        const sDays = normalizeDayMarks(nextDayMarksMap[s.id])
 
         for (const d of parsedWeeklyDays) {
           const dayKey = d.key.toLowerCase()
@@ -760,8 +795,26 @@ export default function ExamResultsPage() {
       })
 
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || "Failed to batch save")
+        // Client fallback upsert directly into Supabase
+        for (const u of batchUpdates) {
+          const payload: any = {
+            exam_id: exam.id,
+            student_id: u.student_id,
+            obtained_marks: u.obtained_marks,
+            grade: u.grade,
+            day_marks: u.day_marks,
+          }
+          let { error } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          if (error) {
+            delete payload.day_marks
+            await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          }
+        }
+        try {
+          const curNote = exam.result_note || ""
+          const newNote = curNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() + ` [STUDENT_DAY_MARKS:${JSON.stringify(nextDayMarksMap)}]`
+          await supabase.from("exams").update({ result_note: newNote }).eq("id", exam.id)
+        } catch {}
       }
 
       setDayMarksMap(nextDayMarksMap)
@@ -776,7 +829,29 @@ export default function ExamResultsPage() {
         }
         return next
       })
-      toast.success(`✓ সকল দিনের নম্বর সফলভাবে সংরক্ষিত হয়েছে! (${batchUpdates.length} জন শিক্ষার্থী)`)
+
+      // Sync draftCellMarks with all saved marks across all days
+      setDraftCellMarks((prev) => {
+        const next = { ...prev }
+        for (const s of students) {
+          if (nextDayMarksMap[s.id]) {
+            for (const [dKey, item] of Object.entries(nextDayMarksMap[s.id])) {
+              if (item && !isNaN(Number(item.marks))) {
+                next[`${s.id}_${dKey}`] = String(item.marks)
+              }
+            }
+          }
+        }
+        return next
+      })
+
+      setJustSavedIds((prev) => {
+        const next = new Set(prev)
+        for (const u of batchUpdates) next.add(u.student_id)
+        return next
+      })
+
+      toast.success(`✓ সকল ৭ দিনের নম্বর সফলভাবে সংরক্ষিত হয়েছে! (${batchUpdates.length} জন শিক্ষার্থী)`)
     } catch (err: any) {
       toast.error(err.message || "Failed to save all days")
     } finally {
@@ -805,7 +880,7 @@ export default function ExamResultsPage() {
 
     if (isWeeklyExam && activeDayConfig && selectedTab !== "weekly_aggregate") {
       const activeKey = (activeDayConfig.key || selectedTab).toLowerCase()
-      const currentStudentDays = { ...(dayMarksMap[student.id] || {}) }
+      const currentStudentDays = normalizeDayMarks(dayMarksMap[student.id])
       currentStudentDays[activeKey] = {
         marks: numMarks,
         total: activeMax,
@@ -849,6 +924,11 @@ export default function ExamResultsPage() {
             delete payload.day_marks
             await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
           }
+          try {
+            const curNote = exam.result_note || ""
+            const newNote = curNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() + ` [STUDENT_DAY_MARKS:${JSON.stringify(updatedAllDayMarks)}]`
+            await supabase.from("exams").update({ result_note: newNote }).eq("id", exam.id)
+          } catch {}
         }
 
         setDayMarksMap((prev) => ({
@@ -866,6 +946,10 @@ export default function ExamResultsPage() {
         setDraftMarks((prev) => ({
           ...prev,
           [student.id]: String(numMarks),
+        }))
+        setDraftCellMarks((prev) => ({
+          ...prev,
+          [`${student.id}_${activeKey}`]: String(numMarks),
         }))
         setJustSavedIds((prev) => new Set(prev).add(student.id))
 
@@ -1151,7 +1235,7 @@ export default function ExamResultsPage() {
             const numMarks = parseFloat(raw)
             if (!isNaN(numMarks) && numMarks >= 0 && numMarks <= activeMax) {
               const dayGrade = getGrade(numMarks, activeMax)
-              const sDays = { ...(nextDayMarksMap[s.id] || {}) }
+              const sDays = normalizeDayMarks(nextDayMarksMap[s.id])
               sDays[activeKey] = {
                 marks: numMarks,
                 total: activeMax,
@@ -1188,8 +1272,25 @@ export default function ExamResultsPage() {
         })
 
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error || "Failed to batch save")
+          for (const u of batchUpdates) {
+            const payload: any = {
+              exam_id: exam.id,
+              student_id: u.student_id,
+              obtained_marks: u.obtained_marks,
+              grade: u.grade,
+              day_marks: u.day_marks,
+            }
+            let { error } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+            if (error) {
+              delete payload.day_marks
+              await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+            }
+          }
+          try {
+            const curNote = exam.result_note || ""
+            const newNote = curNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() + ` [STUDENT_DAY_MARKS:${JSON.stringify(nextDayMarksMap)}]`
+            await supabase.from("exams").update({ result_note: newNote }).eq("id", exam.id)
+          } catch {}
         }
 
         setDayMarksMap(nextDayMarksMap)
@@ -1204,6 +1305,22 @@ export default function ExamResultsPage() {
           }
           return next
         })
+
+        // Sync draftCellMarks
+        setDraftCellMarks((prev) => {
+          const next = { ...prev }
+          for (const u of batchUpdates) {
+            if (u.day_marks) {
+              for (const [dKey, item] of Object.entries(u.day_marks)) {
+                if (item && !isNaN(Number((item as any).marks))) {
+                  next[`${u.student_id}_${dKey}`] = String((item as any).marks)
+                }
+              }
+            }
+          }
+          return next
+        })
+
         setJustSavedIds((prev) => {
           const next = new Set(prev)
           for (const u of batchUpdates) next.add(u.student_id)

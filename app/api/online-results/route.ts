@@ -4,6 +4,31 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+export function normalizeDayMarks(days: Record<string, any> | undefined | null): Record<string, any> {
+  if (!days || typeof days !== "object") return {}
+  const normalized: Record<string, any> = {}
+  for (const [key, val] of Object.entries(days)) {
+    if (!val) continue
+    const lowerKey = key.trim().toLowerCase()
+    const matched = ALL_WEEK_DAYS.find((d) => d.id === lowerKey || d.bn === key || d.en.toLowerCase() === lowerKey)
+    const canonicalKey = matched ? matched.id : lowerKey
+    if (!normalized[canonicalKey] || (typeof val === "object" && val !== null && "marks" in val)) {
+      normalized[canonicalKey] = val
+    }
+  }
+  return normalized
+}
+
 // Helper to normalize an exam record with fallback tags from result_note
 function normalizeExam(ex: any) {
   const note = ex.result_note || ""
@@ -49,14 +74,33 @@ function normalizeExam(ex: any) {
   const isWeekly =
     ex.exam_schedule_type === "weekly" ||
     recDays.length > 0 ||
-    isWeeklyPub
+    isWeeklyPub ||
+    Boolean(ex.title?.includes("সাপ্তাহিক"))
 
-  // Calculate cumulative total_marks and pass_marks for weekly exams
+  // Guarantee all 7 days for weekly exams
   let totalMarks = Number(ex.total_marks) || 100
   let passMarks = Number(ex.pass_marks) || 40
-  if (isWeekly && recDays.length > 0) {
-    const sumTotal = recDays.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-    const sumPass = recDays.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+  if (isWeekly) {
+    // Map configured days by canonical id
+    const confMap: Record<string, any> = {}
+    for (const d of recDays) {
+      const isObj = typeof d === "object" && d !== null
+      const rawKey = isObj ? (d.day || d.day_bn || d.day_en || "") : String(d)
+      const lowerKey = String(rawKey).toLowerCase()
+      const matched = ALL_WEEK_DAYS.find((w) => w.id === lowerKey || w.bn === rawKey || w.en.toLowerCase() === lowerKey)
+      const canonicalKey = matched?.id || lowerKey
+      confMap[canonicalKey] = d
+    }
+
+    let sumTotal = 0
+    let sumPass = 0
+    for (const w of ALL_WEEK_DAYS) {
+      const conf = confMap[w.id]
+      const dTotal = conf && typeof conf === "object" && conf.total_marks ? Number(conf.total_marks) : 50
+      const dPass = conf && typeof conf === "object" && conf.pass_marks ? Number(conf.pass_marks) : 20
+      sumTotal += dTotal
+      sumPass += dPass
+    }
     if (sumTotal > 0) totalMarks = sumTotal
     if (sumPass > 0) passMarks = sumPass
   }
@@ -183,12 +227,12 @@ export async function GET(req: NextRequest) {
 
       const sorted = allResults
         .map((r) => {
-          let sDayMarks = r.day_marks
+          let sDayMarks = normalizeDayMarks(r.day_marks)
           if (
             (!sDayMarks || typeof sDayMarks !== "object" || Object.keys(sDayMarks).length === 0) &&
             fallbackDayMarks[r.student_id]
           ) {
-            sDayMarks = fallbackDayMarks[r.student_id]
+            sDayMarks = normalizeDayMarks(fallbackDayMarks[r.student_id])
           }
 
           let dayTotal = 0

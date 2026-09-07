@@ -92,6 +92,21 @@ function getDayMarkItem(
   return undefined
 }
 
+function normalizeDayMarks(days: Record<string, any> | undefined | null): Record<string, any> {
+  if (!days || typeof days !== "object") return {}
+  const normalized: Record<string, any> = {}
+  for (const [key, val] of Object.entries(days)) {
+    if (!val) continue
+    const lowerKey = key.trim().toLowerCase()
+    const matched = ALL_WEEK_DAYS.find((d) => d.id === lowerKey || d.bn === key || d.en.toLowerCase() === lowerKey)
+    const canonicalKey = matched ? matched.id : lowerKey
+    if (!normalized[canonicalKey] || (typeof val === "object" && val !== null && "marks" in val)) {
+      normalized[canonicalKey] = val
+    }
+  }
+  return normalized
+}
+
 interface PublicExam {
   id: string
   title: string
@@ -288,21 +303,24 @@ export default function OnlineResultPortalPage() {
     )
   }, [selectedExam])
 
-  // Parse structured days for weekly exams
+  // Parse structured days for weekly exams (GUARANTEE ALL 7 DAYS: Saturday to Friday)
   const parsedWeeklyDays = useMemo<ParsedWeeklyDay[]>(() => {
     if (!selectedExam) return []
 
+    const dayConfigMap: Record<string, ParsedWeeklyDay> = {}
+
     // 1. Check recurring_days array
     if (Array.isArray(selectedExam.recurring_days) && selectedExam.recurring_days.length > 0) {
-      return selectedExam.recurring_days.map((item: any) => {
+      for (const item of selectedExam.recurring_days) {
         const isObj = typeof item === "object" && item !== null
-        const rawKey = isObj ? item.day || item.day_bn || item.day_en || "" : String(item)
+        const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
         const dayKey = String(rawKey).toLowerCase()
         const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+        const canonicalKey = matched?.id || dayKey
         const bnName = matched?.bn || (isObj ? item.day_bn : rawKey)
         const enName = matched?.en || (isObj ? item.day_en : rawKey)
-        return {
-          key: matched?.id || dayKey,
+        dayConfigMap[canonicalKey] = {
+          key: canonicalKey,
           day_bn: bnName,
           day_en: enName,
           exam_name: isObj && item.exam_name ? item.exam_name : `${bnName}ের পরীক্ষা`,
@@ -310,7 +328,7 @@ export default function OnlineResultPortalPage() {
           total_marks: isObj && item.total_marks ? Number(item.total_marks) : 50,
           pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : 20,
         }
-      })
+      }
     }
 
     // 2. Check result_note fallback tag [WEEKLY_SCHEDULE:...]
@@ -321,20 +339,23 @@ export default function OnlineResultPortalPage() {
         if (match && match[1]) {
           const parsed = JSON.parse(match[1])
           if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed.map((item: any) => {
-              const rawKey = item.day || item.day_bn || ""
+            for (const item of parsed) {
+              const rawKey = item.day || item.day_bn || item.day_en || ""
               const dayKey = String(rawKey).toLowerCase()
-              const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === item.day_bn)
-              return {
-                key: matched?.id || dayKey,
-                day_bn: matched?.bn || item.day_bn || item.day,
-                day_en: matched?.en || item.day_en || item.day,
-                exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
-                subject: item.subject || selectedExam.subject || "",
-                total_marks: Number(item.total_marks) || 50,
-                pass_marks: Number(item.pass_marks) || 20,
+              const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+              const canonicalKey = matched?.id || dayKey
+              if (!dayConfigMap[canonicalKey]) {
+                dayConfigMap[canonicalKey] = {
+                  key: canonicalKey,
+                  day_bn: matched?.bn || item.day_bn || item.day,
+                  day_en: matched?.en || item.day_en || item.day,
+                  exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+                  subject: item.subject || selectedExam.subject || "",
+                  total_marks: Number(item.total_marks) || 50,
+                  pass_marks: Number(item.pass_marks) || 20,
+                }
               }
-            })
+            }
           }
         }
       } catch (e) {
@@ -352,57 +373,38 @@ export default function OnlineResultPortalPage() {
         .map((s: string) => s.trim())
         .filter(Boolean)
 
-      return foundDaysInTitle.map((d, idx) => {
-        const assignedSubj = subjectList[idx] || selectedExam.subject || ""
-        return {
-          key: d.id,
-          day_bn: d.bn,
-          day_en: d.en,
-          exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
-          subject: assignedSubj,
-          total_marks: 50,
-          pass_marks: 20,
+      foundDaysInTitle.forEach((d, idx) => {
+        if (!dayConfigMap[d.id]) {
+          const assignedSubj = subjectList[idx] || selectedExam.subject || ""
+          dayConfigMap[d.id] = {
+            key: d.id,
+            day_bn: d.bn,
+            day_en: d.en,
+            exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
+            subject: assignedSubj,
+            total_marks: 50,
+            pass_marks: 20,
+          }
         }
       })
     }
 
-    // 4. Scan examResults for day keys
-    const detectedDayKeys = new Set<string>()
-    for (const r of examResults) {
-      if (r.day_marks) {
-        for (const k of Object.keys(r.day_marks)) {
-          detectedDayKeys.add(k.toLowerCase())
+    // 4. GUARANTEE ALL 7 DAYS: Always iterate through all 7 days of ALL_WEEK_DAYS (Saturday to Friday)
+    if (isWeeklyExam) {
+      return ALL_WEEK_DAYS.map((w) => {
+        if (dayConfigMap[w.id]) {
+          return dayConfigMap[w.id]
         }
-      }
-    }
-    if (detectedDayKeys.size > 0) {
-      const matchedDays = ALL_WEEK_DAYS.filter(
-        (d) => detectedDayKeys.has(d.id) || detectedDayKeys.has(d.en.toLowerCase()) || detectedDayKeys.has(d.bn)
-      )
-      if (matchedDays.length > 0) {
-        return matchedDays.map((d) => ({
-          key: d.id,
-          day_bn: d.bn,
-          day_en: d.en,
-          exam_name: `${d.bn}ের পরীক্ষা`,
+        return {
+          key: w.id,
+          day_bn: w.bn,
+          day_en: w.en,
+          exam_name: `${w.bn}ের পরীক্ষা`,
           subject: selectedExam.subject || "",
           total_marks: 50,
           pass_marks: 20,
-        }))
-      }
-    }
-
-    // 5. Default to 6 active days if weekly
-    if (isWeeklyExam) {
-      return ALL_WEEK_DAYS.slice(0, 6).map((d) => ({
-        key: d.id,
-        day_bn: d.bn,
-        day_en: d.en,
-        exam_name: `${d.bn}ের পরীক্ষা`,
-        subject: selectedExam.subject || "",
-        total_marks: 50,
-        pass_marks: 20,
-      }))
+        }
+      })
     }
 
     return []
@@ -426,8 +428,9 @@ export default function OnlineResultPortalPage() {
         let grandTotal = 0
         let hasMark = false
 
-        if (r.day_marks && Object.keys(r.day_marks).length > 0) {
-          grandTotal = Object.values(r.day_marks).reduce((acc: number, curr: any) => {
+        const normDays = normalizeDayMarks(r.day_marks)
+        if (Object.keys(normDays).length > 0) {
+          grandTotal = Object.values(normDays).reduce((acc: number, curr: any) => {
             const m = typeof curr === "object" && curr !== null ? Number(curr.marks) : Number(curr)
             if (!isNaN(m)) {
               hasMark = true
@@ -506,8 +509,9 @@ export default function OnlineResultPortalPage() {
         let grandTotal = 0
         let hasMark = false
 
-        if (r.day_marks && Object.keys(r.day_marks).length > 0) {
-          grandTotal = Object.values(r.day_marks).reduce((acc: number, curr: any) => {
+        const normDays = normalizeDayMarks(r.day_marks)
+        if (Object.keys(normDays).length > 0) {
+          grandTotal = Object.values(normDays).reduce((acc: number, curr: any) => {
             const m = typeof curr === "object" && curr !== null ? Number(curr.marks) : Number(curr)
             if (!isNaN(m)) {
               hasMark = true
@@ -534,7 +538,7 @@ export default function OnlineResultPortalPage() {
           obtained_marks: obt,
           pct,
           grade,
-          day_marks: r.day_marks || {},
+          day_marks: normDays,
         }
       })
       .sort((a, b) => (b.obtained_marks ?? -1) - (a.obtained_marks ?? -1))
