@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import { getExamMarksConfig } from "@/app/student/batch/[id]/page"
 
 export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true)
@@ -375,14 +376,18 @@ export default function StudentProfilePage() {
   const totalPendingDue = activeDues.reduce((acc: number, d: any) => acc + Math.max(0, Number(d.due_amount || 0) - Number(d.paid_amount || 0)), 0)
   const avgScore = examResults.length > 0
     ? Math.round(examResults.reduce((acc, r) => {
-        const examObj = r.exam
-        const isWeekly = examObj?.exam_schedule_type === "weekly" || (Array.isArray(examObj?.recurring_days) && examObj.recurring_days.length > 0)
-        const weeklyTotal = isWeekly && Array.isArray(examObj?.recurring_days) && examObj.recurring_days.length > 0
-          ? examObj.recurring_days.reduce((dAcc: number, d: any) => dAcc + (Number(d?.total_marks) || 50), 0)
-          : 0
-        const total = weeklyTotal > 0 ? weeklyTotal : (Number(examObj?.total_marks) || 100)
+        const marksConfig = getExamMarksConfig(r.exam || r)
+        const total = marksConfig.totalMarks > 0 ? marksConfig.totalMarks : (Number(r.exam?.total_marks) || 100)
         const rawObt = r.obtained_marks ?? r.marks_obtained
-        const obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : 0
+        let obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : 0
+        if (marksConfig.isWeekly && r.day_marks && typeof r.day_marks === "object") {
+          let dSum = 0
+          for (const v of Object.values(r.day_marks)) {
+            const m = typeof v === "object" && v !== null ? Number((v as any).marks) : Number(v)
+            if (!isNaN(m) && m > 0) dSum += m
+          }
+          if (dSum > 0 && (obtained === 0 || dSum > obtained)) obtained = dSum
+        }
         return acc + (total > 0 ? (obtained / total) * 100 : 0)
       }, 0) / examResults.length)
     : 0
@@ -593,13 +598,18 @@ export default function StudentProfilePage() {
                     const batchExamList = examResults.filter((r: any) => r.exam?.batch_id === targetBatchId || r.batch_id === targetBatchId)
                     const latestExam = batchExamList.length > 0 ? batchExamList[0] : null
                     const latestExamObj = latestExam?.exam
-                    const isLatestWeekly = latestExamObj?.exam_schedule_type === "weekly" || (Array.isArray(latestExamObj?.recurring_days) && latestExamObj.recurring_days.length > 0)
-                    const latestWeeklyTotal = isLatestWeekly && Array.isArray(latestExamObj?.recurring_days) && latestExamObj.recurring_days.length > 0
-                      ? latestExamObj.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-                      : 0
-                    const latestTotal = latestWeeklyTotal > 0 ? latestWeeklyTotal : (Number(latestExamObj?.total_marks) || 100)
+                    const marksConfig = getExamMarksConfig(latestExamObj || latestExam)
+                    const latestTotal = marksConfig.totalMarks > 0 ? marksConfig.totalMarks : (Number(latestExamObj?.total_marks) || 100)
                     const latestRaw = latestExam ? (latestExam.obtained_marks ?? latestExam.marks_obtained) : null
-                    const latestObt = latestRaw != null && latestRaw !== "" ? Number(latestRaw) : 0
+                    let latestObt = latestRaw != null && latestRaw !== "" ? Number(latestRaw) : 0
+                    if (marksConfig.isWeekly && latestExam?.day_marks && typeof latestExam.day_marks === "object") {
+                      let dSum = 0
+                      for (const v of Object.values(latestExam.day_marks)) {
+                        const m = typeof v === "object" && v !== null ? Number((v as any).marks) : Number(v)
+                        if (!isNaN(m) && m > 0) dSum += m
+                      }
+                      if (dSum > 0 && (latestObt === 0 || dSum > latestObt)) latestObt = dSum
+                    }
 
                     return (
                       <Link key={i} href={`/student/batch/${targetBatchId}`}
@@ -1052,6 +1062,7 @@ export default function StudentProfilePage() {
               
               for (const be of batchExams) {
                 const res = examResults.find((r: any) => r.exam_id === be.id)
+                const marksCfg = getExamMarksConfig(be)
                 unifiedList.push({
                   id: be.id,
                   title: be.title,
@@ -1059,19 +1070,21 @@ export default function StudentProfilePage() {
                   batch_id: be.batch_id || res?.exam?.batch_id,
                   exam_date: be.exam_date || res?.exam?.exam_date,
                   duration_minutes: be.duration_minutes,
-                  total_marks: Number(be.total_marks || res?.exam?.total_marks) || 100,
-                  pass_marks: Number(be.pass_marks || res?.exam?.pass_marks) || 0,
-                  exam_schedule_type: be.exam_schedule_type || res?.exam?.exam_schedule_type,
+                  total_marks: marksCfg.totalMarks,
+                  pass_marks: marksCfg.passMarks,
+                  exam_schedule_type: marksCfg.isWeekly ? "weekly" : (be.exam_schedule_type || res?.exam?.exam_schedule_type),
                   recurring_days: be.recurring_days || res?.exam?.recurring_days,
                   published_days: be.published_days || res?.exam?.published_days,
                   is_weekly_published: be.is_weekly_published ?? res?.exam?.is_weekly_published,
                   has_result: !!res,
                   result: res || null,
+                  marksConfig: marksCfg,
                 })
               }
 
               for (const res of examResults) {
                 if (res.exam_id && !batchExams.some((be: any) => be.id === res.exam_id)) {
+                  const marksCfg = getExamMarksConfig(res.exam || res)
                   unifiedList.push({
                     id: res.exam_id,
                     title: res.exam?.title || "Exam",
@@ -1079,14 +1092,15 @@ export default function StudentProfilePage() {
                     batch_id: res.exam?.batch_id,
                     exam_date: res.exam?.exam_date,
                     duration_minutes: res.exam?.duration_minutes,
-                    total_marks: Number(res.exam?.total_marks) || 100,
-                    pass_marks: Number(res.exam?.pass_marks) || 0,
-                    exam_schedule_type: res.exam?.exam_schedule_type,
+                    total_marks: marksCfg.totalMarks,
+                    pass_marks: marksCfg.passMarks,
+                    exam_schedule_type: marksCfg.isWeekly ? "weekly" : res.exam?.exam_schedule_type,
                     recurring_days: res.exam?.recurring_days,
                     published_days: res.exam?.published_days,
                     is_weekly_published: res.exam?.is_weekly_published,
                     has_result: true,
                     result: res,
+                    marksConfig: marksCfg,
                   })
                 }
               }
@@ -1147,20 +1161,20 @@ export default function StudentProfilePage() {
                       {filteredList.map((exam: any) => {
                         const batchObj = enrollments.find(e => e.batch_id === exam.batch_id)?.batch
                         const r = exam.result
+                        const marksCfg = exam.marksConfig || getExamMarksConfig(exam)
                         const rawObt = r?.obtained_marks ?? r?.marks_obtained
-                        const obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : null
-                        const isWeekly =
-                          exam.exam_schedule_type === "weekly" ||
-                          (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
-                          exam.is_weekly_published === true
-                        const weeklyTotal = isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                          ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-                          : 0
-                        const weeklyPass = isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                          ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
-                          : 0
-                        const total = weeklyTotal > 0 ? weeklyTotal : (exam.total_marks || 100)
-                        const passMarks = weeklyPass > 0 ? weeklyPass : (exam.pass_marks || 0)
+                        let obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : null
+                        if (marksCfg.isWeekly && r?.day_marks && typeof r.day_marks === "object") {
+                          let dSum = 0
+                          for (const v of Object.values(r.day_marks)) {
+                            const m = typeof v === "object" && v !== null ? Number((v as any).marks) : Number(v)
+                            if (!isNaN(m) && m > 0) dSum += m
+                          }
+                          if (dSum > 0 && (obtained === null || obtained === 0 || dSum > obtained)) obtained = dSum
+                        }
+                        const isWeekly = marksCfg.isWeekly
+                        const total = marksCfg.totalMarks
+                        const passMarks = marksCfg.passMarks
                         const pct = obtained != null && total > 0 ? Math.round((obtained / total) * 100) : null
                         const passed = obtained != null && obtained >= passMarks
                         const isPublic = r?.exam?.show_all_results !== false && !r?.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')

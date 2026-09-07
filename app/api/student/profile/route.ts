@@ -5,6 +5,60 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+function getWeeklyMarks(ex: any, recDays: any[]) {
+  const note = ex?.result_note || ""
+  const isWeekly =
+    ex?.exam_schedule_type === "weekly" ||
+    (Array.isArray(recDays) && recDays.length > 0) ||
+    ex?.is_weekly_published === true ||
+    Boolean(ex?.title?.includes("সাপ্তাহিক"))
+
+  if (!isWeekly) {
+    return {
+      isWeekly: false,
+      totalMarks: Number(ex?.total_marks) || 100,
+      passMarks: Number(ex?.pass_marks) || 33,
+    }
+  }
+
+  const confMap: Record<string, any> = {}
+  const candidateDays = Array.isArray(recDays) ? recDays : []
+  for (const d of candidateDays) {
+    const isObj = typeof d === "object" && d !== null
+    const rawKey = isObj ? (d.day || d.day_bn || d.day_en || "") : String(d)
+    const lowerKey = String(rawKey).toLowerCase()
+    const matched = ALL_WEEK_DAYS.find((w) => w.id === lowerKey || w.bn === rawKey || w.en.toLowerCase() === lowerKey)
+    const canonicalKey = matched?.id || lowerKey
+    confMap[canonicalKey] = d
+  }
+
+  let sumTotal = 0
+  let sumPass = 0
+  for (const w of ALL_WEEK_DAYS) {
+    const conf = confMap[w.id]
+    const dTotal = conf && typeof conf === "object" && conf.total_marks ? Number(conf.total_marks) : 50
+    const dPass = conf && typeof conf === "object" && conf.pass_marks ? Number(conf.pass_marks) : 20
+    sumTotal += dTotal
+    sumPass += dPass
+  }
+
+  return {
+    isWeekly: true,
+    totalMarks: sumTotal > 0 ? sumTotal : 350,
+    passMarks: sumPass > 0 ? sumPass : 140,
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createClient()
@@ -385,26 +439,53 @@ export async function GET(req: NextRequest) {
             if (match && match[1]) pubDays = match[1].split(",").filter(Boolean)
           } catch {}
         }
+
+        const marksInfo = getWeeklyMarks(normalizedExam, recDays)
+
         normalizedExam = {
           ...normalizedExam,
+          total_marks: marksInfo.totalMarks,
+          pass_marks: marksInfo.passMarks,
           recurring_days: recDays,
           is_weekly_published: isWeeklyPub,
           is_public_result: isPubRes,
           published_days: pubDays,
           is_published: normalizedExam.is_published === true || isWeeklyPub || isPubRes || pubDays.length > 0,
-          exam_schedule_type:
-            normalizedExam.exam_schedule_type === "weekly" ||
-            (Array.isArray(recDays) && recDays.length > 0) ||
-            isWeeklyPub
-              ? "weekly"
-              : normalizedExam.exam_schedule_type || "one_time",
+          exam_schedule_type: marksInfo.isWeekly ? "weekly" : (normalizedExam.exam_schedule_type || "one_time"),
         }
+      }
+
+      // Check day marks sum
+      let finalObt = obt
+      if (normalizedExam?.exam_schedule_type === "weekly" && sDayMarks && typeof sDayMarks === "object") {
+        let daySum = 0
+        for (const v of Object.values(sDayMarks)) {
+          const m = typeof v === "object" && v !== null ? Number((v as any).marks) : Number(v)
+          if (!isNaN(m) && m > 0) daySum += m
+        }
+        if (daySum > 0 && (finalObt === 0 || daySum > finalObt)) {
+          finalObt = daySum
+        }
+      }
+
+      const totalMarks = Number(normalizedExam?.total_marks) || 100
+      const pct = totalMarks > 0 ? Math.round((finalObt / totalMarks) * 100) : 0
+      let autoGrade = r.grade
+      if (!autoGrade || autoGrade === "Pass" || autoGrade === "Fail") {
+        if (pct >= 80) autoGrade = "A+"
+        else if (pct >= 70) autoGrade = "A"
+        else if (pct >= 60) autoGrade = "A-"
+        else if (pct >= 50) autoGrade = "B"
+        else if (pct >= 40) autoGrade = "C"
+        else if (pct >= 33) autoGrade = "D"
+        else autoGrade = "F"
       }
 
       return {
         ...r,
-        obtained_marks: obt,
-        marks_obtained: obt,
+        obtained_marks: finalObt,
+        marks_obtained: finalObt,
+        grade: autoGrade,
         day_marks: sDayMarks || {},
         exam: normalizedExam,
       }
@@ -526,17 +607,18 @@ export async function GET(req: NextRequest) {
                 if (match && match[1]) pubDays = match[1].split(",").filter(Boolean)
               } catch {}
             }
+            const marksInfo = getWeeklyMarks(ex, recDays)
             return {
               ...ex,
+              total_marks: marksInfo.totalMarks,
+              pass_marks: marksInfo.passMarks,
               recurring_days: recDays,
               is_weekly_published: isWeeklyPub,
               is_public_result: isPubRes,
               published_days: pubDays,
               is_published: ex.is_published === true || isWeeklyPub || isPubRes || pubDays.length > 0,
               exam_schedule_type:
-                ex.exam_schedule_type === "weekly" ||
-                (Array.isArray(recDays) && recDays.length > 0) ||
-                isWeeklyPub
+                marksInfo.isWeekly
                   ? "weekly"
                   : ex.exam_schedule_type || "one_time",
             }
