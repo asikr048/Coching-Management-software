@@ -130,8 +130,17 @@ export default function ExamResultsPage() {
 
   const [justSavedIds, setJustSavedIds] = useState<Set<string>>(new Set())
   const [savingRowStudentId, setSavingRowStudentId] = useState<string | null>(null)
+  const [autoSavingIds, setAutoSavingIds] = useState<Set<string>>(new Set())
+  const autoSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
+
+  // Clean up any pending auto-save timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
+    }
+  }, [])
 
   // Quick Search & Enter State
   const [studentSearchQuery, setStudentSearchQuery] = useState("")
@@ -545,12 +554,12 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Save single student mark
-  async function saveStudentMark(student: Student, rawMark: string, rowIndex?: number) {
+  // Save single student mark (with optional silent mode for auto-save)
+  async function saveStudentMark(student: Student, rawMark: string, rowIndex?: number, silent?: boolean) {
     if (!exam) return
     const raw = rawMark.trim()
     if (raw === "") {
-      toast.error("অনুগ্রহ করে একটি নম্বর লিখুন (Please enter a mark)")
+      if (!silent) toast.error("অনুগ্রহ করে একটি নম্বর লিখুন (Please enter a mark)")
       return
     }
 
@@ -558,7 +567,7 @@ export default function ExamResultsPage() {
     const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : exam.total_marks
 
     if (isNaN(numMarks) || numMarks < 0 || numMarks > activeMax) {
-      toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeMax}-এর মধ্যে হতে হবে`)
+      if (!silent) toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeMax}-এর মধ্যে হতে হবে`)
       return
     }
 
@@ -630,7 +639,9 @@ export default function ExamResultsPage() {
         }))
         setJustSavedIds((prev) => new Set(prev).add(student.id))
 
-        toast.success(`✓ ${student.name} (${activeDayConfig.day_bn}): ${numMarks}/${activeMax} (${dayGrade}) সংরক্ষিত!`)
+        if (!silent) {
+          toast.success(`✓ ${student.name} (${activeDayConfig.day_bn}): ${numMarks}/${activeMax} (${dayGrade}) সংরক্ষিত!`)
+        }
 
         if (rowIndex !== undefined) {
           const nextInput = document.getElementById(`mark-input-${rowIndex + 1}`) as HTMLInputElement | null
@@ -641,7 +652,7 @@ export default function ExamResultsPage() {
         }
       } catch (err: any) {
         console.error("Save error:", err)
-        toast.error(err.message || "Failed to save mark")
+        if (!silent) toast.error(err.message || "Failed to save mark")
       }
     } else {
       const grade = getGrade(numMarks, exam.total_marks)
@@ -673,7 +684,9 @@ export default function ExamResultsPage() {
         setJustSavedIds((prev) => new Set(prev).add(student.id))
         syncAllRanks({ ...draftMarks, [student.id]: String(numMarks) })
 
-        toast.success(`✓ ${student.name}: ${numMarks}/${exam.total_marks} (${grade}) সংরক্ষিত!`)
+        if (!silent) {
+          toast.success(`✓ ${student.name}: ${numMarks}/${exam.total_marks} (${grade}) সংরক্ষিত!`)
+        }
 
         if (rowIndex !== undefined) {
           const nextInput = document.getElementById(`mark-input-${rowIndex + 1}`) as HTMLInputElement | null
@@ -683,7 +696,80 @@ export default function ExamResultsPage() {
           }
         }
       } catch (err: any) {
-        toast.error(err.message || "Failed to save mark")
+        if (!silent) toast.error(err.message || "Failed to save mark")
+      }
+    }
+  }
+
+  // Auto-save mark for a student with debounce or onBlur
+  async function triggerAutoSave(student: Student, rawMark: string) {
+    const trimmed = rawMark.trim()
+    if (trimmed === "") return
+    const num = parseFloat(trimmed)
+    const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : (exam?.total_marks || 100)
+    if (isNaN(num) || num < 0 || num > activeMax) return
+
+    setAutoSavingIds((prev) => new Set(prev).add(student.id))
+    try {
+      await saveStudentMark(student, trimmed, undefined, true)
+    } finally {
+      setAutoSavingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(student.id)
+        return next
+      })
+    }
+  }
+
+  // Handle live mark input typing with 700ms debounce auto-save
+  function handleMarkInputChange(student: Student, newVal: string) {
+    setDraftMarks((prev) => ({ ...prev, [student.id]: newVal }))
+
+    if (autoSaveTimersRef.current[student.id]) {
+      clearTimeout(autoSaveTimersRef.current[student.id])
+      delete autoSaveTimersRef.current[student.id]
+    }
+
+    const trimmed = newVal.trim()
+    if (trimmed === "") return
+
+    const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
+    const savedVal = isWeeklyExam && selectedTab !== "weekly_aggregate"
+      ? (getDayMarkItem(dayMarksMap[student.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)?.marks?.toString() ?? "")
+      : (savedResults[student.id]?.obtained_marks?.toString() ?? "")
+
+    if (trimmed === savedVal) return
+
+    const num = parseFloat(trimmed)
+    const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : (exam?.total_marks || 100)
+
+    if (!isNaN(num) && num >= 0 && num <= activeMax) {
+      autoSaveTimersRef.current[student.id] = setTimeout(() => {
+        triggerAutoSave(student, trimmed)
+      }, 700)
+    }
+  }
+
+  // Handle input blur for instantaneous auto-save
+  function handleMarkInputBlur(student: Student) {
+    if (autoSaveTimersRef.current[student.id]) {
+      clearTimeout(autoSaveTimersRef.current[student.id])
+      delete autoSaveTimersRef.current[student.id]
+    }
+
+    const currentVal = draftMarks[student.id]?.trim() ?? ""
+    if (currentVal === "") return
+
+    const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
+    const savedVal = isWeeklyExam && selectedTab !== "weekly_aggregate"
+      ? (getDayMarkItem(dayMarksMap[student.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)?.marks?.toString() ?? "")
+      : (savedResults[student.id]?.obtained_marks?.toString() ?? "")
+
+    if (currentVal !== savedVal) {
+      const num = parseFloat(currentVal)
+      const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : (exam?.total_marks || 100)
+      if (!isNaN(num) && num >= 0 && num <= activeMax) {
+        triggerAutoSave(student, currentVal)
       }
     }
   }
@@ -1537,6 +1623,8 @@ export default function ExamResultsPage() {
                   key={d.key}
                   type="button"
                   onClick={() => {
+                    Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
+                    autoSaveTimersRef.current = {}
                     setSelectedTab(d.key)
                     setJustSavedIds(new Set())
                     setSelectedStudent(null)
@@ -1587,6 +1675,8 @@ export default function ExamResultsPage() {
             <button
               type="button"
               onClick={() => {
+                Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
+                autoSaveTimersRef.current = {}
                 setSelectedTab("weekly_aggregate")
                 setJustSavedIds(new Set())
                 setSelectedStudent(null)
@@ -2157,6 +2247,10 @@ export default function ExamResultsPage() {
               </div>
 
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold shrink-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>⚡ Auto-Save Active</span>
+                </div>
                 {(
                   [
                     { key: "all", label: `সকল (${students.length})` },
@@ -2213,11 +2307,12 @@ export default function ExamResultsPage() {
                       : null
                     const hasEntered = Boolean(currentMarksNum !== null && !isNaN(currentMarksNum))
                     const isJustSaved = justSavedIds.has(s.id)
+                    const isAutoSaving = autoSavingIds.has(s.id)
                     const passed = hasEntered && currentMarksNum! >= activePassMarks
                     const gradeToDisplay = hasEntered ? getGrade(currentMarksNum!, activeTotalMarks) : ""
 
                     return (
-                      <tr key={s.id} className={cn("transition-colors", isJustSaved ? "bg-emerald-50" : hasEntered ? "hover:bg-amber-50/20" : "hover:bg-slate-50")}>
+                      <tr key={s.id} className={cn("transition-colors", isAutoSaving ? "bg-amber-50/40" : isJustSaved ? "bg-emerald-50" : hasEntered ? "hover:bg-amber-50/20" : "hover:bg-slate-50")}>
                         <td className="px-4 py-3 text-xs text-slate-500 font-mono text-center font-bold">{idx + 1}</td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
@@ -2239,6 +2334,10 @@ export default function ExamResultsPage() {
                           <form
                             onSubmit={(e) => {
                               e.preventDefault()
+                              if (autoSaveTimersRef.current[s.id]) {
+                                clearTimeout(autoSaveTimersRef.current[s.id])
+                                delete autoSaveTimersRef.current[s.id]
+                              }
                               saveRowMark(s, idx)
                             }}
                             className="inline-flex items-center gap-2"
@@ -2248,16 +2347,23 @@ export default function ExamResultsPage() {
                               type="text"
                               inputMode="decimal"
                               value={draftVal}
-                              onChange={(e) => setDraftMarks((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                              onChange={(e) => handleMarkInputChange(s, e.target.value)}
+                              onBlur={() => handleMarkInputBlur(s)}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter") {
                                   e.preventDefault()
+                                  if (autoSaveTimersRef.current[s.id]) {
+                                    clearTimeout(autoSaveTimersRef.current[s.id])
+                                    delete autoSaveTimersRef.current[s.id]
+                                  }
                                   saveRowMark(s, idx)
                                 }
                               }}
                               className={cn(
                                 "w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all focus:outline-none shadow-xs",
-                                isJustSaved
+                                isAutoSaving
+                                  ? "border-amber-400 bg-amber-50/50 text-amber-900 ring-2 ring-amber-400/20"
+                                  : isJustSaved
                                   ? "border-emerald-500 bg-emerald-50 text-emerald-800"
                                   : hasEntered
                                   ? "border-emerald-400 bg-white text-emerald-900"
@@ -2267,11 +2373,11 @@ export default function ExamResultsPage() {
                             />
                             <button
                               type="submit"
-                              disabled={savingRowStudentId === s.id}
+                              disabled={savingRowStudentId === s.id || isAutoSaving}
                               title="Save mark (Enter ↵)"
                               className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
                             >
-                              {savingRowStudentId === s.id ? (
+                              {savingRowStudentId === s.id || isAutoSaving ? (
                                 <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
                               ) : isJustSaved ? (
                                 <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -2300,7 +2406,11 @@ export default function ExamResultsPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-center">
-                          {isJustSaved ? (
+                          {isAutoSaving ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 animate-pulse">
+                              <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+                            </span>
+                          ) : isJustSaved ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                               <Check className="w-3 h-3" /> Saved ✓
                             </span>
