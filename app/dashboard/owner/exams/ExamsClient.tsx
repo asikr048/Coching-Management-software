@@ -43,6 +43,7 @@ interface ExamRow {
   recurring_days?: any[] | null
   is_paused?: boolean
   is_public_result?: boolean
+  is_weekly_published?: boolean
   schedule_notice_id?: string | null
   result_note?: string | null
 }
@@ -292,16 +293,26 @@ export default function ExamsClient({
   async function handlePublish(id: string) {
     setPublishing(id)
     try {
+      const targetExam = exams.find(e => e.id === id)
+      const isWeekly = targetExam?.exam_schedule_type === "weekly" || (Array.isArray(targetExam?.recurring_days) && targetExam.recurring_days.length > 0)
       const res = await fetch(`/api/exams/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_published: true, is_public_result: true }),
+        body: JSON.stringify({ 
+          is_published: true, 
+          is_public_result: true,
+          is_weekly_published: isWeekly ? true : undefined,
+        }),
       })
       if (!res.ok) {
-        const { error } = await supabase.from("exams").update({ is_published: true, is_public_result: true }).eq("id", id)
+        const { error } = await supabase.from("exams").update({ 
+          is_published: true, 
+          is_public_result: true,
+          is_weekly_published: isWeekly ? true : false,
+        }).eq("id", id)
         if (error) throw error
       }
-      setExams((prev) => prev.map((ex) => (ex.id === id ? { ...ex, is_published: true, is_public_result: true } : ex)))
+      setExams((prev) => prev.map((ex) => (ex.id === id ? { ...ex, is_published: true, is_public_result: true, is_weekly_published: isWeekly ? true : ex.is_weekly_published } : ex)))
       toast.success("Exam published successfully! Results are now visible in online results portal.")
     } catch (err: any) {
       toast.error(err.message || "Failed to publish exam")

@@ -1495,12 +1495,33 @@ export default function ExamResultsPage() {
       const res = await fetch(`/api/exams/${params.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_public_result: nextPublic }),
+        body: JSON.stringify({ 
+          is_public_result: nextPublic,
+          is_published: nextPublic,
+          is_weekly_published: isWeeklyExam ? nextPublic : undefined,
+        }),
       })
       if (!res.ok) {
-        await supabase.from("exams").update({ is_public_result: nextPublic }).eq("id", params.id)
+        const updatedNote = (exam?.result_note || "")
+          .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
+          .replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "")
+          .trim() + ` [PUBLIC_RESULT:${nextPublic}] ${isWeeklyExam ? `[IS_WEEKLY_PUBLISHED:${nextPublic}]` : ""}`
+        await supabase.from("exams").update({ 
+          is_public_result: nextPublic,
+          is_published: nextPublic,
+          is_weekly_published: isWeeklyExam ? nextPublic : false,
+          result_note: updatedNote.trim(),
+        }).eq("id", params.id)
       }
-      setExam((prev: any) => ({ ...prev, is_public_result: nextPublic }))
+      setExam((prev: any) => ({ 
+        ...prev, 
+        is_public_result: nextPublic,
+        is_published: nextPublic,
+        is_weekly_published: isWeeklyExam ? nextPublic : prev?.is_weekly_published,
+      }))
+      if (isWeeklyExam && nextPublic) {
+        setIsWeeklyPublished(true)
+      }
       toast.success(
         nextPublic
           ? "✓ মেরিট লিস্ট এখন পাবলিক! হোমপেজ এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান।"

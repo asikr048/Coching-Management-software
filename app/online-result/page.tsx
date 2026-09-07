@@ -264,9 +264,15 @@ export default function OnlineResultPortalPage() {
       const isWeekly =
         ex.exam_schedule_type === "weekly" ||
         (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
-        ex.is_weekly_published === true
+        ex.is_weekly_published === true ||
+        Boolean(ex.title?.includes("সাপ্তাহিক"))
 
-      if (activeTab === "everyday" && isWeekly) return false
+      const hasDailyComponent =
+        !isWeekly ||
+        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
+        (Array.isArray(ex.published_days) && ex.published_days.length > 0)
+
+      if (activeTab === "everyday" && !hasDailyComponent) return false
       if (activeTab === "weekly" && !isWeekly) return false
 
       if (selectedBranch !== "all" && ex.branch?.id && ex.branch.id !== selectedBranch) {
@@ -605,7 +611,11 @@ export default function OnlineResultPortalPage() {
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
               <p className="text-[11px] text-indigo-200 font-semibold">দৈনিক পরীক্ষা</p>
               <p className="text-2xl font-black text-white mt-0.5">
-                {exams.filter(e => e.exam_schedule_type !== "weekly" && (!Array.isArray(e.recurring_days) || e.recurring_days.length === 0)).length}
+                {exams.filter(e => 
+                  (e.exam_schedule_type !== "weekly" && (!Array.isArray(e.recurring_days) || e.recurring_days.length === 0)) ||
+                  (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
+                  (Array.isArray(e.published_days) && e.published_days.length > 0)
+                ).length}
               </p>
             </div>
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
