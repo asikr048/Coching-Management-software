@@ -120,11 +120,13 @@ export interface Exam {
   exam_schedule_type?: "one_time" | "weekly"; recurring_days?: (string | WeeklyDaySchedule)[] | null
   is_paused?: boolean; is_public_result?: boolean; schedule_notice_id?: string | null
   show_all_results?: boolean; result_note?: string | null
+  published_days?: string[] | null; is_weekly_published?: boolean
 }
 
 export interface ExamResult {
   id: string; exam_id: string; student_id: string; obtained_marks?: number
   grade?: string; rank?: number; student?: Student; exam?: Exam
+  day_marks?: Record<string, { marks: number; total?: number; grade?: string; exam_name?: string; subject?: string }> | null
 }
 
 export interface Material {

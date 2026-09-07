@@ -31,6 +31,9 @@ import {
   Pause,
   CalendarDays,
   CheckCircle,
+  Printer,
+  ChevronRight,
+  BookOpen,
 } from "lucide-react"
 import { getGrade, cn } from "@/lib/utils"
 
@@ -48,6 +51,34 @@ interface Result {
   grade: string
 }
 
+interface DayMarkItem {
+  marks: number
+  total: number
+  grade: string
+  subject?: string
+  exam_name?: string
+}
+
+interface ParsedWeeklyDay {
+  key: string
+  day_bn: string
+  day_en: string
+  exam_name: string
+  subject: string
+  total_marks: number
+  pass_marks: number
+}
+
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
 export default function ExamResultsPage() {
   const params = useParams()
   const router = useRouter()
@@ -58,6 +89,16 @@ export default function ExamResultsPage() {
   const [students, setStudents] = useState<Student[]>([])
   const [savedResults, setSavedResults] = useState<Record<string, Result>>({})
   const [draftMarks, setDraftMarks] = useState<Record<string, string>>({})
+  
+  // Day-wise marks state: studentId -> dayKey -> DayMarkItem
+  const [dayMarksMap, setDayMarksMap] = useState<Record<string, Record<string, DayMarkItem>>>({})
+  const [publishedDays, setPublishedDays] = useState<string[]>([])
+  const [isWeeklyPublished, setIsWeeklyPublished] = useState<boolean>(false)
+
+  // Active Tab: either a day key (e.g. "saturday") or "weekly_aggregate"
+  const [selectedTab, setSelectedTab] = useState<string>("")
+  const [selectedSessionDate, setSelectedSessionDate] = useState<string>("")
+
   const [justSavedIds, setJustSavedIds] = useState<Set<string>>(new Set())
   const [savingRowStudentId, setSavingRowStudentId] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -70,7 +111,7 @@ export default function ExamResultsPage() {
   const [quickMarkInput, setQuickMarkInput] = useState("")
   const [savingQuickMark, setSavingQuickMark] = useState(false)
 
-  // Batch Results Visibility (Default: true - all students see everyone's marks)
+  // Batch Results Visibility
   const [showAllResults, setShowAllResults] = useState<boolean>(true)
   const [updatingVisibility, setUpdatingVisibility] = useState(false)
 
@@ -84,10 +125,6 @@ export default function ExamResultsPage() {
   const [publishingNotice, setPublishingNotice] = useState(false)
   const [pausingExam, setPausingExam] = useState(false)
 
-  // Weekly Session selection state
-  const [selectedDay, setSelectedDay] = useState<string>("")
-  const [selectedSessionDate, setSelectedSessionDate] = useState<string>("")
-
   // Table Filter & Search State
   const [tableSearchQuery, setTableSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "entered" | "pending" | "passed" | "failed">("all")
@@ -97,10 +134,124 @@ export default function ExamResultsPage() {
   const quickMarkInputRef = useRef<HTMLInputElement>(null)
   const searchContainerRef = useRef<HTMLDivElement>(null)
 
-  // Detect back URL for owner vs teacher
   const isTeacher = pathname?.includes("/dashboard/teacher")
   const backUrl = isTeacher ? "/dashboard/teacher/exams" : "/dashboard/owner/exams"
 
+  // 1. Detect if this is a Weekly Exam (ultra resilient)
+  const isWeeklyExam = useMemo(() => {
+    if (!exam) return false
+    if (exam.exam_schedule_type === "weekly") return true
+    if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) return true
+    if (exam.result_note?.includes("[WEEKLY_SCHEDULE:") || exam.result_note?.includes("[WEEKLY_DAYS:")) return true
+    if (exam.title?.includes("সাপ্তাহিক") || exam.title?.toLowerCase()?.includes("weekly")) return true
+    return ALL_WEEK_DAYS.some(
+      (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
+    )
+  }, [exam])
+
+  // 2. Parse Weekly Schedule Days
+  const parsedWeeklyDays = useMemo<ParsedWeeklyDay[]>(() => {
+    if (!exam || !isWeeklyExam) return []
+
+    // A. Check recurring_days column
+    if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+      return exam.recurring_days.map((item: any) => {
+        const isObj = typeof item === "object" && item !== null
+        const rawKey = isObj ? (item.day || item.day_bn || "") : item
+        const dayKey = String(rawKey).toLowerCase()
+        const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+        const bnName = matched?.bn || (isObj ? item.day_bn : rawKey)
+        const enName = matched?.en || (isObj ? item.day_en : rawKey)
+        return {
+          key: matched?.id || dayKey,
+          day_bn: bnName,
+          day_en: enName,
+          exam_name: isObj && item.exam_name ? item.exam_name : `${bnName}ের পরীক্ষা`,
+          subject: isObj && item.subject ? item.subject : exam.subject || "",
+          total_marks: isObj && item.total_marks ? Number(item.total_marks) : exam.total_marks || 50,
+          pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : exam.pass_marks || 20,
+        }
+      })
+    }
+
+    // B. Check result_note fallback tag [WEEKLY_SCHEDULE:...]
+    if (exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+      try {
+        const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+        if (match && match[1]) {
+          const parsed = JSON.parse(match[1])
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.map((item: any) => {
+              const rawKey = item.day || item.day_bn || ""
+              const dayKey = String(rawKey).toLowerCase()
+              const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === item.day_bn)
+              return {
+                key: matched?.id || dayKey,
+                day_bn: matched?.bn || item.day_bn || item.day,
+                day_en: matched?.en || item.day_en || item.day,
+                exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+                subject: item.subject || exam.subject || "",
+                total_marks: Number(item.total_marks) || exam.total_marks || 50,
+                pass_marks: Number(item.pass_marks) || exam.pass_marks || 20,
+              }
+            })
+          }
+        }
+      } catch (e) {
+        console.warn("Error parsing weekly schedule fallback:", e)
+      }
+    }
+
+    // C. Extract days from exam.title (e.g. "সাপ্তাহিক পরীক্ষা (শনিবার, রবিবার, সোমবার, মঙ্গলবার, বুধবার, বৃহস্পতিবার)")
+    const foundDaysInTitle = ALL_WEEK_DAYS.filter(
+      (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
+    )
+
+    if (foundDaysInTitle.length > 0) {
+      const subjectList = (exam.subject || "")
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+
+      return foundDaysInTitle.map((d, idx) => {
+        const assignedSubj = subjectList[idx] || exam.subject || ""
+        return {
+          key: d.id,
+          day_bn: d.bn,
+          day_en: d.en,
+          exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
+          subject: assignedSubj,
+          total_marks: exam.total_marks || 50,
+          pass_marks: exam.pass_marks || 20,
+        }
+      })
+    }
+
+    // D. Default to 6 active days if weekly but days not explicitly listed
+    return ALL_WEEK_DAYS.slice(0, 6).map((d) => ({
+      key: d.id,
+      day_bn: d.bn,
+      day_en: d.en,
+      exam_name: `${d.bn}ের পরীক্ষা`,
+      subject: exam.subject || "",
+      total_marks: exam.total_marks || 50,
+      pass_marks: exam.pass_marks || 20,
+    }))
+  }, [exam, isWeeklyExam])
+
+  // Active day configuration
+  const activeDayConfig = useMemo<ParsedWeeklyDay | null>(() => {
+    if (!isWeeklyExam || selectedTab === "weekly_aggregate") return null
+    return parsedWeeklyDays.find((d) => d.key === selectedTab || d.day_bn === selectedTab) || parsedWeeklyDays[0] || null
+  }, [isWeeklyExam, selectedTab, parsedWeeklyDays])
+
+  // Total possible weekly marks (sum of total marks for all scheduled days)
+  const totalWeeklyMaxMarks = useMemo(() => {
+    if (!isWeeklyExam || parsedWeeklyDays.length === 0) return exam?.total_marks || 100
+    return parsedWeeklyDays.reduce((acc, d) => acc + (d.total_marks || 0), 0)
+  }, [isWeeklyExam, parsedWeeklyDays, exam])
+
+  // Load Exam and Student Data
   useEffect(() => {
     async function load() {
       try {
@@ -115,13 +266,25 @@ export default function ExamResultsPage() {
         const isPublic = ex?.show_all_results !== false && !ex?.result_note?.includes("[SHOW_ALL_RESULTS:false]")
         setShowAllResults(isPublic)
 
-        if (Array.isArray(ex?.recurring_days) && ex.recurring_days.length > 0) {
-          const first = ex.recurring_days[0]
-          const defaultDay = typeof first === "object" && first !== null ? (first.day_bn || first.day) : first
-          setSelectedDay(defaultDay)
+        // Parse published_days
+        let pubDays: string[] = []
+        if (Array.isArray(ex?.published_days)) {
+          pubDays = ex.published_days.map((d: any) => String(d).toLowerCase())
+        } else if (ex?.result_note?.includes("[PUBLISHED_DAYS:")) {
+          const match = ex.result_note.match(/\[PUBLISHED_DAYS:(.*?)\]/)
+          if (match && match[1]) {
+            pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase())
+          }
         }
+        setPublishedDays(pubDays)
+
+        // Parse is_weekly_published
+        const isWPub = ex?.is_weekly_published === true || ex?.result_note?.includes("[IS_WEEKLY_PUBLISHED:true]")
+        setIsWeeklyPublished(Boolean(isWPub))
+
         setSelectedSessionDate(ex?.exam_date || new Date().toISOString().split("T")[0])
 
+        // Load Students
         if (ex?.batch_id) {
           const { data: enrollments } = await supabase
             .from("enrollments")
@@ -145,13 +308,15 @@ export default function ExamResultsPage() {
           setStudents(allStudents || [])
         }
 
+        // Load Existing Results
         const { data: existing } = await supabase
           .from("exam_results")
           .select("*")
           .eq("exam_id", params.id)
 
         const map: Record<string, Result> = {}
-        const drafts: Record<string, string> = {}
+        const dayMarks: Record<string, Record<string, DayMarkItem>> = {}
+
         for (const r of existing || []) {
           const markStr = String(r.obtained_marks ?? "")
           map[r.student_id] = {
@@ -159,10 +324,22 @@ export default function ExamResultsPage() {
             obtained_marks: markStr,
             grade: r.grade || "",
           }
-          drafts[r.student_id] = markStr
+
+          // Parse day_marks
+          let sDayMarks: Record<string, DayMarkItem> = {}
+          if (r.day_marks && typeof r.day_marks === "object") {
+            sDayMarks = r.day_marks
+          } else if (r.result_note?.includes("[DAY_MARKS:")) {
+            try {
+              const m = r.result_note.match(/\[DAY_MARKS:(.*?)\]/)
+              if (m && m[1]) sDayMarks = JSON.parse(m[1])
+            } catch {}
+          }
+          dayMarks[r.student_id] = sDayMarks
         }
+
         setSavedResults(map)
-        setDraftMarks(drafts)
+        setDayMarksMap(dayMarks)
       } catch (err: any) {
         console.error("Error loading exam results:", err)
         toast.error("Failed to load exam data")
@@ -172,6 +349,43 @@ export default function ExamResultsPage() {
     }
     load()
   }, [params.id, supabase])
+
+  // Initialize selectedTab once parsedWeeklyDays is available
+  useEffect(() => {
+    if (parsedWeeklyDays.length > 0 && !selectedTab) {
+      setSelectedTab(parsedWeeklyDays[0].key)
+    }
+  }, [parsedWeeklyDays, selectedTab])
+
+  // Sync draft marks whenever selectedTab or active day changes
+  useEffect(() => {
+    if (!isWeeklyExam) {
+      const drafts: Record<string, string> = {}
+      for (const s of students) {
+        drafts[s.id] = savedResults[s.id]?.obtained_marks ?? ""
+      }
+      setDraftMarks(drafts)
+      return
+    }
+
+    if (selectedTab === "weekly_aggregate") {
+      const drafts: Record<string, string> = {}
+      for (const s of students) {
+        drafts[s.id] = savedResults[s.id]?.obtained_marks ?? ""
+      }
+      setDraftMarks(drafts)
+      return
+    }
+
+    const activeKey = activeDayConfig?.key || selectedTab
+    const drafts: Record<string, string> = {}
+    for (const s of students) {
+      const studentDays = dayMarksMap[s.id] || {}
+      const dMark = studentDays[activeKey] || studentDays[activeDayConfig?.day_bn || ""]
+      drafts[s.id] = dMark ? String(dMark.marks) : ""
+    }
+    setDraftMarks(drafts)
+  }, [selectedTab, isWeeklyExam, students, savedResults, dayMarksMap, activeDayConfig])
 
   // Close search dropdown on outside click
   useEffect(() => {
@@ -196,34 +410,33 @@ export default function ExamResultsPage() {
     })
   }, [students, studentSearchQuery])
 
-  // Handle selecting a student in Quick Entry
+  // Select student in Quick Entry
   function handleSelectStudent(student: Student) {
     setSelectedStudent(student)
     setIsSearchDropdownOpen(false)
     setStudentSearchQuery("")
 
-    // Pre-fill existing mark from draftMarks or savedResults
-    const existing = draftMarks[student.id] ?? savedResults[student.id]?.obtained_marks ?? ""
+    const existing = draftMarks[student.id] ?? ""
     setQuickMarkInput(existing)
 
-    // Automatically focus the mark input
     setTimeout(() => {
       quickMarkInputRef.current?.focus()
       quickMarkInputRef.current?.select()
     }, 50)
   }
 
-  // Recalculate ranks strictly by marks descending (highest to lowest) and sync to DB
+  // Auto-sync overall ranks strictly descending
   async function syncAllRanks(currentMarksMap: Record<string, string>) {
     if (!exam) return
     try {
+      const maxTotal = isWeeklyExam ? totalWeeklyMaxMarks : exam.total_marks
       const items = students
         .map((s) => {
           const raw = currentMarksMap[s.id]?.trim() ?? savedResults[s.id]?.obtained_marks ?? ""
           const m = parseFloat(raw)
           return { student_id: s.id, marks: m }
         })
-        .filter((x) => !isNaN(x.marks) && x.marks >= 0 && (!exam || x.marks <= exam.total_marks))
+        .filter((x) => !isNaN(x.marks) && x.marks >= 0 && x.marks <= maxTotal)
         .sort((a, b) => b.marks - a.marks)
 
       let curR = 1
@@ -235,7 +448,7 @@ export default function ExamResultsPage() {
           exam_id: exam.id,
           student_id: item.student_id,
           obtained_marks: item.marks,
-          grade: getGrade(item.marks, exam.total_marks),
+          grade: getGrade(item.marks, maxTotal),
           rank: curR,
         }
       })
@@ -244,160 +457,175 @@ export default function ExamResultsPage() {
         await supabase.from("exam_results").upsert(updates, { onConflict: "exam_id,student_id" })
       }
     } catch (e) {
-      console.warn("Rank auto-sync note:", e)
+      console.warn("Rank sync note:", e)
     }
   }
 
-  // Save quick mark
-  async function handleSaveQuickMark() {
-    if (!selectedStudent || !exam) return
-
-    const raw = quickMarkInput.trim()
+  // Save single student mark
+  async function saveStudentMark(student: Student, rawMark: string, rowIndex?: number) {
+    if (!exam) return
+    const raw = rawMark.trim()
     if (raw === "") {
-      toast.error("Please enter a mark before saving")
-      quickMarkInputRef.current?.focus()
+      toast.error("অনুগ্রহ করে একটি নম্বর লিখুন (Please enter a mark)")
       return
     }
 
     const numMarks = parseFloat(raw)
-    if (isNaN(numMarks) || numMarks < 0) {
-      toast.error("Please enter a valid non-negative number")
-      return
-    }
-    if (numMarks > exam.total_marks) {
-      toast.error(`Mark cannot exceed maximum marks (${exam.total_marks})`)
+    const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : exam.total_marks
+
+    if (isNaN(numMarks) || numMarks < 0 || numMarks > activeMax) {
+      toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeMax}-এর মধ্যে হতে হবে`)
       return
     }
 
-    const grade = getGrade(numMarks, exam.total_marks)
+    const dayGrade = getGrade(numMarks, activeMax)
 
+    if (isWeeklyExam && activeDayConfig && selectedTab !== "weekly_aggregate") {
+      const activeKey = activeDayConfig.key
+      const currentStudentDays = { ...(dayMarksMap[student.id] || {}) }
+      currentStudentDays[activeKey] = {
+        marks: numMarks,
+        total: activeMax,
+        grade: dayGrade,
+        subject: activeDayConfig.subject,
+        exam_name: activeDayConfig.exam_name,
+      }
+
+      const grandTotal = Object.values(currentStudentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+      const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
+      const fallbackNote = `[DAY_MARKS:${JSON.stringify(currentStudentDays)}]`
+
+      try {
+        const payload: any = {
+          exam_id: exam.id,
+          student_id: student.id,
+          obtained_marks: grandTotal,
+          grade: overallGrade,
+          day_marks: currentStudentDays,
+          result_note: fallbackNote,
+        }
+
+        let { error } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+
+        if (error) {
+          delete payload.day_marks
+          const { error: fbErr } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          if (fbErr) throw fbErr
+        }
+
+        setDayMarksMap((prev) => ({
+          ...prev,
+          [student.id]: currentStudentDays,
+        }))
+        setSavedResults((prev) => ({
+          ...prev,
+          [student.id]: {
+            student_id: student.id,
+            obtained_marks: String(grandTotal),
+            grade: overallGrade,
+          },
+        }))
+        setDraftMarks((prev) => ({
+          ...prev,
+          [student.id]: String(numMarks),
+        }))
+        setJustSavedIds((prev) => new Set(prev).add(student.id))
+
+        toast.success(`✓ ${student.name} (${activeDayConfig.day_bn}): ${numMarks}/${activeMax} (${dayGrade}) সংরক্ষিত!`)
+
+        if (rowIndex !== undefined) {
+          const nextInput = document.getElementById(`mark-input-${rowIndex + 1}`) as HTMLInputElement | null
+          if (nextInput) {
+            nextInput.focus()
+            nextInput.select()
+          }
+        }
+      } catch (err: any) {
+        console.error("Save error:", err)
+        toast.error(err.message || "Failed to save mark")
+      }
+    } else {
+      const grade = getGrade(numMarks, exam.total_marks)
+      try {
+        const { error } = await supabase.from("exam_results").upsert(
+          {
+            exam_id: exam.id,
+            student_id: student.id,
+            obtained_marks: numMarks,
+            grade: grade,
+          },
+          { onConflict: "exam_id,student_id" }
+        )
+
+        if (error) throw error
+
+        setSavedResults((prev) => ({
+          ...prev,
+          [student.id]: {
+            student_id: student.id,
+            obtained_marks: String(numMarks),
+            grade,
+          },
+        }))
+        setDraftMarks((prev) => ({
+          ...prev,
+          [student.id]: String(numMarks),
+        }))
+        setJustSavedIds((prev) => new Set(prev).add(student.id))
+        syncAllRanks({ ...draftMarks, [student.id]: String(numMarks) })
+
+        toast.success(`✓ ${student.name}: ${numMarks}/${exam.total_marks} (${grade}) সংরক্ষিত!`)
+
+        if (rowIndex !== undefined) {
+          const nextInput = document.getElementById(`mark-input-${rowIndex + 1}`) as HTMLInputElement | null
+          if (nextInput) {
+            nextInput.focus()
+            nextInput.select()
+          }
+        }
+      } catch (err: any) {
+        toast.error(err.message || "Failed to save mark")
+      }
+    }
+  }
+
+  // Quick mark save handler
+  async function handleSaveQuickMark() {
+    if (!selectedStudent) return
     setSavingQuickMark(true)
     try {
-      const { error } = await supabase.from("exam_results").upsert(
-        {
-          exam_id: exam.id,
-          student_id: selectedStudent.id,
-          obtained_marks: numMarks,
-          grade: grade,
-        },
-        { onConflict: "exam_id,student_id" }
-      )
-
-      if (error) throw error
-
-      setSavedResults((prev) => ({
-        ...prev,
-        [selectedStudent.id]: {
-          student_id: selectedStudent.id,
-          obtained_marks: String(numMarks),
-          grade,
-        },
-      }))
-      setDraftMarks((prev) => ({
-        ...prev,
-        [selectedStudent.id]: String(numMarks),
-      }))
-      setJustSavedIds((prev) => new Set(prev).add(selectedStudent.id))
-
-      // Auto-sync ranks strictly highest to lowest
-      syncAllRanks({ ...draftMarks, [selectedStudent.id]: String(numMarks) })
-
-      toast.success(`✓ ${selectedStudent.name}: ${numMarks}/${exam.total_marks} (${grade}) saved!`)
-
-      // Reset selection and focus back to search for next student
+      await saveStudentMark(selectedStudent, quickMarkInput)
       setSelectedStudent(null)
       setQuickMarkInput("")
       setStudentSearchQuery("")
-      setTimeout(() => {
-        searchInputRef.current?.focus()
-      }, 50)
-    } catch (err: any) {
-      console.error("Save error:", err)
-      toast.error(err.message || "Failed to save mark")
+      setTimeout(() => searchInputRef.current?.focus(), 50)
     } finally {
       setSavingQuickMark(false)
     }
   }
 
-  // Handle typing mark in table row
-  function handleDraftChange(studentId: string, marks: string) {
-    setDraftMarks((prev) => ({
-      ...prev,
-      [studentId]: marks,
-    }))
-  }
-
-  // Save an individual row from the table (called on Enter / Form submit / button click)
+  // Save an individual row from table
   async function saveRowMark(student: Student, rowIndex?: number) {
-    const raw = draftMarks[student.id]?.trim() ?? ""
-    if (raw === "") {
-      toast.error("Please enter a mark first")
-      return
-    }
-
-    const numMarks = parseFloat(raw)
-    if (isNaN(numMarks) || numMarks < 0 || (exam && numMarks > exam.total_marks)) {
-      toast.error(`Valid mark between 0 and ${exam?.total_marks} required`)
-      return
-    }
-
-    const grade = getGrade(numMarks, exam.total_marks)
-
+    const raw = draftMarks[student.id] ?? ""
     setSavingRowStudentId(student.id)
     try {
-      const { error } = await supabase.from("exam_results").upsert(
-        {
-          exam_id: exam.id,
-          student_id: student.id,
-          obtained_marks: numMarks,
-          grade: grade,
-        },
-        { onConflict: "exam_id,student_id" }
-      )
-      if (error) throw error
-
-      setSavedResults((prev) => ({
-        ...prev,
-        [student.id]: {
-          student_id: student.id,
-          obtained_marks: String(numMarks),
-          grade,
-        },
-      }))
-      setJustSavedIds((prev) => new Set(prev).add(student.id))
-
-      // Auto-sync ranks strictly highest to lowest
-      syncAllRanks({ ...draftMarks, [student.id]: String(numMarks) })
-
-      toast.success(`✓ Saved ${numMarks}/${exam.total_marks} for ${student.name} (${grade})`)
-
-      // Automatically focus the next row input if available
-      if (rowIndex !== undefined) {
-        const nextInput = document.getElementById(`mark-input-${rowIndex + 1}`) as HTMLInputElement | null
-        if (nextInput) {
-          nextInput.focus()
-          nextInput.select()
-        }
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save")
+      await saveStudentMark(student, raw, rowIndex)
     } finally {
       setSavingRowStudentId(null)
     }
   }
 
-  // Clear a student's mark
+  // Clear student mark
   async function clearStudentMark(studentId: string, studentName: string) {
     if (!confirm(`Are you sure you want to clear results for ${studentName}?`)) return
-
     try {
-      await supabase
-        .from("exam_results")
-        .delete()
-        .eq("exam_id", exam.id)
-        .eq("student_id", studentId)
-
+      await supabase.from("exam_results").delete().eq("exam_id", exam.id).eq("student_id", studentId)
       setSavedResults((prev) => {
+        const next = { ...prev }
+        delete next[studentId]
+        return next
+      })
+      setDayMarksMap((prev) => {
         const next = { ...prev }
         delete next[studentId]
         return next
@@ -407,85 +635,111 @@ export default function ExamResultsPage() {
         delete next[studentId]
         return next
       })
-      setJustSavedIds((prev) => {
-        const next = new Set(prev)
-        next.delete(studentId)
-        return next
-      })
-
-      if (selectedStudent?.id === studentId) {
-        setSelectedStudent(null)
-        setQuickMarkInput("")
-      }
-
-      toast.success(`Cleared result for ${studentName}`)
+      toast.success(`Cleared results for ${studentName}`)
     } catch (err: any) {
       toast.error("Failed to clear result")
     }
   }
 
-  // Toggle Batch Leaderboard / Marks Visibility for all students
-  async function handleToggleShowAllResults(nextVal: boolean) {
-    setShowAllResults(nextVal)
-    setUpdatingVisibility(true)
+  // Save All entered marks at once
+  async function handleSaveAll() {
+    setLoading(true)
     try {
-      const res = await fetch(`/api/exams/${params.id}/results`, {
+      let savedCount = 0
+      for (let i = 0; i < students.length; i++) {
+        const s = students[i]
+        const raw = draftMarks[s.id]?.trim()
+        if (raw && raw !== "") {
+          await saveStudentMark(s, raw)
+          savedCount++
+        }
+      }
+      toast.success(`Results saved for ${savedCount} students!`)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save all")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Publish / Unpublish Individual Day Result
+  async function handleTogglePublishDay(dayKey: string) {
+    if (!exam) return
+    const isCurrentlyPub = publishedDays.includes(dayKey.toLowerCase())
+    const nextPubDays = isCurrentlyPub
+      ? publishedDays.filter((d) => d.toLowerCase() !== dayKey.toLowerCase())
+      : [...publishedDays, dayKey.toLowerCase()]
+
+    setPublishingExam(true)
+    try {
+      const res = await fetch(`/api/exams/${params.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ show_all_results: nextVal }),
+        body: JSON.stringify({ 
+          published_days: nextPubDays,
+          is_published: nextPubDays.length > 0
+        }),
       })
+
       if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error || "Failed to update visibility")
+        const updatedNote = (exam.result_note || "")
+          .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
+          .trim() + ` [PUBLISHED_DAYS:${nextPubDays.join(",")}]`
+        await supabase.from("exams").update({ result_note: updatedNote, is_published: nextPubDays.length > 0 }).eq("id", params.id)
       }
 
-      setExam((prev: any) => ({
-        ...prev,
-        show_all_results: nextVal,
-      }))
-
-      if (nextVal) {
-        toast.success("✓ All students in this batch can now see everyone's marks & merit list")
-      } else {
-        toast.success("✓ Private Mode: Each student will only see their own marks in their profile")
-      }
+      setPublishedDays(nextPubDays)
+      setExam((prev: any) => ({ ...prev, published_days: nextPubDays, is_published: nextPubDays.length > 0 }))
+      const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey.toLowerCase())
+      const dayName = matched?.bn || dayKey
+      toast.success(
+        !isCurrentlyPub
+          ? `✓ ${dayName}ের ফলাফল শিক্ষার্থীদের জন্য প্রকাশিত হয়েছে!`
+          : `${dayName}ের ফলাফল ড্রাফট করা হয়েছে।`
+      )
     } catch (err: any) {
-      console.error("Failed to toggle visibility:", err)
-      setShowAllResults(!nextVal)
-      toast.error(err.message || "Failed to update visibility setting")
+      toast.error(err.message || "Failed to update day publish status")
     } finally {
-      setUpdatingVisibility(false)
+      setPublishingExam(false)
     }
   }
 
-  // Delete Exam permanently
-  async function handleDeleteExam() {
-    if (!exam) return
-    setDeleting(true)
+  // Publish / Unpublish Consolidated Weekly Result
+  async function handleTogglePublishWeekly(nextVal: boolean) {
+    setPublishingExam(true)
     try {
-      const res = await fetch(`/api/exams/${exam.id}`, {
-        method: "DELETE",
+      const res = await fetch(`/api/exams/${params.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          is_weekly_published: nextVal,
+          is_published: nextVal || publishedDays.length > 0
+        }),
       })
 
       if (!res.ok) {
-        // Fallback directly to Supabase client
-        const { error: delErr } = await supabase.from("exams").delete().eq("id", exam.id)
-        if (delErr) throw delErr
+        const updatedNote = (exam.result_note || "")
+          .replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "")
+          .trim() + ` [IS_WEEKLY_PUBLISHED:${nextVal}]`
+        await supabase.from("exams").update({ result_note: updatedNote }).eq("id", params.id)
       }
 
-      toast.success(`Exam "${exam.title}" deleted successfully`)
-      setShowDeleteModal(false)
-      router.push(backUrl)
+      setIsWeeklyPublished(nextVal)
+      setExam((prev: any) => ({ ...prev, is_weekly_published: nextVal }))
+      toast.success(
+        nextVal
+          ? "✓ সামগ্রিক সাপ্তাহিক ফলাফল সফলভাবে প্রকাশিত হয়েছে!"
+          : "সাপ্তাহিক সামগ্রিক ফলাফল ড্রাফট করা হয়েছে।"
+      )
     } catch (err: any) {
-      console.error("Failed to delete exam:", err)
-      toast.error(err.message || "Failed to delete exam")
+      toast.error(err.message || "Failed to publish weekly results")
     } finally {
-      setDeleting(false)
+      setPublishingExam(false)
     }
   }
 
-  // 1. Toggle Publish Exam (is_published)
-  async function handleTogglePublish(nextPublished: boolean) {
+  // Publish Exam (One-time exam)
+  async function handleTogglePublishOneTime(nextPublished: boolean) {
     setPublishingExam(true)
     try {
       const res = await fetch(`/api/exams/${params.id}`, {
@@ -497,7 +751,7 @@ export default function ExamResultsPage() {
         await supabase.from("exams").update({ is_published: nextPublished }).eq("id", params.id)
       }
       setExam((prev: any) => ({ ...prev, is_published: nextPublished }))
-      toast.success(nextPublished ? "✓ Exam results published to students!" : "Exam reverted to draft.")
+      toast.success(nextPublished ? "✓ ফলাফল শিক্ষার্থীদের জন্য প্রকাশিত হয়েছে!" : "ফলাফল ড্রাফট করা হয়েছে।")
     } catch (err: any) {
       toast.error(err.message || "Failed to update publish status")
     } finally {
@@ -505,7 +759,7 @@ export default function ExamResultsPage() {
     }
   }
 
-  // 2. Toggle Publish to Public Online Result (is_public_result)
+  // Toggle Public Online Result
   async function handleTogglePublicResult(nextPublic: boolean) {
     setPublishingPublic(true)
     try {
@@ -520,8 +774,8 @@ export default function ExamResultsPage() {
       setExam((prev: any) => ({ ...prev, is_public_result: nextPublic }))
       toast.success(
         nextPublic
-          ? "✓ Merit list is now PUBLIC! Viewable on homepage & Online Result portal."
-          : "Merit list removed from public Online Result portal."
+          ? "✓ মেরিট লিস্ট এখন পাবলিক! হোমপেজ এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান।"
+          : "মেরিট লিস্ট পাবলিক পোর্টাল থেকে অপসারিত হয়েছে।"
       )
     } catch (err: any) {
       toast.error(err.message || "Failed to update public status")
@@ -530,33 +784,30 @@ export default function ExamResultsPage() {
     }
   }
 
-  // 3. Publish to Notice Board
+  // Publish Notice Board Announcement
   async function handlePublishNotice() {
     setPublishingNotice(true)
     try {
-      const activeSchedule = Array.isArray(exam?.recurring_days)
-        ? exam.recurring_days.find((d: any) => {
-            if (typeof d === "object" && d !== null) {
-              return d.day === selectedDay || d.day_bn === selectedDay || d.day_en === selectedDay
-            }
-            return d === selectedDay
-          })
-        : null
+      const isWeeklyTab = selectedTab === "weekly_aggregate"
+      const payload: any = {
+        type: isWeeklyTab ? "weekly_aggregate" : "results",
+      }
+
+      if (!isWeeklyTab && activeDayConfig) {
+        payload.day = activeDayConfig.day_bn
+        payload.day_exam_name = activeDayConfig.exam_name
+        payload.day_total_marks = activeDayConfig.total_marks
+        payload.session_date = selectedSessionDate
+      }
 
       const res = await fetch(`/api/exams/${params.id}/publish-notice`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          type: "results",
-          day: selectedDay,
-          session_date: selectedSessionDate,
-          day_exam_name: typeof activeSchedule === "object" && activeSchedule?.exam_name ? activeSchedule.exam_name : undefined,
-          day_total_marks: typeof activeSchedule === "object" && activeSchedule?.total_marks ? activeSchedule.total_marks : undefined
-        }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to publish notice")
-      toast.success("✓ " + (data.message || "Exam merit list published to Notice Board!"))
+      toast.success("✓ " + (data.message || "নোটিশ বোর্ডে সফলভাবে প্রকাশিত হয়েছে!"))
     } catch (err: any) {
       toast.error(err.message || "Failed to publish notice")
     } finally {
@@ -564,7 +815,7 @@ export default function ExamResultsPage() {
     }
   }
 
-  // 4. Toggle Pause Weekly Exam
+  // Toggle Pause Exam
   async function handleTogglePauseExam() {
     if (!exam) return
     const nextPaused = !exam.is_paused
@@ -579,7 +830,7 @@ export default function ExamResultsPage() {
         await supabase.from("exams").update({ is_paused: nextPaused }).eq("id", params.id)
       }
       setExam((prev: any) => ({ ...prev, is_paused: nextPaused }))
-      toast.success(nextPaused ? `✓ "${exam.title}" is now PAUSED (স্থগিত)` : `✓ "${exam.title}" is now RESUMED (সচল)`)
+      toast.success(nextPaused ? `✓ "${exam.title}" স্থগিত (PAUSED) করা হয়েছে` : `✓ "${exam.title}" সচল (RESUMED) করা হয়েছে`)
     } catch (err: any) {
       toast.error(err.message || "Failed to toggle pause")
     } finally {
@@ -587,81 +838,151 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Save all results & calculate rank
-  async function handleSaveAll() {
-    setLoading(true)
+  // Toggle Batch Leaderboard Visibility
+  async function handleToggleShowAllResults(nextVal: boolean) {
+    setShowAllResults(nextVal)
+    setUpdatingVisibility(true)
     try {
-      const items: { exam_id: string; student_id: string; obtained_marks: number; grade: string }[] = []
+      const res = await fetch(`/api/exams/${params.id}/results`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ show_all_results: nextVal }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Failed to update visibility")
+      }
+      setExam((prev: any) => ({ ...prev, show_all_results: nextVal }))
+      toast.success(
+        nextVal
+          ? "✓ এই ব্যাচের সকল শিক্ষার্থী একে অপরের নম্বর ও মেরিট লিস্ট দেখতে পারবে"
+          : "✓ প্রাইভেট মোড: শিক্ষার্থীরা শুধুমাত্র নিজেদের নম্বর দেখতে পারবে"
+      )
+    } catch (err: any) {
+      setShowAllResults(!nextVal)
+      toast.error(err.message || "Failed to update visibility")
+    } finally {
+      setUpdatingVisibility(false)
+    }
+  }
+
+  // Delete Exam Permanently
+  async function handleDeleteExam() {
+    if (!exam) return
+    setDeleting(true)
+    try {
+      const res = await fetch(`/api/exams/${exam.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const { error: delErr } = await supabase.from("exams").delete().eq("id", exam.id)
+        if (delErr) throw delErr
+      }
+      toast.success(`Exam "${exam.title}" deleted successfully`)
+      setShowDeleteModal(false)
+      router.push(backUrl)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete exam")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // Statistics for the Active View
+  const stats = useMemo(() => {
+    const total = students.length
+    const activeMax = isWeeklyExam
+      ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+      : (exam?.total_marks || 100)
+    const activePass = isWeeklyExam
+      ? (selectedTab === "weekly_aggregate" ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20))
+      : (exam?.pass_marks || 33)
+
+    let enteredCount = 0
+    const marksArr: number[] = []
+
+    for (const s of students) {
+      let markVal: number | null = null
+      if (isWeeklyExam && selectedTab !== "weekly_aggregate" && activeDayConfig) {
+        const dObj = dayMarksMap[s.id]?.[activeDayConfig.key] || dayMarksMap[s.id]?.[activeDayConfig.day_bn]
+        if (dObj && !isNaN(Number(dObj.marks))) {
+          markVal = Number(dObj.marks)
+        }
+      } else {
+        const raw = savedResults[s.id]?.obtained_marks
+        if (raw !== undefined && raw !== "" && !isNaN(parseFloat(raw))) {
+          markVal = parseFloat(raw)
+        }
+      }
+
+      if (markVal !== null) {
+        enteredCount++
+        marksArr.push(markVal)
+      }
+    }
+
+    const avg = marksArr.length ? Math.round(marksArr.reduce((a, b) => a + b, 0) / marksArr.length) : 0
+    const highest = marksArr.length ? Math.max(...marksArr) : 0
+    const passedCount = marksArr.filter((m) => m >= activePass).length
+    const passRate = marksArr.length ? Math.round((passedCount / marksArr.length) * 100) : 0
+
+    return { total, count: enteredCount, avg, highest, passRate, passedCount, failedCount: enteredCount - passedCount, max: activeMax, pass: activePass }
+  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, dayMarksMap, savedResults, exam])
+
+  // Total Toppers for Weekly View
+  const totalToppers = useMemo(() => {
+    if (!isWeeklyExam) return []
+    const scoredList = students
+      .map((s) => {
+        const studentDays = dayMarksMap[s.id] || {}
+        const grandTotal = Object.values(studentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+        const hasAnyMark = Object.keys(studentDays).length > 0 || (savedResults[s.id]?.obtained_marks !== "" && savedResults[s.id]?.obtained_marks !== undefined)
+        const obt = hasAnyMark ? (grandTotal > 0 ? grandTotal : parseFloat(savedResults[s.id]?.obtained_marks || "0")) : null
+        return {
+          student: s,
+          obtained_marks: obt,
+          pct: obt !== null ? Math.round((obt / totalWeeklyMaxMarks) * 100) : 0,
+          grade: obt !== null ? getGrade(obt, totalWeeklyMaxMarks) : "-",
+        }
+      })
+      .filter((x) => x.obtained_marks !== null)
+      .sort((a, b) => (b.obtained_marks || 0) - (a.obtained_marks || 0))
+
+    let curRank = 1
+    return scoredList.slice(0, 3).map((item, idx) => {
+      if (idx > 0 && (item.obtained_marks || 0) < (scoredList[idx - 1].obtained_marks || 0)) {
+        curRank = idx + 1
+      }
+      return { ...item, rank: curRank }
+    })
+  }, [isWeeklyExam, students, dayMarksMap, savedResults, totalWeeklyMaxMarks])
+
+  // Subject-wise Toppers for Weekly View
+  const subjectToppers = useMemo(() => {
+    if (!isWeeklyExam || parsedWeeklyDays.length === 0) return []
+
+    return parsedWeeklyDays.map((d) => {
+      let topStudent: Student | null = null
+      let topScore = -1
 
       for (const s of students) {
-        const raw = draftMarks[s.id]?.trim() ?? savedResults[s.id]?.obtained_marks ?? ""
-        if (raw !== "") {
-          const numMarks = parseFloat(raw)
-          if (!isNaN(numMarks) && numMarks >= 0 && (!exam || numMarks <= exam.total_marks)) {
-            items.push({
-              exam_id: params.id as string,
-              student_id: s.id,
-              obtained_marks: numMarks,
-              grade: getGrade(numMarks, exam.total_marks),
-            })
+        const dObj = dayMarksMap[s.id]?.[d.key] || dayMarksMap[s.id]?.[d.day_bn]
+        if (dObj) {
+          const score = Number(dObj.marks)
+          if (score > topScore) {
+            topScore = score
+            topStudent = s
           }
         }
       }
 
-      if (items.length === 0) {
-        toast.error("No marks entered")
-        return
+      return {
+        day: d,
+        student: topStudent,
+        score: topScore,
       }
+    })
+  }, [isWeeklyExam, parsedWeeklyDays, students, dayMarksMap])
 
-      const sorted = [...items].sort((a, b) => b.obtained_marks - a.obtained_marks)
-      let curR = 1
-      sorted.forEach((item, i) => {
-        if (i > 0 && item.obtained_marks < sorted[i - 1].obtained_marks) {
-          curR = i + 1
-        }
-        ;(item as any).rank = curR
-      })
-
-      const { error } = await supabase
-        .from("exam_results")
-        .upsert(sorted, { onConflict: "exam_id,student_id" })
-
-      if (error) throw error
-
-      const map: Record<string, Result> = {}
-      for (const item of sorted) {
-        map[item.student_id] = {
-          student_id: item.student_id,
-          obtained_marks: String(item.obtained_marks),
-          grade: item.grade,
-        }
-      }
-      setSavedResults(map)
-
-      toast.success(`Results and ranks saved for ${items.length} students!`)
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to save results")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Statistics
-  const stats = useMemo(() => {
-    const total = students.length
-    const entered = Object.values(savedResults).filter((r) => r.obtained_marks !== "")
-    const count = entered.length
-    const marksArr = entered.map((r) => parseFloat(r.obtained_marks)).filter((n) => !isNaN(n))
-    const avg = marksArr.length ? Math.round(marksArr.reduce((a, b) => a + b, 0) / marksArr.length) : 0
-    const highest = marksArr.length ? Math.max(...marksArr) : 0
-    const passMarks = exam?.pass_marks || 0
-    const passedCount = marksArr.filter((m) => m >= passMarks).length
-    const passRate = marksArr.length ? Math.round((passedCount / marksArr.length) * 100) : 0
-
-    return { total, count, avg, highest, passRate, passedCount, failedCount: count - passedCount }
-  }, [students, savedResults, exam])
-
-  // Filtered students for Table
+  // Filtered Students for Table
   const tableStudents = useMemo(() => {
     return students.filter((s) => {
       const q = tableSearchQuery.trim().toLowerCase()
@@ -671,50 +992,50 @@ export default function ExamResultsPage() {
         if (!nameMatch && !idMatch) return false
       }
 
-      const saved = savedResults[s.id]
-      const hasSaved = Boolean(saved && saved.obtained_marks !== "")
+      const activeKey = activeDayConfig?.key || selectedTab
+      const hasEntered = isWeeklyExam && selectedTab !== "weekly_aggregate"
+        ? Boolean(dayMarksMap[s.id]?.[activeKey] || dayMarksMap[s.id]?.[activeDayConfig?.day_bn || ""])
+        : Boolean(savedResults[s.id] && savedResults[s.id].obtained_marks !== "")
+
       const isJustSaved = justSavedIds.has(s.id)
 
-      if (statusFilter === "entered") {
-        return hasSaved || isJustSaved
-      }
-      if (statusFilter === "pending") {
-        // KEEP VISIBLE if not saved yet OR if it was just saved in this view
-        // so it NEVER disappears while typing!
-        if (isJustSaved) return true
-        return !hasSaved
-      }
+      if (statusFilter === "entered") return hasEntered || isJustSaved
+      if (statusFilter === "pending") return isJustSaved || !hasEntered
       if (statusFilter === "passed") {
-        const num = hasSaved ? parseFloat(saved.obtained_marks) : null
-        return num !== null && exam && num >= exam.pass_marks
+        const mark = isWeeklyExam && selectedTab !== "weekly_aggregate"
+          ? (dayMarksMap[s.id]?.[activeKey]?.marks ?? null)
+          : (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
+        return mark !== null && mark >= stats.pass
       }
       if (statusFilter === "failed") {
-        const num = hasSaved ? parseFloat(saved.obtained_marks) : null
-        return num !== null && exam && num < exam.pass_marks
+        const mark = isWeeklyExam && selectedTab !== "weekly_aggregate"
+          ? (dayMarksMap[s.id]?.[activeKey]?.marks ?? null)
+          : (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
+        return mark !== null && mark < stats.pass
       }
 
       return true
     })
-  }, [students, tableSearchQuery, statusFilter, savedResults, justSavedIds, exam])
+  }, [students, tableSearchQuery, statusFilter, isWeeklyExam, selectedTab, activeDayConfig, dayMarksMap, savedResults, justSavedIds, stats.pass])
 
   if (fetching) {
     return (
       <div className="flex flex-col items-center justify-center h-80 text-slate-400 gap-3">
         <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
-        <p className="text-sm font-medium text-slate-400">Loading exam & student list...</p>
+        <p className="text-sm font-medium text-slate-500">পরীক্ষার তথ্য ও শিক্ষার্থীদের তালিকা লোড হচ্ছে...</p>
       </div>
     )
   }
 
   if (!exam) {
     return (
-      <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/90 shadow-sm">
+      <div className="text-center py-16 bg-white rounded-2xl border border-slate-200/90 shadow-sm max-w-lg mx-auto">
         <AlertCircle className="w-12 h-12 text-rose-500 mx-auto mb-3" />
         <h3 className="text-lg font-bold text-slate-900">Exam not found</h3>
-        <p className="text-sm text-slate-400 mt-1 mb-6">The requested test may have been moved or deleted.</p>
+        <p className="text-sm text-slate-400 mt-1 mb-6">পরীক্ষাটি খুঁজে পাওয়া যায়নি বা মুছে ফেলা হয়েছে।</p>
         <Link
           href={backUrl}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-bold rounded-xl text-sm shadow-md"
         >
           <ArrowLeft className="w-4 h-4" /> Return to Exams
         </Link>
@@ -722,72 +1043,126 @@ export default function ExamResultsPage() {
     )
   }
 
+  const isWeeklyActive = isWeeklyExam && selectedTab === "weekly_aggregate"
+  const isSelectedDayPublished = activeDayConfig ? (publishedDays.includes(activeDayConfig.key) || publishedDays.includes(activeDayConfig.day_bn)) : false
+  const activeTotalMarks = isWeeklyExam ? (isWeeklyActive ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50)) : exam.total_marks
+  const activePassMarks = isWeeklyExam ? (isWeeklyActive ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20)) : exam.pass_marks
+
   const quickMarkNum = parseFloat(quickMarkInput)
-  const hasValidQuickMark = !isNaN(quickMarkNum) && quickMarkNum >= 0 && quickMarkNum <= exam.total_marks
-  const quickGradePreview = hasValidQuickMark ? getGrade(quickMarkNum, exam.total_marks) : ""
-  const isQuickPass = hasValidQuickMark && quickMarkNum >= exam.pass_marks
+  const hasValidQuickMark = !isNaN(quickMarkNum) && quickMarkNum >= 0 && quickMarkNum <= activeTotalMarks
+  const quickGradePreview = hasValidQuickMark ? getGrade(quickMarkNum, activeTotalMarks) : ""
+  const isQuickPass = hasValidQuickMark && quickMarkNum >= activePassMarks
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-16">
-      {/* Top Navigation & Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-xl">
+      {/* Top Header Card */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex items-start gap-4">
           <Link
             href={backUrl}
-            className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors shrink-0 mt-0.5"
+            className="p-2.5 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-600 transition-colors shrink-0 mt-0.5"
             title="Back to Exams"
           >
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <Trophy className="w-6 h-6 text-amber-400" />
+              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                <Trophy className="w-6 h-6 text-amber-500" />
                 {exam.title}
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                {exam.subject || "General"}
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                {exam.subject || "সাধারণ বিষয়"}
               </span>
+              {isWeeklyExam && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                  সাপ্তাহিক মডেল টেস্ট
+                </span>
+              )}
             </div>
-            <p className="text-xs text-slate-400 mt-1.5 flex items-center gap-2 flex-wrap">
-              <span className="font-semibold text-slate-200">{exam.batch?.name || "All Enrolled Batches"}</span>
+            <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-slate-700">{exam.batch?.name || "সকল ব্যাচ"}</span>
               <span>•</span>
               <span>
-                Total: <strong className="text-amber-400 font-bold">{exam.total_marks}</strong> marks
+                মোট পূর্ণমান: <strong className="text-amber-600 font-bold">{activeTotalMarks}</strong> নম্বর
               </span>
               <span>•</span>
               <span>
-                Pass mark: <strong className="text-emerald-400 font-bold">{exam.pass_marks}</strong>
+                পাস নম্বর: <strong className="text-emerald-600 font-bold">{activePassMarks}</strong>
               </span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          {/* Publish Exam to Students */}
-          <button
-            type="button"
-            onClick={() => handleTogglePublish(!exam.is_published)}
-            disabled={publishingExam}
-            className={cn(
-              "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
-              exam.is_published
-                ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
-                : "bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-blue-600/20"
-            )}
-            title={exam.is_published ? "Click to unpublish results" : "Publish results to enrolled students"}
-          >
-            {publishingExam ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : exam.is_published ? (
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-            ) : (
-              <Play className="w-3.5 h-3.5" />
-            )}
-            <span>{exam.is_published ? "Results Published" : "Publish Exam"}</span>
-          </button>
+        {/* Dynamic Action Buttons */}
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* 1. Dynamic Publish Button */}
+          {isWeeklyExam ? (
+            isWeeklyActive ? (
+              <button
+                type="button"
+                onClick={() => handleTogglePublishWeekly(!isWeeklyPublished)}
+                disabled={publishingExam}
+                className={cn(
+                  "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
+                  isWeeklyPublished
+                    ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
+                    : "bg-purple-600 hover:bg-purple-700 text-white border-purple-600 shadow-purple-600/20"
+                )}
+                title="Publish consolidated weekly results"
+              >
+                {publishingExam ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : isWeeklyPublished ? (
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
+                <span>{isWeeklyPublished ? "সাপ্তাহিক রেজাল্ট প্রকাশিত ✓" : "Publish Weekly Result"}</span>
+              </button>
+            ) : activeDayConfig ? (
+              <button
+                type="button"
+                onClick={() => handleTogglePublishDay(activeDayConfig.key)}
+                disabled={publishingExam}
+                className={cn(
+                  "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
+                  isSelectedDayPublished
+                    ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
+                    : "bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-blue-600/20"
+                )}
+                title={`Publish results for ${activeDayConfig.day_bn}`}
+              >
+                {publishingExam ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : isSelectedDayPublished ? (
+                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Play className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {isSelectedDayPublished ? `${activeDayConfig.day_bn} প্রকাশিত ✓` : `Publish [${activeDayConfig.day_bn}] Result`}
+                </span>
+              </button>
+            ) : null
+          ) : (
+            <button
+              type="button"
+              onClick={() => handleTogglePublishOneTime(!exam.is_published)}
+              disabled={publishingExam}
+              className={cn(
+                "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
+                exam.is_published
+                  ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
+                  : "bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
+              )}
+            >
+              {publishingExam ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : exam.is_published ? <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> : <Play className="w-3.5 h-3.5" />}
+              <span>{exam.is_published ? "Results Published" : "Publish Exam"}</span>
+            </button>
+          )}
 
-          {/* Publish to Public Online Result */}
+          {/* 2. Public Online Result Portal Toggle */}
           <button
             type="button"
             onClick={() => handleTogglePublicResult(!exam.is_public_result)}
@@ -795,798 +1170,962 @@ export default function ExamResultsPage() {
             className={cn(
               "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
               exam.is_public_result
-                ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-700 shadow-purple-600/20"
+                ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-700"
                 : "bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
             )}
-            title="Publish merit list on public homepage Online Result portal"
+            title="Publish on homepage Online Result portal"
           >
-            {publishingPublic ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Globe className="w-3.5 h-3.5" />
-            )}
+            {publishingPublic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
             <span>{exam.is_public_result ? "🌐 Public Online Result" : "Publish to Public"}</span>
           </button>
 
-          {/* Publish to Notice Board */}
+          {/* 3. Publish Notice Button */}
           <button
             type="button"
             onClick={handlePublishNotice}
             disabled={publishingNotice}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer"
-            title="Generate and post merit list notice to notice board"
+            title="Post merit list announcement to notice board"
           >
-            {publishingNotice ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Bell className="w-3.5 h-3.5 text-amber-600" />
-            )}
-            <span>Publish to Notice</span>
+            {publishingNotice ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bell className="w-3.5 h-3.5 text-amber-600" />}
+            <span>{isWeeklyActive ? "Publish Weekly Notice" : activeDayConfig ? `Publish [${activeDayConfig.day_bn}] Notice` : "Publish to Notice"}</span>
           </button>
 
-          {/* Weekly Pause / Resume Toggle */}
-          {(exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)) && (
+          {/* 4. Weekly Pause/Resume */}
+          {isWeeklyExam && (
             <button
               type="button"
               onClick={handleTogglePauseExam}
               disabled={pausingExam}
               className={cn(
                 "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
-                exam.is_paused
-                  ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-700 shadow-rose-600/20"
-                  : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+                exam.is_paused ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-700" : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
               )}
             >
-              {pausingExam ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : exam.is_paused ? (
-                <>
-                  <Play className="w-3.5 h-3.5 fill-white" />
-                  <span>Resume Exam</span>
-                </>
-              ) : (
-                <>
-                  <Pause className="w-3.5 h-3.5 fill-slate-800" />
-                  <span>Pause Exam</span>
-                </>
-              )}
+              {pausingExam ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : exam.is_paused ? <Play className="w-3.5 h-3.5 fill-white" /> : <Pause className="w-3.5 h-3.5 fill-slate-800" />}
+              <span>{exam.is_paused ? "Resume Exam" : "Pause Exam"}</span>
             </button>
           )}
 
+          {/* 5. SMS Button */}
           <Link
-            href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-            className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 rounded-xl font-bold text-xs sm:text-sm hover:border-amber-500/50 active:scale-[0.98] shadow-md transition-all cursor-pointer"
+            href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result${activeDayConfig ? `&day=${activeDayConfig.key}` : ""}`}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer"
           >
-            <MessageSquare className="w-4 h-4" /> Send Result SMS
+            <MessageSquare className="w-4 h-4" /> Send SMS
           </Link>
 
+          {/* 6. Delete Exam */}
           <button
             type="button"
             onClick={() => setShowDeleteModal(true)}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-xs sm:text-sm active:scale-[0.98] shadow-xs transition-all cursor-pointer"
+            className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer"
             title="Delete this exam"
           >
-            <Trash2 className="w-4 h-4" /> Delete Exam
+            <Trash2 className="w-4 h-4" />
           </button>
 
-          <button
-            onClick={handleSaveAll}
-            disabled={loading}
-            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs sm:text-sm active:scale-[0.98] shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> Saving All...
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" /> Save All & Rank
-              </>
-            )}
-          </button>
+          {/* 7. Save All */}
+          {!isWeeklyActive && (
+            <button
+              onClick={handleSaveAll}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs sm:text-sm shadow-md shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Save className="w-4 h-4" />}
+              <span>Save All</span>
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Weekly Exam Session Card */}
-      {(exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)) && (
-        <div className="p-4 sm:p-5 rounded-2xl border border-purple-200 bg-purple-50/70 shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-purple-100 text-purple-700 border border-purple-300 flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+      {/* PROMINENT TOP DAY SELECTION & SESSION BAR (For Weekly Exams) */}
+      {isWeeklyExam && parsedWeeklyDays.length > 0 && (
+        <div className="bg-white p-4 sm:p-5 rounded-2xl border-2 border-amber-400 shadow-md space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white flex items-center justify-center font-bold shadow-sm shrink-0">
                 <CalendarDays className="w-5 h-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                    Weekly Exam Session (সাপ্তাহিক পরীক্ষার সেশন ও দিন নির্বাচন)
-                  </h2>
-                  {exam.is_paused ? (
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">
-                      PAUSED (স্থগিত)
-                    </span>
-                  ) : (
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      ACTIVE (সচল)
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-600 mt-1">
-                  সপ্তাহের নির্ধারিত দিন সিলেক্ট করে এই সেশনের প্রাপ্ত নম্বর ইনপুট করুন।
+                <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  সাপ্তাহিক পরীক্ষার দিন নির্বাচন (Weekly Exam Day Selection)
+                </h2>
+                <p className="text-xs text-slate-500">
+                  দিন সিলেক্ট করে নম্বর ইনপুট ও প্রকাশ করুন, অথবা সামগ্রিক মেধার জন্য &ldquo;সাপ্তাহিক রেজাল্ট&rdquo; ট্যাবে যান।
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 flex-wrap">
-              {Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0 && (
-                <div>
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    বার / দিন (Day)
-                  </label>
-                  <select
-                    value={selectedDay}
-                    onChange={(e) => setSelectedDay(e.target.value)}
-                    className="px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-900 focus:outline-none cursor-pointer"
-                  >
-                    {exam.recurring_days.map((d: any, idx: number) => {
-                      const isObj = typeof d === "object" && d !== null
-                      const dayVal = isObj ? (d.day_bn || d.day) : d
-                      const label = isObj
-                        ? `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (নম্বর: ${d.total_marks || exam.total_marks})`
-                        : d
-                      return (
-                        <option key={idx} value={dayVal}>
-                          {label}
-                        </option>
-                      )
-                    })}
-                  </select>
-                </div>
-              )}
-              <div>
-                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                  সেশন তারিখ (Date)
-                </label>
-                <input
-                  type="date"
-                  value={selectedSessionDate}
-                  onChange={(e) => setSelectedSessionDate(e.target.value)}
-                  className="px-3 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
-                />
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500">তারিখ:</span>
+              <input
+                type="date"
+                value={selectedSessionDate}
+                onChange={(e) => setSelectedSessionDate(e.target.value)}
+                className="px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none"
+              />
             </div>
           </div>
 
-          {(() => {
-            const activeDaySchedule = Array.isArray(exam.recurring_days)
-              ? exam.recurring_days.find((d: any) => {
-                  if (typeof d === "object" && d !== null) {
-                    return d.day === selectedDay || d.day_bn === selectedDay || d.day_en === selectedDay
-                  }
-                  return d === selectedDay
-                })
-              : null
+          {/* DAY TABS + FINAL WEEKLY RESULT TAB */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5">
+            {parsedWeeklyDays.map((d) => {
+              const isSelected = selectedTab === d.key
+              const isDayPub = publishedDays.includes(d.key.toLowerCase()) || publishedDays.includes(d.day_bn.toLowerCase())
 
-            if (!activeDaySchedule || typeof activeDaySchedule !== "object") return null
+              return (
+                <button
+                  key={d.key}
+                  type="button"
+                  onClick={() => setSelectedTab(d.key)}
+                  className={cn(
+                    "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[130px] sm:min-w-[155px] cursor-pointer",
+                    isSelected
+                      ? "bg-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-400/40"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200"
+                  )}
+                >
+                  <div className="flex items-center justify-between w-full gap-2">
+                    <span className={cn("text-xs font-black", isSelected ? "text-white" : "text-slate-900")}>
+                      {d.day_bn}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-[10px] font-bold px-1.5 py-0.2 rounded-full border",
+                        isDayPub
+                          ? isSelected
+                            ? "bg-white text-emerald-700 border-white"
+                            : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                          : isSelected
+                          ? "bg-amber-600/40 text-white border-amber-400"
+                          : "bg-slate-200 text-slate-600 border-slate-300"
+                      )}
+                    >
+                      {isDayPub ? "✓ প্রকাশিত" : "ড্রাফট"}
+                    </span>
+                  </div>
 
-            return (
-              <div className="pt-2.5 border-t border-purple-200/80 flex items-center gap-3 flex-wrap text-xs text-purple-900">
-                <span className="font-bold flex items-center gap-1 bg-white px-2.5 py-1 rounded-lg border border-purple-200">
-                  📝 {activeDaySchedule.exam_name}
+                  <div className="flex items-center gap-1 text-[11px] truncate w-full">
+                    <span className={cn("font-medium truncate", isSelected ? "text-amber-100" : "text-slate-600")}>
+                      {d.subject || d.exam_name}
+                    </span>
+                  </div>
+
+                  <div className={cn("text-[10px] font-bold mt-0.5", isSelected ? "text-white" : "text-amber-700")}>
+                    মোট: {d.total_marks} নম্বর (পাস: {d.pass_marks})
+                  </div>
+                </button>
+              )
+            })}
+
+            {/* FINAL TAB: WEEKLY AGGREGATE RESULT */}
+            <button
+              type="button"
+              onClick={() => setSelectedTab("weekly_aggregate")}
+              className={cn(
+                "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[180px] sm:min-w-[210px] cursor-pointer",
+                selectedTab === "weekly_aggregate"
+                  ? "bg-gradient-to-r from-purple-700 to-indigo-700 text-white border-purple-800 shadow-lg ring-2 ring-purple-400/40"
+                  : "bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200"
+              )}
+            >
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="text-xs font-black flex items-center gap-1.5">
+                  <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                  🏆 সাপ্তাহিক সামগ্রিক রেজাল্ট
                 </span>
-                {activeDaySchedule.subject && (
-                  <span className="bg-white px-2.5 py-1 rounded-lg border border-purple-200 font-medium">
-                    বিষয়: {activeDaySchedule.subject}
-                  </span>
-                )}
-                <span className="bg-white px-2.5 py-1 rounded-lg border border-purple-200 font-bold">
-                  মোট নম্বর: {activeDaySchedule.total_marks}
-                </span>
-                <span className="bg-white px-2.5 py-1 rounded-lg border border-purple-200 font-medium">
-                  পাস নম্বর: {activeDaySchedule.pass_marks}
+                <span
+                  className={cn(
+                    "text-[10px] font-bold px-1.5 py-0.2 rounded-full border",
+                    isWeeklyPublished
+                      ? "bg-emerald-500 text-white border-emerald-400"
+                      : "bg-purple-200 text-purple-800 border-purple-300"
+                  )}
+                >
+                  {isWeeklyPublished ? "✓ প্রকাশিত" : "ড্রাফট"}
                 </span>
               </div>
-            )
-          })()}
+              <p className={cn("text-[11px] font-medium", selectedTab === "weekly_aggregate" ? "text-purple-100" : "text-purple-700")}>
+                সকল বিষয়ের মোট ফলাফল ও মেধা
+              </p>
+              <span className={cn("text-[10px] font-bold", selectedTab === "weekly_aggregate" ? "text-amber-300" : "text-purple-900")}>
+                মোট পূর্ণমান: {totalWeeklyMaxMarks} নম্বর
+              </span>
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Batch Marks Visibility Option Card */}
-      <div className={`p-4 sm:p-5 rounded-2xl border transition-all duration-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-        showAllResults 
-          ? "bg-white backdrop-blur-md border-emerald-500/30 shadow-xl" 
-          : "bg-white backdrop-blur-md border-amber-500/30 shadow-xl"
-      }`}>
-        <div className="flex items-start gap-3.5">
-          <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
-            showAllResults ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-amber-500/20 text-amber-400 border border-amber-500/30"
-          }`}>
-            {showAllResults ? <Users className="w-5 h-5" /> : <Lock className="w-5 h-5" />}
-          </div>
-          <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-sm sm:text-base font-bold text-slate-900">
-                Batch Marks Visibility & Merit List
-              </h2>
-              <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
-                showAllResults 
-                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" 
-                  : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-              }`}>
-                {showAllResults ? "Public to Batch (Default)" : "Private (Own Marks Only)"}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1 max-w-2xl leading-relaxed">
-              {showAllResults ? (
-                <>
-                  <strong className="font-semibold text-emerald-400">Default:</strong> All enrolled students in this batch can view everyone&apos;s scores, percentages, and the batch merit list.
-                </>
-              ) : (
-                <>
-                  <strong className="font-semibold text-amber-400">Deselected:</strong> Each student will <strong className="underline">only see their own marks</strong> privately on their profile. Other students&apos; marks and numbers are hidden.
-                </>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 shrink-0 self-start sm:self-auto pl-14 sm:pl-0">
-          <label className="relative inline-flex items-center cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={showAllResults}
-              disabled={updatingVisibility}
-              onChange={(e) => handleToggleShowAllResults(e.target.checked)}
-              className="sr-only peer"
-            />
-            <div className="w-12 h-6.5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-slate-950 after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:border-slate-200 after:border after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-emerald-500"></div>
-            <span className="ml-3 text-xs font-bold text-slate-300 min-w-[140px]">
-              {updatingVisibility ? (
-                <span className="flex items-center gap-1.5 text-slate-400">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" /> Saving setting...
-                </span>
-              ) : showAllResults ? (
-                <span className="text-emerald-400 flex items-center gap-1">
-                  <Eye className="w-3.5 h-3.5" /> All Marks Visible
-                </span>
-              ) : (
-                <span className="text-amber-400 flex items-center gap-1">
-                  <EyeOff className="w-3.5 h-3.5" /> Private Only
-                </span>
-              )}
-            </span>
-          </label>
-        </div>
-      </div>
-
-      {/* Summary KPI Cards */}
+      {/* KPI Stats Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="bg-white backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center shrink-0">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 border border-blue-200 text-blue-600 flex items-center justify-center shrink-0">
             <Users className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-medium">Total Students</p>
-            <p className="text-lg font-black text-white">{stats.total}</p>
+            <p className="text-xs text-slate-500 font-medium">মোট শিক্ষার্থী</p>
+            <p className="text-lg font-black text-slate-900">{stats.total}</p>
           </div>
         </div>
 
-        <div className="bg-white backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center shrink-0">
             <CheckCircle2 className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-medium">Marks Entered</p>
-            <p className="text-lg font-black text-white">
+            <p className="text-xs text-slate-500 font-medium">নম্বর প্রদান সম্পন্ন</p>
+            <p className="text-lg font-black text-slate-900">
               {stats.count} <span className="text-xs font-normal text-slate-400">/ {stats.total}</span>
             </p>
           </div>
         </div>
 
-        <div className="bg-white backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center shrink-0">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-purple-50 border border-purple-200 text-purple-600 flex items-center justify-center shrink-0">
             <TrendingUp className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-medium">Average Mark</p>
-            <p className="text-lg font-black text-white">
-              {stats.avg} <span className="text-xs font-normal text-slate-400">/{exam.total_marks}</span>
+            <p className="text-xs text-slate-500 font-medium">গড় নম্বর</p>
+            <p className="text-lg font-black text-slate-900">
+              {stats.avg} <span className="text-xs font-normal text-slate-400">/{stats.max}</span>
             </p>
           </div>
         </div>
 
-        <div className="bg-white backdrop-blur-md p-4 rounded-xl border border-slate-200 shadow-xl flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 flex items-center justify-center shrink-0">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
             <Award className="w-5 h-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-medium">Highest / Pass Rate</p>
-            <p className="text-lg font-black text-white">
+            <p className="text-xs text-slate-500 font-medium">সর্বোচ্চ / পাসের হার</p>
+            <p className="text-lg font-black text-slate-900">
               {stats.highest} <span className="text-xs font-normal text-slate-400">({stats.passRate}%)</span>
             </p>
           </div>
         </div>
       </div>
 
-      {/* QUICK SEARCH & ENTER MARK SECTION */}
-      <div className="bg-white backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-xl">
-        <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-sm">
-              <Sparkles className="w-4 h-4" />
-            </span>
-            <h2 className="text-base font-black text-slate-900">Quick Mark Entry (Search & Enter)</h2>
-          </div>
-          <span className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded-full font-medium hidden sm:inline-block">
-            Keyboard shortcut: Type name/ID → Select → Type mark → Press Enter ↵
-          </span>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-          {/* Student Search Box */}
-          <div className="lg:col-span-6 relative" ref={searchContainerRef}>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">
-              1. Search Student (by Name, ID, or Roll)
-            </label>
-            <div className="relative">
-              <Search className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={studentSearchQuery}
-                onChange={(e) => {
-                  setStudentSearchQuery(e.target.value)
-                  setIsSearchDropdownOpen(true)
-                }}
-                onFocus={() => setIsSearchDropdownOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && filteredSearchStudents.length === 1) {
-                    e.preventDefault()
-                    handleSelectStudent(filteredSearchStudents[0])
-                  } else if (e.key === "Escape") {
-                    setIsSearchDropdownOpen(false)
-                  }
-                }}
-                placeholder="Type student name (e.g. Asik) or ID (e.g. MS-86053)..."
-                className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-white placeholder:text-slate-500 placeholder:font-normal focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10 shadow-sm"
-              />
-              {studentSearchQuery && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStudentSearchQuery("")
-                    searchInputRef.current?.focus()
-                  }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-0.5 rounded-full cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+      {/* CONDITIONAL CONTENT: IF "WEEKLY AGGREGATE" IS SELECTED, SHOW TOPPERS & CONSOLIDATED TABLE */}
+      {isWeeklyActive ? (
+        <div className="space-y-6">
+          {/* TOTAL TOPPERS (GRAND MERIT PODIUM) */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-amber-500 text-white font-bold shadow-xs">
+                  <Trophy className="w-5 h-5" />
+                </span>
+                <div>
+                  <h2 className="text-base font-black text-slate-900">
+                    সামগ্রিক শীর্ষ মেধা (Weekly Grand Total Toppers)
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    সকল বিষয়ের মোট নম্বরের ভিত্তিতে ১ম, ২য় ও ৩য় স্থান অর্জনকারী শিক্ষার্থী
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" /> প্রিন্ট মেধা তালিকা
+              </button>
             </div>
 
-            {/* Dropdown Suggestions */}
-            {isSearchDropdownOpen && (
-              <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-900 rounded-xl border border-slate-200 shadow-2xl max-h-64 overflow-y-auto z-50 divide-y divide-slate-100">
-                {filteredSearchStudents.length === 0 ? (
-                  <div className="p-4 text-center text-xs text-slate-500 font-medium">
-                    No matching enrolled student found
-                  </div>
-                ) : (
-                  filteredSearchStudents.map((s) => {
-                    const saved = savedResults[s.id]
-                    const draft = draftMarks[s.id]
-                    const markToShow = draft || saved?.obtained_marks || ""
-                    const hasMark = Boolean(markToShow !== "")
-                    const gradeToShow = saved?.grade || (hasMark && exam ? getGrade(parseFloat(markToShow), exam.total_marks) : "")
-                    const isSelected = selectedStudent?.id === s.id
+            {totalToppers.length === 0 ? (
+              <div className="py-8 text-center text-slate-400 text-xs">
+                এখনও কোনো শিক্ষার্থীর নম্বর দেওয়া হয়নি।
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {totalToppers.map((t, idx) => {
+                  const isGold = idx === 0
+                  const isSilver = idx === 1
 
-                    return (
+                  return (
+                    <div
+                      key={t.student.id}
+                      className={cn(
+                        "p-4 rounded-2xl border flex items-center gap-3.5 transition-all shadow-xs",
+                        isGold
+                          ? "bg-gradient-to-br from-amber-50 via-amber-100/50 to-amber-200/40 border-amber-300 ring-2 ring-amber-400/30"
+                          : isSilver
+                          ? "bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/50 border-slate-300"
+                          : "bg-gradient-to-br from-orange-50 via-orange-100/50 to-orange-200/40 border-orange-300"
+                      )}
+                    >
                       <div
-                        key={s.id}
-                        onClick={() => handleSelectStudent(s)}
-                        className={`px-3.5 py-2.5 flex items-center justify-between cursor-pointer transition-colors ${
-                          isSelected ? "bg-amber-500/10 border-l-2 border-amber-400" : "hover:bg-slate-800/80"
-                        }`}
+                        className={cn(
+                          "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm shrink-0",
+                          isGold ? "bg-amber-500 text-white" : isSilver ? "bg-slate-600 text-white" : "bg-amber-700 text-white"
+                        )}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-xs flex items-center justify-center shrink-0">
-                            {s.name?.charAt(0).toUpperCase() || "S"}
-                          </div>
-                          <div className="truncate">
-                            <p className="text-xs font-bold text-white truncate">{s.name}</p>
-                            <p className="text-[11px] text-slate-400 font-mono flex items-center gap-1.5">
-                              <span className="font-semibold text-amber-400">{s.student_id}</span>
-                              {s.phone && <span>• {s.phone}</span>}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="shrink-0 ml-2 text-right">
-                          {hasMark ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                              <Check className="w-3 h-3" /> {markToShow}/{exam.total_marks} ({gradeToShow})
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                              Pending
-                            </span>
-                          )}
-                        </div>
+                        {isGold ? "১ম" : isSilver ? "২য়" : "৩য়"}
                       </div>
-                    )
-                  })
-                )}
+                      <div className="min-w-0">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
+                        </span>
+                        <h3 className="font-black text-sm text-slate-900 truncate">{t.student.name}</h3>
+                        <p className="text-[11px] font-mono text-slate-500">ID: {t.student.student_id}</p>
+                        <p className="text-xs font-bold text-amber-700 mt-1">
+                          মোট প্রাপ্ত: {t.obtained_marks} / {totalWeeklyMaxMarks} ({t.pct}%, গ্রেড: {t.grade})
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
 
-          {/* Enter Mark & Action Box */}
-          <div className="lg:col-span-6 bg-slate-950 p-3.5 rounded-xl border border-slate-200 shadow-sm">
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">
-              2. Enter Mark & Save (Auto-saves to database)
-            </label>
+          {/* SUBJECT-WISE TOPPERS */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
+              <span className="p-2 rounded-xl bg-purple-100 text-purple-700 font-bold">
+                <BookOpen className="w-5 h-5" />
+              </span>
+              <div>
+                <h2 className="text-base font-black text-slate-900">
+                  বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী (Subject-wise Toppers)
+                </h2>
+                <p className="text-xs text-slate-500">
+                  প্রতিটি দিনের নির্ধারিত বিষয়ে সর্বোচ্চ নম্বর অর্জনকারী শিক্ষার্থী
+                </p>
+              </div>
+            </div>
 
-            {selectedStudent ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-2 bg-slate-900 p-2.5 rounded-lg border border-slate-200">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded-full bg-amber-500 text-slate-950 font-black text-xs flex items-center justify-center shrink-0">
-                      {selectedStudent.name?.charAt(0).toUpperCase()}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {subjectToppers.map((st) => {
+                const hasWinner = st.student && st.score >= 0
+
+                return (
+                  <div key={st.day.key} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                        {st.day.day_bn}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                        পূর্ণমান: {st.day.total_marks}
+                      </span>
                     </div>
-                    <div className="truncate">
-                      <p className="text-xs font-black text-white truncate">{selectedStudent.name}</p>
-                      <p className="text-[11px] text-amber-400 font-mono font-bold">
-                        ID: {selectedStudent.student_id}
+
+                    <p className="text-xs text-purple-900 font-bold truncate">
+                      {st.day.subject || st.day.exam_name}
+                    </p>
+
+                    {hasWinner ? (
+                      <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
+                        <div className="truncate">
+                          <p className="font-bold text-slate-800 truncate">🏆 {st.student?.name}</p>
+                          <p className="text-[10px] text-slate-500 font-mono">ID: {st.student?.student_id}</p>
+                        </div>
+                        <span className="font-black text-amber-700 shrink-0 ml-2">
+                          {st.score}/{st.day.total_marks}
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-200">
+                        নম্বর এখনও যুক্ত হয়নি
                       </p>
-                    </div>
+                    )}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedStudent(null)
-                      setQuickMarkInput("")
-                      searchInputRef.current?.focus()
+                )
+              })}
+            </div>
+          </div>
+
+          {/* CONSOLIDATED MULTI-COLUMN WEEKLY MARKS TABLE */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-0">
+            <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-900">
+                  সাপ্তাহিক সামগ্রিক মূল্যায়ন টেবিল (Day-by-Day Marks Breakdown)
+                </h3>
+                <p className="text-xs text-slate-500">প্রতিটি শিক্ষার্থীর প্রতিদিনের নম্বর এবং মোট প্রাপ্তির বিস্তারিত বিবরণ</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
+                  <tr>
+                    <th className="px-4 py-3 text-center w-12">#</th>
+                    <th className="px-4 py-3">Student Name</th>
+                    <th className="px-4 py-3">Student ID</th>
+                    {parsedWeeklyDays.map((d) => (
+                      <th key={d.key} className="px-3 py-3 text-center whitespace-nowrap">
+                        {d.day_bn} ({d.total_marks})
+                      </th>
+                    ))}
+                    <th className="px-4 py-3 text-center bg-amber-50/60 font-black text-amber-900">
+                      মোট প্রাপ্ত ({totalWeeklyMaxMarks})
+                    </th>
+                    <th className="px-3 py-3 text-center">শতকরা (%)</th>
+                    <th className="px-3 py-3 text-center">গ্রেড</th>
+                    <th className="px-3 py-3 text-center">মেধা (Rank)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {students
+                    .map((s) => {
+                      const studentDays = dayMarksMap[s.id] || {}
+                      const grandTotal = Object.values(studentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+                      const hasMarks = Object.keys(studentDays).length > 0 || (savedResults[s.id]?.obtained_marks !== "" && savedResults[s.id]?.obtained_marks !== undefined)
+                      const obtVal = hasMarks ? (grandTotal > 0 ? grandTotal : parseFloat(savedResults[s.id]?.obtained_marks || "0")) : null
+                      return { student: s, grandTotal: obtVal, days: studentDays }
+                    })
+                    .sort((a, b) => (b.grandTotal ?? -1) - (a.grandTotal ?? -1))
+                    .map((row, idx) => {
+                      const obt = row.grandTotal
+                      const pct = obt !== null ? Math.round((obt / totalWeeklyMaxMarks) * 100) : null
+                      const grade = obt !== null ? getGrade(obt, totalWeeklyMaxMarks) : "-"
+
+                      return (
+                        <tr key={row.student.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="px-4 py-3 text-center font-mono text-slate-500 font-bold">{idx + 1}</td>
+                          <td className="px-4 py-3 font-bold text-slate-900">{row.student.name}</td>
+                          <td className="px-4 py-3 font-mono text-slate-600 font-semibold">{row.student.student_id}</td>
+                          {parsedWeeklyDays.map((d) => {
+                            const dObj = row.days[d.key] || row.days[d.day_bn]
+                            return (
+                              <td key={d.key} className="px-3 py-3 text-center font-semibold">
+                                {dObj ? (
+                                  <span className="text-slate-800 font-black">{dObj.marks}</span>
+                                ) : (
+                                  <span className="text-slate-300">—</span>
+                                )}
+                              </td>
+                            )
+                          })}
+                          <td className="px-4 py-3 text-center font-black text-amber-800 bg-amber-50/40 text-sm">
+                            {obt !== null ? obt : "—"}
+                          </td>
+                          <td className="px-3 py-3 text-center font-bold text-slate-700">
+                            {pct !== null ? `${pct}%` : "—"}
+                          </td>
+                          <td className="px-3 py-3 text-center font-black">
+                            <span
+                              className={cn(
+                                "px-2 py-0.5 rounded-md text-[11px]",
+                                grade === "A+" || grade === "A" ? "bg-emerald-100 text-emerald-800 font-bold" : "bg-slate-100 text-slate-700"
+                              )}
+                            >
+                              {grade}
+                            </span>
+                          </td>
+                          <td className="px-3 py-3 text-center font-black">
+                            {obt !== null ? (
+                              <span
+                                className={cn(
+                                  "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold",
+                                  idx === 0 ? "bg-amber-500 text-white" : idx === 1 ? "bg-slate-500 text-white" : idx === 2 ? "bg-amber-700 text-white" : "bg-slate-100 text-slate-700"
+                                )}
+                              >
+                                {idx + 1}
+                              </span>
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* DAY MARK ENTRY MODE OR ONE-TIME EXAM MODE */
+        <div className="space-y-6">
+          {/* QUICK SEARCH & ENTER MARK SECTION */}
+          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2">
+                <span className="p-1.5 rounded-lg bg-amber-500/10 text-amber-600 border border-amber-500/20 shadow-xs">
+                  <Sparkles className="w-4 h-4" />
+                </span>
+                <h2 className="text-base font-black text-slate-900">
+                  Quick Mark Entry — {activeDayConfig ? `${activeDayConfig.day_bn} (${activeDayConfig.subject || activeDayConfig.exam_name})` : "পরীক্ষার নম্বর প্রদান"}
+                </h2>
+              </div>
+              <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full font-medium hidden sm:inline-block">
+                শর্টকাট: নাম/ID টাইপ করুন → সিলেক্ট করুন → নম্বর দিয়ে Enter ↵ চাপুন
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+              {/* Student Search Box */}
+              <div className="lg:col-span-6 relative" ref={searchContainerRef}>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ১. শিক্ষার্থী খুঁজুন (Search by Name, Roll, or Phone)
+                </label>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    value={studentSearchQuery}
+                    onChange={(e) => {
+                      setStudentSearchQuery(e.target.value)
+                      setIsSearchDropdownOpen(true)
                     }}
-                    className="text-xs text-slate-400 hover:text-white p-1 rounded-md cursor-pointer"
-                    title="Deselect student"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                    onFocus={() => setIsSearchDropdownOpen(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && filteredSearchStudents.length === 1) {
+                        e.preventDefault()
+                        handleSelectStudent(filteredSearchStudents[0])
+                      } else if (e.key === "Escape") {
+                        setIsSearchDropdownOpen(false)
+                      }
+                    }}
+                    placeholder="শিক্ষার্থীর নাম বা রোল/ID টাইপ করুন..."
+                    className="w-full pl-10 pr-9 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-xs"
+                  />
+                  {studentSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStudentSearchQuery("")
+                        searchInputRef.current?.focus()
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    handleSaveQuickMark()
-                  }}
-                  className="flex items-center gap-3"
-                >
-                  <div className="relative flex-1">
-                    <input
-                      ref={quickMarkInputRef}
-                      type="text"
-                      inputMode="decimal"
-                      enterKeyHint="done"
-                      value={quickMarkInput}
-                      onChange={(e) => setQuickMarkInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          handleSaveQuickMark()
-                        } else if (e.key === "Escape") {
+                {/* Dropdown Suggestions */}
+                {isSearchDropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl border border-slate-200 shadow-2xl max-h-64 overflow-y-auto z-50 divide-y divide-slate-100">
+                    {filteredSearchStudents.length === 0 ? (
+                      <div className="p-4 text-center text-xs text-slate-500 font-medium">
+                        কোনো শিক্ষার্থী পাওয়া যায়নি
+                      </div>
+                    ) : (
+                      filteredSearchStudents.map((s) => {
+                        const activeKey = activeDayConfig?.key || selectedTab
+                        const dayObj = isWeeklyExam ? (dayMarksMap[s.id]?.[activeKey] || dayMarksMap[s.id]?.[activeDayConfig?.day_bn || ""]) : null
+                        const markToShow = isWeeklyExam ? (dayObj ? String(dayObj.marks) : "") : (draftMarks[s.id] || savedResults[s.id]?.obtained_marks || "")
+                        const hasMark = Boolean(markToShow !== "")
+                        const isSelected = selectedStudent?.id === s.id
+
+                        return (
+                          <div
+                            key={s.id}
+                            onClick={() => handleSelectStudent(s)}
+                            className={cn(
+                              "px-3.5 py-2.5 flex items-center justify-between cursor-pointer transition-colors",
+                              isSelected ? "bg-amber-50 border-l-4 border-amber-500" : "hover:bg-slate-50"
+                            )}
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 font-bold text-xs flex items-center justify-center shrink-0">
+                                {s.name?.charAt(0).toUpperCase() || "S"}
+                              </div>
+                              <div className="truncate">
+                                <p className="text-xs font-bold text-slate-900 truncate">{s.name}</p>
+                                <p className="text-[11px] text-slate-500 font-mono">
+                                  <span className="font-semibold text-amber-700">{s.student_id}</span>
+                                  {s.phone && <span> • ${s.phone}</span>}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="shrink-0 ml-2">
+                              {hasMark ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  <Check className="w-3 h-3" /> ${markToShow}/${activeTotalMarks}
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-500">
+                                  Pending
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Enter Mark & Action Box */}
+              <div className="lg:col-span-6 bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ২. প্রাপ্ত নম্বর ইনপুট করুন (পূর্ণমান: {activeTotalMarks})
+                </label>
+
+                {selectedStudent ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-2 bg-white p-2.5 rounded-lg border border-slate-200">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-amber-500 text-white font-black text-xs flex items-center justify-center shrink-0">
+                          {selectedStudent.name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="truncate">
+                          <p className="text-xs font-black text-slate-900 truncate">{selectedStudent.name}</p>
+                          <p className="text-[11px] text-amber-700 font-mono font-bold">
+                            ID: {selectedStudent.student_id}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
                           setSelectedStudent(null)
                           setQuickMarkInput("")
                           searchInputRef.current?.focus()
-                        }
-                      }}
-                      placeholder={`0 - ${exam.total_marks}`}
-                      className="w-full pl-3.5 pr-14 py-2 bg-slate-900 border-2 border-amber-500/70 rounded-xl text-base font-black text-white focus:outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-500/20 shadow-sm"
-                    />
-                    <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                      /{exam.total_marks}
-                    </span>
-                  </div>
-
-                  {hasValidQuickMark && (
-                    <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-1 bg-amber-500/15 border border-amber-500/30 text-amber-400 rounded-lg text-xs font-black">
-                        {quickGradePreview}
-                      </span>
-                      <span
-                        className={`px-2 py-1 rounded-lg text-xs font-bold border ${
-                          isQuickPass 
-                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" 
-                            : "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                        }`}
-                      >
-                        {isQuickPass ? "Pass" : "Fail"}
-                      </span>
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={savingQuickMark || !quickMarkInput}
-                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:shadow-none cursor-pointer shrink-0"
-                  >
-                    {savingQuickMark ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4" /> Save Mark
-                      </>
-                    )}
-                  </button>
-                </form>
-              </div>
-            ) : (
-              <div
-                onClick={() => searchInputRef.current?.focus()}
-                className="py-4 px-3 border border-dashed border-slate-200 rounded-xl bg-slate-900/50 text-center cursor-pointer hover:bg-slate-900 hover:border-amber-500/40 transition-colors"
-              >
-                <p className="text-xs font-semibold text-slate-300">
-                  Select a student on the left to quickly enter mark
-                </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Click here or press <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 text-slate-300 rounded text-[10px]">Enter</kbd> in search box
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* TABLE SECTION WITH LIVE SEARCH & FILTERS */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
-        {/* Table Filter Controls */}
-        <div className="p-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={tableSearchQuery}
-              onChange={(e) => setTableSearchQuery(e.target.value)}
-              placeholder="Filter list by student name or roll number..."
-              className="w-full pl-9 pr-8 py-2 bg-slate-900 border border-slate-200 rounded-xl text-xs font-medium text-white placeholder:text-slate-500 focus:outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-500/10 shadow-sm"
-            />
-            {tableSearchQuery && (
-              <button
-                type="button"
-                onClick={() => setTableSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-            {(
-              [
-                { key: "all", label: `All (${students.length})` },
-                { key: "entered", label: `Marks Entered (${stats.count})` },
-                { key: "pending", label: `Pending (${stats.total - stats.count})` },
-                { key: "passed", label: `Passed (${stats.passedCount})` },
-                { key: "failed", label: `Failed (${stats.failedCount})` },
-              ] as const
-            ).map((tab) => (
-              <button
-                key={tab.key}
-                type="button"
-                onClick={() => setStatusFilter(tab.key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
-                  statusFilter === tab.key
-                    ? "bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20"
-                    : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-200"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* The Student Results Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider text-[11px] font-bold">
-                <th className="px-4 py-3 w-12 text-center">#</th>
-                <th className="px-4 py-3">Student Name</th>
-                <th className="px-4 py-3">Student ID</th>
-                <th className="px-4 py-3 text-center">Marks (/{exam.total_marks})</th>
-                <th className="px-4 py-3 text-center">Grade</th>
-                <th className="px-4 py-3 text-center">Status</th>
-                <th className="px-4 py-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 text-sm">
-              {tableStudents.map((s, idx) => {
-                const saved = savedResults[s.id]
-                const draftVal = draftMarks[s.id] ?? ""
-                const numMarks = draftVal !== "" ? parseFloat(draftVal) : (saved?.obtained_marks ? parseFloat(saved.obtained_marks) : null)
-                const hasEntered = Boolean(saved && saved.obtained_marks !== "")
-                const isJustSaved = justSavedIds.has(s.id)
-                const passed = numMarks !== null && !isNaN(numMarks) && exam && numMarks >= exam.pass_marks
-                const isSelectedInQuick = selectedStudent?.id === s.id
-                const gradeToDisplay = saved?.grade || (numMarks !== null && !isNaN(numMarks) && exam ? getGrade(numMarks, exam.total_marks) : "")
-
-                return (
-                  <tr
-                    key={s.id}
-                    className={`transition-colors ${
-                      isSelectedInQuick
-                        ? "bg-amber-500/10 border-l-2 border-amber-400"
-                        : isJustSaved
-                        ? "bg-emerald-500/15"
-                        : hasEntered
-                        ? "hover:bg-amber-50/30"
-                        : "hover:bg-slate-800/20"
-                    }`}
-                  >
-                    <td className="px-4 py-3 text-xs text-slate-500 font-mono text-center">{idx + 1}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold text-xs flex items-center justify-center shrink-0">
-                          {s.name?.charAt(0).toUpperCase() || "S"}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-white">{s.name}</p>
-                          {s.phone && <p className="text-[11px] text-slate-400 font-medium">{s.phone}</p>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="px-2 py-1 rounded bg-white border border-slate-300 text-amber-400 font-mono text-xs font-bold">
-                        {s.student_id}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault()
-                          saveRowMark(s, idx)
                         }}
-                        className="inline-flex items-center gap-2"
+                        className="text-slate-400 hover:text-slate-600 p-1"
+                        title="Deselect student"
                       >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        handleSaveQuickMark()
+                      }}
+                      className="flex items-center gap-2.5"
+                    >
+                      <div className="relative flex-1">
                         <input
-                          id={`mark-input-${idx}`}
+                          ref={quickMarkInputRef}
                           type="text"
                           inputMode="decimal"
-                          enterKeyHint="next"
-                          value={draftVal}
-                          onChange={(e) => handleDraftChange(s.id, e.target.value)}
+                          value={quickMarkInput}
+                          onChange={(e) => setQuickMarkInput(e.target.value)}
                           onKeyDown={(e) => {
                             if (e.key === "Enter") {
                               e.preventDefault()
-                              saveRowMark(s, idx)
+                              handleSaveQuickMark()
+                            } else if (e.key === "Escape") {
+                              setSelectedStudent(null)
+                              setQuickMarkInput("")
+                              searchInputRef.current?.focus()
                             }
                           }}
-                          className={`w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all ${
-                            isJustSaved
-                              ? "border-emerald-500 bg-emerald-500/20 text-emerald-300 ring-2 ring-emerald-500/30"
-                              : hasEntered
-                              ? "border-emerald-500/40 bg-slate-950 text-emerald-400 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-500/20"
-                              : "border-slate-200 bg-slate-950 text-white focus:border-amber-400 focus:ring-2 focus:ring-amber-500/20"
-                          } focus:outline-none shadow-sm`}
-                          placeholder="—"
+                          placeholder={`0 - ${activeTotalMarks}`}
+                          className="w-full pl-3.5 pr-14 py-2 bg-white border-2 border-amber-500 rounded-xl text-base font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                         />
-                        <button
-                          type="submit"
-                          disabled={savingRowStudentId === s.id}
-                          title="Save mark (Enter ↵ / Return on phone)"
-                          className="p-1.5 text-slate-400 hover:text-amber-400 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-                        >
-                          {savingRowStudentId === s.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
-                          ) : isJustSaved ? (
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                          ) : (
-                            <Save className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      </form>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {gradeToDisplay ? (
-                        <span
-                          className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-black border ${
-                            gradeToDisplay === "A+" || gradeToDisplay === "A"
-                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                              : gradeToDisplay === "F"
-                              ? "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                              : "bg-amber-500/15 text-amber-400 border border-amber-500/30"
-                          }`}
-                        >
-                          {gradeToDisplay}
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                          /{activeTotalMarks}
                         </span>
-                      ) : (
-                        <span className="text-slate-600 text-xs">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {isJustSaved ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 animate-pulse">
-                          <Check className="w-3 h-3" /> Saved ✓
-                        </span>
-                      ) : hasEntered ? (
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                            passed
-                              ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                              : "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                          }`}
-                        >
-                          {passed ? "Pass" : "Fail"}
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
-                          Pending
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleSelectStudent(s)}
-                          className="px-2 py-1 text-xs font-bold text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors cursor-pointer"
-                          title="Quick edit mark"
-                        >
-                          Quick Edit
-                        </button>
-                        {(hasEntered || isJustSaved || draftVal !== "") && (
-                          <button
-                            type="button"
-                            onClick={() => clearStudentMark(s.id, s.name)}
-                            className="p-1 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                            title="Clear mark"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        )}
                       </div>
-                    </td>
+
+                      {hasValidQuickMark && (
+                        <div className="flex items-center gap-1">
+                          <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-black border border-amber-200">
+                            {quickGradePreview}
+                          </span>
+                          <span
+                            className={cn(
+                              "px-2 py-1 rounded-lg text-xs font-bold border",
+                              isQuickPass ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                            )}
+                          >
+                            {isQuickPass ? "Pass" : "Fail"}
+                          </span>
+                        </div>
+                      )}
+
+                      <button
+                        type="submit"
+                        disabled={savingQuickMark || !quickMarkInput}
+                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        {savingQuickMark ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Check className="w-4 h-4" />}
+                        <span>Save</span>
+                      </button>
+                    </form>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => searchInputRef.current?.focus()}
+                    className="py-4 px-3 border border-dashed border-slate-300 rounded-xl bg-white text-center cursor-pointer hover:border-amber-400 transition-colors"
+                  >
+                    <p className="text-xs font-semibold text-slate-700">বাম পাশের সার্চ বক্সে শিক্ষার্থীর নাম বা আইডি খুঁজুন</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      অথবা সরাসরি নিচের টেবিলের ঘরে নম্বর টাইপ করে <kbd className="px-1 py-0.5 bg-slate-100 rounded text-[10px] font-mono">Enter</kbd> চাপুন
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* TABLE SECTION WITH LIVE SEARCH & FILTERS */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-50">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={tableSearchQuery}
+                  onChange={(e) => setTableSearchQuery(e.target.value)}
+                  placeholder="শিক্ষার্থীর নাম বা রোল দিয়ে ফিল্টার করুন..."
+                  className="w-full pl-9 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-amber-400 shadow-xs"
+                />
+                {tableSearchQuery && (
+                  <button type="button" onClick={() => setTableSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+                {(
+                  [
+                    { key: "all", label: `সকল (${students.length})` },
+                    { key: "entered", label: `নম্বর প্রাপ্ত (${stats.count})` },
+                    { key: "pending", label: `বাকি (${stats.total - stats.count})` },
+                    { key: "passed", label: `পাস (${stats.passedCount})` },
+                    { key: "failed", label: `ফেল (${stats.failedCount})` },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setStatusFilter(tab.key)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer",
+                      statusFilter === tab.key ? "bg-amber-500 text-white shadow-xs" : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Results Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider text-[11px] font-bold">
+                    <th className="px-4 py-3 w-12 text-center">#</th>
+                    <th className="px-4 py-3">Student Name</th>
+                    <th className="px-4 py-3">Student ID</th>
+                    <th className="px-4 py-3 text-center">
+                      প্রাপ্ত নম্বর (/{activeTotalMarks})
+                    </th>
+                    <th className="px-4 py-3 text-center">গ্রেড</th>
+                    <th className="px-4 py-3 text-center">অবস্থা</th>
+                    <th className="px-4 py-3 text-right">Action</th>
                   </tr>
-                )
-              })}
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {tableStudents.map((s, idx) => {
+                    const activeKey = activeDayConfig?.key || selectedTab
+                    const dayObj = isWeeklyExam ? (dayMarksMap[s.id]?.[activeKey] || dayMarksMap[s.id]?.[activeDayConfig?.day_bn || ""]) : null
+                    const draftVal = draftMarks[s.id] ?? ""
+                    const currentMarksNum = draftVal !== "" ? parseFloat(draftVal) : (dayObj ? Number(dayObj.marks) : (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null))
+                    const hasEntered = Boolean(currentMarksNum !== null && !isNaN(currentMarksNum))
+                    const isJustSaved = justSavedIds.has(s.id)
+                    const passed = hasEntered && currentMarksNum! >= activePassMarks
+                    const gradeToDisplay = hasEntered ? getGrade(currentMarksNum!, activeTotalMarks) : ""
 
-              {tableStudents.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-slate-500">
-                    <p className="text-sm font-semibold">No students found matching your criteria</p>
-                    <p className="text-xs text-slate-500 mt-1">Try clearing your search query or filters</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                    return (
+                      <tr key={s.id} className={cn("transition-colors", isJustSaved ? "bg-emerald-50" : hasEntered ? "hover:bg-amber-50/20" : "hover:bg-slate-50")}>
+                        <td className="px-4 py-3 text-xs text-slate-500 font-mono text-center font-bold">{idx + 1}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 font-bold text-xs flex items-center justify-center shrink-0">
+                              {s.name?.charAt(0).toUpperCase() || "S"}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold text-slate-900">{s.name}</p>
+                              {s.phone && <p className="text-[11px] text-slate-400 font-medium">{s.phone}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-slate-800 font-mono text-xs font-bold">
+                            {s.student_id}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <form
+                            onSubmit={(e) => {
+                              e.preventDefault()
+                              saveRowMark(s, idx)
+                            }}
+                            className="inline-flex items-center gap-2"
+                          >
+                            <input
+                              id={`mark-input-${idx}`}
+                              type="text"
+                              inputMode="decimal"
+                              value={draftVal}
+                              onChange={(e) => setDraftMarks((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  saveRowMark(s, idx)
+                                }
+                              }}
+                              className={cn(
+                                "w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all focus:outline-none shadow-xs",
+                                isJustSaved
+                                  ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                  : hasEntered
+                                  ? "border-emerald-400 bg-white text-emerald-900"
+                                  : "border-slate-300 bg-white text-slate-900 focus:border-amber-500"
+                              )}
+                              placeholder="—"
+                            />
+                            <button
+                              type="submit"
+                              disabled={savingRowStudentId === s.id}
+                              title="Save mark (Enter ↵)"
+                              className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              {savingRowStudentId === s.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                              ) : isJustSaved ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Save className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </form>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {gradeToDisplay ? (
+                            <span
+                              className={cn(
+                                "inline-block px-2.5 py-0.5 rounded-full text-xs font-black border",
+                                gradeToDisplay === "A+" || gradeToDisplay === "A"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : gradeToDisplay === "F"
+                                  ? "bg-rose-50 text-rose-700 border-rose-200"
+                                  : "bg-amber-50 text-amber-700 border-amber-200"
+                              )}
+                            >
+                              {gradeToDisplay}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {isJustSaved ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                              <Check className="w-3 h-3" /> Saved ✓
+                            </span>
+                          ) : hasEntered ? (
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border",
+                                passed ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                              )}
+                            >
+                              {passed ? "Pass" : "Fail"}
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                              Pending
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleSelectStudent(s)}
+                              className="px-2 py-1 text-xs font-bold text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              Quick Edit
+                            </button>
+                            {hasEntered && (
+                              <button
+                                type="button"
+                                onClick={() => clearStudentMark(s.id, s.name)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                                title="Clear mark"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+
+                  {tableStudents.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="text-center py-12 text-slate-500">
+                        কোনো শিক্ষার্থী পাওয়া যায়নি
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BATCH MARKS VISIBILITY OPTION */}
+      <div className="p-4 sm:p-5 rounded-2xl border bg-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+            {showAllResults ? <Users className="w-5 h-5 text-emerald-600" /> : <Lock className="w-5 h-5 text-amber-600" />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                Batch Marks Visibility & Merit List
+              </h3>
+              <span className={cn("text-[11px] font-bold px-2 py-0.5 rounded-full border", showAllResults ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
+                {showAllResults ? "Public to Batch (Default)" : "Private (Only Own Marks)"}
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-1">
+              {showAllResults
+                ? "ডিফল্ট: ব্যাচের সকল শিক্ষার্থী প্রোফাইল থেকে একে অপরের ফলাফল ও মেরিট লিস্ট দেখতে পারবে।"
+                : "প্রাইভেট: শিক্ষার্থীরা শুধুমাত্র নিজেদের নম্বর দেখতে পারবে, অন্যের নম্বর বা মেরিট লুকানো থাকবে।"}
+            </p>
+          </div>
         </div>
 
-        {/* Footer info */}
-        <div className="p-3.5 bg-slate-950 border-t border-slate-200 flex items-center justify-between text-xs text-slate-400">
-          <span>
-            Showing <strong className="text-white">{tableStudents.length}</strong> of{" "}
-            <strong className="text-white">{students.length}</strong> students
+        <label className="relative inline-flex items-center cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={showAllResults}
+            disabled={updatingVisibility}
+            onChange={(e) => handleToggleShowAllResults(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-12 h-6.5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[3px] after:bg-white after:rounded-full after:h-5.5 after:w-5.5 after:transition-all peer-checked:bg-emerald-500"></div>
+          <span className="ml-3 text-xs font-bold text-slate-700 min-w-[120px]">
+            {updatingVisibility ? "আপডেট হচ্ছে..." : showAllResults ? "All Marks Visible" : "Private Only"}
           </span>
-          <span>
-            Marks entered: <strong className="text-amber-400">{stats.count}</strong> / {stats.total}
-          </span>
-        </div>
+        </label>
       </div>
 
-      {/* Delete Exam Confirmation Modal */}
+      {/* DELETE MODAL */}
       {showDeleteModal && exam && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-slate-200 space-y-4">
             <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-slate-900">Delete Exam?</h3>
-                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                  Are you sure you want to delete <strong className="text-slate-800 font-bold">&quot;{exam.title}&quot;</strong>?
-                  All associated questions and student exam results will be permanently removed. This action cannot be undone.
+                <p className="text-xs text-slate-500 mt-1">
+                  আপনি কি নিশ্চিত যে &ldquo;{exam.title}&rdquo; মুছে ফেলতে চান? সকল প্রশ্ন ও শিক্ষার্থীদের ফলাফল স্থায়ীভাবে মুছে যাবে।
                 </p>
               </div>
             </div>
@@ -1596,7 +2135,7 @@ export default function ExamResultsPage() {
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={deleting}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
               >
                 Cancel
               </button>
@@ -1604,17 +2143,10 @@ export default function ExamResultsPage() {
                 type="button"
                 onClick={handleDeleteExam}
                 disabled={deleting}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-md shadow-rose-600/20 disabled:opacity-50 cursor-pointer"
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
               >
-                {deleting ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-3.5 h-3.5" /> Delete Permanently
-                  </>
-                )}
+                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>Delete Permanently</span>
               </button>
             </div>
           </div>

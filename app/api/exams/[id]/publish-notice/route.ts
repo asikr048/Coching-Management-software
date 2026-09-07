@@ -51,7 +51,101 @@ export async function POST(
     let noticeTitle = ""
     let noticeContent = ""
 
-    if (type === "results") {
+    if (type === "weekly_aggregate") {
+      // Consolidated Weekly Results with Total Toppers & Subject-wise Toppers
+      const { data: results } = await admin
+        .from("exam_results")
+        .select("*, student:students(name, student_id)")
+        .eq("exam_id", examId)
+        .order("obtained_marks", { ascending: false })
+
+      const count = results?.length || 0
+      const highest = count > 0 ? results![0].obtained_marks : 0
+
+      // Calculate days breakdown & subject toppers
+      const rawDays = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
+      let totalMaxMarks = 0
+      const daysInfo: { key: string; label: string; subject: string; total: number }[] = []
+
+      rawDays.forEach((d: any) => {
+        const isObj = typeof d === "object" && d !== null
+        const key = isObj ? (d.day || d.day_bn) : d
+        const label = isObj ? (d.day_bn || d.day) : d
+        const subj = isObj ? (d.subject || "") : ""
+        const tot = isObj ? (Number(d.total_marks) || 50) : 50
+        totalMaxMarks += tot
+        daysInfo.push({ key, label, subject: subj, total: tot })
+      })
+
+      if (totalMaxMarks === 0) totalMaxMarks = exam.total_marks || 100
+
+      // Overall Top 3 Podium
+      const top3 = (results || []).slice(0, 3)
+      let overallToppersText = ""
+      if (top3.length > 0) {
+        overallToppersText = "\n\n🏆 সামগ্রিক শীর্ষ মেধা (Overall Grand Toppers):\n" +
+          top3.map((r, idx) => {
+            const medal = idx === 0 ? "🥇 ১ম:" : idx === 1 ? "🥈 ২য়:" : "🥉 ৩য়:"
+            const pct = Math.round((Number(r.obtained_marks || 0) / totalMaxMarks) * 100)
+            return `${medal} ${r.student?.name || "Student"} (ID: ${r.student?.student_id || "N/A"}) — প্রাপ্ত নম্বর: ${r.obtained_marks}/${totalMaxMarks} (${pct}%, গ্রেড: ${r.grade || "A+"})`
+          }).join("\n")
+      }
+
+      // Subject-wise Toppers
+      let subjectToppersText = ""
+      if (daysInfo.length > 0 && results && results.length > 0) {
+        const subLines: string[] = []
+        for (const d of daysInfo) {
+          let topStudentName = ""
+          let topStudentId = ""
+          let topScore = -1
+
+          for (const r of results) {
+            let dayMarkObj = r.day_marks?.[d.key] || r.day_marks?.[d.label]
+            if (!dayMarkObj && r.result_note) {
+              try {
+                const m = r.result_note.match(/\[DAY_MARKS:(.*?)\]/)
+                if (m) {
+                  const parsed = JSON.parse(m[1])
+                  dayMarkObj = parsed[d.key] || parsed[d.label]
+                }
+              } catch {}
+            }
+            const sScore = dayMarkObj ? Number(dayMarkObj.marks ?? dayMarkObj) : -1
+            if (sScore > topScore) {
+              topScore = sScore
+              topStudentName = r.student?.name || "Student"
+              topStudentId = r.student?.student_id || ""
+            }
+          }
+
+          if (topScore >= 0) {
+            const subjDisplay = d.subject ? ` (${d.subject})` : ""
+            subLines.push(`  • ${d.label}${subjDisplay}: ${topStudentName} (ID: ${topStudentId}) — ${topScore}/${d.total}`)
+          }
+        }
+        if (subLines.length > 0) {
+          subjectToppersText = "\n\n📚 বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী (Subject-wise Toppers):\n" + subLines.join("\n")
+        }
+      }
+
+      noticeTitle = `🏆 সামগ্রিক সাপ্তাহিক ফলাফল ও মেরিট তালিকা: ${exam.title}`
+      noticeContent = `মেধাশিরী কোচিংয়ের শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, "${exam.title}"-এর সকল বিষয়ের সাপ্তাহিক মূল্যায়ন ও সামগ্রিক মেধা তালিকা চূড়ান্তভাবে প্রকাশিত হয়েছে।
+
+📋 সাপ্তাহিক পরীক্ষার তথ্য:
+• বিষয়সমূহ: ${exam.subject || "সাপ্তাহিক নির্ধারিত বিষয়সমূহ"}
+• ব্যাচ: ${batchNames}
+• মোট পূর্ণমান: ${totalMaxMarks} নম্বর
+• অংশগ্রহণকারী শিক্ষার্থী: ${count} জন
+• সর্বোচ্চ প্রাপ্ত নম্বর: ${highest}${overallToppersText}${subjectToppersText}
+
+শিক্ষার্থীরা তাদের প্রোফাইল অথবা ওয়েবসাইটের "অনলাইন রেজাল্ট" পোর্টাল থেকে বিষয়ভিত্তিক ও সামগ্রিক মেরিট তালিকা দেখতে পারবে।`
+
+      try {
+        await admin.from("exams").update({ is_weekly_published: true, is_public_result: true }).eq("id", examId)
+      } catch {}
+
+    } else if (type === "results") {
       // Fetch results
       const { data: results } = await admin
         .from("exam_results")

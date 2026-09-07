@@ -73,6 +73,14 @@ export async function PATCH(
       updatedNote = updatedNote.replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [SHOW_ALL_RESULTS:${body.show_all_results}]`.trim()
     }
+    if (Array.isArray(body.published_days)) {
+      updatedNote = updatedNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
+      updatedNote = `${updatedNote} [PUBLISHED_DAYS:${body.published_days.join(",")}]`.trim()
+    }
+    if (typeof body.is_weekly_published === "boolean") {
+      updatedNote = updatedNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
+      updatedNote = `${updatedNote} [IS_WEEKLY_PUBLISHED:${body.is_weekly_published}]`.trim()
+    }
     payload.result_note = updatedNote
 
     // Attempt update with column fallback
@@ -91,6 +99,8 @@ export async function PATCH(
       if ("exam_schedule_type" in payload) delete payload.exam_schedule_type
       if ("recurring_days" in payload) delete payload.recurring_days
       if ("schedule_notice_id" in payload) delete payload.schedule_notice_id
+      if ("published_days" in payload) delete payload.published_days
+      if ("is_weekly_published" in payload) delete payload.is_weekly_published
 
       const { data: fbExam, error: fbErr } = await admin
         .from("exams")
