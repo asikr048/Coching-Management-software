@@ -292,10 +292,17 @@ export default function ExamsClient({
   async function handlePublish(id: string) {
     setPublishing(id)
     try {
-      const { error } = await supabase.from("exams").update({ is_published: true }).eq("id", id)
-      if (error) throw error
-      setExams(prev => prev.map(ex => ex.id === id ? { ...ex, is_published: true } : ex))
-      toast.success("Exam published successfully!")
+      const res = await fetch(`/api/exams/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_published: true, is_public_result: true }),
+      })
+      if (!res.ok) {
+        const { error } = await supabase.from("exams").update({ is_published: true, is_public_result: true }).eq("id", id)
+        if (error) throw error
+      }
+      setExams((prev) => prev.map((ex) => (ex.id === id ? { ...ex, is_published: true, is_public_result: true } : ex)))
+      toast.success("Exam published successfully! Results are now visible in online results portal.")
     } catch (err: any) {
       toast.error(err.message || "Failed to publish exam")
     } finally {
@@ -352,11 +359,11 @@ export default function ExamsClient({
         : form.title
 
       const finalTotalMarks = form.exam_schedule_type === "weekly"
-        ? (activeWeeklyDays[0]?.total_marks || 50)
+        ? activeWeeklyDays.reduce((acc, d) => acc + (d.total_marks || 50), 0)
         : (examMode === "online" ? computedTotal : parseInt(form.total_marks))
 
       const finalPassMarks = form.exam_schedule_type === "weekly"
-        ? (activeWeeklyDays[0]?.pass_marks || 20)
+        ? activeWeeklyDays.reduce((acc, d) => acc + (d.pass_marks || 20), 0)
         : parseInt(form.pass_marks)
 
       const finalSubject = form.exam_schedule_type === "weekly"
@@ -676,7 +683,11 @@ export default function ExamsClient({
               <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex-grow">
                 <div className="flex flex-col">
                   <span className="text-[11px] text-slate-500 font-medium">Total Marks</span>
-                  <span className="font-extrabold text-amber-700 text-sm">{exam.total_marks}</span>
+                  <span className="font-extrabold text-amber-700 text-sm">
+                    {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+                      ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+                      : exam.total_marks}
+                  </span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[11px] text-slate-500 font-medium">

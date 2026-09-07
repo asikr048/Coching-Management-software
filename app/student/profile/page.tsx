@@ -375,7 +375,12 @@ export default function StudentProfilePage() {
   const totalPendingDue = activeDues.reduce((acc: number, d: any) => acc + Math.max(0, Number(d.due_amount || 0) - Number(d.paid_amount || 0)), 0)
   const avgScore = examResults.length > 0
     ? Math.round(examResults.reduce((acc, r) => {
-        const total = Number(r.exam?.total_marks) || 100
+        const examObj = r.exam
+        const isWeekly = examObj?.exam_schedule_type === "weekly" || (Array.isArray(examObj?.recurring_days) && examObj.recurring_days.length > 0)
+        const weeklyTotal = isWeekly && Array.isArray(examObj?.recurring_days) && examObj.recurring_days.length > 0
+          ? examObj.recurring_days.reduce((dAcc: number, d: any) => dAcc + (Number(d?.total_marks) || 50), 0)
+          : 0
+        const total = weeklyTotal > 0 ? weeklyTotal : (Number(examObj?.total_marks) || 100)
         const rawObt = r.obtained_marks ?? r.marks_obtained
         const obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : 0
         return acc + (total > 0 ? (obtained / total) * 100 : 0)
@@ -587,7 +592,12 @@ export default function StudentProfilePage() {
                     const targetBatchId = enr.batch_id || b?.id
                     const batchExamList = examResults.filter((r: any) => r.exam?.batch_id === targetBatchId || r.batch_id === targetBatchId)
                     const latestExam = batchExamList.length > 0 ? batchExamList[0] : null
-                    const latestTotal = Number(latestExam?.exam?.total_marks) || 100
+                    const latestExamObj = latestExam?.exam
+                    const isLatestWeekly = latestExamObj?.exam_schedule_type === "weekly" || (Array.isArray(latestExamObj?.recurring_days) && latestExamObj.recurring_days.length > 0)
+                    const latestWeeklyTotal = isLatestWeekly && Array.isArray(latestExamObj?.recurring_days) && latestExamObj.recurring_days.length > 0
+                      ? latestExamObj.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+                      : 0
+                    const latestTotal = latestWeeklyTotal > 0 ? latestWeeklyTotal : (Number(latestExamObj?.total_marks) || 100)
                     const latestRaw = latestExam ? (latestExam.obtained_marks ?? latestExam.marks_obtained) : null
                     const latestObt = latestRaw != null && latestRaw !== "" ? Number(latestRaw) : 0
 
@@ -1139,14 +1149,21 @@ export default function StudentProfilePage() {
                         const r = exam.result
                         const rawObt = r?.obtained_marks ?? r?.marks_obtained
                         const obtained = rawObt != null && rawObt !== "" ? Number(rawObt) : null
-                        const total = exam.total_marks || 100
-                        const pct = obtained != null && total > 0 ? Math.round((obtained / total) * 100) : null
-                        const passed = obtained != null && obtained >= (exam.pass_marks || 0)
-                        const isPublic = r?.exam?.show_all_results !== false && !r?.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')
                         const isWeekly =
                           exam.exam_schedule_type === "weekly" ||
                           (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
                           exam.is_weekly_published === true
+                        const weeklyTotal = isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+                          ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+                          : 0
+                        const weeklyPass = isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+                          ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+                          : 0
+                        const total = weeklyTotal > 0 ? weeklyTotal : (exam.total_marks || 100)
+                        const passMarks = weeklyPass > 0 ? weeklyPass : (exam.pass_marks || 0)
+                        const pct = obtained != null && total > 0 ? Math.round((obtained / total) * 100) : null
+                        const passed = obtained != null && obtained >= passMarks
+                        const isPublic = r?.exam?.show_all_results !== false && !r?.exam?.result_note?.includes('[SHOW_ALL_RESULTS:false]')
 
                         return (
                           <div

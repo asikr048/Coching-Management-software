@@ -51,8 +51,20 @@ function normalizeExam(ex: any) {
     recDays.length > 0 ||
     isWeeklyPub
 
+  // Calculate cumulative total_marks and pass_marks for weekly exams
+  let totalMarks = Number(ex.total_marks) || 100
+  let passMarks = Number(ex.pass_marks) || 40
+  if (isWeekly && recDays.length > 0) {
+    const sumTotal = recDays.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+    const sumPass = recDays.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+    if (sumTotal > 0) totalMarks = sumTotal
+    if (sumPass > 0) passMarks = sumPass
+  }
+
   return {
     ...ex,
+    total_marks: totalMarks,
+    pass_marks: passMarks,
     is_public_result: isPubResult,
     is_weekly_published: isWeeklyPub,
     published_days: pubDays,

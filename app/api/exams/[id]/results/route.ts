@@ -49,6 +49,17 @@ export async function GET(
       return NextResponse.json({ error: "Exam not found" }, { status: 404 })
     }
 
+    // Compute cumulative total_marks and pass_marks if weekly recurring_days is present
+    let cumulativeTotal = Number(exam.total_marks) || 100
+    let cumulativePass = Number(exam.pass_marks) || 40
+    const isWeeklyExam = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) || exam.is_weekly_published === true
+    if (isWeeklyExam && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+      const sumTotal = exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+      const sumPass = exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+      if (sumTotal > 0) cumulativeTotal = sumTotal
+      if (sumPass > 0) cumulativePass = sumPass
+    }
+
     // 2. Determine user role / permissions
     let isStaffOrAdmin = false
     const { data: profile } = await admin
@@ -179,6 +190,8 @@ export async function GET(
         success: true,
         exam: {
           ...exam,
+          total_marks: cumulativeTotal,
+          pass_marks: cumulativePass,
           show_all_results: showAllToStudents,
         },
         results: ranked,
@@ -193,6 +206,8 @@ export async function GET(
           success: true,
           exam: {
             ...exam,
+            total_marks: cumulativeTotal,
+            pass_marks: cumulativePass,
             show_all_results: false,
           },
           results: [],
@@ -229,10 +244,25 @@ export async function GET(
 
       const { data: ownResult } = await admin
         .from("exam_results")
-        .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, phone)")
+        .select("id, exam_id, student_id, obtained_marks, grade, rank, day_marks, created_at, student:students(id, name, student_id, phone)")
         .eq("exam_id", examId)
         .eq("student_id", currentStudentId)
         .maybeSingle()
+
+      let fallbackStudentDayMarks: Record<string, any> = {}
+      if (exam.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+        try {
+          const match = exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+          if (match && match[1]) {
+            fallbackStudentDayMarks = JSON.parse(match[1])
+          }
+        } catch {}
+      }
+
+      let ownDayMarks = ownResult?.day_marks
+      if ((!ownDayMarks || typeof ownDayMarks !== "object" || Object.keys(ownDayMarks).length === 0) && fallbackStudentDayMarks[currentStudentId]) {
+        ownDayMarks = fallbackStudentDayMarks[currentStudentId]
+      }
 
       if (ownResult && ownResult.rank !== computedRank) {
         admin.from("exam_results").update({ rank: computedRank }).eq("id", ownResult.id).then(() => {})
@@ -242,9 +272,11 @@ export async function GET(
         success: true,
         exam: {
           ...exam,
+          total_marks: cumulativeTotal,
+          pass_marks: cumulativePass,
           show_all_results: false,
         },
-        results: ownResult ? [{ ...ownResult, rank: computedRank, is_current_student: true }] : [],
+        results: ownResult ? [{ ...ownResult, day_marks: ownDayMarks || {}, rank: computedRank, is_current_student: true }] : [],
         can_view_all: false,
         is_private: true,
         current_student_id: currentStudentId,
@@ -396,8 +428,111 @@ export async function POST(
       return NextResponse.json({ error: "No student marks provided" }, { status: 400 })
     }
 
+    // 2. Fetch existing exam_results for all updating students to guarantee deep-merging
+    const studentIds = updates.map((u) => u.student_id)
+    const { data: existingRows } = await admin
+      .from("exam_results")
+      .select("student_id, obtained_marks, grade, day_marks")
+      .eq("exam_id", examId)
+      .in("student_id", studentIds)
+
+    const existingStudentMap: Record<string, any> = {}
+    for (const r of existingRows || []) {
+      existingStudentMap[r.student_id] = r
+    }
+
+    // Extract fallback day marks from exam result_note
+    let existingNoteMap: Record<string, Record<string, any>> = {}
+    if (currentExam.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+      try {
+        const m = currentExam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+        if (m && m[1]) {
+          existingNoteMap = JSON.parse(m[1])
+        }
+      } catch {}
+    }
+
+    // Calculate weekly max marks
+    const isWeekly =
+      currentExam.exam_schedule_type === "weekly" ||
+      (Array.isArray(currentExam.recurring_days) && currentExam.recurring_days.length > 0) ||
+      currentExam.result_note?.includes("[WEEKLY_SCHEDULE:") ||
+      currentExam.result_note?.includes("[WEEKLY_DAYS:")
+
+    let calculatedWeeklyMax = 0
+    let calculatedWeeklyPass = 0
+    if (isWeekly && Array.isArray(currentExam.recurring_days) && currentExam.recurring_days.length > 0) {
+      calculatedWeeklyMax = currentExam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+      calculatedWeeklyPass = currentExam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+    }
+
+    // Auto-heal exam.total_marks in database if it was wrongly saved as 50 instead of 300!
+    if (calculatedWeeklyMax > 0 && (!currentExam.total_marks || Number(currentExam.total_marks) < calculatedWeeklyMax)) {
+      admin.from("exams").update({
+        total_marks: calculatedWeeklyMax,
+        pass_marks: calculatedWeeklyPass > 0 ? calculatedWeeklyPass : Math.round(calculatedWeeklyMax * 0.4),
+      }).eq("id", examId).then(() => {})
+    }
+
+    const effectiveTotalMarks = calculatedWeeklyMax > 0 ? calculatedWeeklyMax : (Number(currentExam.total_marks) || 100)
+
+    // Deep merge day marks for every student
+    const mergedUpdates = updates.map((u) => {
+      const existingRow = existingStudentMap[u.student_id]
+      let existingDays: Record<string, any> = {}
+
+      if (existingRow?.day_marks && typeof existingRow.day_marks === "object") {
+        existingDays = { ...existingRow.day_marks }
+      } else if (typeof existingRow?.day_marks === "string") {
+        try { existingDays = JSON.parse(existingRow.day_marks) } catch {}
+      }
+
+      if (Object.keys(existingDays).length === 0 && existingNoteMap[u.student_id]) {
+        existingDays = { ...existingNoteMap[u.student_id] }
+      }
+
+      // Merge existing days with incoming updates
+      const mergedDays: Record<string, any> = {
+        ...existingDays,
+        ...(u.day_marks || {}),
+      }
+
+      // Recalculate true cumulative grand total across all merged days
+      let cumulativeGrandTotal = 0
+      let hasAnyDay = false
+      for (const dayItem of Object.values(mergedDays)) {
+        const m = typeof dayItem === "object" && dayItem !== null ? Number((dayItem as any).marks) : Number(dayItem)
+        if (!isNaN(m)) {
+          cumulativeGrandTotal += m
+          hasAnyDay = true
+        }
+      }
+
+      const finalObtainedMarks = hasAnyDay ? cumulativeGrandTotal : (Number(u.obtained_marks) || 0)
+      
+      // Calculate grade
+      let grade = u.grade
+      if (!grade || hasAnyDay) {
+        const pct = (finalObtainedMarks / effectiveTotalMarks) * 100
+        if (pct >= 80) grade = "A+"
+        else if (pct >= 70) grade = "A"
+        else if (pct >= 60) grade = "A-"
+        else if (pct >= 50) grade = "B"
+        else if (pct >= 40) grade = "C"
+        else if (pct >= 33) grade = "D"
+        else grade = "F"
+      }
+
+      return {
+        student_id: u.student_id,
+        obtained_marks: finalObtainedMarks,
+        grade,
+        day_marks: mergedDays,
+      }
+    })
+
     // Upsert into exam_results with day_marks
-    const payloadWithDayMarks = updates.map((u) => ({
+    const payloadWithDayMarks = mergedUpdates.map((u) => ({
       exam_id: examId,
       student_id: u.student_id,
       obtained_marks: u.obtained_marks,
@@ -411,8 +546,7 @@ export async function POST(
 
     if (upsertErr) {
       console.warn("Attempting exam_results upsert without day_marks column:", upsertErr.message)
-      // Fallback without day_marks column
-      const payloadWithoutDayMarks = updates.map((u) => ({
+      const payloadWithoutDayMarks = mergedUpdates.map((u) => ({
         exam_id: examId,
         student_id: u.student_id,
         obtained_marks: u.obtained_marks,
@@ -428,23 +562,12 @@ export async function POST(
       }
     }
 
-    // Always ensure day marks are backed up into exams.result_note [STUDENT_DAY_MARKS:...]
-    let existingMap: Record<string, Record<string, any>> = {}
-    if (currentExam.result_note?.includes("[STUDENT_DAY_MARKS:")) {
-      try {
-        const m = currentExam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
-        if (m && m[1]) {
-          existingMap = JSON.parse(m[1])
-        }
-      } catch {}
-    }
-
-    // Merge provided all_day_marks or the updates
+    // Backup day marks into exams.result_note [STUDENT_DAY_MARKS:...]
     const mergedMap: Record<string, Record<string, any>> = {
-      ...existingMap,
+      ...existingNoteMap,
       ...(body.all_day_marks || {}),
     }
-    for (const u of updates) {
+    for (const u of mergedUpdates) {
       if (u.day_marks && Object.keys(u.day_marks).length > 0) {
         mergedMap[u.student_id] = {
           ...(mergedMap[u.student_id] || {}),

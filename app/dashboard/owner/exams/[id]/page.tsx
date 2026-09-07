@@ -132,6 +132,8 @@ export default function ExamResultsPage() {
   const [savingRowStudentId, setSavingRowStudentId] = useState<string | null>(null)
   const [autoSavingIds, setAutoSavingIds] = useState<Set<string>>(new Set())
   const autoSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
+  const [draftCellMarks, setDraftCellMarks] = useState<Record<string, string>>({})
+  const cellAutoSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
 
@@ -139,6 +141,7 @@ export default function ExamResultsPage() {
   useEffect(() => {
     return () => {
       Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
+      Object.values(cellAutoSaveTimersRef.current).forEach((t) => clearTimeout(t))
     }
   }, [])
 
@@ -280,7 +283,15 @@ export default function ExamResultsPage() {
   // Active day configuration
   const activeDayConfig = useMemo<ParsedWeeklyDay | null>(() => {
     if (!isWeeklyExam || selectedTab === "weekly_aggregate") return null
-    return parsedWeeklyDays.find((d) => d.key === selectedTab || d.day_bn === selectedTab) || parsedWeeklyDays[0] || null
+    const sTabLower = (selectedTab || "").toLowerCase()
+    return (
+      parsedWeeklyDays.find(
+        (d) =>
+          d.key.toLowerCase() === sTabLower ||
+          d.day_bn === selectedTab ||
+          d.day_en.toLowerCase() === sTabLower
+      ) || parsedWeeklyDays[0] || null
+    )
   }, [isWeeklyExam, selectedTab, parsedWeeklyDays])
 
   // Total possible weekly marks (sum of total marks for all scheduled days)
@@ -551,6 +562,225 @@ export default function ExamResultsPage() {
       }
     } catch (e) {
       console.warn("Rank sync note:", e)
+    }
+  }
+
+  // Save specific day mark for a student (works from breakdown table or day view)
+  async function saveStudentDayMark(student: Student, day: ParsedWeeklyDay, rawMark: string, silent?: boolean) {
+    if (!exam) return
+    const raw = rawMark.trim()
+    if (raw === "") return
+
+    const numMarks = parseFloat(raw)
+    const dayMax = day.total_marks || 50
+    if (isNaN(numMarks) || numMarks < 0 || numMarks > dayMax) {
+      if (!silent) toast.error(`নম্বরটি অবশ্যই 0 থেকে ${dayMax}-এর মধ্যে হতে হবে`)
+      return
+    }
+
+    const dayGrade = getGrade(numMarks, dayMax)
+    const activeKey = day.key.toLowerCase()
+
+    const currentStudentDays = { ...(dayMarksMap[student.id] || {}) }
+    currentStudentDays[activeKey] = {
+      marks: numMarks,
+      total: dayMax,
+      grade: dayGrade,
+      subject: day.subject,
+      exam_name: day.exam_name,
+    }
+
+    const grandTotal = Object.values(currentStudentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+    const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
+
+    const updatedAllDayMarks = {
+      ...dayMarksMap,
+      [student.id]: currentStudentDays,
+    }
+
+    try {
+      const res = await fetch(`/api/exams/${exam.id}/results`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          student_id: student.id,
+          obtained_marks: grandTotal,
+          grade: overallGrade,
+          day_marks: currentStudentDays,
+          all_day_marks: updatedAllDayMarks,
+        }),
+      })
+
+      if (!res.ok) {
+        const payload: any = {
+          exam_id: exam.id,
+          student_id: student.id,
+          obtained_marks: grandTotal,
+          grade: overallGrade,
+          day_marks: currentStudentDays,
+        }
+        await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+      }
+
+      setDayMarksMap((prev) => ({
+        ...prev,
+        [student.id]: currentStudentDays,
+      }))
+      setSavedResults((prev) => ({
+        ...prev,
+        [student.id]: {
+          student_id: student.id,
+          obtained_marks: String(grandTotal),
+          grade: overallGrade,
+        },
+      }))
+      setDraftCellMarks((prev) => ({
+        ...prev,
+        [`${student.id}_${activeKey}`]: String(numMarks),
+      }))
+      if (activeDayConfig?.key.toLowerCase() === activeKey) {
+        setDraftMarks((prev) => ({
+          ...prev,
+          [student.id]: String(numMarks),
+        }))
+      }
+      setJustSavedIds((prev) => new Set(prev).add(student.id))
+
+      if (!silent) {
+        toast.success(`✓ ${student.name} (${day.day_bn}): ${numMarks}/${dayMax} সংরক্ষিত!`)
+      }
+    } catch (err: any) {
+      console.error("Save day mark error:", err)
+      if (!silent) toast.error(err.message || "Failed to save mark")
+    }
+  }
+
+  // Handle cell mark typing with debounce in the breakdown table
+  function handleCellMarkChange(student: Student, day: ParsedWeeklyDay, newVal: string) {
+    const cellKey = `${student.id}_${day.key.toLowerCase()}`
+    setDraftCellMarks((prev) => ({ ...prev, [cellKey]: newVal }))
+
+    if (cellAutoSaveTimersRef.current[cellKey]) {
+      clearTimeout(cellAutoSaveTimersRef.current[cellKey])
+      delete cellAutoSaveTimersRef.current[cellKey]
+    }
+
+    const trimmed = newVal.trim()
+    if (trimmed === "") return
+
+    const dObj = getDayMarkItem(dayMarksMap[student.id], day.key, day.day_bn, day.day_en)
+    const savedVal = dObj && !isNaN(Number(dObj.marks)) ? String(dObj.marks) : ""
+    if (trimmed === savedVal) return
+
+    const num = parseFloat(trimmed)
+    const dayMax = day.total_marks || 50
+    if (!isNaN(num) && num >= 0 && num <= dayMax) {
+      cellAutoSaveTimersRef.current[cellKey] = setTimeout(() => {
+        saveStudentDayMark(student, day, trimmed, true)
+      }, 700)
+    }
+  }
+
+  // Handle cell mark blur for instantaneous auto-save
+  function handleCellMarkBlur(student: Student, day: ParsedWeeklyDay) {
+    const cellKey = `${student.id}_${day.key.toLowerCase()}`
+    if (cellAutoSaveTimersRef.current[cellKey]) {
+      clearTimeout(cellAutoSaveTimersRef.current[cellKey])
+      delete cellAutoSaveTimersRef.current[cellKey]
+    }
+
+    const draftVal = draftCellMarks[cellKey]?.trim()
+    if (draftVal === undefined || draftVal === "") return
+
+    const dObj = getDayMarkItem(dayMarksMap[student.id], day.key, day.day_bn, day.day_en)
+    const savedVal = dObj && !isNaN(Number(dObj.marks)) ? String(dObj.marks) : ""
+    if (draftVal !== savedVal) {
+      saveStudentDayMark(student, day, draftVal, true)
+    }
+  }
+
+  // Save All Days at once from the breakdown table
+  async function handleSaveAllDays() {
+    if (!exam || !isWeeklyExam) return
+    setLoading(true)
+    try {
+      const batchUpdates: any[] = []
+      const nextDayMarksMap: Record<string, Record<string, DayMarkItem>> = { ...dayMarksMap }
+
+      for (const s of students) {
+        let hasChanges = false
+        const sDays = { ...(nextDayMarksMap[s.id] || {}) }
+
+        for (const d of parsedWeeklyDays) {
+          const dayKey = d.key.toLowerCase()
+          const cellKey = `${s.id}_${dayKey}`
+          const draftVal = draftCellMarks[cellKey]?.trim()
+          if (draftVal !== undefined && draftVal !== "") {
+            const num = parseFloat(draftVal)
+            const dayMax = d.total_marks || 50
+            if (!isNaN(num) && num >= 0 && num <= dayMax) {
+              sDays[dayKey] = {
+                marks: num,
+                total: dayMax,
+                grade: getGrade(num, dayMax),
+                subject: d.subject,
+                exam_name: d.exam_name,
+              }
+              hasChanges = true
+            }
+          }
+        }
+
+        if (hasChanges || Object.keys(sDays).length > 0) {
+          nextDayMarksMap[s.id] = sDays
+          const grandTotal = Object.values(sDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+          const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
+
+          batchUpdates.push({
+            student_id: s.id,
+            obtained_marks: grandTotal,
+            grade: overallGrade,
+            day_marks: sDays,
+          })
+        }
+      }
+
+      if (batchUpdates.length === 0) {
+        toast.info("সংরক্ষণের জন্য কোনো নতুন নম্বর নেই (No new marks to save)")
+        return
+      }
+
+      const res = await fetch(`/api/exams/${exam.id}/results`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          batch_updates: batchUpdates,
+          all_day_marks: nextDayMarksMap,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to batch save")
+      }
+
+      setDayMarksMap(nextDayMarksMap)
+      setSavedResults((prev) => {
+        const next = { ...prev }
+        for (const u of batchUpdates) {
+          next[u.student_id] = {
+            student_id: u.student_id,
+            obtained_marks: String(u.obtained_marks),
+            grade: u.grade,
+          }
+        }
+        return next
+      })
+      toast.success(`✓ সকল দিনের নম্বর সফলভাবে সংরক্ষিত হয়েছে! (${batchUpdates.length} জন শিক্ষার্থী)`)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save all days")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -1945,12 +2175,33 @@ export default function ExamResultsPage() {
 
           {/* CONSOLIDATED MULTI-COLUMN WEEKLY MARKS TABLE */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-0">
-            <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between">
+            <div className="p-4 border-b border-slate-100 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-black text-slate-900">
-                  সাপ্তাহিক সামগ্রিক মূল্যায়ন টেবিল (Day-by-Day Marks Breakdown)
-                </h3>
-                <p className="text-xs text-slate-500">প্রতিটি শিক্ষার্থীর প্রতিদিনের নম্বর এবং মোট প্রাপ্তির বিস্তারিত বিবরণ</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-black text-slate-900">
+                    সাপ্তাহিক সামগ্রিক মূল্যায়ন টেবিল (Day-by-Day Marks Breakdown)
+                  </h3>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Live Edit & Auto-Save
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  যেকোনো দিনের ঘরে সরাসরি নম্বর লিখুন — স্বয়ংক্রিয়ভাবে সেভ হবে এবং মোট নম্বর আপডেট হবে।
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveAllDays}
+                  disabled={loading}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  title="Save all entered day marks across all students"
+                >
+                  {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  <span>সব দিনের নম্বর সেভ করুন (Save All Days)</span>
+                </button>
               </div>
             </div>
 
@@ -1958,26 +2209,46 @@ export default function ExamResultsPage() {
               <table className="w-full text-left text-xs">
                 <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
                   <tr>
-                    <th className="px-4 py-3 text-center w-12">#</th>
-                    <th className="px-4 py-3">Student Name</th>
-                    <th className="px-4 py-3">Student ID</th>
+                    <th className="px-3 py-3 text-center w-10">#</th>
+                    <th className="px-4 py-3 min-w-[140px]">Student Name</th>
+                    <th className="px-3 py-3 min-w-[90px]">Student ID</th>
                     {parsedWeeklyDays.map((d) => (
-                      <th key={d.key} className="px-3 py-3 text-center whitespace-nowrap">
-                        {d.day_bn} ({d.total_marks})
+                      <th key={d.key} className="px-2 py-3 text-center whitespace-nowrap min-w-[85px]">
+                        <span className="block text-slate-900 font-extrabold">{d.day_bn}</span>
+                        <span className="text-[10px] text-amber-700 font-bold">({d.total_marks})</span>
                       </th>
                     ))}
-                    <th className="px-4 py-3 text-center bg-amber-50/60 font-black text-amber-900">
+                    <th className="px-4 py-3 text-center bg-amber-50/60 font-black text-amber-900 min-w-[100px]">
                       মোট প্রাপ্ত ({totalWeeklyMaxMarks})
                     </th>
-                    <th className="px-3 py-3 text-center">শতকরা (%)</th>
-                    <th className="px-3 py-3 text-center">গ্রেড</th>
-                    <th className="px-3 py-3 text-center">মেধা (Rank)</th>
+                    <th className="px-3 py-3 text-center min-w-[70px]">শতকরা (%)</th>
+                    <th className="px-3 py-3 text-center min-w-[60px]">গ্রেড</th>
+                    <th className="px-3 py-3 text-center min-w-[70px]">মেধা (Rank)</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {students
                     .map((s) => {
-                      const studentDays = dayMarksMap[s.id] || {}
+                      const studentDays = { ...(dayMarksMap[s.id] || {}) }
+                      
+                      // Integrate any active cell drafts into the row's live calculation
+                      for (const d of parsedWeeklyDays) {
+                        const dayKey = d.key.toLowerCase()
+                        const cellKey = `${s.id}_${dayKey}`
+                        if (draftCellMarks[cellKey] !== undefined) {
+                          const num = parseFloat(draftCellMarks[cellKey].trim())
+                          if (!isNaN(num) && num >= 0) {
+                            studentDays[dayKey] = {
+                              marks: num,
+                              total: d.total_marks,
+                              grade: getGrade(num, d.total_marks),
+                              subject: d.subject,
+                              exam_name: d.exam_name,
+                            }
+                          }
+                        }
+                      }
+
                       const grandTotal = Object.values(studentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
                       const hasMarks = Object.keys(studentDays).length > 0 || (savedResults[s.id]?.obtained_marks !== "" && savedResults[s.id]?.obtained_marks !== undefined)
                       const obtVal = hasMarks ? (grandTotal > 0 ? grandTotal : parseFloat(savedResults[s.id]?.obtained_marks || "0")) : null
@@ -1990,29 +2261,52 @@ export default function ExamResultsPage() {
                       const grade = obt !== null ? getGrade(obt, totalWeeklyMaxMarks) : "-"
 
                       return (
-                        <tr key={row.student.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="px-4 py-3 text-center font-mono text-slate-500 font-bold">{idx + 1}</td>
-                          <td className="px-4 py-3 font-bold text-slate-900">{row.student.name}</td>
-                          <td className="px-4 py-3 font-mono text-slate-600 font-semibold">{row.student.student_id}</td>
+                        <tr key={row.student.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="px-3 py-2 text-center font-mono text-slate-500 font-bold">{idx + 1}</td>
+                          <td className="px-4 py-2 font-bold text-slate-900">
+                            <p className="truncate max-w-[150px]">{row.student.name}</p>
+                          </td>
+                          <td className="px-3 py-2 font-mono text-slate-600 font-semibold">{row.student.student_id}</td>
                           {parsedWeeklyDays.map((d) => {
+                            const dayKey = d.key.toLowerCase()
+                            const cellKey = `${row.student.id}_${dayKey}`
                             const dObj = getDayMarkItem(row.days, d.key, d.day_bn, d.day_en)
+                            const currentVal = draftCellMarks[cellKey] !== undefined
+                              ? draftCellMarks[cellKey]
+                              : (dObj && !isNaN(Number(dObj.marks)) ? String(dObj.marks) : "")
+
                             return (
-                              <td key={d.key} className="px-3 py-3 text-center font-semibold">
-                                {dObj && !isNaN(Number(dObj.marks)) ? (
-                                  <span className="text-slate-800 font-black">{dObj.marks}</span>
-                                ) : (
-                                  <span className="text-slate-300">—</span>
-                                )}
+                              <td key={d.key} className="px-1.5 py-1.5 text-center">
+                                <input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={currentVal}
+                                  onChange={(e) => handleCellMarkChange(row.student, d, e.target.value)}
+                                  onBlur={() => handleCellMarkBlur(row.student, d)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault()
+                                      handleCellMarkBlur(row.student, d)
+                                    }
+                                  }}
+                                  placeholder="—"
+                                  className={cn(
+                                    "w-16 sm:w-20 text-center py-1 px-1 rounded-lg text-xs font-black border transition-all focus:outline-none focus:ring-2 focus:ring-amber-500",
+                                    currentVal !== ""
+                                      ? "bg-amber-50/70 border-amber-400 text-slate-900 shadow-2xs font-extrabold"
+                                      : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"
+                                  )}
+                                />
                               </td>
                             )
                           })}
-                          <td className="px-4 py-3 text-center font-black text-amber-800 bg-amber-50/40 text-sm">
+                          <td className="px-4 py-2 text-center font-black text-amber-900 bg-amber-50/50 text-sm">
                             {obt !== null ? obt : "—"}
                           </td>
-                          <td className="px-3 py-3 text-center font-bold text-slate-700">
+                          <td className="px-3 py-2 text-center font-bold text-slate-700">
                             {pct !== null ? `${pct}%` : "—"}
                           </td>
-                          <td className="px-3 py-3 text-center font-black">
+                          <td className="px-3 py-2 text-center font-black">
                             <span
                               className={cn(
                                 "px-2 py-0.5 rounded-md text-[11px]",
@@ -2022,7 +2316,7 @@ export default function ExamResultsPage() {
                               {grade}
                             </span>
                           </td>
-                          <td className="px-3 py-3 text-center font-black">
+                          <td className="px-3 py-2 text-center font-black">
                             {obt !== null ? (
                               <span
                                 className={cn(

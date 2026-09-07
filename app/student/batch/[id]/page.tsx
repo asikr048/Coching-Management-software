@@ -1161,8 +1161,18 @@ export default function StudentBatchDetailPage() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredExams.map((item: any, idx: number) => {
-                        const totalMarks = Number(item.exam?.total_marks) || 100
-                        const passMarks = Number(item.exam?.pass_marks) || 0
+                        const isWeeklyExam =
+                          item.exam?.exam_schedule_type === 'weekly' ||
+                          (Array.isArray(item.exam?.recurring_days) && item.exam?.recurring_days.length > 0) ||
+                          item.exam?.is_weekly_published === true
+                        const weeklyTotalMarks = isWeeklyExam && Array.isArray(item.exam?.recurring_days) && item.exam.recurring_days.length > 0
+                          ? item.exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+                          : 0
+                        const weeklyPassMarks = isWeeklyExam && Array.isArray(item.exam?.recurring_days) && item.exam.recurring_days.length > 0
+                          ? item.exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+                          : 0
+                        const totalMarks = weeklyTotalMarks > 0 ? weeklyTotalMarks : (Number(item.exam?.total_marks) || 100)
+                        const passMarks = weeklyPassMarks > 0 ? weeklyPassMarks : (Number(item.exam?.pass_marks) || 0)
                         const rawObtained = item.obtained_marks ?? item.marks_obtained
                         const obtained = rawObtained != null && rawObtained !== "" ? Number(rawObtained) : 0
                         const percentage = totalMarks > 0 ? Math.round((obtained / totalMarks) * 100) : 0

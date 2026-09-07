@@ -150,8 +150,15 @@ export default function StudentExamResultsPage() {
     (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
     exam.is_weekly_published === true
 
-  const totalMarks = Number(exam.total_marks) || 100
-  const passMarks = Number(exam.pass_marks) || 33
+  const totalMarks =
+    isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+      ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+      : (Number(exam.total_marks) || 100)
+
+  const passMarks =
+    isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+      ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+      : (Number(exam.pass_marks) || 33)
 
   // Score determination: preference to myResult, then submission
   const obtainedMarks = myResult

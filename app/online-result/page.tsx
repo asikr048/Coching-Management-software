@@ -763,7 +763,11 @@ export default function OnlineResultPortalPage() {
                       <div>
                         <span className="text-[10px] text-slate-500 font-medium block">পূর্ণমান ও পাস</span>
                         <span className="font-bold text-slate-800 block">
-                          {exam.total_marks} marks (Pass: {exam.pass_marks || 33})
+                          {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+                            ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+                            : (exam.total_marks || 100)} marks (Pass: {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+                            ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+                            : (exam.pass_marks || 33)})
                         </span>
                       </div>
                     </div>
