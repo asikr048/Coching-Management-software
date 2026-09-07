@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency } from "@/lib/utils"
 import {
@@ -322,10 +322,163 @@ export default function HomePage() {
     return b.branch_id === selectedBranchId || !b.branch_id
   })
 
-  const filteredPublicExams = publicExams.filter(ex => {
-    if (selectedBranchId === "all") return true
-    return ex.branch?.id === selectedBranchId || ex.branch_id === selectedBranchId || !ex.branch_id
-  })
+  const publicResultCards = useMemo(() => {
+    const cards: Array<{
+      id: string
+      examId: string
+      title: string
+      badgeText: string
+      badgeType: "daily" | "weekly" | "one_time"
+      subject?: string
+      branchName?: string
+      batchName?: string
+      routineText: string
+      totalMarks: number
+      passMarks: number
+      link: string
+      buttonText: string
+      dayKey?: string
+    }> = []
+
+    const ALL_WEEK_DAYS_LOCAL = [
+      { id: "saturday", bn: "শনিবার", en: "Saturday" },
+      { id: "sunday", bn: "রবিবার", en: "Sunday" },
+      { id: "monday", bn: "সোমবার", en: "Monday" },
+      { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+      { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+      { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+      { id: "friday", bn: "শুক্রবার", en: "Friday" },
+    ]
+
+    for (const ex of publicExams) {
+      if (selectedBranchId !== "all") {
+        const matchesBranch = ex.branch?.id === selectedBranchId || ex.branch_id === selectedBranchId || !ex.branch_id
+        if (!matchesBranch) continue
+      }
+
+      const isWeekly =
+        ex.exam_schedule_type === "weekly" ||
+        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
+        ex.is_weekly_published === true ||
+        Boolean(ex.title?.includes("সাপ্তাহিক"))
+
+      if (!isWeekly) {
+        cards.push({
+          id: ex.id,
+          examId: ex.id,
+          title: ex.title,
+          badgeText: "দৈনিক পরীক্ষা",
+          badgeType: "one_time",
+          subject: ex.subject,
+          branchName: ex.branch?.name,
+          batchName: ex.batch?.name,
+          routineText: ex.exam_date ? new Date(ex.exam_date).toLocaleDateString("en-GB") : "চলমান",
+          totalMarks: ex.total_marks || 50,
+          passMarks: ex.pass_marks || 20,
+          link: `/online-result?exam_id=${ex.id}`,
+          buttonText: "ফলাফল ও সম্পূর্ণ মেরিট লিস্ট দেখুন",
+        })
+      } else {
+        // Parse recurring days
+        const dayConfigMap: Record<string, any> = {}
+        if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
+          for (const item of ex.recurring_days) {
+            const isObj = typeof item === "object" && item !== null
+            const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
+            const dayKey = String(rawKey).toLowerCase()
+            const matched = ALL_WEEK_DAYS_LOCAL.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+            const canonicalKey = matched?.id || dayKey
+            dayConfigMap[canonicalKey] = {
+              key: canonicalKey,
+              day_bn: matched?.bn || (isObj ? item.day_bn : rawKey),
+              exam_name: (isObj ? item.exam_name : null) || `${matched?.bn || rawKey}ের পরীক্ষা`,
+              subject: (isObj ? item.subject : null) || ex.subject || "",
+              total_marks: Number(isObj ? item.total_marks : 50) || 50,
+              pass_marks: Number(isObj ? item.pass_marks : 20) || 20,
+            }
+          }
+        }
+
+        const days = ALL_WEEK_DAYS_LOCAL.map((w) => {
+          if (dayConfigMap[w.id]) return dayConfigMap[w.id]
+          return {
+            key: w.id,
+            day_bn: w.bn,
+            exam_name: `${w.bn}ের পরীক্ষা`,
+            subject: ex.subject || "",
+            total_marks: 50,
+            pass_marks: 20,
+          }
+        })
+
+        // Parse published days
+        let pubDays: string[] = []
+        if (Array.isArray(ex.published_days)) {
+          pubDays = ex.published_days.map((d: any) => String(d).toLowerCase())
+        } else if (typeof ex.published_days === "string" && ex.published_days.trim()) {
+          try {
+            const parsed = JSON.parse(ex.published_days)
+            if (Array.isArray(parsed)) pubDays = parsed.map((d: any) => String(d).toLowerCase())
+            else pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          } catch {
+            pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          }
+        }
+        if (pubDays.length === 0 && (ex as any).result_note?.includes("[PUBLISHED_DAYS:")) {
+          const match = (ex as any).result_note.match(/\[PUBLISHED_DAYS:(.*?)\]/)
+          if (match && match[1]) {
+            pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          }
+        }
+
+        // Add daily cards for each published day
+        for (const dayConf of days) {
+          const isDayPub = pubDays.some((p) => p === dayConf.key.toLowerCase() || p === dayConf.day_bn.toLowerCase() || p === dayConf.day_en.toLowerCase())
+          if (isDayPub) {
+            cards.push({
+              id: `${ex.id}-day-${dayConf.key}`,
+              examId: ex.id,
+              dayKey: dayConf.key,
+              title: `${ex.title} - ${dayConf.day_bn}`,
+              badgeText: `দৈনিক পরীক্ষা (${dayConf.day_bn})`,
+              badgeType: "daily",
+              subject: dayConf.subject || ex.subject,
+              branchName: ex.branch?.name,
+              batchName: ex.batch?.name,
+              routineText: `${dayConf.day_bn}ের পরীক্ষা`,
+              totalMarks: dayConf.total_marks || 50,
+              passMarks: dayConf.pass_marks || 20,
+              link: `/online-result?exam_id=${ex.id}&day=${dayConf.key}`,
+              buttonText: `${dayConf.day_bn}ের মেরিট লিস্ট দেখুন`,
+            })
+          }
+        }
+
+        // If weekly consolidated result is published, add weekly card
+        if (ex.is_weekly_published === true) {
+          const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
+          const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
+          cards.push({
+            id: `${ex.id}-weekly`,
+            examId: ex.id,
+            title: ex.title,
+            badgeText: "সাপ্তাহিক (৭ দিন)",
+            badgeType: "weekly",
+            subject: ex.subject,
+            branchName: ex.branch?.name,
+            batchName: ex.batch?.name,
+            routineText: "শনিবার হতে শুক্রবার",
+            totalMarks: totalMarks,
+            passMarks: passMarks,
+            link: `/online-result?exam_id=${ex.id}`,
+            buttonText: "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন",
+          })
+        }
+      }
+    }
+
+    return cards
+  }, [publicExams, selectedBranchId])
 
   async function handleFeedbackSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -916,7 +1069,7 @@ export default function HomePage() {
               <Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto mb-2" />
               <p className="text-xs font-semibold">ফলাফল লোড হচ্ছে...</p>
             </div>
-          ) : filteredPublicExams.length === 0 ? (
+          ) : publicResultCards.length === 0 ? (
             <div className="bg-white rounded-3xl border border-dashed border-indigo-200 p-10 text-center text-gray-500 shadow-xs max-w-xl mx-auto space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto">
                 <Trophy className="w-6 h-6" />
@@ -932,13 +1085,12 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredPublicExams.slice(0, 6).map((exam) => {
-                const isWeekly = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)
-                const daysCount = Array.isArray(exam.recurring_days) ? exam.recurring_days.length : 0
+              {publicResultCards.slice(0, 6).map((card) => {
+                const isWeekly = card.badgeType === "weekly"
 
                 return (
                   <div
-                    key={exam.id}
+                    key={card.id}
                     className="bg-white rounded-2xl border border-indigo-100/80 hover:border-amber-400/80 shadow-md hover:shadow-xl transition-all p-5 flex flex-col justify-between group relative overflow-hidden"
                   >
                     <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-bl from-amber-400/10 via-transparent to-transparent pointer-events-none"></div>
@@ -949,36 +1101,36 @@ export default function HomePage() {
                           {isWeekly ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
                               <Calendar className="w-3 h-3 text-purple-600" />
-                              সাপ্তাহিক ({daysCount > 0 ? `${daysCount} দিন` : "৭ দিন"})
+                              {card.badgeText}
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-200">
                               <Calendar className="w-3 h-3 text-amber-700" />
-                              দৈনিক পরীক্ষা
+                              {card.badgeText}
                             </span>
                           )}
-                          {exam.subject && (
+                          {card.subject && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
-                              {exam.subject}
+                              {card.subject}
                             </span>
                           )}
                         </div>
-                        {exam.branch?.name && (
+                        {card.branchName && (
                           <span className="text-[10px] font-semibold text-gray-500 flex items-center gap-1">
                             <Landmark className="w-3 h-3 text-indigo-500" />
-                            {exam.branch.name}
+                            {card.branchName}
                           </span>
                         )}
                       </div>
 
                       <div>
                         <h3 className="text-base font-extrabold text-gray-900 group-hover:text-indigo-700 transition-colors leading-snug">
-                          {exam.title}
+                          {card.title}
                         </h3>
-                        {exam.batch?.name && (
+                        {card.batchName && (
                           <p className="text-xs text-gray-600 mt-1 flex items-center gap-1.5">
                             <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-                            <span>ব্যাচ: <strong>{exam.batch.name}</strong></span>
+                            <span>ব্যাচ: <strong>{card.batchName}</strong></span>
                           </p>
                         )}
                       </div>
@@ -987,13 +1139,13 @@ export default function HomePage() {
                         <div>
                           <span className="text-[10px] text-gray-500 font-medium block">তারিখ / সূচি</span>
                           <span className="font-bold text-gray-800 truncate block">
-                            {isWeekly ? "শনিবার হতে শুক্রবার" : (exam.exam_date ? new Date(exam.exam_date).toLocaleDateString("en-GB") : "চলমান")}
+                            {card.routineText}
                           </span>
                         </div>
                         <div>
                           <span className="text-[10px] text-gray-500 font-medium block">পূর্ণমান ও পাস</span>
                           <span className="font-bold text-gray-800 block">
-                            {exam.total_marks || (isWeekly ? 350 : 50)} নম্বর (পাস: {exam.pass_marks || (isWeekly ? 140 : 20)})
+                            {card.totalMarks} নম্বর (পাস: {card.passMarks})
                           </span>
                         </div>
                       </div>
@@ -1001,11 +1153,11 @@ export default function HomePage() {
 
                     <div className="pt-4 mt-4 border-t border-gray-100">
                       <Link
-                        href={`/online-result?exam_id=${exam.id}`}
+                        href={card.link}
                         className="w-full py-2.5 bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer group-hover:bg-amber-600"
                       >
                         <Trophy className="w-4 h-4 text-amber-400" />
-                        <span>ফলাফল ও সম্পূর্ণ মেরিট লিস্ট দেখুন</span>
+                        <span>{card.buttonText}</span>
                         <ChevronRight className="w-4 h-4 text-white/70" />
                       </Link>
                     </div>

@@ -107,6 +107,23 @@ function normalizeDayMarks(days: Record<string, any> | undefined | null): Record
   return normalized
 }
 
+export interface ResultCardItem {
+  id: string
+  parentExam: PublicExam
+  type: "daily" | "weekly" | "one_time"
+  title: string
+  subTitle?: string
+  subject?: string
+  batchName?: string
+  branchName?: string
+  branchId?: string
+  routineText: string
+  totalMarks: number
+  passMarks: number
+  dayKey?: string | null
+  dayConfig?: ParsedWeeklyDay | null
+}
+
 interface PublicExam {
   id: string
   title: string
@@ -116,7 +133,7 @@ interface PublicExam {
   exam_date?: string
   exam_schedule_type?: "one_time" | "weekly" | string
   recurring_days?: any[] | null
-  published_days?: string[] | null
+  published_days?: string[] | string | null
   is_weekly_published?: boolean
   is_paused?: boolean
   is_public_result?: boolean
@@ -138,6 +155,111 @@ interface StudentRank {
   day_marks?: Record<string, any>
 }
 
+// Standalone parser for weekly days
+export function parseWeeklyDaysForExam(exam: PublicExam | null): ParsedWeeklyDay[] {
+  if (!exam) return []
+  const isWeekly =
+    exam.exam_schedule_type === "weekly" ||
+    (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+    exam.is_weekly_published === true ||
+    Boolean(exam.title?.includes("সাপ্তাহিক"))
+
+  const dayConfigMap: Record<string, ParsedWeeklyDay> = {}
+
+  if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+    for (const item of exam.recurring_days) {
+      const isObj = typeof item === "object" && item !== null
+      const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
+      const dayKey = String(rawKey).toLowerCase()
+      const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+      const canonicalKey = matched?.id || dayKey
+      const bnName = matched?.bn || (isObj ? item.day_bn : rawKey)
+      const enName = matched?.en || (isObj ? item.day_en : rawKey)
+      dayConfigMap[canonicalKey] = {
+        key: canonicalKey,
+        day_bn: bnName,
+        day_en: enName,
+        exam_name: isObj && item.exam_name ? item.exam_name : `${bnName}ের পরীক্ষা`,
+        subject: isObj && item.subject ? item.subject : exam.subject || "",
+        total_marks: isObj && item.total_marks ? Number(item.total_marks) : 50,
+        pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : 20,
+      }
+    }
+  }
+
+  const note = (exam as any).result_note || ""
+  if (note.includes("[WEEKLY_SCHEDULE:")) {
+    try {
+      const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+      if (match && match[1]) {
+        const parsed = JSON.parse(match[1])
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          for (const item of parsed) {
+            const rawKey = item.day || item.day_bn || item.day_en || ""
+            const dayKey = String(rawKey).toLowerCase()
+            const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+            const canonicalKey = matched?.id || dayKey
+            if (!dayConfigMap[canonicalKey]) {
+              dayConfigMap[canonicalKey] = {
+                key: canonicalKey,
+                day_bn: matched?.bn || item.day_bn || item.day,
+                day_en: matched?.en || item.day_en || item.day,
+                exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+                subject: item.subject || exam.subject || "",
+                total_marks: Number(item.total_marks) || 50,
+                pass_marks: Number(item.pass_marks) || 20,
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const foundDaysInTitle = ALL_WEEK_DAYS.filter(
+    (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
+  )
+  if (foundDaysInTitle.length > 0) {
+    const subjectList = (exam.subject || "")
+      .split(",")
+      .map((s: string) => s.trim())
+      .filter(Boolean)
+
+    foundDaysInTitle.forEach((d, idx) => {
+      if (!dayConfigMap[d.id]) {
+        const assignedSubj = subjectList[idx] || exam.subject || ""
+        dayConfigMap[d.id] = {
+          key: d.id,
+          day_bn: d.bn,
+          day_en: d.en,
+          exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
+          subject: assignedSubj,
+          total_marks: 50,
+          pass_marks: 20,
+        }
+      }
+    })
+  }
+
+  if (isWeekly) {
+    return ALL_WEEK_DAYS.map((w) => {
+      if (dayConfigMap[w.id]) {
+        return dayConfigMap[w.id]
+      }
+      return {
+        key: w.id,
+        day_bn: w.bn,
+        day_en: w.en,
+        exam_name: `${w.bn}ের পরীক্ষা`,
+        subject: exam.subject || "",
+        total_marks: 50,
+        pass_marks: 20,
+      }
+    })
+  }
+  return []
+}
+
 export default function OnlineResultPortalPage() {
   const [exams, setExams] = useState<PublicExam[]>([])
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
@@ -150,6 +272,7 @@ export default function OnlineResultPortalPage() {
 
   // Active Exam for Full Merit List Modal
   const [selectedExam, setSelectedExam] = useState<PublicExam | null>(null)
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null)
   const [examResults, setExamResults] = useState<StudentRank[]>([])
   const [loadingResults, setLoadingResults] = useState(false)
   const [studentSearchInModal, setStudentSearchInModal] = useState("")
@@ -185,6 +308,7 @@ export default function OnlineResultPortalPage() {
         }
         const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
         const targetExamId = urlParams?.get("exam_id") || urlParams?.get("id")
+        const targetDay = urlParams?.get("day")
 
         if (targetExamId) {
           let found = loadedExams.find((e: any) => e.id === targetExamId)
@@ -198,7 +322,7 @@ export default function OnlineResultPortalPage() {
             } catch {}
           }
           if (found) {
-            handleOpenMeritList(found)
+            handleOpenMeritList(found, targetDay || null)
           }
         }
       } catch (err) {
@@ -211,8 +335,9 @@ export default function OnlineResultPortalPage() {
   }, [])
 
   // Open Full Merit List
-  async function handleOpenMeritList(exam: PublicExam) {
+  async function handleOpenMeritList(exam: PublicExam, dayKey: string | null = null) {
     setSelectedExam(exam)
+    setSelectedDayKey(dayKey)
     setLoadingResults(true)
     setStudentSearchInModal("")
     setExamResults([])
@@ -258,38 +383,129 @@ export default function OnlineResultPortalPage() {
     }
   }
 
-  // Filter exams by tab, branch, and search
-  const filteredExams = useMemo(() => {
-    return exams.filter((ex) => {
+  // Unified Card Items: expands weekly exams into individual published daily cards + published weekly card
+  const allCardItems = useMemo<ResultCardItem[]>(() => {
+    const items: ResultCardItem[] = []
+
+    for (const ex of exams) {
       const isWeekly =
         ex.exam_schedule_type === "weekly" ||
         (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
         ex.is_weekly_published === true ||
         Boolean(ex.title?.includes("সাপ্তাহিক"))
 
-      const hasDailyComponent =
-        !isWeekly ||
-        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
-        (Array.isArray(ex.published_days) && ex.published_days.length > 0)
+      if (!isWeekly) {
+        items.push({
+          id: ex.id,
+          parentExam: ex,
+          type: "one_time",
+          title: ex.title,
+          subTitle: ex.subject,
+          subject: ex.subject,
+          batchName: ex.batch?.name || "All Enrolled Batches",
+          branchName: ex.branch?.name,
+          branchId: ex.branch?.id,
+          routineText: ex.exam_date ? formatDate(ex.exam_date) : "চলমান",
+          totalMarks: ex.total_marks || 100,
+          passMarks: ex.pass_marks || 33,
+          dayKey: null,
+          dayConfig: null,
+        })
+      } else {
+        const days = parseWeeklyDaysForExam(ex)
+        const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
+        const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
 
-      if (activeTab === "everyday" && !hasDailyComponent) return false
-      if (activeTab === "weekly" && !isWeekly) return false
+        // Parse published days
+        let pubDays: string[] = []
+        const rawPubDays: any = ex.published_days
+        if (Array.isArray(rawPubDays)) {
+          pubDays = rawPubDays.map((d: any) => String(d).toLowerCase())
+        } else if (typeof rawPubDays === "string" && rawPubDays.trim()) {
+          try {
+            const parsed = JSON.parse(rawPubDays)
+            if (Array.isArray(parsed)) pubDays = parsed.map((d: any) => String(d).toLowerCase())
+            else pubDays = rawPubDays.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          } catch {
+            pubDays = rawPubDays.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          }
+        }
+        if (pubDays.length === 0 && (ex as any).result_note?.includes("[PUBLISHED_DAYS:")) {
+          const match = (ex as any).result_note.match(/\[PUBLISHED_DAYS:(.*?)\]/)
+          if (match && match[1]) {
+            pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          }
+        }
 
-      if (selectedBranch !== "all" && ex.branch?.id && ex.branch.id !== selectedBranch) {
+        // 1. FOR EACH PUBLISHED DAY: Add a Daily Exam card
+        for (const dayConf of days) {
+          const isDayPub = pubDays.some((p) => p === dayConf.key.toLowerCase() || p === dayConf.day_bn.toLowerCase() || p === dayConf.day_en.toLowerCase())
+          if (isDayPub) {
+            items.push({
+              id: `${ex.id}-day-${dayConf.key}`,
+              parentExam: ex,
+              type: "daily",
+              title: `${ex.title} - ${dayConf.day_bn}`,
+              subTitle: dayConf.subject ? `${dayConf.subject} (${dayConf.exam_name})` : dayConf.exam_name,
+              subject: dayConf.subject || ex.subject,
+              batchName: ex.batch?.name || "All Enrolled Batches",
+              branchName: ex.branch?.name,
+              branchId: ex.branch?.id,
+              routineText: `${dayConf.day_bn}ের পরীক্ষা`,
+              totalMarks: dayConf.total_marks || 50,
+              passMarks: dayConf.pass_marks || 20,
+              dayKey: dayConf.key,
+              dayConfig: dayConf,
+            })
+          }
+        }
+
+        // 2. IF WEEKLY RESULTS ARE PUBLISHED: Add the Weekly Consolidated card
+        const isWeeklyPub = ex.is_weekly_published === true || (ex as any).result_note?.includes("[IS_WEEKLY_PUBLISHED:true]")
+        if (isWeeklyPub) {
+          items.push({
+            id: `${ex.id}-weekly`,
+            parentExam: ex,
+            type: "weekly",
+            title: ex.title,
+            subTitle: "সাপ্তাহিক সামগ্রিক মূল্যায়ন ও সকল দিনের সম্মিলিত ফলাফল",
+            subject: ex.subject,
+            batchName: ex.batch?.name || "All Enrolled Batches",
+            branchName: ex.branch?.name,
+            branchId: ex.branch?.id,
+            routineText: "প্রতি সাপ্তাহিক দিন (শনিবার হতে শুক্রবার)",
+            totalMarks,
+            passMarks,
+            dayKey: null,
+            dayConfig: null,
+          })
+        }
+      }
+    }
+    return items
+  }, [exams])
+
+  // Filter cards by active tab, branch, and search
+  const filteredCards = useMemo(() => {
+    return allCardItems.filter((item) => {
+      if (activeTab === "weekly" && item.type !== "weekly") return false
+      if (activeTab === "everyday" && item.type !== "daily" && item.type !== "one_time") return false
+
+      if (selectedBranch !== "all" && item.branchId && item.branchId !== selectedBranch) {
         return false
       }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase()
-        const titleMatch = ex.title?.toLowerCase().includes(q)
-        const subMatch = ex.subject?.toLowerCase().includes(q)
-        const batchMatch = ex.batch?.name?.toLowerCase().includes(q)
+        const titleMatch = item.title?.toLowerCase().includes(q)
+        const subMatch = item.subject?.toLowerCase().includes(q)
+        const batchMatch = item.batchName?.toLowerCase().includes(q)
         if (!titleMatch && !subMatch && !batchMatch) return false
       }
 
       return true
     })
-  }, [exams, activeTab, selectedBranch, searchQuery])
+  }, [allCardItems, activeTab, selectedBranch, searchQuery])
 
   // Filter results inside merit list modal
   const filteredModalResults = useMemo(() => {
@@ -311,110 +527,109 @@ export default function OnlineResultPortalPage() {
 
   // Parse structured days for weekly exams (GUARANTEE ALL 7 DAYS: Saturday to Friday)
   const parsedWeeklyDays = useMemo<ParsedWeeklyDay[]>(() => {
-    if (!selectedExam) return []
+    return parseWeeklyDaysForExam(selectedExam)
+  }, [selectedExam])
 
-    const dayConfigMap: Record<string, ParsedWeeklyDay> = {}
-
-    // 1. Check recurring_days array
-    if (Array.isArray(selectedExam.recurring_days) && selectedExam.recurring_days.length > 0) {
-      for (const item of selectedExam.recurring_days) {
-        const isObj = typeof item === "object" && item !== null
-        const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
-        const dayKey = String(rawKey).toLowerCase()
-        const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
-        const canonicalKey = matched?.id || dayKey
-        const bnName = matched?.bn || (isObj ? item.day_bn : rawKey)
-        const enName = matched?.en || (isObj ? item.day_en : rawKey)
-        dayConfigMap[canonicalKey] = {
-          key: canonicalKey,
-          day_bn: bnName,
-          day_en: enName,
-          exam_name: isObj && item.exam_name ? item.exam_name : `${bnName}ের পরীক্ষা`,
-          subject: isObj && item.subject ? item.subject : selectedExam.subject || "",
-          total_marks: isObj && item.total_marks ? Number(item.total_marks) : 50,
-          pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : 20,
-        }
-      }
-    }
-
-    // 2. Check result_note fallback tag [WEEKLY_SCHEDULE:...]
-    const note = (selectedExam as any).result_note || ""
-    if (note.includes("[WEEKLY_SCHEDULE:")) {
-      try {
-        const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-        if (match && match[1]) {
-          const parsed = JSON.parse(match[1])
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            for (const item of parsed) {
-              const rawKey = item.day || item.day_bn || item.day_en || ""
-              const dayKey = String(rawKey).toLowerCase()
-              const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
-              const canonicalKey = matched?.id || dayKey
-              if (!dayConfigMap[canonicalKey]) {
-                dayConfigMap[canonicalKey] = {
-                  key: canonicalKey,
-                  day_bn: matched?.bn || item.day_bn || item.day,
-                  day_en: matched?.en || item.day_en || item.day,
-                  exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
-                  subject: item.subject || selectedExam.subject || "",
-                  total_marks: Number(item.total_marks) || 50,
-                  pass_marks: Number(item.pass_marks) || 20,
-                }
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("Error parsing weekly schedule fallback:", e)
-      }
-    }
-
-    // 3. Extract days from title
-    const foundDaysInTitle = ALL_WEEK_DAYS.filter(
-      (d) => selectedExam.title?.includes(d.bn) || selectedExam.title?.toLowerCase()?.includes(d.id)
+  // Active day configuration if viewing a specific day's merit list
+  const activeDayConfig = useMemo<ParsedWeeklyDay | null>(() => {
+    if (!selectedDayKey || parsedWeeklyDays.length === 0) return null
+    const lower = selectedDayKey.toLowerCase()
+    return (
+      parsedWeeklyDays.find(
+        (d) =>
+          d.key.toLowerCase() === lower ||
+          d.day_bn.toLowerCase() === lower ||
+          d.day_en.toLowerCase() === lower
+      ) || null
     )
-    if (foundDaysInTitle.length > 0) {
-      const subjectList = (selectedExam.subject || "")
-        .split(",")
-        .map((s: string) => s.trim())
-        .filter(Boolean)
+  }, [selectedDayKey, parsedWeeklyDays])
 
-      foundDaysInTitle.forEach((d, idx) => {
-        if (!dayConfigMap[d.id]) {
-          const assignedSubj = subjectList[idx] || selectedExam.subject || ""
-          dayConfigMap[d.id] = {
-            key: d.id,
-            day_bn: d.bn,
-            day_en: d.en,
-            exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
-            subject: assignedSubj,
-            total_marks: 50,
-            pass_marks: 20,
-          }
-        }
-      })
+  // Available published days for day switcher pills in modal
+  const modalPublishedDays = useMemo(() => {
+    if (!selectedExam) return []
+    let pubDays: string[] = []
+    const rawPub: any = selectedExam.published_days
+    if (Array.isArray(rawPub)) {
+      pubDays = rawPub.map((d: any) => String(d).toLowerCase())
+    } else if (typeof rawPub === "string" && rawPub.trim()) {
+      try {
+        const p = JSON.parse(rawPub)
+        if (Array.isArray(p)) pubDays = p.map((d: any) => String(d).toLowerCase())
+        else pubDays = rawPub.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+      } catch {
+        pubDays = rawPub.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+      }
     }
-
-    // 4. GUARANTEE ALL 7 DAYS: Always iterate through all 7 days of ALL_WEEK_DAYS (Saturday to Friday)
-    if (isWeeklyExam) {
-      return ALL_WEEK_DAYS.map((w) => {
-        if (dayConfigMap[w.id]) {
-          return dayConfigMap[w.id]
-        }
-        return {
-          key: w.id,
-          day_bn: w.bn,
-          day_en: w.en,
-          exam_name: `${w.bn}ের পরীক্ষা`,
-          subject: selectedExam.subject || "",
-          total_marks: 50,
-          pass_marks: 20,
-        }
-      })
+    if (pubDays.length === 0 && (selectedExam as any).result_note?.includes("[PUBLISHED_DAYS:")) {
+      const match = (selectedExam as any).result_note.match(/\[PUBLISHED_DAYS:(.*?)\]/)
+      if (match && match[1]) {
+        pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+      }
     }
+    return parsedWeeklyDays.filter((d) => pubDays.some((p) => p === d.key.toLowerCase() || p === d.day_bn.toLowerCase() || p === d.day_en.toLowerCase()))
+  }, [selectedExam, parsedWeeklyDays])
 
-    return []
-  }, [selectedExam, isWeeklyExam, examResults])
+  // Daily Exam Student Results (When viewing a specific published day)
+  const dailyModalResults = useMemo(() => {
+    if (!selectedDayKey || !activeDayConfig) return []
+    const dayKeyLower = activeDayConfig.key.toLowerCase()
+    const maxMarks = activeDayConfig.total_marks || 50
+    const passMarks = activeDayConfig.pass_marks || 20
+
+    const mapped = examResults.map((r) => {
+      const normDays = normalizeDayMarks(r.day_marks)
+      const dayVal = normDays[dayKeyLower]
+      const mark =
+        typeof dayVal === "object" && dayVal !== null
+          ? dayVal.marks != null
+            ? Number(dayVal.marks)
+            : null
+          : dayVal != null
+          ? Number(dayVal)
+          : null
+      const obt = mark !== null && !isNaN(mark) ? mark : null
+      const pct = obt !== null && maxMarks > 0 ? Math.round((obt / maxMarks) * 100) : null
+      const grade = obt !== null ? getGrade(obt, maxMarks) : "-"
+      const passed = obt !== null && obt >= passMarks
+
+      return {
+        id: r.id,
+        student_id: r.student_id,
+        student_name: r.student_name,
+        roll: r.roll,
+        obtained_marks: obt,
+        pct,
+        grade,
+        passed,
+      }
+    })
+
+    const filtered = studentSearchInModal.trim()
+      ? mapped.filter(
+          (s) =>
+            s.student_name.toLowerCase().includes(studentSearchInModal.toLowerCase()) ||
+            s.roll.toLowerCase().includes(studentSearchInModal.toLowerCase())
+        )
+      : mapped
+
+    const sorted = [...filtered].sort((a, b) => (b.obtained_marks ?? -1) - (a.obtained_marks ?? -1))
+
+    let curRank = 1
+    return sorted.map((s, idx) => {
+      if (idx > 0 && (s.obtained_marks ?? -1) < (sorted[idx - 1].obtained_marks ?? -1)) {
+        curRank = idx + 1
+      }
+      return {
+        ...s,
+        rank: s.obtained_marks !== null ? curRank : null,
+      }
+    })
+  }, [examResults, selectedDayKey, activeDayConfig, studentSearchInModal])
+
+  // Daily Podium Toppers (Top 3 for that day)
+  const dailyToppers = useMemo(() => {
+    return dailyModalResults.filter((s) => s.obtained_marks !== null && s.obtained_marks > 0).slice(0, 3)
+  }, [dailyModalResults])
 
   // Total possible weekly marks
   const totalWeeklyMaxMarks = useMemo(() => {
@@ -606,22 +821,18 @@ export default function OnlineResultPortalPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-8">
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
               <p className="text-[11px] text-indigo-200 font-semibold">প্রকাশিত মোট পরীক্ষা</p>
-              <p className="text-2xl font-black text-amber-400 mt-0.5">{exams.length}</p>
+              <p className="text-2xl font-black text-amber-400 mt-0.5">{allCardItems.length}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
               <p className="text-[11px] text-indigo-200 font-semibold">দৈনিক পরীক্ষা</p>
               <p className="text-2xl font-black text-white mt-0.5">
-                {exams.filter(e => 
-                  (e.exam_schedule_type !== "weekly" && (!Array.isArray(e.recurring_days) || e.recurring_days.length === 0)) ||
-                  (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
-                  (Array.isArray(e.published_days) && e.published_days.length > 0)
-                ).length}
+                {allCardItems.filter((i) => i.type === "daily" || i.type === "one_time").length}
               </p>
             </div>
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
               <p className="text-[11px] text-indigo-200 font-semibold">সাপ্তাহিক মডেল টেস্ট</p>
               <p className="text-2xl font-black text-purple-300 mt-0.5">
-                {exams.filter(e => e.exam_schedule_type === "weekly" || (Array.isArray(e.recurring_days) && e.recurring_days.length > 0)).length}
+                {allCardItems.filter((i) => i.type === "weekly").length}
               </p>
             </div>
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
@@ -647,7 +858,7 @@ export default function OnlineResultPortalPage() {
               }`}
             >
               <Trophy className="w-4 h-4" />
-              <span>সকল পরীক্ষা ({exams.length})</span>
+              <span>সকল পরীক্ষা ({allCardItems.length})</span>
             </button>
             <button
               onClick={() => setActiveTab("weekly")}
@@ -658,7 +869,7 @@ export default function OnlineResultPortalPage() {
               }`}
             >
               <CalendarDays className="w-4 h-4" />
-              <span>সাপ্তাহিক পরীক্ষার মেরিট লিস্ট (Weekly)</span>
+              <span>সাপ্তাহিক পরীক্ষার মেরিট লিস্ট ({allCardItems.filter((i) => i.type === "weekly").length})</span>
             </button>
             <button
               onClick={() => setActiveTab("everyday")}
@@ -669,7 +880,7 @@ export default function OnlineResultPortalPage() {
               }`}
             >
               <Calendar className="w-4 h-4" />
-              <span>দৈনিক পরীক্ষার মেরিট লিস্ট (Everyday)</span>
+              <span>দৈনিক পরীক্ষার মেরিট লিস্ট ({allCardItems.filter((i) => i.type === "daily" || i.type === "one_time").length})</span>
             </button>
           </div>
 
@@ -709,23 +920,21 @@ export default function OnlineResultPortalPage() {
             <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
             <p className="font-semibold text-sm">ফলাফল ও মেরিট লিস্ট লোড হচ্ছে...</p>
           </div>
-        ) : filteredExams.length === 0 ? (
+        ) : filteredCards.length === 0 ? (
           <div className="bg-white rounded-3xl border border-dashed border-slate-300 p-12 text-center text-slate-500 shadow-xs space-y-2">
             <Trophy className="w-10 h-10 text-slate-300 mx-auto" />
             <p className="text-base font-bold text-slate-700">এই বিভাগে কোনো ফলাফল পাওয়া যায়নি</p>
-            <p className="text-xs text-slate-400">ফিল্টার পরিবর্তন করে পুনরায় চেষ্টা করুন।</p>
+            <p className="text-xs text-slate-400">ফিল্টার পরিবর্তন করে অথবা পরীক্ষা ফলাফল প্রকাশিত হলে পুনরায় চেক করুন।</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredExams.map((exam) => {
-              const isWeekly = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)
-              const daysText = Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                ? exam.recurring_days.map((d: any) => typeof d === "object" && d !== null ? `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (${d.total_marks || ""} নম্বর)` : d).join(", ")
-                : "সাপ্তাহিক দিন"
+            {filteredCards.map((card) => {
+              const isWeekly = card.type === "weekly"
+              const isDaily = card.type === "daily"
 
               return (
                 <div
-                  key={exam.id}
+                  key={card.id}
                   className="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-500/50 p-5 shadow-lg transition-all flex flex-col justify-between group"
                 >
                   <div className="space-y-3">
@@ -734,35 +943,45 @@ export default function OnlineResultPortalPage() {
                         {isWeekly ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-700 border border-purple-200">
                             <CalendarDays className="w-3 h-3" />
-                            WEEKLY
+                            WEEKLY (সাপ্তাহিক ৭ দিন)
+                          </span>
+                        ) : isDaily ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                            <Calendar className="w-3 h-3 text-amber-700" />
+                            দৈনিক পরীক্ষা ({card.dayConfig?.day_bn || "দিন"})
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
                             <Calendar className="w-3 h-3" />
                             ONE-TIME
                           </span>
                         )}
-                        {exam.subject && (
+                        {card.subject && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            {exam.subject}
+                            {card.subject}
                           </span>
                         )}
                       </div>
-                      {exam.branch?.name && (
+                      {card.branchName && (
                         <span className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
                           <Landmark className="w-3 h-3 text-slate-400" />
-                          {exam.branch.name}
+                          {card.branchName}
                         </span>
                       )}
                     </div>
 
                     <div>
                       <h3 className="text-base font-black text-slate-900 group-hover:text-indigo-900 transition-colors">
-                        {exam.title}
+                        {card.title}
                       </h3>
-                      <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                      {card.subTitle && (
+                        <p className="text-xs text-indigo-800 font-semibold mt-0.5">
+                          {card.subTitle}
+                        </p>
+                      )}
+                      <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                         <BookOpen className="w-3.5 h-3.5 text-amber-600" />
-                        <span>{exam.batch?.name || "All Enrolled Batches"}</span>
+                        <span>{card.batchName}</span>
                       </p>
                     </div>
 
@@ -771,17 +990,13 @@ export default function OnlineResultPortalPage() {
                       <div>
                         <span className="text-[10px] text-slate-500 font-medium block">তারিখ / সূচি</span>
                         <span className="font-bold text-slate-800 truncate block">
-                          {isWeekly ? `প্রতি ${daysText}` : (exam.exam_date ? formatDate(exam.exam_date) : "TBD")}
+                          {card.routineText}
                         </span>
                       </div>
                       <div>
                         <span className="text-[10px] text-slate-500 font-medium block">পূর্ণমান ও পাস</span>
                         <span className="font-bold text-slate-800 block">
-                          {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                            ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-                            : (exam.total_marks || 100)} marks (Pass: {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                            ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
-                            : (exam.pass_marks || 33)})
+                          {card.totalMarks} marks (Pass: {card.passMarks})
                         </span>
                       </div>
                     </div>
@@ -790,11 +1005,11 @@ export default function OnlineResultPortalPage() {
                   <div className="pt-4 mt-4 border-t border-slate-100">
                     <button
                       type="button"
-                      onClick={() => handleOpenMeritList(exam)}
+                      onClick={() => handleOpenMeritList(card.parentExam, card.dayKey)}
                       className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Trophy className="w-4 h-4 text-amber-200" />
-                      <span>সম্পূর্ণ মেরিট লিস্ট দেখুন (View Results)</span>
+                      <span>{isDaily ? `${card.dayConfig?.day_bn || "দিন"}ের মেরিট লিস্ট দেখুন` : "সম্পূর্ণ মেরিট লিস্ট দেখুন"}</span>
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -823,29 +1038,82 @@ export default function OnlineResultPortalPage() {
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-base sm:text-lg font-black text-slate-900">
-                      {selectedExam.title} - {isWeeklyExam ? "সাপ্তাহিক মূল্যায়ন ও মেধাতালিকা" : "মেধাতালিকা"}
+                      {selectedDayKey && activeDayConfig
+                        ? `${selectedExam.title} - ${activeDayConfig.day_bn} (${activeDayConfig.subject || activeDayConfig.exam_name})`
+                        : `${selectedExam.title} - ${isWeeklyExam ? "সাপ্তাহিক মূল্যায়ন ও সামগ্রিক মেধাতালিকা" : "মেধাতালিকা"}`}
                     </h3>
-                    {isWeeklyExam && (
+                    {selectedDayKey && activeDayConfig ? (
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                        দৈনিক পরীক্ষা • {activeDayConfig.day_bn}
+                      </span>
+                    ) : isWeeklyExam ? (
                       <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200">
                         সাপ্তাহিক মূল্যায়ন
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {selectedExam.branch?.name && <span>শাখা: {selectedExam.branch.name} • </span>}
                     {selectedExam.batch?.name && <span>ব্যাচ: {selectedExam.batch.name} • </span>}
-                    মোট পূর্ণমান: {isWeeklyExam ? totalWeeklyMaxMarks : selectedExam.total_marks} নম্বর • মোট পরীক্ষার্থী: {examResults.length} জন
+                    {selectedDayKey && activeDayConfig ? (
+                      <span>পূর্ণমান: {activeDayConfig.total_marks} নম্বর (পাস: {activeDayConfig.pass_marks}) • মোট পরীক্ষার্থী: {dailyModalResults.length} জন</span>
+                    ) : (
+                      <span>মোট পূর্ণমান: {isWeeklyExam ? totalWeeklyMaxMarks : selectedExam.total_marks} নম্বর • মোট পরীক্ষার্থী: {examResults.length} জন</span>
+                    )}
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedExam(null)}
+                onClick={() => {
+                  setSelectedExam(null)
+                  setSelectedDayKey(null)
+                }}
                 className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Day Switcher Bar in Modal (If weekly exam has published days or weekly published) */}
+            {isWeeklyExam && (modalPublishedDays.length > 0 || selectedExam.is_weekly_published) && (
+              <div className="px-4 sm:px-6 py-2.5 bg-slate-100/90 border-b border-slate-200 flex items-center gap-2 overflow-x-auto">
+                <span className="text-[11px] font-bold text-slate-500 mr-1 whitespace-nowrap">দিন নির্বাচন:</span>
+                {modalPublishedDays.map((d) => {
+                  const isDayActive = selectedDayKey?.toLowerCase() === d.key.toLowerCase()
+                  return (
+                    <button
+                      key={d.key}
+                      type="button"
+                      onClick={() => setSelectedDayKey(d.key)}
+                      className={cn(
+                        "px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer border",
+                        isDayActive
+                          ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                          : "bg-white hover:bg-slate-200/70 text-slate-700 border-slate-300"
+                      )}
+                    >
+                      {d.day_bn} ({d.total_marks})
+                    </button>
+                  )
+                })}
+                {selectedExam.is_weekly_published && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDayKey(null)}
+                    className={cn(
+                      "px-3 py-1 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer border",
+                      !selectedDayKey
+                        ? "bg-purple-600 text-white border-purple-700 shadow-xs"
+                        : "bg-white hover:bg-slate-200/70 text-slate-700 border-slate-300"
+                    )}
+                  >
+                    <CalendarDays className="w-3 h-3 inline mr-1" />
+                    সামগ্রিক সাপ্তাহিক ({totalWeeklyMaxMarks})
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
@@ -854,8 +1122,185 @@ export default function OnlineResultPortalPage() {
                   <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
                   <p className="text-sm font-semibold">ফলাফল ও মেধাতালিকা সাজানো হচ্ছে...</p>
                 </div>
+              ) : selectedDayKey && activeDayConfig ? (
+                /* ========================================================================= */
+                /* 1. DAILY EXAM MERIT LIST (FOR EACH PUBLISHED DAY OF THE WEEK) */
+                /* ========================================================================= */
+                <div className="space-y-6">
+                  {/* Daily Podium (Top 3 for that day) */}
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <span className="p-2 rounded-xl bg-amber-500 text-white font-bold shadow-xs">
+                          <Trophy className="w-5 h-5" />
+                        </span>
+                        <div>
+                          <h2 className="text-sm sm:text-base font-black text-slate-900">
+                            {activeDayConfig.day_bn}ের শীর্ষ মেধা তালিকা (Top Performers)
+                          </h2>
+                          <p className="text-xs text-slate-500">
+                            {activeDayConfig.subject || activeDayConfig.exam_name} বিষয়ে সর্বোচ্চ নম্বর অর্জনকারী ১ম, ২য় ও ৩য় স্থান
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => window.print()}
+                        className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer border border-slate-300"
+                      >
+                        <Printer className="w-3.5 h-3.5" /> প্রিন্ট মেধা তালিকা
+                      </button>
+                    </div>
+
+                    {dailyToppers.length === 0 ? (
+                      <div className="py-8 text-center text-slate-400 text-xs">
+                        এই দিনে এখনও কোনো শিক্ষার্থীর প্রাপ্ত নম্বর পাওয়া যায়নি।
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {dailyToppers.map((t, idx) => {
+                          const isGold = idx === 0
+                          const isSilver = idx === 1
+
+                          return (
+                            <div
+                              key={t.id || t.student_id}
+                              className={cn(
+                                "p-4 rounded-2xl border flex items-center gap-3.5 transition-all shadow-xs",
+                                isGold
+                                  ? "bg-gradient-to-br from-amber-50 via-amber-100/50 to-amber-200/40 border-amber-300 ring-2 ring-amber-400/30"
+                                  : isSilver
+                                  ? "bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/50 border-slate-300"
+                                  : "bg-gradient-to-br from-orange-50 via-orange-100/50 to-orange-200/40 border-orange-300"
+                              )}
+                            >
+                              <div
+                                className={cn(
+                                  "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm shrink-0",
+                                  isGold ? "bg-amber-500 text-white" : isSilver ? "bg-slate-600 text-white" : "bg-amber-700 text-white"
+                                )}
+                              >
+                                {isGold ? "১ম" : isSilver ? "২য়" : "৩য়"}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                  {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
+                                </span>
+                                <h3 className="font-black text-sm text-slate-900 truncate">{t.student_name}</h3>
+                                <p className="text-[11px] font-mono text-slate-500">ID: {t.roll}</p>
+                                <p className="text-xs font-bold text-amber-700 mt-1">
+                                  প্রাপ্ত: {t.obtained_marks} / {activeDayConfig.total_marks} ({t.pct}%, গ্রেড: {t.grade})
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Daily Search and Table */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 bg-slate-50 flex items-center justify-between flex-wrap gap-3">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-900">
+                          {activeDayConfig.day_bn}ের পূর্ণাঙ্গ ফলাফল ও মেধাতালিকা
+                        </h3>
+                        <p className="text-xs text-slate-500">
+                          বিষয়: {activeDayConfig.subject || activeDayConfig.exam_name} • পূর্ণমান: {activeDayConfig.total_marks} (পাস: {activeDayConfig.pass_marks})
+                        </p>
+                      </div>
+
+                      <div className="relative w-full sm:w-64">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input
+                          type="text"
+                          placeholder="নিজের রোল বা নাম দিয়ে খুঁজুন..."
+                          value={studentSearchInModal}
+                          onChange={(e) => setStudentSearchInModal(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {dailyModalResults.length === 0 ? (
+                      <div className="p-8 text-center text-slate-400 text-xs">
+                        কোনো শিক্ষার্থীর তথ্য পাওয়া যায়নি।
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs">
+                          <thead className="bg-slate-50 text-slate-600 font-extrabold uppercase border-b border-slate-200">
+                            <tr>
+                              <th className="px-4 py-3 text-center w-16">মেধা (Rank)</th>
+                              <th className="px-4 py-3">শিক্ষার্থীর নাম</th>
+                              <th className="px-4 py-3">রোল / Student ID</th>
+                              <th className="px-4 py-3 text-center bg-amber-50/70 text-amber-900 font-black">
+                                প্রাপ্ত নম্বর ({activeDayConfig.total_marks})
+                              </th>
+                              <th className="px-4 py-3 text-center">শতকরা (%)</th>
+                              <th className="px-4 py-3 text-center">গ্রেড</th>
+                              <th className="px-4 py-3 text-center">ফলাফল</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {dailyModalResults.map((r) => {
+                              return (
+                                <tr key={r.id || r.student_id} className="hover:bg-slate-50 transition-colors">
+                                  <td className="px-4 py-3 text-center font-black">
+                                    <span
+                                      className={cn(
+                                        "inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold",
+                                        r.rank === 1
+                                          ? "bg-amber-500 text-white"
+                                          : r.rank === 2
+                                          ? "bg-slate-500 text-white"
+                                          : r.rank === 3
+                                          ? "bg-amber-700 text-white"
+                                          : "bg-slate-100 text-slate-700"
+                                      )}
+                                    >
+                                      {r.rank ?? "-"}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 font-bold text-slate-900">{r.student_name}</td>
+                                  <td className="px-4 py-3 font-mono text-slate-600 font-semibold">{r.roll}</td>
+                                  <td className="px-4 py-3 text-center font-black text-amber-700 text-sm bg-amber-50/40">
+                                    {r.obtained_marks !== null ? `${r.obtained_marks} / ${activeDayConfig.total_marks}` : "অনুপস্থিত"}
+                                  </td>
+                                  <td className="px-4 py-3 text-center font-bold text-slate-700">
+                                    {r.pct !== null ? `${r.pct}%` : "-"}
+                                  </td>
+                                  <td className="px-4 py-3 text-center font-extrabold text-slate-800">
+                                    {r.grade || "-"}
+                                  </td>
+                                  <td className="px-4 py-3 text-center">
+                                    <span
+                                      className={cn(
+                                        "inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold border",
+                                        r.obtained_marks === null
+                                          ? "bg-slate-100 text-slate-500 border-slate-200"
+                                          : r.passed
+                                          ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                          : "bg-rose-100 text-rose-800 border-rose-300"
+                                      )}
+                                    >
+                                      {r.obtained_marks === null ? "অনুপস্থিত" : r.passed ? "উত্তীর্ণ" : "অনুত্তীর্ণ"}
+                                    </span>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
               ) : isWeeklyExam ? (
-                /* WEEKLY EXAM VIEW: MATCHING OWNER DASHBOARD EXACTLY */
+                /* ========================================================================= */
+                /* 2. CONSOLIDATED WEEKLY EXAM VIEW */
+                /* ========================================================================= */
                 <div className="space-y-6">
                   {/* 1. TOTAL TOPPERS (GRAND MERIT PODIUM) */}
                   <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">

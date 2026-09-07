@@ -33,13 +33,6 @@ export function normalizeDayMarks(days: Record<string, any> | undefined | null):
 function normalizeExam(ex: any) {
   const note = ex.result_note || ""
 
-  // Parse is_public_result
-  const isPubResult =
-    ex.is_public_result === true ||
-    note.includes("[PUBLIC_RESULT:true]") ||
-    ex.is_weekly_published === true ||
-    note.includes("[IS_WEEKLY_PUBLISHED:true]")
-
   // Parse is_weekly_published
   const isWeeklyPub =
     ex.is_weekly_published === true ||
@@ -48,15 +41,34 @@ function normalizeExam(ex: any) {
   // Parse published_days
   let pubDays: string[] = []
   if (Array.isArray(ex.published_days)) {
-    pubDays = ex.published_days
-  } else if (note.includes("[PUBLISHED_DAYS:")) {
+    pubDays = ex.published_days.map((d: any) => String(d).toLowerCase())
+  } else if (typeof ex.published_days === "string" && ex.published_days.trim()) {
+    try {
+      const parsed = JSON.parse(ex.published_days)
+      if (Array.isArray(parsed)) {
+        pubDays = parsed.map((d: any) => String(d).toLowerCase())
+      } else {
+        pubDays = ex.published_days.split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
+      }
+    } catch {
+      pubDays = ex.published_days.split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
+    }
+  }
+  if (pubDays.length === 0 && note.includes("[PUBLISHED_DAYS:")) {
     try {
       const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
       if (match && match[1]) {
-        pubDays = match[1].split(",").filter(Boolean)
+        pubDays = match[1].split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
       }
     } catch {}
   }
+
+  // Parse is_public_result
+  const isPubResult =
+    ex.is_public_result === true ||
+    note.includes("[PUBLIC_RESULT:true]") ||
+    isWeeklyPub ||
+    pubDays.length > 0
 
   // Parse recurring_days
   let recDays: any[] = []

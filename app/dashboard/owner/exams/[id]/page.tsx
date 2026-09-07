@@ -345,10 +345,22 @@ export default function ExamResultsPage() {
         let pubDays: string[] = []
         if (Array.isArray(ex?.published_days)) {
           pubDays = ex.published_days.map((d: any) => String(d).toLowerCase())
-        } else if (ex?.result_note?.includes("[PUBLISHED_DAYS:")) {
+        } else if (typeof ex?.published_days === "string" && ex.published_days.trim()) {
+          try {
+            const parsed = JSON.parse(ex.published_days)
+            if (Array.isArray(parsed)) {
+              pubDays = parsed.map((d: any) => String(d).toLowerCase())
+            } else {
+              pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+            }
+          } catch {
+            pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          }
+        }
+        if (pubDays.length === 0 && ex?.result_note?.includes("[PUBLISHED_DAYS:")) {
           const match = ex.result_note.match(/\[PUBLISHED_DAYS:(.*?)\]/)
           if (match && match[1]) {
-            pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase())
+            pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
           }
         }
         setPublishedDays(pubDays)

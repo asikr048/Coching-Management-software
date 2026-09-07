@@ -74,29 +74,23 @@ export async function PATCH(
       updatedNote = `${updatedNote} [SHOW_ALL_RESULTS:${body.show_all_results}]`.trim()
     }
     if (Array.isArray(body.published_days)) {
+      const pubList = body.published_days.map((d: any) => String(d).toLowerCase())
+      payload.published_days = pubList
       updatedNote = updatedNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
-      updatedNote = `${updatedNote} [PUBLISHED_DAYS:${body.published_days.join(",")}]`.trim()
+      updatedNote = `${updatedNote} [PUBLISHED_DAYS:${pubList.join(",")}]`.trim()
     }
     if (typeof body.is_weekly_published === "boolean") {
+      payload.is_weekly_published = body.is_weekly_published
       updatedNote = updatedNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [IS_WEEKLY_PUBLISHED:${body.is_weekly_published}]`.trim()
     }
-    const isWeekly =
-      currentExam.exam_schedule_type === "weekly" ||
-      (Array.isArray(currentExam.recurring_days) && currentExam.recurring_days.length > 0) ||
-      Boolean(currentExam.title?.includes("সাপ্তাহিক"))
 
-    // If is_public_result is enabled, ensure is_published is true and weekly exams are marked weekly published
+    // If is_public_result is enabled, ensure is_published is true
     if (body.is_public_result === true) {
       payload.is_published = true
       payload.is_public_result = true
       updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [PUBLIC_RESULT:true]`.trim()
-      if (isWeekly) {
-        payload.is_weekly_published = true
-        updatedNote = updatedNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
-        updatedNote = `${updatedNote} [IS_WEEKLY_PUBLISHED:true]`.trim()
-      }
     }
 
     // If weekly or day results are published, automatically publish public results unless explicitly set to false
