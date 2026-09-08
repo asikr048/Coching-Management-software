@@ -140,8 +140,11 @@ export default function AccountantClient({
   const [payModalDue, setPayModalDue] = useState<DueRow | null>(null)
   const [payFeeType, setPayFeeType] = useState<"monthly" | "admission" | "course" | "exam" | "other">("monthly")
   const [payMonth, setPayMonth] = useState<string>(currentMonthStr)
+  const [payTargetFee, setPayTargetFee] = useState<string>("")
+  const [payPreviouslyPaid, setPayPreviouslyPaid] = useState<number>(0)
   const [payAmount, setPayAmount] = useState<string>("")
   const [payDiscount, setPayDiscount] = useState<string>("0")
+  const [payDueDate, setPayDueDate] = useState<string>("")
   const [payMethod, setPayMethod] = useState<string>("cash")
   const [payTransactionId, setPayTransactionId] = useState<string>("")
   const [payNotes, setPayNotes] = useState<string>("")
@@ -272,14 +275,32 @@ export default function AccountantClient({
           dueAmount = Math.max(0, expectedAmount - paidAmount)
           status = expectedAmount > 0 && dueAmount <= 0 ? "paid" : paidAmount > 0 ? "partial" : "due"
         } else {
-          // One-time / Course Batch
-          expectedAmount = (Number(batch.admission_fee) || 0) + (Number(batch.monthly_fee) || 0)
-          if (expectedAmount === 0 && Number(batch.admission_fee) > 0) {
-            expectedAmount = Number(batch.admission_fee)
-          }
+          // One-time / Course Batch - check if an active due record exists in fee_dues
+          dueObj =
+            dues.find(
+              (d) =>
+                d.student_id === st.id &&
+                d.batch_id === batch.id &&
+                (d.status === "pending" || d.status === "partial")
+            ) ||
+            dues.find((d) => d.student_id === st.id && d.batch_id === batch.id) ||
+            null
 
-          const batchPayments = payments.filter((p) => p.student_id === st.id && p.batch_id === batch.id)
-          paidAmount = batchPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+          if (dueObj) {
+            expectedAmount =
+              Number(dueObj.due_amount) ||
+              (Number(batch.admission_fee) || 0) + (Number(batch.monthly_fee) || 0)
+            const batchPayments = payments.filter((p) => p.student_id === st.id && p.batch_id === batch.id)
+            const paySum = batchPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+            paidAmount = Math.max(Number(dueObj.paid_amount || 0), paySum)
+          } else {
+            expectedAmount = (Number(batch.admission_fee) || 0) + (Number(batch.monthly_fee) || 0)
+            if (expectedAmount === 0 && Number(batch.admission_fee) > 0) {
+              expectedAmount = Number(batch.admission_fee)
+            }
+            const batchPayments = payments.filter((p) => p.student_id === st.id && p.batch_id === batch.id)
+            paidAmount = batchPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+          }
 
           dueAmount = Math.max(0, expectedAmount - paidAmount)
           status = expectedAmount > 0 && dueAmount <= 0 ? "paid" : paidAmount > 0 ? "partial" : "due"
@@ -450,57 +471,156 @@ export default function AccountantClient({
   ) {
     setPayModalStudent(student)
     setPayModalBatch(batch)
-    setPayModalDue(item?.dueObj || duesMapForSelectedMonth.get(`${student.id}_${batch.id}`) || null)
 
     const isMonthlyBatch = batch.fee_type === "monthly" || (Number(batch.monthly_fee) || 0) > 0
     const resolvedType = defaultType || (isMonthlyBatch ? "monthly" : "course")
     setPayFeeType(resolvedType)
     setPayMonth(selectedMonth)
 
-    // Calculate default suggested amount
-    let suggested = 0
-    if (resolvedType === "monthly") {
-      suggested = item ? item.dueAmount : Number(batch.monthly_fee) || 0
-    } else if (resolvedType === "admission") {
-      suggested = Number(batch.admission_fee) || 0
+    const dueObj =
+      item?.dueObj ||
+      (resolvedType === "monthly"
+        ? duesMapForSelectedMonth.get(`${student.id}_${batch.id}`) || null
+        : dues.find(
+            (d) =>
+              d.student_id === student.id &&
+              d.batch_id === batch.id &&
+              (d.status === "pending" || d.status === "partial")
+          ) ||
+          dues.find((d) => d.student_id === student.id && d.batch_id === batch.id) ||
+          null)
+
+    setPayModalDue(dueObj)
+
+    // Calculate Target Fee & Previously Paid
+    let targetFee = 0
+    let prevPaid = 0
+
+    if (item && item.expectedAmount > 0) {
+      targetFee = item.expectedAmount
+      prevPaid = item.paidAmount
+    } else if (resolvedType === "monthly") {
+      targetFee = dueObj ? Number(dueObj.due_amount) : Number(batch.monthly_fee) || 0
+      const monthPayments = payments.filter(
+        (p) => p.student_id === student.id && p.batch_id === batch.id && p.payment_month === selectedMonth
+      )
+      const paySum = monthPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+      prevPaid = dueObj ? Math.max(Number(dueObj.paid_amount || 0), paySum) : paySum
     } else if (resolvedType === "course") {
-      suggested = item ? item.dueAmount : (Number(batch.monthly_fee) || 0) + (Number(batch.admission_fee) || 0)
+      targetFee = dueObj
+        ? Number(dueObj.due_amount)
+        : (Number(batch.monthly_fee) || 0) + (Number(batch.admission_fee) || 0) || Number(batch.admission_fee) || 0
+      const batchPayments = payments.filter(
+        (p) => p.student_id === student.id && p.batch_id === batch.id && (p.payment_for === "course" || !p.payment_month)
+      )
+      const paySum = batchPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+      prevPaid = dueObj ? Math.max(Number(dueObj.paid_amount || 0), paySum) : paySum
+    } else if (resolvedType === "admission") {
+      targetFee = Number(batch.admission_fee) || 0
+      const admPayments = payments.filter(
+        (p) => p.student_id === student.id && p.batch_id === batch.id && p.payment_for === "admission"
+      )
+      prevPaid = admPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+    } else if (resolvedType === "exam") {
+      targetFee = 500
+      const examPayments = payments.filter(
+        (p) => p.student_id === student.id && p.batch_id === batch.id && p.payment_for === "exam"
+      )
+      prevPaid = examPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
     }
 
-    setPayAmount(String(suggested > 0 ? suggested : ""))
+    const remaining = Math.max(0, targetFee - prevPaid)
+    setPayTargetFee(String(targetFee > 0 ? targetFee : ""))
+    setPayPreviouslyPaid(prevPaid)
+    setPayAmount(String(remaining > 0 ? remaining : targetFee > 0 ? targetFee : ""))
     setPayDiscount("0")
+
+    const nextDue = new Date()
+    nextDue.setMonth(nextDue.getMonth() + 1)
+    nextDue.setDate(10)
+    setPayDueDate(dueObj?.due_date || nextDue.toISOString().split("T")[0])
+
     setPayMethod("cash")
     setPayTransactionId("")
-    setPayNotes(`${resolvedType === "monthly" ? `Monthly Fee: ${selectedMonth}` : `${resolvedType.toUpperCase()} Fee`}`)
+    setPayNotes(
+      resolvedType === "monthly"
+        ? `Monthly Fee: ${selectedMonth}`
+        : `${resolvedType.toUpperCase()} Fee - ${batch.name}`
+    )
   }
 
   // Recalculate amount when user toggles fee type in modal
   function handleFeeTypeChange(type: "monthly" | "admission" | "course" | "exam" | "other") {
     setPayFeeType(type)
-    if (!payModalBatch) return
+    if (!payModalBatch || !payModalStudent) return
+
+    const student = payModalStudent
+    const batch = payModalBatch
+
+    const dueObj =
+      type === "monthly"
+        ? duesMapForSelectedMonth.get(`${student.id}_${batch.id}`) || null
+        : dues.find(
+            (d) =>
+              d.student_id === student.id &&
+              d.batch_id === batch.id &&
+              (d.status === "pending" || d.status === "partial")
+          ) ||
+          dues.find((d) => d.student_id === student.id && d.batch_id === batch.id) ||
+          null
+
+    setPayModalDue(dueObj)
+
+    let targetFee = 0
+    let prevPaid = 0
 
     if (type === "monthly") {
-      const dueObj = payModalStudent ? duesMapForSelectedMonth.get(`${payModalStudent.id}_${payModalBatch.id}`) : null
-      const fullFee = dueObj ? Number(dueObj.due_amount) : Number(payModalBatch.monthly_fee) || 0
-      const paid = dueObj ? Number(dueObj.paid_amount || 0) : 0
-      const rem = Math.max(0, fullFee - paid)
-      setPayAmount(String(rem > 0 ? rem : fullFee))
+      targetFee = dueObj ? Number(dueObj.due_amount) : Number(batch.monthly_fee) || 0
+      const monthPayments = payments.filter(
+        (p) => p.student_id === student.id && p.batch_id === batch.id && p.payment_month === payMonth
+      )
+      const paySum = monthPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+      prevPaid = dueObj ? Math.max(Number(dueObj.paid_amount || 0), paySum) : paySum
       setPayNotes(`Monthly Fee: ${payMonth}`)
     } else if (type === "admission") {
-      const admFee = Number(payModalBatch.admission_fee) || 0
-      setPayAmount(String(admFee))
-      setPayNotes(`Admission Fee - ${payModalBatch.name}`)
+      targetFee = Number(batch.admission_fee) || 0
+      const admPayments = payments.filter(
+        (p) => p.student_id === student.id && p.batch_id === batch.id && p.payment_for === "admission"
+      )
+      prevPaid = admPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+      setPayNotes(`Admission Fee - ${batch.name}`)
     } else if (type === "course") {
-      const courseFee = (Number(payModalBatch.monthly_fee) || 0) + (Number(payModalBatch.admission_fee) || 0)
-      setPayAmount(String(courseFee))
-      setPayNotes(`Full Course Fee - ${payModalBatch.name}`)
+      targetFee = dueObj
+        ? Number(dueObj.due_amount)
+        : (Number(batch.monthly_fee) || 0) + (Number(batch.admission_fee) || 0) || Number(batch.admission_fee) || 0
+      const batchPayments = payments.filter(
+        (p) => p.student_id === student.id && p.batch_id === batch.id && (p.payment_for === "course" || !p.payment_month)
+      )
+      const paySum = batchPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+      prevPaid = dueObj ? Math.max(Number(dueObj.paid_amount || 0), paySum) : paySum
+      setPayNotes(`Full Course Fee - ${batch.name}`)
     } else if (type === "exam") {
-      setPayAmount("500")
-      setPayNotes(`Exam Fee - ${payModalBatch.name}`)
+      targetFee = 500
+      const examPayments = payments.filter(
+        (p) => p.student_id === student.id && p.batch_id === batch.id && p.payment_for === "exam"
+      )
+      prevPaid = examPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+      setPayNotes(`Exam Fee - ${batch.name}`)
     } else {
-      setPayAmount("")
-      setPayNotes(`Fee payment - ${payModalBatch.name}`)
+      targetFee = 0
+      prevPaid = 0
+      setPayNotes(`Fee payment - ${batch.name}`)
     }
+
+    const remaining = Math.max(0, targetFee - prevPaid)
+    setPayTargetFee(String(targetFee > 0 ? targetFee : ""))
+    setPayPreviouslyPaid(prevPaid)
+    setPayAmount(String(remaining > 0 ? remaining : targetFee > 0 ? targetFee : ""))
+
+    const nextDue = new Date()
+    nextDue.setMonth(nextDue.getMonth() + 1)
+    nextDue.setDate(10)
+    setPayDueDate(dueObj?.due_date || nextDue.toISOString().split("T")[0])
   }
 
   // Handle Payment Submit
@@ -517,7 +637,19 @@ export default function AccountantClient({
 
     setPaySubmitting(true)
     try {
-      const totalPaid = Math.max(0, amountNum - discountNum)
+      const netPaidNow = Math.max(0, amountNum - discountNum)
+      const targetFeeNum = parseFloat(payTargetFee) || (payPreviouslyPaid + netPaidNow)
+      const totalPaidSoFar = payPreviouslyPaid + netPaidNow
+      const remainingDue = Math.max(0, targetFeeNum - totalPaidSoFar)
+
+      const defaultNextDue = (() => {
+        const d = new Date()
+        d.setMonth(d.getMonth() + 1)
+        d.setDate(10)
+        return d.toISOString().split("T")[0]
+      })()
+      const effectiveDueDate = payDueDate || defaultNextDue
+
       const now = new Date()
       const receiptNo = `RCP-${now.getFullYear()}-${Date.now().toString().slice(-6)}`
 
@@ -529,7 +661,7 @@ export default function AccountantClient({
           batch_id: payModalBatch.id,
           amount: amountNum,
           discount: discountNum,
-          total_paid: totalPaid,
+          total_paid: netPaidNow,
           payment_method: payMethod,
           payment_for: payFeeType,
           payment_month: payFeeType === "monthly" ? payMonth : null,
@@ -542,53 +674,97 @@ export default function AccountantClient({
 
       if (payErr) throw payErr
 
-      // 2. If it's a Monthly Fee, update or insert into fee_dues (without branch_id)
-      if (payFeeType === "monthly") {
-        const existingDue =
-          payModalDue || duesMapForSelectedMonth.get(`${payModalStudent.id}_${payModalBatch.id}`)
+      // 2. Fee Dues Sync: Determine dueMonth for fee_dues (must be YYYY-MM)
+      const dueMonth = payFeeType === "monthly" ? payMonth : (payMonth || now.toISOString().slice(0, 7))
 
-        if (existingDue) {
-          const newPaid = (Number(existingDue.paid_amount) || 0) + totalPaid
-          const newStatus: "paid" | "partial" = newPaid >= Number(existingDue.due_amount) ? "paid" : "partial"
+      // 3. Find existing due record to update or check if we need to insert
+      let existingDue = payModalDue
+      if (!existingDue) {
+        if (payFeeType === "monthly") {
+          existingDue = duesMapForSelectedMonth.get(`${payModalStudent.id}_${payModalBatch.id}`) || null
+        } else {
+          existingDue =
+            dues.find(
+              (d) =>
+                d.student_id === payModalStudent.id &&
+                d.batch_id === payModalBatch.id &&
+                (d.status === "pending" || d.status === "partial")
+            ) ||
+            dues.find(
+              (d) => d.student_id === payModalStudent.id && d.batch_id === payModalBatch.id
+            ) ||
+            null
+        }
+      }
 
-          const { data: updData, error: updErr } = await supabase
+      if (existingDue) {
+        // Update existing due record
+        const newPaid = (Number(existingDue.paid_amount) || 0) + netPaidNow
+        const totalTarget = Math.max(Number(existingDue.due_amount) || 0, targetFeeNum, newPaid + remainingDue)
+        const isFull = newPaid >= totalTarget
+        const newStatus: "paid" | "partial" = isFull ? "paid" : "partial"
+
+        const { data: updData, error: updErr } = await supabase
+          .from("fee_dues")
+          .update({
+            due_amount: totalTarget,
+            paid_amount: newPaid,
+            status: newStatus,
+            due_date: effectiveDueDate,
+          })
+          .eq("id", existingDue.id)
+          .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
+          .single()
+
+        if (updErr) {
+          console.error("Error updating fee_dues:", updErr)
+        } else if (updData) {
+          setDues((prev) => prev.map((d) => (d.id === existingDue.id ? updData : d)))
+        }
+      } else if (remainingDue > 0 || payFeeType === "monthly") {
+        // No existing due record, but student has remaining due (partial payment) OR it's monthly
+        const isFull = totalPaidSoFar >= targetFeeNum
+        const newStatus: "paid" | "partial" = isFull ? "paid" : "partial"
+
+        const { data: insData, error: insErr } = await supabase
+          .from("fee_dues")
+          .insert({
+            student_id: payModalStudent.id,
+            batch_id: payModalBatch.id,
+            due_month: dueMonth,
+            due_amount: targetFeeNum,
+            paid_amount: totalPaidSoFar,
+            due_date: effectiveDueDate,
+            status: newStatus,
+          })
+          .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
+          .single()
+
+        if (insErr) {
+          // If conflict with existing (student_id, batch_id, due_month), fall back to update
+          console.warn("Insert due note, attempting fallback update:", insErr.message)
+          const { data: fallbackData } = await supabase
             .from("fee_dues")
             .update({
-              paid_amount: newPaid,
+              due_amount: targetFeeNum,
+              paid_amount: totalPaidSoFar,
               status: newStatus,
+              due_date: effectiveDueDate,
             })
-            .eq("id", existingDue.id)
+            .eq("student_id", payModalStudent.id)
+            .eq("batch_id", payModalBatch.id)
+            .eq("due_month", dueMonth)
             .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
-            .single()
+            .maybeSingle()
 
-          if (updErr) throw updErr
-          if (updData) {
-            setDues((prev) => prev.map((d) => (d.id === existingDue.id ? updData : d)))
-          }
-        } else {
-          // Insert new due record
-          const targetDueDate = `${payMonth}-10`
-          const fullFee = Number(payModalBatch.monthly_fee) || totalPaid
-          const status: "paid" | "partial" = totalPaid >= fullFee ? "paid" : "partial"
-
-          const { data: insData, error: insErr } = await supabase
-            .from("fee_dues")
-            .insert({
-              student_id: payModalStudent.id,
-              batch_id: payModalBatch.id,
-              due_month: payMonth,
-              due_amount: fullFee,
-              paid_amount: totalPaid,
-              due_date: targetDueDate,
-              status: status,
+          if (fallbackData) {
+            setDues((prev) => {
+              const exists = prev.some((d) => d.id === fallbackData.id)
+              return exists ? prev.map((d) => (d.id === fallbackData.id ? fallbackData : d)) : [fallbackData, ...prev]
             })
-            .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
-            .single()
-
-          if (insErr) throw insErr
-          if (insData) {
-            setDues((prev) => [insData, ...prev])
           }
+        } else if (insData) {
+          setDues((prev) => [insData, ...prev])
         }
       }
 
@@ -596,7 +772,13 @@ export default function AccountantClient({
         setPayments((prev) => [payRecord, ...prev])
       }
 
-      toast.success(`Payment of ৳${totalPaid} recorded successfully for ${payModalStudent.name}!`)
+      if (remainingDue > 0) {
+        toast.success(
+          `Payment of ৳${netPaidNow} recorded! New due of ৳${remainingDue} created (Due date: ${effectiveDueDate})`
+        )
+      } else {
+        toast.success(`Payment of ৳${netPaidNow} recorded successfully for ${payModalStudent.name}! (Full settlement)`)
+      }
 
       // Display official printable voucher
       setReceiptData({
@@ -608,7 +790,10 @@ export default function AccountantClient({
         month: payFeeType === "monthly" ? payMonth : "N/A",
         amount: amountNum,
         discount: discountNum,
-        totalPaid: totalPaid,
+        totalPaid: netPaidNow,
+        targetFee: targetFeeNum,
+        remainingDue: remainingDue,
+        nextDueDate: remainingDue > 0 ? effectiveDueDate : null,
         method: payMethod,
         transactionId: payTransactionId || "N/A",
         date: new Date().toLocaleDateString("en-GB"),
@@ -1607,13 +1792,117 @@ export default function AccountantClient({
                     type="month"
                     value={payMonth}
                     onChange={(e) => {
-                      setPayMonth(e.target.value)
-                      setPayNotes(`Monthly Fee: ${e.target.value}`)
+                      const newMonth = e.target.value
+                      setPayMonth(newMonth)
+                      setPayNotes(`Monthly Fee: ${newMonth}`)
+                      if (payModalStudent && payModalBatch) {
+                        const dueObj =
+                          dues.find(
+                            (d) =>
+                              d.student_id === payModalStudent.id &&
+                              d.batch_id === payModalBatch.id &&
+                              d.due_month === newMonth
+                          ) || null
+                        setPayModalDue(dueObj)
+                        const targetFee = dueObj ? Number(dueObj.due_amount) : Number(payModalBatch.monthly_fee) || 0
+                        const mPays = payments.filter(
+                          (p) =>
+                            p.student_id === payModalStudent.id &&
+                            p.batch_id === payModalBatch.id &&
+                            p.payment_month === newMonth
+                        )
+                        const paySum = mPays.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+                        const prevPaid = dueObj ? Math.max(Number(dueObj.paid_amount || 0), paySum) : paySum
+                        const rem = Math.max(0, targetFee - prevPaid)
+                        setPayTargetFee(String(targetFee > 0 ? targetFee : ""))
+                        setPayPreviouslyPaid(prevPaid)
+                        setPayAmount(String(rem > 0 ? rem : targetFee > 0 ? targetFee : ""))
+                      }
                     }}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-hidden focus:border-indigo-500 cursor-pointer"
                   />
                 </div>
               )}
+
+              {/* Target Fee & Payment Breakdown Card */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-3 items-center">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Total Target Fee for {payFeeType.toUpperCase()} (৳)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      value={payTargetFee}
+                      onChange={(e) => setPayTargetFee(e.target.value)}
+                      placeholder="e.g. 3000"
+                      className="w-full px-2.5 py-1.5 border border-slate-300 rounded-xl text-xs font-black text-slate-900 bg-white focus:outline-hidden focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-1">Previously Paid:</span>
+                    <div className="px-2.5 py-1.5 bg-slate-200/70 rounded-xl text-xs font-black text-slate-800">
+                      ৳{payPreviouslyPaid}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Live Real-time Due Status Preview */}
+                {(() => {
+                  const targetNum = parseFloat(payTargetFee) || 0
+                  const payNum = parseFloat(payAmount) || 0
+                  const discNum = parseFloat(payDiscount) || 0
+                  const netPay = Math.max(0, payNum - discNum)
+                  const totalPaidAfter = payPreviouslyPaid + netPay
+                  const remDue = targetNum > 0 ? Math.max(0, targetNum - totalPaidAfter) : 0
+
+                  if (targetNum > 0 && remDue > 0) {
+                    return (
+                      <div className="p-3 bg-amber-50 border border-amber-300 rounded-xl text-amber-900 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-xs font-black text-amber-900">
+                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                            Partial Payment: Remaining Due
+                          </span>
+                          <span className="text-sm font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200">
+                            ৳{remDue}
+                          </span>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-amber-900 mb-1 flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-amber-700" />
+                            Next Due Date for Balance (বকেয়া পরিশোধের শেষ তারিখ):
+                          </label>
+                          <input
+                            type="date"
+                            value={payDueDate}
+                            onChange={(e) => setPayDueDate(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-amber-400 rounded-xl text-xs font-bold text-slate-900 focus:outline-hidden focus:border-amber-600 cursor-pointer shadow-xs"
+                          />
+                        </div>
+                        <p className="text-[10px] text-amber-800 leading-relaxed font-medium">
+                          ⚠️ A new tracking due record of <strong className="text-rose-700 font-black">৳{remDue}</strong> will automatically be created in Fee Dues and appear in student ledger.
+                        </p>
+                      </div>
+                    )
+                  } else if (targetNum > 0 && remDue === 0) {
+                    return (
+                      <div className="p-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-emerald-800 flex items-center justify-between text-xs font-bold">
+                        <span className="flex items-center gap-1.5">
+                          <CheckCircle className="w-4 h-4 text-emerald-600" />
+                          Full Settlement: Fee cleared in full
+                        </span>
+                        <span className="text-emerald-700 font-black bg-emerald-100 px-2 py-0.5 rounded-md">
+                          ৳0 Due
+                        </span>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
+              </div>
 
               {/* Amount and Discount */}
               <div className="grid grid-cols-2 gap-3">
@@ -2073,9 +2362,41 @@ export default function AccountantClient({
                 </div>
               </div>
 
-              <div className="border-t border-slate-200 pt-2 flex justify-between items-center text-sm font-black text-slate-900">
-                <span>Total Paid:</span>
-                <span className="text-emerald-600 text-base">৳{receiptData.totalPaid}</span>
+              <div className="border-t border-slate-200 pt-2 space-y-1.5 text-xs">
+                {receiptData.targetFee && receiptData.targetFee > receiptData.totalPaid && (
+                  <div className="flex justify-between text-slate-600 text-[11px]">
+                    <span>Target Fee:</span>
+                    <span className="font-bold">৳{receiptData.targetFee}</span>
+                  </div>
+                )}
+                {receiptData.discount > 0 && (
+                  <div className="flex justify-between text-emerald-600 text-[11px]">
+                    <span>Discount:</span>
+                    <span className="font-bold">-৳{receiptData.discount}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center text-sm font-black text-slate-900 border-t border-slate-200/60 pt-1">
+                  <span>Total Paid Now:</span>
+                  <span className="text-emerald-600 text-base">৳{receiptData.totalPaid}</span>
+                </div>
+                {receiptData.remainingDue > 0 ? (
+                  <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 space-y-1 mt-1 text-rose-800">
+                    <div className="flex justify-between font-black text-xs text-rose-700">
+                      <span>Remaining Due (বকেয়া):</span>
+                      <span className="text-rose-600 font-black">৳{receiptData.remainingDue}</span>
+                    </div>
+                    {receiptData.nextDueDate && (
+                      <div className="flex justify-between text-[10px] text-rose-600">
+                        <span>Next Due Date:</span>
+                        <span className="font-bold">{receiptData.nextDueDate}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-1.5 text-center text-[10px] font-bold text-emerald-700 mt-1">
+                    ✓ Paid in Full (৳0 Due)
+                  </div>
+                )}
               </div>
             </div>
 
