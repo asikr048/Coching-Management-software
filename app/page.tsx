@@ -80,210 +80,227 @@ export default function HomePage() {
     const supabase = createClient()
 
     async function loadData() {
-      // 1. Auth & Enrollment Check
-      try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          setCurrentUser(user)
-          const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle()
-          setUserRole(staff?.role || "student")
-
-          getUserEnrollments().then(enrState => {
-            setUserEnrollments(enrState)
-          })
-        }
-      } catch {}
-
-      // 2. Branches
-      let loadedBranches: any[] = []
-      try {
-        const { data: bList } = await supabase.from("branches").select("*").eq("is_active", true).order("name")
-        if (bList && bList.length > 0) {
-          loadedBranches = bList
-          setBranches(bList)
-        }
-      } catch {}
-
-      // 3. Batches
-      try {
-        const { data: b } = await supabase
-          .from("batches")
-          .select("*, teacher:staff(name), branch:branches(name)")
-          .eq("is_active", true)
-          .order("created_at", { ascending: false })
-
-        if (b) {
-          setBatches(b)
-        }
-      } catch {}
-
-      // 4. Courses
-      try {
-        const { data: c } = await supabase
-          .from("courses")
-          .select("*, teacher:staff(name)")
-          .eq("status", "published")
-          .order("total_sales", { ascending: false })
-          .limit(8)
-        if (c) setCourses(c)
-      } catch {}
-
-      // 5. Students Count
-      try {
-        const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("is_active", true)
-        if (count) setStudentCount(count)
-      } catch {}
-
-      // 6. Slides
-      try {
-        const { data: s } = await supabase.from("slider_images").select("*").eq("is_active", true).order("sort_order")
-        if (s && s.length > 0) {
-          setSlides(s)
-        } else {
-          // Default beautiful institutional slides
-          setSlides([
-            {
-              id: "def1",
-              title: "মেধাশিরী কোচিং সেন্টার",
-              subtitle: "এইচএসসি ও এসএসসি স্পেশাল মডেল টেস্ট ব্যাচে ভর্তি চলছে",
-              image_url: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1200&auto=format&fit=crop",
-            },
-            {
-              id: "def2",
-              title: "অভিজ্ঞ শিক্ষক মণ্ডলী ও আধুনিক ক্লাসরুম",
-              subtitle: "পরীক্ষামূলক ক্লাস ও সাপ্তাহিক মূল্যায়নের মাধ্যমে নিশ্চিত সাফল্য",
-              image_url: "https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=1200&auto=format&fit=crop",
-            },
-          ])
-        }
-      } catch {}
-
-      // 7. Notices
-      try {
-        const { data: n, error: nErr } = await supabase
-          .from("notices")
-          .select("*")
-          .eq("is_active", true)
-          .order("created_at", { ascending: false })
-          .limit(25)
-
-        if (!nErr && Array.isArray(n)) {
-          let noticeBranchesMap: Record<string, string[]> = {}
-          try {
-            const { data: nbSetting } = await supabase
-              .from("site_settings")
-              .select("value")
-              .eq("key", "notice_branch_assignments")
-              .maybeSingle()
-            if (nbSetting?.value) {
-              noticeBranchesMap = JSON.parse(nbSetting.value)
-            }
-          } catch {}
-
-          const enriched = n.map((item: any) => {
-            const extraBranchIds = noticeBranchesMap[item.id] || []
-            const branchIds = Array.isArray(item.branch_ids) && item.branch_ids.length > 0
-              ? item.branch_ids
-              : (extraBranchIds.length > 0 ? extraBranchIds : (item.branch_id ? [item.branch_id] : []))
-            const assignedBranches = (loadedBranches || []).filter((b: any) => branchIds.includes(b.id))
-            const branchNames = assignedBranches.map((b: any) => b.name)
-            return {
-              ...item,
-              branch_ids: branchIds,
-              branch: branchNames.length > 0 ? { name: branchNames.join(", ") } : null,
-            }
-          })
-          setNotices(enriched)
-        }
-      } catch {}
-
-      // 8. Achievements
-      try {
-        const { data: a } = await supabase.from("achievements").select("*, branch:branches(name)").eq("is_active", true).order("sort_order", { ascending: true }).limit(8)
-        if (a && a.length > 0) {
-          setAchievements(a)
-        } else {
-          setAchievements([
-            {
-              id: "a1",
-              student_name: "তানভীর আহমেদ",
-              title: "রাজশাহী মেডিকেল কলেজ (চান্স প্রাপ্ত)",
-              description: "মেধাশিরী কোচিংয়ের নিয়মিত ক্লাস ও বিশেষ মডেল টেস্ট আমার মেডিকেল প্রস্তুতিতে সর্বোচ্চ ভূমিকা রেখেছে।",
-              exam_year: "২০২৫",
-            },
-            {
-              id: "a2",
-              student_name: "নুসরাত জাহান",
-              title: "এইচএসসি পরীক্ষায় গোল্ডেন জিপিএ ৫.০০",
-              description: "শিক্ষকদের আন্তরিক পাঠদান ও নিয়মিত পরীক্ষা ভীতি দূর করতে সাহায্য করেছে।",
-              exam_year: "২০২৫",
-            },
-            {
-              id: "a3",
-              student_name: "মাহমুদুল হাসান",
-              title: "রুয়েট (CSE) চান্স প্রাপ্ত",
-              description: "গণিত ও পদার্থবিজ্ঞানের কনসেপ্ট ক্লিয়ারিং ক্লাসের মাধ্যমে ইঞ্জিনিয়ারিং ভর্তি পরীক্ষায় সাফল্য পেয়েছি।",
-              exam_year: "২০২৪",
-            },
-          ])
-        }
-      } catch {}
-
-      // 9. Blogs
-      try {
-        const { data: bl } = await supabase.from("blogs").select("*, branch:branches(name)").eq("is_published", true).order("published_at", { ascending: false }).limit(6)
-        if (bl && bl.length > 0) {
-          setBlogs(bl)
-        } else {
-          setBlogs([
-            {
-              id: "b1",
-              title: "এইচএসসি পদার্থবিজ্ঞান পরীক্ষায় এ+ পাওয়ার সহজ কৌশল",
-              excerpt: "পদার্থবিজ্ঞানে গাণিতিক সমস্যা সমাধান এবং সৃজনশীল অংশে সম্পূর্ণ নম্বর অর্জনের কার্যকর ফর্মুলা ও সময় বণ্টন গাইড।",
-              content: "পদার্থবিজ্ঞানে ভালো করতে হলে মুখস্থ করার চেয়ে কনসেপ্ট ক্লিয়ার থাকা সবচেয়ে জরুরি। নিয়মিত গাণিতিক সূত্রাবলি অনুশীলন এবং বোর্ড প্রশ্নের ধরন বিশ্লেষণ শিক্ষার্থীদের পরীক্ষার জন্য আত্মবিশ্বাসী করে তোলে...",
-              author_name: "মেধাশিরী একাডেমিক টিম",
-              created_at: new Date().toISOString(),
-              tags: ["এইচএসসি", "পদার্থবিজ্ঞান", "টিপস"],
-            },
-            {
-              id: "b2",
-              title: "মেডিকেল ভর্তি পরীক্ষার শেষ মুহূর্তের কার্যকর রিভিশন প্ল্যান",
-              excerpt: "প্রতিদিনের বিষয়ভিত্তিক টার্গেট নির্ধারণ এবং নেগেটিভ মার্কিং এড়ানোর মোক্ষম কৌশল নিয়ে বিশেষজ্ঞদের পরামর্শ।",
-              content: "মেডিকেল ভর্তি পরীক্ষার ক্ষেত্রে নির্ভুলতা অত্যন্ত গুরুত্বপূর্ণ। শেষ মাসগুলোতে নতুন কোনো টপিক পড়ার চেয়ে পূর্বে পড়া নোট এবং মডেল টেস্টের ভুলগুলো বারবার সংশোধন করা সবচেয়ে বেশি কাজে দেয়...",
-              author_name: "ডাঃ তাসনিম আহমেদ (পরামর্শক)",
-              created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-              tags: ["মেডিকেল", "অ্যাডমিশন", "পরামর্শ"],
-            },
-          ])
-        }
-      } catch {}
-
-      // 10. Site Settings
-      try {
-        const { data: settings } = await supabase.from("site_settings").select("key, value")
-        if (settings && settings.length > 0) {
-          const getVal = (k: string) => settings.find((s: any) => s.key === k)?.value
-          if (getVal("contact_link")) setContactLink(getVal("contact_link")!)
-          if (getVal("contact_label")) setContactLabel(getVal("contact_label")!)
-          if (getVal("contact_phone")) setContactPhone(getVal("contact_phone")!)
-          if (getVal("contact_email")) setContactEmail(getVal("contact_email")!)
-          if (getVal("contact_address")) setContactAddress(getVal("contact_address")!)
-          if (getVal("footer_about")) setFooterAbout(getVal("footer_about")!)
-        }
-      } catch {}
-
-      // 11. Public Exam Results for Homepage
-      try {
-        const res = await fetch("/api/online-results")
-        const json = await res.json()
-        if (json.success && Array.isArray(json.exams)) {
-          setPublicExams(json.exams)
-        }
-      } catch (err) {
-        console.error("Error fetching online results for homepage:", err)
-      } finally {
-        setLoadingExams(false)
+      const fetchAuth = async () => {
+        try {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            setCurrentUser(user)
+            const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle()
+            setUserRole(staff?.role || "student")
+            getUserEnrollments().then(enrState => {
+              setUserEnrollments(enrState)
+            })
+          }
+        } catch {}
       }
+
+      const fetchBranchesAndNotices = async () => {
+        let loadedBranches: any[] = []
+        try {
+          const { data: bList } = await supabase.from("branches").select("*").eq("is_active", true).order("name")
+          if (bList && bList.length > 0) {
+            loadedBranches = bList
+            setBranches(bList)
+          }
+        } catch {}
+
+        try {
+          const { data: n, error: nErr } = await supabase
+            .from("notices")
+            .select("*")
+            .eq("is_active", true)
+            .order("created_at", { ascending: false })
+            .limit(25)
+
+          if (!nErr && Array.isArray(n)) {
+            let noticeBranchesMap: Record<string, string[]> = {}
+            try {
+              const { data: nbSetting } = await supabase
+                .from("site_settings")
+                .select("value")
+                .eq("key", "notice_branch_assignments")
+                .maybeSingle()
+              if (nbSetting?.value) {
+                noticeBranchesMap = JSON.parse(nbSetting.value)
+              }
+            } catch {}
+
+            const enriched = n.map((item: any) => {
+              const extraBranchIds = noticeBranchesMap[item.id] || []
+              const branchIds = Array.isArray(item.branch_ids) && item.branch_ids.length > 0
+                ? item.branch_ids
+                : (extraBranchIds.length > 0 ? extraBranchIds : (item.branch_id ? [item.branch_id] : []))
+              const assignedBranches = (loadedBranches || []).filter((b: any) => branchIds.includes(b.id))
+              const branchNames = assignedBranches.map((b: any) => b.name)
+              return {
+                ...item,
+                branch_ids: branchIds,
+                branch: branchNames.length > 0 ? { name: branchNames.join(", ") } : null,
+              }
+            })
+            setNotices(enriched)
+          }
+        } catch {}
+      }
+
+      const fetchBatches = async () => {
+        try {
+          const { data: b } = await supabase
+            .from("batches")
+            .select("*, teacher:staff(name), branch:branches(name)")
+            .eq("is_active", true)
+            .order("created_at", { ascending: false })
+          if (b) setBatches(b)
+        } catch {}
+      }
+
+      const fetchCourses = async () => {
+        try {
+          const { data: c } = await supabase
+            .from("courses")
+            .select("*, teacher:staff(name)")
+            .eq("status", "published")
+            .order("total_sales", { ascending: false })
+            .limit(8)
+          if (c) setCourses(c)
+        } catch {}
+      }
+
+      const fetchStudentCount = async () => {
+        try {
+          const { count } = await supabase.from("students").select("id", { count: "exact", head: true }).eq("is_active", true)
+          if (count) setStudentCount(count)
+        } catch {}
+      }
+
+      const fetchSlides = async () => {
+        try {
+          const { data: s } = await supabase.from("slider_images").select("*").eq("is_active", true).order("sort_order")
+          if (s && s.length > 0) {
+            setSlides(s)
+          } else {
+            setSlides([
+              {
+                id: "def1",
+                title: "মেধাশিরী কোচিং সেন্টার",
+                subtitle: "এইচএসসি ও এসএসসি স্পেশাল মডেল টেস্ট ব্যাচে ভর্তি চলছে",
+                image_url: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1200&auto=format&fit=crop",
+              },
+              {
+                id: "def2",
+                title: "অভিজ্ঞ শিক্ষক মণ্ডলী ও আধুনিক ক্লাসরুম",
+                subtitle: "পরীক্ষামূলক ক্লাস ও সাপ্তাহিক মূল্যায়নের মাধ্যমে নিশ্চিত সাফল্য",
+                image_url: "https://images.unsplash.com/photo-1577896851231-70ef18881754?q=80&w=1200&auto=format&fit=crop",
+              },
+            ])
+          }
+        } catch {}
+      }
+
+      const fetchAchievements = async () => {
+        try {
+          const { data: a } = await supabase.from("achievements").select("*, branch:branches(name)").eq("is_active", true).order("sort_order", { ascending: true }).limit(8)
+          if (a && a.length > 0) {
+            setAchievements(a)
+          } else {
+            setAchievements([
+              {
+                id: "a1",
+                student_name: "তানভীর আহমেদ",
+                title: "রাজশাহী মেডিকেল কলেজ (চান্স প্রাপ্ত)",
+                description: "মেধাশিরী কোচিংয়ের নিয়মিত ক্লাস ও বিশেষ মডেল টেস্ট আমার মেডিকেল প্রস্তুতিতে সর্বোচ্চ ভূমিকা রেখেছে।",
+                exam_year: "২০২৫",
+              },
+              {
+                id: "a2",
+                student_name: "নুসরাত জাহান",
+                title: "এইচএসসি পরীক্ষায় গোল্ডেন জিপিএ ৫.০০",
+                description: "শিক্ষকদের আন্তরিক পাঠদান ও নিয়মিত পরীক্ষা ভীতি দূর করতে সাহায্য করেছে।",
+                exam_year: "২০২৫",
+              },
+              {
+                id: "a3",
+                student_name: "মাহমুদুল হাসান",
+                title: "রুয়েট (CSE) চান্স প্রাপ্ত",
+                description: "গণিত ও পদার্থবিজ্ঞানের কনসেপ্ট ক্লিয়ারিং ক্লাসের মাধ্যমে ইঞ্জিনিয়ারিং ভর্তি পরীক্ষায় সাফল্য পেয়েছি।",
+                exam_year: "২০২৪",
+              },
+            ])
+          }
+        } catch {}
+      }
+
+      const fetchBlogs = async () => {
+        try {
+          const { data: bl } = await supabase.from("blogs").select("*, branch:branches(name)").eq("is_published", true).order("published_at", { ascending: false }).limit(6)
+          if (bl && bl.length > 0) {
+            setBlogs(bl)
+          } else {
+            setBlogs([
+              {
+                id: "b1",
+                title: "এইচএসসি পদার্থবিজ্ঞান পরীক্ষায় এ+ পাওয়ার সহজ কৌশল",
+                excerpt: "পদার্থবিজ্ঞানে গাণিতিক সমস্যা সমাধান এবং সৃজনশীল অংশে সম্পূর্ণ নম্বর অর্জনের কার্যকর ফর্মুলা ও সময় বণ্টন গাইড।",
+                content: "পদার্থবিজ্ঞানে ভালো করতে হলে মুখস্থ করার চেয়ে কনসেপ্ট ক্লিয়ার থাকা সবচেয়ে জরুরি। নিয়মিত গাণিতিক সূত্রাবলি অনুশীলন এবং বোর্ড প্রশ্নের ধরন বিশ্লেষণ শিক্ষার্থীদের পরীক্ষার জন্য আত্মবিশ্বাসী করে তোলে...",
+                author_name: "মেধাশিরী একাডেমিক টিম",
+                created_at: new Date().toISOString(),
+                tags: ["এইচএসসি", "পদার্থবিজ্ঞান", "টিপস"],
+              },
+              {
+                id: "b2",
+                title: "মেডিকেল ভর্তি পরীক্ষার শেষ মুহূর্তের কার্যকর রিভিশন প্ল্যান",
+                excerpt: "প্রতিদিনের বিষয়ভিত্তিক টার্গেট নির্ধারণ এবং নেগেটিভ মার্কিং এড়ানোর মোক্ষম কৌশল নিয়ে বিশেষজ্ঞদের পরামর্শ।",
+                content: "মেডিকেল ভর্তি পরীক্ষার ক্ষেত্রে নির্ভুলতা অত্যন্ত গুরুত্বপূর্ণ। শেষ মাসগুলোতে নতুন কোনো টপিক পড়ার চেয়ে পূর্বে পড়া নোট এবং মডেল টেস্টের ভুলগুলো বারবার সংশোধন করা সবচেয়ে বেশি কাজে দেয়...",
+                author_name: "ডাঃ তাসনিম আহমেদ (পরামর্শক)",
+                created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+                tags: ["মেডিকেল", "অ্যাডমিশন", "পরামর্শ"],
+              },
+            ])
+          }
+        } catch {}
+      }
+
+      const fetchSettings = async () => {
+        try {
+          const { data: settings } = await supabase.from("site_settings").select("key, value")
+          if (settings && settings.length > 0) {
+            const getVal = (k: string) => settings.find((s: any) => s.key === k)?.value
+            if (getVal("contact_link")) setContactLink(getVal("contact_link")!)
+            if (getVal("contact_label")) setContactLabel(getVal("contact_label")!)
+            if (getVal("contact_phone")) setContactPhone(getVal("contact_phone")!)
+            if (getVal("contact_email")) setContactEmail(getVal("contact_email")!)
+            if (getVal("contact_address")) setContactAddress(getVal("contact_address")!)
+            if (getVal("footer_about")) setFooterAbout(getVal("footer_about")!)
+          }
+        } catch {}
+      }
+
+      const fetchPublicExams = async () => {
+        try {
+          const res = await fetch("/api/online-results")
+          const json = await res.json()
+          if (json.success && Array.isArray(json.exams)) {
+            setPublicExams(json.exams)
+          }
+        } catch (err) {
+          console.error("Error fetching online results for homepage:", err)
+        } finally {
+          setLoadingExams(false)
+        }
+      }
+
+      await Promise.allSettled([
+        fetchAuth(),
+        fetchBranchesAndNotices(),
+        fetchBatches(),
+        fetchCourses(),
+        fetchStudentCount(),
+        fetchSlides(),
+        fetchAchievements(),
+        fetchBlogs(),
+        fetchSettings(),
+        fetchPublicExams(),
+      ])
     }
 
     loadData()
@@ -392,6 +409,7 @@ export default function HomePage() {
             dayConfigMap[canonicalKey] = {
               key: canonicalKey,
               day_bn: matched?.bn || (isObj ? item.day_bn : rawKey),
+              day_en: matched?.en || (isObj ? item.day_en : rawKey),
               exam_name: (isObj ? item.exam_name : null) || `${matched?.bn || rawKey}ের পরীক্ষা`,
               subject: (isObj ? item.subject : null) || ex.subject || "",
               total_marks: Number(isObj ? item.total_marks : 50) || 50,
@@ -405,6 +423,7 @@ export default function HomePage() {
           return {
             key: w.id,
             day_bn: w.bn,
+            day_en: w.en,
             exam_name: `${w.bn}ের পরীক্ষা`,
             subject: ex.subject || "",
             total_marks: 50,
@@ -453,7 +472,14 @@ export default function HomePage() {
 
         // 2. FOR EACH PUBLISHED DAY: Add daily cards
         for (const dayConf of days) {
-          const isDayPub = pubDays.some((p) => p === dayConf.key.toLowerCase() || p === dayConf.day_bn.toLowerCase() || p === dayConf.day_en.toLowerCase())
+          const isDayPub = pubDays.some((p) => {
+            const pLower = String(p).toLowerCase()
+            return (
+              pLower === dayConf.key?.toLowerCase() ||
+              pLower === dayConf.day_bn?.toLowerCase() ||
+              (dayConf.day_en && pLower === dayConf.day_en.toLowerCase())
+            )
+          })
           if (isDayPub) {
             cards.push({
               id: `${ex.id}-day-${dayConf.key}`,

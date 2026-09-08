@@ -463,7 +463,14 @@ export default function OnlineResultPortalPage() {
 
         // 2. FOR EACH PUBLISHED DAY: Add a Daily Exam card
         for (const dayConf of days) {
-          const isDayPub = pubDays.some((p) => p === dayConf.key.toLowerCase() || p === dayConf.day_bn.toLowerCase() || p === dayConf.day_en.toLowerCase())
+          const isDayPub = pubDays.some((p) => {
+            const pLower = String(p).toLowerCase()
+            return (
+              pLower === dayConf.key?.toLowerCase() ||
+              pLower === dayConf.day_bn?.toLowerCase() ||
+              (dayConf.day_en && pLower === dayConf.day_en.toLowerCase())
+            )
+          })
           if (isDayPub) {
             items.push({
               id: `${ex.id}-day-${dayConf.key}`,
@@ -540,9 +547,9 @@ export default function OnlineResultPortalPage() {
     return (
       parsedWeeklyDays.find(
         (d) =>
-          d.key.toLowerCase() === lower ||
-          d.day_bn.toLowerCase() === lower ||
-          d.day_en.toLowerCase() === lower
+          d.key?.toLowerCase() === lower ||
+          d.day_bn?.toLowerCase() === lower ||
+          (d.day_en && d.day_en.toLowerCase() === lower)
       ) || null
     )
   }, [selectedDayKey, parsedWeeklyDays])
@@ -569,7 +576,16 @@ export default function OnlineResultPortalPage() {
         pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
       }
     }
-    return parsedWeeklyDays.filter((d) => pubDays.some((p) => p === d.key.toLowerCase() || p === d.day_bn.toLowerCase() || p === d.day_en.toLowerCase()))
+    return parsedWeeklyDays.filter((d) =>
+      pubDays.some((p) => {
+        const pLower = String(p).toLowerCase()
+        return (
+          pLower === d.key?.toLowerCase() ||
+          pLower === d.day_bn?.toLowerCase() ||
+          (d.day_en && pLower === d.day_en.toLowerCase())
+        )
+      })
+    )
   }, [selectedExam, parsedWeeklyDays])
 
   // Daily Exam Student Results (When viewing a specific published day)
