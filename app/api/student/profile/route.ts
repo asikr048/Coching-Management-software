@@ -538,8 +538,9 @@ export async function GET(req: NextRequest) {
 
     // 5b. Fetch scheduled batch exams & materials for enrolled batches
     const studentEnrolledBatchIds = Array.from(new Set([
-      ...enrollments.map((e: any) => e.batch_id).filter(Boolean),
+      ...enrollments.map((e: any) => e.batch_id || e.batch?.id).filter(Boolean),
       ...(primaryStudent?.batch_id ? [primaryStudent.batch_id] : []),
+      ...matchedStudents.map((s: any) => s.batch_id).filter(Boolean),
       ...subResults.flatMap((sr: any) => sr.data || []).filter((s: any) => s.batch_id).map((s: any) => s.batch_id),
     ]))
     const studentBatchIdSet = new Set(studentEnrolledBatchIds.map(String))
@@ -624,10 +625,12 @@ export async function GET(req: NextRequest) {
             }
           })
       }
-      if (mIssRes.data) materialIssues = mIssRes.data
+      if (mIssRes.data) {
+        materialIssues = mIssRes.data.filter((iss: any) => iss.status !== "returned" && iss.material != null)
+      }
 
       const rawMats = bMatsRes.data || []
-      const issuedMatIds = new Set(materialIssues.map((iss: any) => iss.material_id).filter(Boolean))
+      const issuedMatIds = new Set(materialIssues.map((iss: any) => String(iss.material_id)).filter(Boolean))
 
       const studentBranchIdSet = new Set(
         enrollments.map((e: any) => e.batch?.branch_id).filter(Boolean).map(String)
@@ -700,6 +703,14 @@ export async function GET(req: NextRequest) {
         }
 
         return false
+      }).map((m: any) => {
+        const iss = materialIssues.find((i: any) => String(i.material_id) === String(m.id))
+        return {
+          ...m,
+          is_received: !!iss,
+          issued_at: iss?.issued_at || null,
+          issue_record: iss || null,
+        }
       })
     } catch (extraErr) {
       console.warn("Scheduled exams & materials profile fetch notice:", extraErr)

@@ -312,81 +312,70 @@ export default function MaterialsClient({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             id: editingMaterial.id,
-            name: updatedMat.name,
-            type: updatedMat.type,
-            subject: updatedMat.subject,
+            name: formData.name.trim(),
+            type: formData.type,
+            subject: formData.subject.trim() || null,
             branch_id: finalBranchId,
             batch_id: primaryBatchId,
             batch_ids: formData.batch_ids,
-            total_stock: updatedMat.total_stock,
-            available_stock: updatedMat.available_stock,
-            price: updatedMat.price,
-            description: updatedMat.description
+            total_stock: Number(formData.total_stock),
+            available_stock: updatedAvailable,
+            price: Number(formData.price) || 0,
+            description: formData.description.trim() || null
           })
         })
         const data = await res.json()
         if (data?.material) {
           saveMaterials(materials.map(m => m.id === editingMaterial.id ? data.material : m))
+          toast.success("Material updated successfully!")
+        } else {
+          toast.error(data?.error || "Failed to update material")
+          return
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn("Could not update material via API:", err)
+        toast.error(err?.message || "Could not update material")
+        return
       }
-
-      toast.success("Material updated successfully!")
     } else {
-      // Create
-      const tempId = "mat_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6)
-      const tempMat: Material = {
-        id: tempId,
-        name: formData.name.trim(),
-        type: formData.type,
-        subject: formData.subject.trim() || null,
-        branch_id: finalBranchId,
-        batch_id: primaryBatchId,
-        batch_ids: formData.batch_ids,
-        total_stock: Number(formData.total_stock),
-        available_stock: Number(formData.total_stock),
-        price: Number(formData.price) || 0,
-        description: formData.description.trim() || null,
-        created_at: new Date().toISOString()
-      }
-
-      // Optimistic local insert
-      saveMaterials([tempMat, ...materials])
-
+      // Create with server-generated database UUID
       try {
         const res = await fetch("/api/materials/save", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: tempMat.name,
-            type: tempMat.type,
-            subject: tempMat.subject,
+            name: formData.name.trim(),
+            type: formData.type,
+            subject: formData.subject.trim() || null,
             branch_id: finalBranchId,
             batch_id: primaryBatchId,
             batch_ids: formData.batch_ids,
-            total_stock: tempMat.total_stock,
-            available_stock: tempMat.available_stock,
-            price: tempMat.price,
-            description: tempMat.description
+            total_stock: Number(formData.total_stock),
+            available_stock: Number(formData.total_stock),
+            price: Number(formData.price) || 0,
+            description: formData.description.trim() || null
           })
         })
         const data = await res.json()
         if (data?.material) {
-          saveMaterials([data.material, ...materials.filter(m => m.id !== tempId)])
+          saveMaterials([data.material, ...materials])
+          toast.success("New material added to batch successfully!")
+        } else {
+          toast.error(data?.error || "Failed to save material to database")
+          return
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn("Could not insert material via API:", err)
+        toast.error(err?.message || "Could not create material")
+        return
       }
-
-      toast.success("New material added successfully!")
     }
 
     setAddModalOpen(false)
   }
 
   const handleDeleteMaterial = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"? Any distribution logs will also be removed.`)) {
+    if (!confirm(`Are you sure you want to delete "${name}"? Any distribution logs will also be removed from student profiles.`)) {
       return
     }
 
@@ -396,19 +385,24 @@ export default function MaterialsClient({
     saveIssues(nextIssues)
 
     try {
-      await fetch("/api/materials/delete", {
+      const res = await fetch("/api/materials/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id })
+        body: JSON.stringify({ id, name })
       })
-    } catch (e) {
+      const data = await res.json()
+      if (data?.success) {
+        toast.success(`"${name}" deleted from batch and student profiles.`)
+      } else {
+        toast.error(data?.error || "Could not delete material from database")
+      }
+    } catch (e: any) {
       console.warn("Could not delete via API:", e)
       try {
         await supabase.from("materials").delete().eq("id", id)
       } catch {}
+      toast.success(`"${name}" deleted.`)
     }
-
-    toast.success(`"${name}" deleted from batch and student profiles.`)
   }
 
   // ==========================================
@@ -572,7 +566,7 @@ export default function MaterialsClient({
 
     // 3. Backend API insert
     try {
-      await fetch("/api/materials/distribute", {
+      const res = await fetch("/api/materials/distribute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -584,6 +578,19 @@ export default function MaterialsClient({
           notes: distributeNotes.trim() || undefined
         })
       })
+      const data = await res.json()
+      if (data?.success) {
+        if (data.issues && data.issues.length > 0) {
+          const insertedMap = new Map(data.issues.map((iss: any) => [iss.student_id, iss]))
+          const resolvedIssues = newIssues.map(i => {
+            const dbIss: any = insertedMap.get(i.student_id)
+            return dbIss ? { ...i, id: dbIss.id, issued_at: dbIss.issued_at } : i
+          })
+          saveIssues([...resolvedIssues, ...issues])
+        }
+      } else {
+        toast.error(data?.error || "Failed to record distribution")
+      }
     } catch (e) {
       console.warn("Could not save issues via API, falling back:", e)
       try {
@@ -677,7 +684,7 @@ export default function MaterialsClient({
     setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: Math.max(0, prev.available_stock - 1) } : null)
 
     try {
-      await fetch("/api/materials/distribute", {
+      const res = await fetch("/api/materials/distribute", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -689,6 +696,12 @@ export default function MaterialsClient({
           notes: "Quick distributed via Manager"
         })
       })
+      const data = await res.json()
+      if (data?.success && data?.issues && data.issues.length > 0) {
+        const dbIss = data.issues[0]
+        const resolvedIssue = { ...newIssue, id: dbIss.id, issued_at: dbIss.issued_at }
+        saveIssues([resolvedIssue, ...issues])
+      }
     } catch {
       try {
         await supabase.from("material_issues").insert({

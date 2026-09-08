@@ -6,9 +6,9 @@ import { createClient } from "@/lib/supabase/client"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { toast } from "sonner"
 import {
-  ArrowLeft, BookOpen, PlayCircle, CheckCircle2, Clock,
+  ArrowLeft, BookOpen, PlayCircle, CheckCircle2, CheckCircle, Clock,
   User, Award, Star, FileText, Video, Sparkles, AlertCircle,
-  Loader2, Check, ExternalLink, ShieldCheck
+  Loader2, Check, ExternalLink, ShieldCheck, Package
 } from "lucide-react"
 
 export default function StudentCoursePage() {
@@ -21,6 +21,8 @@ export default function StudentCoursePage() {
   const [contents, setContents] = useState<any[]>([])
   const [activeLesson, setActiveLesson] = useState<any>(null)
   const [purchaseInfo, setPurchaseInfo] = useState<any>(null)
+  const [materials, setMaterials] = useState<any[]>([])
+  const [materialIssues, setMaterialIssues] = useState<any[]>([])
   const [error, setError] = useState<string | null>(null)
 
   const supabase = createClient()
@@ -54,6 +56,12 @@ export default function StudentCoursePage() {
         }
 
         setPurchaseInfo(found)
+        if (Array.isArray(profileData.materials)) {
+          setMaterials(profileData.materials)
+        }
+        if (Array.isArray(profileData.materialIssues)) {
+          setMaterialIssues(profileData.materialIssues)
+        }
 
         // Fetch course details & lessons from Supabase
         const { data: courseData, error: cErr } = await supabase
@@ -238,6 +246,107 @@ export default function StudentCoursePage() {
                 </div>
               )}
             </div>
+
+            {/* Course Study Materials & Handouts Section */}
+            {(() => {
+              const receivedMatIds = new Set(
+                materialIssues
+                  .filter((mi: any) => mi.status !== "returned")
+                  .map((mi: any) => String(mi.material_id))
+                  .filter(Boolean)
+              )
+              const relevantMaterials = materials.filter((m: any) => {
+                if (m.course_id && (m.course_id === courseId || m.course_id === course?.id)) return true
+                if (course?.title && (m.subject?.toLowerCase() === course.title.toLowerCase() || m.name?.toLowerCase().includes(course.title.toLowerCase()))) return true
+                if (course?.batch_id && (m.batch_id === course.batch_id || (Array.isArray(m.batch_ids) && m.batch_ids.includes(course.batch_id)))) return true
+                if (course?.category && m.subject && m.subject.toLowerCase() === course.category.toLowerCase()) return true
+                return false
+              })
+
+              const receivedCount = relevantMaterials.filter((m: any) => receivedMatIds.has(String(m.id)) || m.is_received).length
+
+              return (
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-teal-100 flex items-center justify-center text-teal-700">
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="text-base font-bold text-gray-900">Course Study Materials & Handouts</h3>
+                        <p className="text-xs text-gray-500">Lecture sheets, books, and practice materials for this course</p>
+                      </div>
+                    </div>
+                    {relevantMaterials.length > 0 && (
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                        receivedCount > 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-teal-50 text-teal-700 border-teal-200"
+                      }`}>
+                        {receivedCount}/{relevantMaterials.length} Got
+                      </span>
+                    )}
+                  </div>
+
+                  {relevantMaterials.length === 0 ? (
+                    <div className="text-center py-6 text-gray-400 text-xs space-y-1">
+                      <Package className="w-8 h-8 mx-auto text-gray-300 mb-1" />
+                      <p className="font-semibold text-gray-600">No physical study materials assigned yet</p>
+                      <p className="text-gray-400">Class notes and study materials will appear here when distributed by the teacher.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-100">
+                      {relevantMaterials.map((m: any) => {
+                        const isReceived = receivedMatIds.has(String(m.id)) || m.is_received === true
+                        const issueRecord = materialIssues.find((mi: any) => String(mi.material_id) === String(m.id)) || m.issue_record
+
+                        return (
+                          <div key={m.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-bold text-gray-900 text-sm">{m.name}</span>
+                                {m.type && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 uppercase">
+                                    {m.type}
+                                  </span>
+                                )}
+                                {isReceived ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                                    <CheckCircle className="w-3 h-3 text-emerald-600" /> ✓ Got / Received (সংগৃহীত)
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
+                                    <Clock className="w-3 h-3 text-amber-600" /> Available (সংগ্রহ বাকি)
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 text-xs text-gray-500 flex-wrap">
+                                {m.subject && <span>Subject: <strong>{m.subject}</strong></span>}
+                                {isReceived && issueRecord?.issued_at && (
+                                  <span className="text-emerald-700 font-medium">Received on {formatDate(issueRecord.issued_at)}</span>
+                                )}
+                                {!isReceived && (
+                                  <span className="text-amber-700">🏢 Collect from coaching office</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {m.file_url && (
+                              <a
+                                href={m.file_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="self-start sm:self-center px-3 py-1 bg-white hover:bg-slate-50 text-slate-700 font-semibold rounded-xl text-xs border border-gray-200 transition-colors shadow-2xs flex items-center gap-1"
+                              >
+                                <FileText className="w-3 h-3 text-slate-500" /> Download
+                              </a>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Sidebar: Curriculum & Access Info (1 Column) */}

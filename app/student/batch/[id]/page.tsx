@@ -694,23 +694,6 @@ export default function StudentBatchDetailPage() {
               candidateMaterials = profileMaterials
             }
 
-            // Also check localStorage if available
-            try {
-              const localMatStr = localStorage.getItem("medhashiree_materials")
-              if (localMatStr) {
-                const localMats = JSON.parse(localMatStr)
-                if (Array.isArray(localMats)) {
-                  const existingIds = new Set(candidateMaterials.map((m: any) => m.id))
-                  for (const lm of localMats) {
-                    if (!existingIds.has(lm.id)) {
-                      candidateMaterials.push(lm)
-                      existingIds.add(lm.id)
-                    }
-                  }
-                }
-              }
-            } catch {}
-
             const bIdStr = String(batchId)
             const currentBatchName = batchData?.name || currentEnrollment?.batch?.name || ''
             const currentBranchId = batchData?.branch_id || currentEnrollment?.batch?.branch_id || ''

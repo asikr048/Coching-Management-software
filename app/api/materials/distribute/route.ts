@@ -17,12 +17,33 @@ export async function POST(req: NextRequest) {
     const admin = createAdminClient()
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-    // Gather student IDs
+    // Gather student IDs (supporting UUIDs, student codes, and phone numbers)
     let targetStudentIds: string[] = []
+    const rawIds: string[] = []
     if (Array.isArray(student_ids) && student_ids.length > 0) {
-      targetStudentIds = student_ids.filter(sid => uuidRegex.test(String(sid)))
-    } else if (student_id && uuidRegex.test(String(student_id))) {
-      targetStudentIds = [String(student_id)]
+      student_ids.forEach((sid: any) => {
+        if (sid) rawIds.push(String(sid).trim())
+      })
+    } else if (student_id) {
+      rawIds.push(String(student_id).trim())
+    }
+
+    const uuidList = rawIds.filter(id => uuidRegex.test(id))
+    const nonUuidList = rawIds.filter(id => !uuidRegex.test(id))
+    targetStudentIds = [...uuidList]
+
+    if (nonUuidList.length > 0) {
+      const { data: foundStudents } = await admin
+        .from("students")
+        .select("id")
+        .in("student_id", nonUuidList)
+      if (foundStudents) {
+        foundStudents.forEach((s: any) => {
+          if (s.id && !targetStudentIds.includes(s.id)) {
+            targetStudentIds.push(s.id)
+          }
+        })
+      }
     }
 
     if (targetStudentIds.length === 0) {
@@ -37,8 +58,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Fallback if material_id was a legacy id or title match
-    if (!targetMaterial && body.material_name) {
-      const { data } = await admin.from("materials").select("*").eq("name", body.material_name).maybeSingle()
+    const candidateName = body.material_name || body.name
+    if (!targetMaterial && candidateName) {
+      const { data } = await admin.from("materials").select("*").ilike("name", String(candidateName).trim()).maybeSingle()
       if (data) targetMaterial = data
     }
 

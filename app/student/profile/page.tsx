@@ -109,47 +109,6 @@ export default function StudentProfilePage() {
           let currentMaterials = data.materials || []
           let currentIssues = data.materialIssues || []
 
-          // Client-side local backup merge (if owner/admin created in same browser or offline sync)
-          try {
-            const localMatStr = localStorage.getItem("medhashiree_materials")
-            if (localMatStr) {
-              const localMats = JSON.parse(localMatStr)
-              if (Array.isArray(localMats)) {
-                const existingMatIds = new Set(currentMaterials.map((m: any) => m.id))
-                const enrolledBatchIds = new Set(data.enrollments?.map((e: any) => e.batch_id).filter(Boolean))
-                for (const lm of localMats) {
-                  if (!existingMatIds.has(lm.id)) {
-                    const isForBatch = !lm.batch_id || enrolledBatchIds.has(lm.batch_id) ||
-                      (Array.isArray(lm.batch_ids) && lm.batch_ids.some((bid: any) => enrolledBatchIds.has(bid)))
-                    if (isForBatch) {
-                      currentMaterials.push(lm)
-                      existingMatIds.add(lm.id)
-                    }
-                  }
-                }
-              }
-            }
-          } catch {}
-
-          // If currentMaterials is still empty, perform client-side direct query to Supabase as backup
-          if (currentMaterials.length === 0) {
-            try {
-              const { data: clientMats } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
-              if (clientMats && clientMats.length > 0) {
-                const enrolledBatchIds = new Set(data.enrollments?.map((e: any) => e.batch_id).filter(Boolean))
-                const matched = clientMats.filter((m: any) => {
-                  if (m.batch_id && enrolledBatchIds.has(m.batch_id)) return true
-                  if (Array.isArray(m.batch_ids) && m.batch_ids.some((bid: any) => enrolledBatchIds.has(bid))) return true
-                  if (!m.batch_id && (!m.batch_ids || m.batch_ids.length === 0)) return true
-                  return false
-                })
-                if (matched.length > 0) {
-                  currentMaterials = matched
-                }
-              }
-            } catch {}
-          }
-
           setMaterials(currentMaterials)
           setMaterialIssues(currentIssues)
 
@@ -221,6 +180,14 @@ export default function StudentProfilePage() {
     }
 
     loadStudentProfile()
+
+    const onWindowFocus = () => {
+      loadStudentProfile()
+    }
+    window.addEventListener("focus", onWindowFocus)
+    return () => {
+      window.removeEventListener("focus", onWindowFocus)
+    }
   }, [])
 
   function copyId() {
@@ -392,9 +359,14 @@ export default function StudentProfilePage() {
       }, 0) / examResults.length)
     : 0
 
-  const receivedMaterialIds = new Set(materialIssues.map((mi: any) => mi.material_id).filter(Boolean))
+  const receivedMaterialIds = new Set(
+    materialIssues
+      .filter((mi: any) => mi.status !== "returned")
+      .map((mi: any) => String(mi.material_id))
+      .filter(Boolean)
+  )
   const totalMaterials = materials.length
-  const receivedMaterialsCount = materials.filter((m: any) => receivedMaterialIds.has(m.id)).length
+  const receivedMaterialsCount = materials.filter((m: any) => receivedMaterialIds.has(String(m.id)) || m.is_received).length
 
   const inputClass = "w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
 
@@ -647,14 +619,28 @@ export default function StudentProfilePage() {
 
                         {/* Batch Study Materials Status Indicator */}
                         {(() => {
+                          const bIdStr = targetBatchId ? String(targetBatchId) : ""
                           const batchMatList = materials.filter((m: any) => {
-                            if (m.batch_id === targetBatchId) return true
-                            if (Array.isArray(m.batch_ids) && m.batch_ids.includes(targetBatchId)) return true
+                            if (bIdStr && m.batch_id && String(m.batch_id) === bIdStr) return true
+                            if (bIdStr && m.batch_ids) {
+                              if (Array.isArray(m.batch_ids) && m.batch_ids.some((bid: any) => String(bid) === bIdStr)) return true
+                              if (typeof m.batch_ids === "string") {
+                                try {
+                                  const parsed = JSON.parse(m.batch_ids)
+                                  if (Array.isArray(parsed) && parsed.some((bid: any) => String(bid) === bIdStr)) return true
+                                } catch {
+                                  if (m.batch_ids.includes(bIdStr)) return true
+                                }
+                              }
+                            }
                             if (b?.name && (m.batch_name?.toLowerCase() === b.name.toLowerCase() || m.subject?.toLowerCase() === b.name.toLowerCase())) return true
+                            const hasNoBatch = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
+                              (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]")
+                            if (hasNoBatch) return true
                             return false
                           })
                           if (batchMatList.length === 0) return null
-                          const receivedForBatch = batchMatList.filter((m: any) => receivedMaterialIds.has(m.id)).length
+                          const receivedForBatch = batchMatList.filter((m: any) => receivedMaterialIds.has(String(m.id)) || m.is_received).length
 
                           return (
                             <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
@@ -1448,7 +1434,7 @@ export default function StudentProfilePage() {
 
             {(() => {
               const filteredMaterials = materials.filter((m: any) => {
-                const isReceived = receivedMaterialIds.has(m.id)
+                const isReceived = receivedMaterialIds.has(String(m.id)) || m.is_received === true
                 if (materialFilter === 'received') return isReceived
                 if (materialFilter === 'pending') return !isReceived
                 return true
@@ -1471,8 +1457,8 @@ export default function StudentProfilePage() {
               return (
                 <div className="space-y-3">
                   {filteredMaterials.map((m: any) => {
-                    const isReceived = receivedMaterialIds.has(m.id)
-                    const issueRecord = materialIssues.find((mi: any) => mi.material_id === m.id)
+                    const isReceived = receivedMaterialIds.has(String(m.id)) || m.is_received === true
+                    const issueRecord = materialIssues.find((mi: any) => String(mi.material_id) === String(m.id)) || m.issue_record
                     const batchObj = enrollments.find((e: any) => 
                       e.batch_id === m.batch_id || 
                       (Array.isArray(m.batch_ids) && m.batch_ids.includes(e.batch_id))
