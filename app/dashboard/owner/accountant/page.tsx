@@ -17,13 +17,13 @@ export default async function AccountantDeskPage() {
   const [studentsRes, batchesRes, duesRes, paymentsRes, branchesRes] = await Promise.all([
     admin
       .from("students")
-      .select("*, enrollments(id, batch_id, status, created_at, batch:batches(id, name, monthly_fee, admission_fee, branch_id, class_level))")
+      .select("*, enrollments(id, batch_id, status, created_at, batch:batches(id, name, monthly_fee, admission_fee, branch_id, class_level, fee_type))")
       .eq("is_active", true)
       .order("name", { ascending: true }),
 
     admin
       .from("batches")
-      .select("id, name, monthly_fee, admission_fee, branch_id, class_level, current_seats, max_seats, is_active, status, branch:branches(id, name)")
+      .select("id, name, monthly_fee, admission_fee, branch_id, class_level, current_seats, max_seats, is_active, status, fee_type, branch:branches(id, name)")
       .eq("is_active", true)
       .order("name", { ascending: true }),
 
@@ -36,7 +36,7 @@ export default async function AccountantDeskPage() {
       .from("payments")
       .select("id, student_id, batch_id, amount, total_paid, payment_method, payment_for, payment_month, receipt_number, created_at, notes, student:students(name, student_id), batch:batches(name)")
       .order("created_at", { ascending: false })
-      .limit(100),
+      .limit(300),
 
     admin
       .from("branches")
