@@ -71,8 +71,12 @@ export async function middleware(request: NextRequest) {
     }
 
     const role = staff.role
+    // Accountant desk can be accessed by owner, super_manager, manager, and accountant
+    if (pathname.startsWith("/dashboard/owner/accountant") && !["owner", "super_manager", "manager", "accountant"].includes(role)) {
+      return NextResponse.redirect(new URL("/dashboard", request.url))
+    }
     // Owner, Super Manager, and Manager can access /dashboard/owner
-    if (pathname.startsWith("/dashboard/owner") && !["owner", "super_manager", "manager"].includes(role)) {
+    if (pathname.startsWith("/dashboard/owner") && !pathname.startsWith("/dashboard/owner/accountant") && !["owner", "super_manager", "manager"].includes(role)) {
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
     if (pathname.startsWith("/dashboard/accountant") && !["owner", "super_manager", "manager", "accountant"].includes(role)) {

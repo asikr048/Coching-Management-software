@@ -8,12 +8,13 @@ import {
   BarChart3, UserCheck, MessageSquare, Settings, ChevronLeft,
   ChevronRight, Package, Trophy, Fingerprint, ShoppingBag,
   DollarSign, GitMerge, Home, FileText, ImageIcon, Shield, ClipboardList,
-  X, Globe, Landmark, Sparkles, Bell
+  X, Globe, Landmark, Sparkles, Bell, Calculator
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
 
 const ownerNav = [
   { href: "/dashboard/owner", icon: LayoutDashboard, label: "Dashboard", exact: true },
+  { href: "/dashboard/owner/accountant", icon: Calculator, label: "Accountant Desk" },
   { href: "/dashboard/owner/branches", icon: Landmark, label: "Branches (শাখা)" },
   { href: "/dashboard/owner/students", icon: Users, label: "Students" },
   { href: "/dashboard/owner/batches", icon: BookOpen, label: "Batches" },
@@ -53,6 +54,7 @@ const teacherNav = [
 
 const accountantNav = [
   { href: "/dashboard/accountant", icon: LayoutDashboard, label: "Dashboard", exact: true },
+  { href: "/dashboard/owner/accountant", icon: Calculator, label: "Student Accounts & Billing" },
   { href: "/dashboard/accountant/payments", icon: CreditCard, label: "Payments" },
   { href: "/dashboard/accountant/fee-dues", icon: DollarSign, label: "Fee Dues" },
   { href: "/dashboard/accountant/reports", icon: BarChart3, label: "Reports" },
