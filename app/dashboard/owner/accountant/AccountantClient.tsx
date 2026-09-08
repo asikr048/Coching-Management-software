@@ -80,6 +80,9 @@ interface LedgerItem {
   status: "paid" | "partial" | "due"
   dueObj?: DueRow | null
   feeTypeLabel: string
+  referralAmount?: number
+  hasReferral?: boolean
+  referralNotes?: string | null
 }
 
 interface Props {
@@ -125,7 +128,8 @@ export default function AccountantClient({
   const [selectedBatchId, setSelectedBatchId] = useState<string>("all")
   const [batchTypeFilter, setBatchTypeFilter] = useState<"all" | "monthly" | "course">("all")
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
-  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "partial" | "due">("all")
+  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "partial" | "due" | "referral">("all")
+  const [historyMethodFilter, setHistoryMethodFilter] = useState<string>("all")
 
   // Multi-Selection State for Marked Rows
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set())
@@ -146,6 +150,8 @@ export default function AccountantClient({
   const [payDiscount, setPayDiscount] = useState<string>("0")
   const [payDueDate, setPayDueDate] = useState<string>("")
   const [payMethod, setPayMethod] = useState<string>("cash")
+  const [payReferralName, setPayReferralName] = useState<string>("")
+  const [payReferralReason, setPayReferralReason] = useState<string>("")
   const [payTransactionId, setPayTransactionId] = useState<string>("")
   const [payNotes, setPayNotes] = useState<string>("")
   const [paySubmitting, setPaySubmitting] = useState(false)
@@ -306,6 +312,21 @@ export default function AccountantClient({
           status = expectedAmount > 0 && dueAmount <= 0 ? "paid" : paidAmount > 0 ? "partial" : "due"
         }
 
+        // Calculate Referral amount paid for this student & batch
+        const referralPaymentsForThis = payments.filter(
+          (p) =>
+            p.student_id === st.id &&
+            p.batch_id === batch.id &&
+            p.payment_method === "referral" &&
+            (!isMonthly || p.payment_month === selectedMonth || !p.payment_month)
+        )
+        const referralAmount = referralPaymentsForThis.reduce(
+          (acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0),
+          0
+        )
+        const hasReferral = referralAmount > 0
+        const referralNotes = referralPaymentsForThis[0]?.notes || null
+
         const feeTypeLabel = isMonthly
           ? `Monthly (৳${batch.monthly_fee || 0}/mo)`
           : `Course Fee (৳${expectedAmount})`
@@ -322,6 +343,9 @@ export default function AccountantClient({
           status,
           dueObj,
           feeTypeLabel,
+          referralAmount,
+          hasReferral,
+          referralNotes,
         })
       }
     }
@@ -346,8 +370,10 @@ export default function AccountantClient({
       if (batchTypeFilter === "monthly" && !item.isMonthly) return false
       if (batchTypeFilter === "course" && item.isMonthly) return false
 
-      // 4. Status Filter
-      if (statusFilter !== "all" && item.status !== statusFilter) {
+      // 4. Status Filter (includes referral filter)
+      if (statusFilter === "referral") {
+        if (!item.hasReferral) return false
+      } else if (statusFilter !== "all" && item.status !== statusFilter) {
         return false
       }
 
@@ -373,6 +399,16 @@ export default function AccountantClient({
     let totalDue = 0
     let paidRowsCount = 0
     let dueRowsCount = 0
+    let totalReferralAmount = 0
+    let referralCount = 0
+
+    // Compute total referral across all payments
+    for (const p of payments) {
+      if (p.payment_method === "referral") {
+        totalReferralAmount += Number(p.total_paid ?? p.amount) || 0
+        referralCount++
+      }
+    }
 
     for (const item of filteredLedgerItems) {
       studentIdSet.add(item.student.id)
@@ -398,8 +434,10 @@ export default function AccountantClient({
       paidRowsCount,
       dueRowsCount,
       collectionRate,
+      totalReferralAmount,
+      referralCount,
     }
-  }, [filteredLedgerItems])
+  }, [filteredLedgerItems, payments])
 
   // Checkbox Selection Controls
   const isAllFilteredSelected = useMemo(() => {
@@ -418,6 +456,17 @@ export default function AccountantClient({
   const totalSelectedDue = useMemo(() => {
     return selectedItemsWithDue.reduce((sum, it) => sum + it.dueAmount, 0)
   }, [selectedItemsWithDue])
+
+  // Filter payments in History Tab by payment method
+  const displayedPayments = useMemo(() => {
+    if (historyMethodFilter === "all") return payments
+    return payments.filter((p) => {
+      if (historyMethodFilter === "referral") return p.payment_method === "referral"
+      if (historyMethodFilter === "cash") return p.payment_method === "cash"
+      if (historyMethodFilter === "online") return p.payment_method !== "cash" && p.payment_method !== "referral"
+      return p.payment_method === historyMethodFilter
+    })
+  }, [payments, historyMethodFilter])
 
   function handleToggleSelectAll() {
     if (isAllFilteredSelected) {
@@ -541,6 +590,8 @@ export default function AccountantClient({
     setPayDueDate(dueObj?.due_date || nextDue.toISOString().split("T")[0])
 
     setPayMethod("cash")
+    setPayReferralName("")
+    setPayReferralReason("")
     setPayTransactionId("")
     setPayNotes(
       resolvedType === "monthly"
@@ -635,6 +686,17 @@ export default function AccountantClient({
       return
     }
 
+    if (payMethod === "referral") {
+      if (!payReferralName.trim()) {
+        toast.error("Please enter the Referral Person Name or Student ID")
+        return
+      }
+      if (!payReferralReason.trim()) {
+        toast.error("Please enter the reason for the referral payment")
+        return
+      }
+    }
+
     setPaySubmitting(true)
     try {
       const netPaidNow = Math.max(0, amountNum - discountNum)
@@ -653,6 +715,14 @@ export default function AccountantClient({
       const now = new Date()
       const receiptNo = `RCP-${now.getFullYear()}-${Date.now().toString().slice(-6)}`
 
+      let finalNotes = payNotes.trim()
+      if (payMethod === "referral") {
+        const refPrefix = `Referral: ${payReferralName.trim()} | Reason: ${payReferralReason.trim()}`
+        finalNotes = finalNotes ? `${refPrefix} | ${finalNotes}` : refPrefix
+      }
+
+      const trxId = payTransactionId.trim() || (payMethod === "referral" ? `REF-${Date.now().toString().slice(-6)}` : null)
+
       // 1. Insert Payment Record
       const { data: payRecord, error: payErr } = await supabase
         .from("payments")
@@ -665,9 +735,9 @@ export default function AccountantClient({
           payment_method: payMethod,
           payment_for: payFeeType,
           payment_month: payFeeType === "monthly" ? payMonth : null,
-          transaction_id: payTransactionId.trim() || null,
+          transaction_id: trxId,
           receipt_number: receiptNo,
-          notes: payNotes.trim() || null,
+          notes: finalNotes || null,
         })
         .select("*, student:students(name, student_id), batch:batches(name)")
         .single()
@@ -772,7 +842,17 @@ export default function AccountantClient({
         setPayments((prev) => [payRecord, ...prev])
       }
 
-      if (remainingDue > 0) {
+      if (payMethod === "referral") {
+        if (remainingDue > 0) {
+          toast.success(
+            `Referral credit of ৳${netPaidNow} applied via ${payReferralName.trim()}! Remaining due: ৳${remainingDue} (Due date: ${effectiveDueDate})`
+          )
+        } else {
+          toast.success(
+            `Referral credit of ৳${netPaidNow} recorded via ${payReferralName.trim()} for ${payModalStudent.name}! (Full settlement)`
+          )
+        }
+      } else if (remainingDue > 0) {
         toast.success(
           `Payment of ৳${netPaidNow} recorded! New due of ৳${remainingDue} created (Due date: ${effectiveDueDate})`
         )
@@ -795,7 +875,9 @@ export default function AccountantClient({
         remainingDue: remainingDue,
         nextDueDate: remainingDue > 0 ? effectiveDueDate : null,
         method: payMethod,
-        transactionId: payTransactionId || "N/A",
+        referralName: payMethod === "referral" ? payReferralName.trim() : null,
+        referralReason: payMethod === "referral" ? payReferralReason.trim() : null,
+        transactionId: trxId || "N/A",
         date: new Date().toLocaleDateString("en-GB"),
         recordedBy: currentStaff.name,
       })
@@ -803,6 +885,8 @@ export default function AccountantClient({
       setPayModalStudent(null)
       setPayModalBatch(null)
       setPayModalDue(null)
+      setPayReferralName("")
+      setPayReferralReason("")
     } catch (err: any) {
       toast.error(err?.message || "Failed to record payment")
     } finally {
@@ -988,7 +1072,7 @@ export default function AccountantClient({
       {/* ========================================================================= */}
       {/* 2. FINANCIAL KPI STATS CARDS */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
         {/* Total Students */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center justify-between">
           <div>
@@ -1034,6 +1118,33 @@ export default function AccountantClient({
           </div>
           <div className="w-11 h-11 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center flex-shrink-0">
             <AlertCircle className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Total Referral Settled */}
+        <div
+          onClick={() => {
+            setStatusFilter(statusFilter === "referral" ? "all" : "referral")
+            setActiveTab("students")
+          }}
+          className={`p-4 rounded-2xl border shadow-xs flex items-center justify-between cursor-pointer transition-all hover:scale-[1.02] ${
+            statusFilter === "referral"
+              ? "bg-purple-100 border-purple-400 ring-2 ring-purple-400/40"
+              : "bg-white border-slate-200 hover:border-purple-300"
+          }`}
+          title="Click to filter students with referral payments"
+        >
+          <div>
+            <p className="text-xs font-bold text-purple-700 uppercase tracking-wider flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5 text-purple-600" /> Total Referral
+            </p>
+            <h3 className="text-2xl font-black text-purple-900 mt-1">{formatCurrency(stats.totalReferralAmount)}</h3>
+            <p className="text-[11px] text-purple-600 font-medium mt-0.5">
+              {stats.referralCount} referral settlement{stats.referralCount === 1 ? "" : "s"}
+            </p>
+          </div>
+          <div className="w-11 h-11 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center flex-shrink-0">
+            <Tag className="w-5 h-5" />
           </div>
         </div>
 
@@ -1171,6 +1282,7 @@ export default function AccountantClient({
               <option value="due">🔴 Due / Unpaid</option>
               <option value="partial">🟡 Partial Payment</option>
               <option value="paid">🟢 Fully Paid</option>
+              <option value="referral">🎁 Referral Payment ({formatCurrency(stats.totalReferralAmount)})</option>
             </select>
           </div>
         )}
@@ -1346,8 +1458,19 @@ export default function AccountantClient({
                         </td>
 
                         {/* Paid Amount */}
-                        <td className="px-4 py-3.5 font-bold text-emerald-600">
-                          {formatCurrency(item.paidAmount)}
+                        <td className="px-4 py-3.5">
+                          <p className="font-bold text-emerald-600">
+                            {formatCurrency(item.paidAmount)}
+                          </p>
+                          {item.hasReferral && (
+                            <div
+                              className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-black"
+                              title={item.referralNotes || "Referral Applied"}
+                            >
+                              <Sparkles className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                              <span>Referral: ৳{item.referralAmount}</span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Outstanding Due */}
@@ -1539,81 +1662,192 @@ export default function AccountantClient({
       {/* 6. TAB 3: RECENT PAYMENTS LOG */}
       {/* ========================================================================= */}
       {activeTab === "history" && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs sm:text-sm">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[11px] tracking-wider">
-                <tr>
-                  <th className="px-4 py-3.5">Receipt #</th>
-                  <th className="px-4 py-3.5">Student</th>
-                  <th className="px-4 py-3.5">Batch</th>
-                  <th className="px-4 py-3.5">Payment For</th>
-                  <th className="px-4 py-3.5">Month</th>
-                  <th className="px-4 py-3.5">Method</th>
-                  <th className="px-4 py-3.5">Paid Amount</th>
-                  <th className="px-4 py-3.5">Date</th>
-                  <th className="px-4 py-3.5 text-right">Voucher</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {payments.length === 0 ? (
+        <div className="space-y-4">
+          {/* Method Filter Pills & Summary */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1">Method Filter:</span>
+              <button
+                type="button"
+                onClick={() => setHistoryMethodFilter("all")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                  historyMethodFilter === "all"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                All Methods ({payments.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryMethodFilter("cash")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                  historyMethodFilter === "cash"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                💵 Cash
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryMethodFilter("online")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                  historyMethodFilter === "online"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                📱 bKash / Nagad / Online
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistoryMethodFilter("referral")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  historyMethodFilter === "referral"
+                    ? "bg-purple-700 text-white shadow-xs"
+                    : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200"
+                }`}
+              >
+                <span>🎁 Referral / Waiver</span>
+                <span
+                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-black ${
+                    historyMethodFilter === "referral"
+                      ? "bg-purple-900 text-purple-100"
+                      : "bg-purple-200 text-purple-800"
+                  }`}
+                >
+                  ৳{stats.totalReferralAmount}
+                </span>
+              </button>
+            </div>
+            <div className="text-xs text-slate-500 font-medium">
+              Showing <span className="font-bold text-slate-800">{displayedPayments.length}</span> payment records
+            </div>
+          </div>
+
+          {/* Payments Table */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs sm:text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase text-[11px] tracking-wider">
                   <tr>
-                    <td colSpan={9} className="text-center py-12 text-slate-400">
-                      No payments recorded yet
-                    </td>
+                    <th className="px-4 py-3.5">Receipt #</th>
+                    <th className="px-4 py-3.5">Student</th>
+                    <th className="px-4 py-3.5">Batch</th>
+                    <th className="px-4 py-3.5">Payment For</th>
+                    <th className="px-4 py-3.5">Month</th>
+                    <th className="px-4 py-3.5">Method</th>
+                    <th className="px-4 py-3.5">Paid Amount</th>
+                    <th className="px-4 py-3.5">Date</th>
+                    <th className="px-4 py-3.5 text-right">Voucher</th>
                   </tr>
-                ) : (
-                  payments.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs font-bold text-indigo-600">
-                        {p.receipt_number}
-                      </td>
-                      <td className="px-4 py-3 font-bold text-slate-900">{p.student?.name || "Student"}</td>
-                      <td className="px-4 py-3 font-medium text-slate-700">{p.batch?.name || "All Batches"}</td>
-                      <td className="px-4 py-3">
-                        <span className="capitalize px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200/60 rounded text-xs font-bold">
-                          {p.payment_for || "monthly"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 font-medium">{p.payment_month || "N/A"}</td>
-                      <td className="px-4 py-3">
-                        <span className="capitalize px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-bold">
-                          {p.payment_method}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-black text-emerald-600">
-                        {formatCurrency(p.total_paid || p.amount)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(p.created_at)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => {
-                            setReceiptData({
-                              receiptNumber: p.receipt_number,
-                              studentName: p.student?.name || "Student",
-                              studentId: p.student_id,
-                              batchName: p.batch?.name || "Fee",
-                              feeType: (p.payment_for || "monthly").toUpperCase(),
-                              month: p.payment_month || "N/A",
-                              amount: p.amount,
-                              discount: p.amount - (p.total_paid || p.amount),
-                              totalPaid: p.total_paid || p.amount,
-                              method: p.payment_method,
-                              date: formatDate(p.created_at),
-                              recordedBy: currentStaff.name,
-                            })
-                          }}
-                          className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
-                        >
-                          <Printer className="w-3 h-3" />
-                          <span>Print</span>
-                        </button>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {displayedPayments.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="text-center py-12 text-slate-400">
+                        No payments found for this filter
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    displayedPayments.map((p) => {
+                      const isReferral = p.payment_method === "referral"
+                      let refName: string | null = null
+                      let refReason: string | null = null
+                      if (p.notes) {
+                        const match = p.notes.match(/Referral:\s*([^|]+)(?:\s*\|\s*Reason:\s*([^|]+))?/)
+                        if (match) {
+                          refName = match[1]?.trim() || null
+                          refReason = match[2]?.trim() || null
+                        }
+                      }
+
+                      return (
+                        <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="px-4 py-3 font-mono text-xs font-bold text-indigo-600">
+                            {p.receipt_number}
+                          </td>
+                          <td className="px-4 py-3 font-bold text-slate-900">{p.student?.name || "Student"}</td>
+                          <td className="px-4 py-3 font-medium text-slate-700">{p.batch?.name || "All Batches"}</td>
+                          <td className="px-4 py-3">
+                            <span className="capitalize px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200/60 rounded text-xs font-bold">
+                              {p.payment_for || "monthly"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-slate-600 font-medium">{p.payment_month || "N/A"}</td>
+                          <td className="px-4 py-3">
+                            {isReferral ? (
+                              <div className="space-y-1">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-100 text-purple-800 rounded-md text-[11px] font-bold border border-purple-200">
+                                  <Sparkles className="w-3 h-3 text-purple-600" />
+                                  <span>Referral / Waiver</span>
+                                </span>
+                                {refName && (
+                                  <p className="text-[10px] text-purple-900 font-semibold truncate max-w-[160px]">
+                                    Ref: {refName}
+                                  </p>
+                                )}
+                                {refReason && (
+                                  <p className="text-[9px] text-purple-700 truncate max-w-[160px]">
+                                    {refReason}
+                                  </p>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="capitalize px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs font-bold">
+                                {p.payment_method}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`font-black ${
+                                isReferral ? "text-purple-700" : "text-emerald-600"
+                              }`}
+                            >
+                              {formatCurrency(p.total_paid || p.amount)}
+                            </span>
+                            {isReferral && (
+                              <span className="block text-[10px] text-purple-600 font-semibold">
+                                Referral Credit
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-slate-500 text-xs">{formatDate(p.created_at)}</td>
+                          <td className="px-4 py-3 text-right">
+                            <button
+                              onClick={() => {
+                                setReceiptData({
+                                  receiptNumber: p.receipt_number,
+                                  studentName: p.student?.name || "Student",
+                                  studentId: p.student_id,
+                                  batchName: p.batch?.name || "Fee",
+                                  feeType: (p.payment_for || "monthly").toUpperCase(),
+                                  month: p.payment_month || "N/A",
+                                  amount: p.amount,
+                                  discount: p.amount - (p.total_paid || p.amount),
+                                  totalPaid: p.total_paid || p.amount,
+                                  method: p.payment_method,
+                                  referralName: refName,
+                                  referralReason: refReason,
+                                  date: formatDate(p.created_at),
+                                  recordedBy: currentStaff.name,
+                                })
+                              }}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded text-xs font-bold transition-colors cursor-pointer inline-flex items-center gap-1"
+                            >
+                              <Printer className="w-3 h-3" />
+                              <span>Print</span>
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -1952,11 +2186,13 @@ export default function AccountantClient({
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 focus:outline-hidden focus:border-emerald-500 cursor-pointer"
                   >
                     <option value="cash">Cash (নগদ)</option>
-                    <option value="bkash">bKash</option>
-                    <option value="nagad">Nagad</option>
+                    <option value="bkash">bKash (বিকাশ)</option>
+                    <option value="nagad">Nagad (নগদ)</option>
+                    <option value="rocket">Rocket (রকেট)</option>
                     <option value="bank">Bank Transfer</option>
                     <option value="card">Card / POS</option>
                     <option value="online">Online Gateway</option>
+                    <option value="referral">🎁 Referral / Waiver (রেফারেল)</option>
                   </select>
                 </div>
 
@@ -1964,13 +2200,62 @@ export default function AccountantClient({
                   <label className="block text-xs font-bold text-slate-700 mb-1">TrxID / Reference</label>
                   <input
                     type="text"
-                    placeholder="e.g. 9X483KLS"
+                    placeholder={payMethod === "referral" ? "Auto-generated REF-..." : "e.g. 9X483KLS"}
                     value={payTransactionId}
                     onChange={(e) => setPayTransactionId(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-hidden focus:border-emerald-500"
                   />
                 </div>
               </div>
+
+              {/* Referral Details Inputs */}
+              {payMethod === "referral" && (
+                <div className="p-3.5 bg-purple-50/80 border border-purple-300 rounded-2xl space-y-3 animate-in fade-in duration-150 text-xs">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-purple-200/60">
+                    <span className="font-extrabold text-purple-900 flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-purple-600" />
+                      Referral Payment Details (রেফারেল তথ্য)
+                    </span>
+                    <span className="bg-purple-200/90 text-purple-900 px-2 py-0.5 rounded-md font-black text-[11px]">
+                      Referral Amount: ৳{Math.max(0, (parseFloat(payAmount) || 0) - (parseFloat(payDiscount) || 0))}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                        Referral Person / Student Name or ID <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={payReferralName}
+                        onChange={(e) => setPayReferralName(e.target.value)}
+                        placeholder="e.g. Rafiq Sir or Shakib (Roll 2401)"
+                        className="w-full px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-950 focus:outline-hidden focus:border-purple-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-purple-900 mb-1">
+                        Referral Reason / Note <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={payReferralReason}
+                        onChange={(e) => setPayReferralReason(e.target.value)}
+                        placeholder="e.g. Special teacher discount, Sibling concession"
+                        className="w-full px-2.5 py-1.5 bg-white border border-purple-300 rounded-xl text-xs font-bold text-purple-950 focus:outline-hidden focus:border-purple-600"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-purple-700 font-medium leading-relaxed">
+                    ✨ This referral credit amount (৳{Math.max(0, (parseFloat(payAmount) || 0) - (parseFloat(payDiscount) || 0))}) will be automatically tracked in the accounting ledger, under the Total Referral KPI, and on student records.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Receipt Memo / Note</label>
@@ -2350,8 +2635,34 @@ export default function AccountantClient({
                 )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Payment Mode:</span>
-                  <span className="uppercase font-bold text-slate-700">{receiptData.method}</span>
+                  <span
+                    className={`uppercase font-bold ${
+                      receiptData.method === "referral" ? "text-purple-700" : "text-slate-700"
+                    }`}
+                  >
+                    {receiptData.method === "referral" ? "🎁 Referral / Waiver (রেফারেল)" : receiptData.method}
+                  </span>
                 </div>
+                {receiptData.referralName && (
+                  <div className="bg-purple-50 border border-purple-200 rounded-xl p-2.5 my-1.5 space-y-1 text-purple-950">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-purple-800">
+                      <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                      <span>Referral Waiver Details (রেফারেল তথ্য)</span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-purple-700 font-medium">Referred By:</span>
+                      <span className="font-bold text-purple-900">{receiptData.referralName}</span>
+                    </div>
+                    {receiptData.referralReason && (
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-purple-700 font-medium">Reason / Note:</span>
+                        <span className="font-medium text-purple-900 text-right max-w-[200px] truncate">
+                          {receiptData.referralReason}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-slate-500">Date:</span>
                   <span className="text-slate-700">{receiptData.date}</span>
@@ -2376,8 +2687,10 @@ export default function AccountantClient({
                   </div>
                 )}
                 <div className="flex justify-between items-center text-sm font-black text-slate-900 border-t border-slate-200/60 pt-1">
-                  <span>Total Paid Now:</span>
-                  <span className="text-emerald-600 text-base">৳{receiptData.totalPaid}</span>
+                  <span>{receiptData.method === "referral" ? "Referral Credit Applied:" : "Total Paid Now:"}</span>
+                  <span className={`${receiptData.method === "referral" ? "text-purple-700" : "text-emerald-600"} text-base`}>
+                    ৳{receiptData.totalPaid}
+                  </span>
                 </div>
                 {receiptData.remainingDue > 0 ? (
                   <div className="bg-rose-50 border border-rose-200 rounded-xl p-2 space-y-1 mt-1 text-rose-800">
