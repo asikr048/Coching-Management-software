@@ -29,7 +29,7 @@ export default async function AccountantDeskPage() {
 
     admin
       .from("fee_dues")
-      .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, branch_id, batch:batches(id, name, monthly_fee)")
+      .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
       .order("due_date", { ascending: false }),
 
     admin

@@ -107,7 +107,6 @@ async function handleGenerate(req: NextRequest) {
         paid_amount: 0,
         due_date: targetDueDate,
         status: "pending",
-        branch_id: batch.branch_id || enr.branch_id || null,
       })
 
       totalBilled += monthlyAmt

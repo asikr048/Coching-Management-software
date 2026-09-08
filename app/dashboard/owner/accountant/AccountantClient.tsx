@@ -137,7 +137,7 @@ export default function AccountantClient({
           // Refresh dues list
           const { data: updatedDues } = await supabase
             .from("fee_dues")
-            .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, branch_id, batch:batches(id, name, monthly_fee)")
+            .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
             .order("due_date", { ascending: false })
           if (updatedDues) {
             setDues(updatedDues)
@@ -170,7 +170,7 @@ export default function AccountantClient({
       // Re-fetch dues from DB
       const { data: refreshedDues } = await supabase
         .from("fee_dues")
-        .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, branch_id, batch:batches(id, name, monthly_fee)")
+        .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
         .order("due_date", { ascending: false })
 
       if (refreshedDues) setDues(refreshedDues)
@@ -383,7 +383,7 @@ export default function AccountantClient({
             status: newStatus,
           })
           .eq("id", existingDue.id)
-          .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, branch_id, batch:batches(id, name, monthly_fee)")
+          .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
           .single()
 
         if (updErr) throw updErr
@@ -405,9 +405,8 @@ export default function AccountantClient({
             paid_amount: totalPaid,
             due_date: targetDueDate,
             status: status,
-            branch_id: payModalBatch.branch_id || payModalStudent.branch_id || null,
           })
-          .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, branch_id, batch:batches(id, name, monthly_fee)")
+          .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name, monthly_fee)")
           .single()
 
         if (insErr) throw insErr
