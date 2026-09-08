@@ -1,14 +1,21 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import MaterialsClient from "./MaterialsClient"
 
 export default async function MaterialsPage() {
   const supabase = await createClient()
+  const admin = createAdminClient()
 
   // 1. Materials
   let materials: any[] = []
   try {
-    const { data } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
-    if (data && data.length > 0) materials = data
+    const { data } = await admin.from("materials").select("*").order("created_at", { ascending: false })
+    if (data && data.length > 0) {
+      materials = data
+    } else {
+      const { data: cData } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
+      if (cData && cData.length > 0) materials = cData
+    }
   } catch (e) {
     console.warn("Could not load materials from supabase:", e)
   }
@@ -16,11 +23,19 @@ export default async function MaterialsPage() {
   // 2. Material issues
   let issues: any[] = []
   try {
-    const { data } = await supabase
+    const { data } = await admin
       .from("material_issues")
       .select("*, student:students(id, name, student_id, phone), batch:batches(id, name)")
       .order("issued_at", { ascending: false })
-    if (data && data.length > 0) issues = data
+    if (data && data.length > 0) {
+      issues = data
+    } else {
+      const { data: cIssues } = await supabase
+        .from("material_issues")
+        .select("*, student:students(id, name, student_id, phone), batch:batches(id, name)")
+        .order("issued_at", { ascending: false })
+      if (cIssues && cIssues.length > 0) issues = cIssues
+    }
   } catch (e) {
     console.warn("Could not load material_issues from supabase:", e)
   }

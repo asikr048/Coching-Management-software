@@ -627,7 +627,6 @@ export async function GET(req: NextRequest) {
       if (mIssRes.data) materialIssues = mIssRes.data
 
       const rawMats = bMatsRes.data || []
-      const studentBatchIdSet = new Set(studentEnrolledBatchIds.map(String))
       const issuedMatIds = new Set(materialIssues.map((iss: any) => iss.material_id).filter(Boolean))
 
       const studentBranchIdSet = new Set(
@@ -638,6 +637,15 @@ export async function GET(req: NextRequest) {
       const enrolledBatchNames = new Set(
         enrollments.map((e: any) => e.batch?.name).filter(Boolean).map(n => String(n).trim().toLowerCase())
       )
+
+      // Collect any enrolled or purchased course IDs and titles
+      const enrolledCourseIdSet = new Set<string>()
+      const enrolledCourseTitles = new Set<string>()
+      const allCoursePurchases = [ ...(cpSidResult?.data || []), ...(cpEmailResult?.data || []) ]
+      allCoursePurchases.forEach((cp: any) => {
+        if (cp.course_id) enrolledCourseIdSet.add(String(cp.course_id))
+        if (cp.course?.title) enrolledCourseTitles.add(String(cp.course.title).trim().toLowerCase())
+      })
 
       batchMaterials = rawMats.filter((m: any) => {
         // 1. If student was issued this material directly, always show
@@ -667,13 +675,21 @@ export async function GET(req: NextRequest) {
           if (Array.isArray(m.batch_names) && m.batch_names.some((bn: any) => enrolledBatchNames.has(String(bn).trim().toLowerCase()))) return true
         }
 
-        // 4. If material has NO specific batch specified (general batch material)
+        // 3.8. Course Match (for online course materials)
+        if (m.course_id && enrolledCourseIdSet.has(String(m.course_id))) return true
+        if (enrolledCourseTitles.size > 0) {
+          if (m.subject && enrolledCourseTitles.has(String(m.subject).trim().toLowerCase())) return true
+          if (m.name && Array.from(enrolledCourseTitles).some(ct => m.name.toLowerCase().includes(ct))) return true
+        }
+
+        // 4. If material has NO specific batch or course specified (general batch material)
         const hasNoBatch = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
-          (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]")
+          (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]") &&
+          !m.course_id
 
         if (hasNoBatch) {
-          if (m.branch_id) {
-            return studentBranchIdSet.size === 0 || studentBranchIdSet.has(String(m.branch_id))
+          if (m.branch_id && studentBranchIdSet.size > 0) {
+            return studentBranchIdSet.has(String(m.branch_id))
           }
           return true
         }

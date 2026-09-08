@@ -317,7 +317,7 @@ export default function AccountantClient({
           (p) =>
             p.student_id === st.id &&
             p.batch_id === batch.id &&
-            p.payment_method === "referral" &&
+            (p.payment_method === "referral" || (p.notes && p.notes.includes("Referral:"))) &&
             (!isMonthly || p.payment_month === selectedMonth || !p.payment_month)
         )
         const referralAmount = referralPaymentsForThis.reduce(

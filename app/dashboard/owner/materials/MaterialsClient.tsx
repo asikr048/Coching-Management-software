@@ -149,6 +149,57 @@ export default function MaterialsClient({
     } catch {}
   }
 
+  // Auto-sync legacy localStorage materials with backend database so valid UUIDs are assigned
+  useEffect(() => {
+    async function syncLegacyMaterials() {
+      const dbIds = new Set(initialMaterials.map(m => m.id))
+      const unsyncedMats = materials.filter(m => !dbIds.has(m.id) || String(m.id).startsWith("mat_"))
+      if (unsyncedMats.length === 0) return
+
+      for (const lm of unsyncedMats) {
+        try {
+          const res = await fetch("/api/materials/save", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(lm)
+          })
+          if (res.ok) {
+            const data = await res.json()
+            if (data.material) {
+              setMaterials(prev => {
+                const updated = prev.map(m => m.id === lm.id ? data.material : m)
+                try { localStorage.setItem("medhashiree_materials", JSON.stringify(updated)) } catch {}
+                return updated
+              })
+            }
+          }
+        } catch (syncErr) {
+          console.warn("Syncing legacy material note:", syncErr)
+        }
+      }
+
+      // Also sync any local distribution issues
+      const legacyIssues = issues.filter(i => i.id && String(i.id).startsWith("issue_"))
+      for (const li of legacyIssues) {
+        try {
+          await fetch("/api/materials/distribute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              material_id: li.material_id,
+              student_ids: [li.student_id],
+              batch_id: li.batch_id,
+              issued_by: li.issued_by,
+              notes: li.notes,
+            })
+          })
+        } catch {}
+      }
+    }
+
+    syncLegacyMaterials()
+  }, [])
+
   // Filters
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedType, setSelectedType] = useState<string>("all")
@@ -251,32 +302,42 @@ export default function MaterialsClient({
         description: formData.description.trim() || null
       }
 
+      // Optimistic local update
       const next = materials.map(m => m.id === editingMaterial.id ? updatedMat : m)
       saveMaterials(next)
 
       try {
-        await supabase.from("materials").update({
-          name: updatedMat.name,
-          type: updatedMat.type,
-          subject: updatedMat.subject,
-          branch_id: finalBranchId,
-          batch_id: primaryBatchId,
-          batch_ids: formData.batch_ids,
-          total_stock: updatedMat.total_stock,
-          available_stock: updatedMat.available_stock,
-          price: updatedMat.price,
-          description: updatedMat.description
-        }).eq("id", editingMaterial.id)
+        const res = await fetch("/api/materials/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: editingMaterial.id,
+            name: updatedMat.name,
+            type: updatedMat.type,
+            subject: updatedMat.subject,
+            branch_id: finalBranchId,
+            batch_id: primaryBatchId,
+            batch_ids: formData.batch_ids,
+            total_stock: updatedMat.total_stock,
+            available_stock: updatedMat.available_stock,
+            price: updatedMat.price,
+            description: updatedMat.description
+          })
+        })
+        const data = await res.json()
+        if (data?.material) {
+          saveMaterials(materials.map(m => m.id === editingMaterial.id ? data.material : m))
+        }
       } catch (err) {
-        console.warn("Could not update material in database:", err)
+        console.warn("Could not update material via API:", err)
       }
 
       toast.success("Material updated successfully!")
     } else {
       // Create
-      const newId = "mat_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6)
-      const newMat: Material = {
-        id: newId,
+      const tempId = "mat_" + Date.now().toString(36) + "_" + Math.random().toString(36).substring(2, 6)
+      const tempMat: Material = {
+        id: tempId,
         name: formData.name.trim(),
         type: formData.type,
         subject: formData.subject.trim() || null,
@@ -290,25 +351,32 @@ export default function MaterialsClient({
         created_at: new Date().toISOString()
       }
 
-      const next = [newMat, ...materials]
-      saveMaterials(next)
+      // Optimistic local insert
+      saveMaterials([tempMat, ...materials])
 
       try {
-        await supabase.from("materials").insert({
-          id: newMat.id.startsWith("mat_") ? undefined : newMat.id,
-          name: newMat.name,
-          type: newMat.type,
-          subject: newMat.subject,
-          branch_id: finalBranchId,
-          batch_id: primaryBatchId,
-          batch_ids: formData.batch_ids,
-          total_stock: newMat.total_stock,
-          available_stock: newMat.available_stock,
-          price: newMat.price,
-          description: newMat.description
+        const res = await fetch("/api/materials/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: tempMat.name,
+            type: tempMat.type,
+            subject: tempMat.subject,
+            branch_id: finalBranchId,
+            batch_id: primaryBatchId,
+            batch_ids: formData.batch_ids,
+            total_stock: tempMat.total_stock,
+            available_stock: tempMat.available_stock,
+            price: tempMat.price,
+            description: tempMat.description
+          })
         })
+        const data = await res.json()
+        if (data?.material) {
+          saveMaterials([data.material, ...materials.filter(m => m.id !== tempId)])
+        }
       } catch (err) {
-        console.warn("Could not insert material to database:", err)
+        console.warn("Could not insert material via API:", err)
       }
 
       toast.success("New material added successfully!")
@@ -328,12 +396,19 @@ export default function MaterialsClient({
     saveIssues(nextIssues)
 
     try {
-      await supabase.from("materials").delete().eq("id", id)
+      await fetch("/api/materials/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id })
+      })
     } catch (e) {
-      console.warn("Could not delete from supabase:", e)
+      console.warn("Could not delete via API:", e)
+      try {
+        await supabase.from("materials").delete().eq("id", id)
+      } catch {}
     }
 
-    toast.success("Material deleted.")
+    toast.success(`"${name}" deleted from batch and student profiles.`)
   }
 
   // ==========================================
@@ -495,24 +570,34 @@ export default function MaterialsClient({
     })
     saveMaterials(nextMaterials)
 
-    // 3. Supabase insert
+    // 3. Backend API insert
     try {
-      const rowsToInsert = newIssues.map(i => ({
-        material_id: i.material_id,
-        student_id: i.student_id,
-        batch_id: i.batch_id,
-        issued_by: currentStaff.id.startsWith("admin") ? undefined : currentStaff.id,
-        issued_at: i.issued_at,
-        status: "issued",
-        notes: i.notes
-      }))
-      await supabase.from("material_issues").insert(rowsToInsert)
-
-      await supabase.from("materials").update({
-        available_stock: Math.max(0, distributeMaterial.available_stock - countToIssue)
-      }).eq("id", distributeMaterial.id)
+      await fetch("/api/materials/distribute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          material_id: distributeMaterial.id,
+          material_name: distributeMaterial.name,
+          student_ids: Array.from(distributeSelectedStudentIds),
+          batch_id: distributeSelectedBatchIds[0] || distributeMaterial.batch_id,
+          issued_by: currentStaff.id,
+          notes: distributeNotes.trim() || undefined
+        })
+      })
     } catch (e) {
-      console.warn("Could not save issues to supabase:", e)
+      console.warn("Could not save issues via API, falling back:", e)
+      try {
+        const rowsToInsert = newIssues.map(i => ({
+          material_id: i.material_id,
+          student_id: i.student_id,
+          batch_id: i.batch_id,
+          issued_by: currentStaff.id.startsWith("admin") ? undefined : currentStaff.id,
+          issued_at: i.issued_at,
+          status: "issued",
+          notes: i.notes
+        }))
+        await supabase.from("material_issues").insert(rowsToInsert)
+      } catch {}
     }
 
     toast.success(`✓ Distributed ${countToIssue} copies of "${distributeMaterial.name}" across selected batches!`)
@@ -592,18 +677,30 @@ export default function MaterialsClient({
     setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: Math.max(0, prev.available_stock - 1) } : null)
 
     try {
-      await supabase.from("material_issues").insert({
-        material_id: whoGotItMaterial.id,
-        student_id: student.id,
-        batch_id: enrolledBatch,
-        issued_by: currentStaff.id.startsWith("admin") ? undefined : currentStaff.id,
-        status: "issued",
-        notes: "Quick distributed"
+      await fetch("/api/materials/distribute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          material_id: whoGotItMaterial.id,
+          material_name: whoGotItMaterial.name,
+          student_ids: [student.id],
+          batch_id: enrolledBatch,
+          issued_by: currentStaff.id,
+          notes: "Quick distributed via Manager"
+        })
       })
-      await supabase.from("materials").update({
-        available_stock: Math.max(0, whoGotItMaterial.available_stock - 1)
-      }).eq("id", whoGotItMaterial.id)
-    } catch {}
+    } catch {
+      try {
+        await supabase.from("material_issues").insert({
+          material_id: whoGotItMaterial.id,
+          student_id: student.id,
+          batch_id: enrolledBatch,
+          issued_by: currentStaff.id.startsWith("admin") ? undefined : currentStaff.id,
+          status: "issued",
+          notes: "Quick distributed"
+        })
+      } catch {}
+    }
 
     toast.success(`✓ Marked ${student.name} as received.`)
   }
@@ -625,11 +722,19 @@ export default function MaterialsClient({
     setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: prev.available_stock + 1 } : null)
 
     try {
-      await supabase.from("material_issues").delete().eq("id", issueId)
-      await supabase.from("materials").update({
-        available_stock: whoGotItMaterial.available_stock + 1
-      }).eq("id", whoGotItMaterial.id)
-    } catch {}
+      await fetch("/api/materials/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          issue_id: issueId,
+          material_id: whoGotItMaterial.id
+        })
+      })
+    } catch {
+      try {
+        await supabase.from("material_issues").delete().eq("id", issueId)
+      } catch {}
+    }
 
     toast.info(`Revoked distribution for ${studentName}. 1 unit restored to stock.`)
   }

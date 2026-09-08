@@ -645,6 +645,37 @@ export default function StudentProfilePage() {
                           </div>
                         )}
 
+                        {/* Batch Study Materials Status Indicator */}
+                        {(() => {
+                          const batchMatList = materials.filter((m: any) => {
+                            if (m.batch_id === targetBatchId) return true
+                            if (Array.isArray(m.batch_ids) && m.batch_ids.includes(targetBatchId)) return true
+                            if (b?.name && (m.batch_name?.toLowerCase() === b.name.toLowerCase() || m.subject?.toLowerCase() === b.name.toLowerCase())) return true
+                            return false
+                          })
+                          if (batchMatList.length === 0) return null
+                          const receivedForBatch = batchMatList.filter((m: any) => receivedMaterialIds.has(m.id)).length
+
+                          return (
+                            <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                              <span className={`font-semibold flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${
+                                receivedForBatch > 0 
+                                  ? "text-emerald-700 bg-emerald-50 border-emerald-200 shadow-2xs" 
+                                  : "text-amber-700 bg-amber-50 border-amber-200"
+                              }`}>
+                                <Package className="w-3.5 h-3.5 shrink-0" />
+                                <span>Study Materials:</span>
+                                <strong>
+                                  {receivedForBatch}/{batchMatList.length} {receivedForBatch === batchMatList.length ? "Got" : "Received"}
+                                </strong>
+                              </span>
+                              <span className="text-[11px] text-gray-400 font-medium">
+                                {batchMatList.length} {batchMatList.length === 1 ? "item" : "items"}
+                              </span>
+                            </div>
+                          )
+                        })()}
+
                         <div className="flex items-center justify-end text-xs text-indigo-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity pt-1">
                           View Details <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
                         </div>
@@ -770,6 +801,29 @@ export default function StudentProfilePage() {
                             </p>
                           </div>
                         </div>
+
+                        {/* Course Study Materials Indicator if applicable */}
+                        {(() => {
+                          const courseMatList = materials.filter((m: any) => {
+                            if (m.course_id === item.course_id || m.course_id === c.id) return true
+                            if (c.title && (m.subject?.toLowerCase() === c.title.toLowerCase() || m.name?.toLowerCase().includes(c.title.toLowerCase()))) return true
+                            return false
+                          })
+                          if (courseMatList.length === 0) return null
+                          const receivedForCourse = courseMatList.filter((m: any) => receivedMaterialIds.has(m.id)).length
+
+                          return (
+                            <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
+                              <span className={`font-semibold flex items-center gap-1.5 px-2 py-0.5 rounded-md border ${
+                                receivedForCourse > 0 ? "text-emerald-700 bg-emerald-50 border-emerald-200" : "text-purple-700 bg-purple-50 border-purple-200"
+                              }`}>
+                                <Package className="w-3.5 h-3.5" />
+                                <span>Materials:</span>
+                                <strong>{receivedForCourse}/{courseMatList.length} Got</strong>
+                              </span>
+                            </div>
+                          )
+                        })()}
 
                         <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-xs">
                           <span className="text-gray-400">
