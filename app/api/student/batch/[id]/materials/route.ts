@@ -113,12 +113,14 @@ export async function GET(
     const candidateCodes = new Set<string>()
     const candidateEmails = new Set<string>()
     const candidatePhones = new Set<string>()
+    const studentNames = new Set<string>()
 
-    // Accept student_id, code, email, and phone directly from query parameters if provided
+    // Accept student_id, code, email, phone, and name directly from query parameters if provided
     const paramStudentId = req.nextUrl.searchParams.get("student_id")
     const paramCode = req.nextUrl.searchParams.get("code")
     const paramEmail = req.nextUrl.searchParams.get("email")
     const paramPhone = req.nextUrl.searchParams.get("phone")
+    const paramName = req.nextUrl.searchParams.get("name")
 
     if (paramStudentId) {
       const s = paramStudentId.trim()
@@ -128,20 +130,34 @@ export async function GET(
     if (paramCode) candidateCodes.add(paramCode.trim())
     if (paramEmail) candidateEmails.add(paramEmail.trim().toLowerCase())
     if (paramPhone) candidatePhones.add(paramPhone.trim())
+    if (paramName) studentNames.add(paramName.trim().toLowerCase())
 
     try {
       const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        if (uuidRegex.test(user.id)) candidateStudentUuids.add(user.id)
         if (user.email) candidateEmails.add(user.email.trim().toLowerCase())
         if (user.user_metadata?.phone) candidatePhones.add(String(user.user_metadata.phone).trim())
         if (user.user_metadata?.user_id) candidateCodes.add(String(user.user_metadata.user_id).trim())
+        if (user.user_metadata?.full_name) studentNames.add(String(user.user_metadata.full_name).trim().toLowerCase())
 
-        const { data: up } = await admin.from("user_profiles").select("user_id, email, phone").eq("auth_user_id", user.id).maybeSingle()
+        const { data: up } = await admin.from("user_profiles").select("user_id, email, phone, name").eq("auth_user_id", user.id).maybeSingle()
         if (up?.user_id) candidateCodes.add(String(up.user_id).trim())
         if (up?.email) candidateEmails.add(String(up.email).trim().toLowerCase())
         if (up?.phone) candidatePhones.add(String(up.phone).trim())
+        if (up?.name) studentNames.add(String(up.name).trim().toLowerCase())
+
+        // Directly query students by auth_user_id
+        const { data: authStudents } = await admin.from("students").select("id, student_id, email, phone, name, batch_id").eq("auth_user_id", user.id)
+        if (authStudents) {
+          authStudents.forEach((s: any) => {
+            if (s.id && uuidRegex.test(s.id)) candidateStudentUuids.add(s.id)
+            if (s.student_id) candidateCodes.add(s.student_id.trim())
+            if (s.phone) candidatePhones.add(s.phone.trim())
+            if (s.email) candidateEmails.add(s.email.trim().toLowerCase())
+            if (s.name) studentNames.add(s.name.trim().toLowerCase())
+          })
+        }
       }
     } catch {}
 
@@ -149,23 +165,23 @@ export async function GET(
     const lookupQueries: any[] = []
     if (candidateStudentUuids.size > 0) {
       lookupQueries.push(
-        admin.from("students").select("id, student_id, email, phone, auth_user_id").in("id", Array.from(candidateStudentUuids))
+        admin.from("students").select("id, student_id, email, phone, name, auth_user_id, batch_id").in("id", Array.from(candidateStudentUuids))
       )
     }
     if (candidateCodes.size > 0) {
       lookupQueries.push(
-        admin.from("students").select("id, student_id, email, phone, auth_user_id").in("student_id", Array.from(candidateCodes))
+        admin.from("students").select("id, student_id, email, phone, name, auth_user_id, batch_id").in("student_id", Array.from(candidateCodes))
       )
     }
     if (candidateEmails.size > 0) {
       const emailList = Array.from(candidateEmails)
       lookupQueries.push(
-        admin.from("students").select("id, student_id, email, phone, auth_user_id").or(emailList.map(e => `email.ilike.${e}`).join(","))
+        admin.from("students").select("id, student_id, email, phone, name, auth_user_id, batch_id").or(emailList.map(e => `email.ilike.${e}`).join(","))
       )
     }
     if (candidatePhones.size > 0) {
       lookupQueries.push(
-        admin.from("students").select("id, student_id, email, phone, auth_user_id").in("phone", Array.from(candidatePhones))
+        admin.from("students").select("id, student_id, email, phone, name, auth_user_id, batch_id").in("phone", Array.from(candidatePhones))
       )
     }
 
@@ -176,28 +192,41 @@ export async function GET(
           if (res.data) {
             for (const s of res.data) {
               if (s.id && uuidRegex.test(s.id)) candidateStudentUuids.add(s.id)
+              if (s.student_id) candidateCodes.add(s.student_id.trim())
               if (s.email) candidateEmails.add(s.email.toLowerCase())
               if (s.phone) candidatePhones.add(s.phone)
+              if (s.name) studentNames.add(s.name.trim().toLowerCase())
             }
           }
         }
       }
 
-      // Also find sibling student records in this batch or system sharing phone or email
-      if (candidatePhones.size > 0 || candidateEmails.size > 0) {
-        const siblingQueries: any[] = []
-        if (candidatePhones.size > 0) {
-          siblingQueries.push(admin.from("students").select("id").in("phone", Array.from(candidatePhones)))
-        }
-        if (candidateEmails.size > 0) {
-          const emailList = Array.from(candidateEmails)
-          siblingQueries.push(admin.from("students").select("id").or(emailList.map(e => `email.ilike.${e}`).join(",")))
-        }
-        const siblingResults = await Promise.all(siblingQueries)
-        for (const sr of siblingResults) {
-          sr.data?.forEach((s: any) => {
-            if (s.id && uuidRegex.test(s.id)) candidateStudentUuids.add(s.id)
-          })
+      // Find all students in this batch matching candidate phone, email, or name
+      if (batchId) {
+        const { data: batchStudents } = await admin
+          .from("students")
+          .select("id, name, student_id, phone, email")
+          .eq("batch_id", batchId)
+
+        if (batchStudents) {
+          for (const bs of batchStudents) {
+            const bsName = String(bs.name || "").trim().toLowerCase()
+            const bsPhone = String(bs.phone || "").trim()
+            const bsEmail = String(bs.email || "").trim().toLowerCase()
+            const bsCode = String(bs.student_id || "").trim()
+
+            const isMatch = (bsName && studentNames.has(bsName)) ||
+              (bsPhone && candidatePhones.has(bsPhone)) ||
+              (bsEmail && candidateEmails.has(bsEmail)) ||
+              (bsCode && candidateCodes.has(bsCode))
+
+            if (isMatch && bs.id && uuidRegex.test(bs.id)) {
+              candidateStudentUuids.add(bs.id)
+              if (bs.student_id) candidateCodes.add(bs.student_id)
+              if (bs.phone) candidatePhones.add(bs.phone)
+              if (bs.name) studentNames.add(bsName)
+            }
+          }
         }
       }
     } catch {}
@@ -206,6 +235,9 @@ export async function GET(
     const cleanStudentUuids = Array.from(candidateStudentUuids).filter(id => uuidRegex.test(id))
 
     let studentIssues: any[] = []
+    const seenIssueIds = new Set<string>()
+
+    // 1. Load direct issues for verified student UUIDs
     if (cleanStudentUuids.length > 0) {
       const { data: issueData, error: issErr } = await admin
         .from("material_issues")
@@ -216,7 +248,48 @@ export async function GET(
         console.warn("material_issues query warning in batch materials route:", issErr)
       }
       if (issueData) {
-        studentIssues = issueData
+        issueData.forEach(iss => {
+          studentIssues.push(iss)
+          seenIssueIds.add(iss.id)
+        })
+      }
+    }
+
+    // 2. Also load all issues for this batch and match by student name / phone / code
+    if (batchId) {
+      try {
+        const { data: batchIssues } = await admin
+          .from("material_issues")
+          .select("*, material:materials(*), student:students(id, name, student_id, phone, email)")
+          .eq("batch_id", batchId)
+          .eq("status", "issued")
+
+        if (batchIssues) {
+          for (const bi of batchIssues) {
+            if (seenIssueIds.has(bi.id)) continue
+
+            const st = bi.student || {}
+            const stId = st.id || bi.student_id
+            const stCode = (st.student_id || "").trim().toLowerCase()
+            const stPhone = (st.phone || "").trim()
+            const stEmail = (st.email || "").trim().toLowerCase()
+            const stName = (st.name || "").trim().toLowerCase()
+
+            let isMatch = false
+            if (stId && cleanStudentUuids.includes(stId)) isMatch = true
+            if (stCode && candidateCodes.has(stCode)) isMatch = true
+            if (stPhone && candidatePhones.has(stPhone)) isMatch = true
+            if (stEmail && candidateEmails.has(stEmail)) isMatch = true
+            if (stName && (studentNames.has(stName) || (paramName && stName === paramName.trim().toLowerCase()))) isMatch = true
+
+            if (isMatch) {
+              studentIssues.push(bi)
+              seenIssueIds.add(bi.id)
+            }
+          }
+        }
+      } catch (bErr) {
+        console.warn("Batch material_issues fetch note:", bErr)
       }
     }
 

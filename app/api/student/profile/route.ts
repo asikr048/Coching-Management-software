@@ -148,8 +148,8 @@ export async function GET(req: NextRequest) {
       res.data?.forEach((s: any) => matchedStudentsMap.set(s.id, s))
     }
 
-    // Only if ZERO records found by auth_user_id, student_id, or email, fallback to phone lookup
-    if (matchedStudentsMap.size === 0 && candidatePhones.size > 0) {
+    // Always include students matching candidate phones
+    if (candidatePhones.size > 0) {
       const { data: phoneStudents } = await admin
         .from("students")
         .select("*")
@@ -157,7 +157,6 @@ export async function GET(req: NextRequest) {
 
       if (phoneStudents && phoneStudents.length > 0) {
         for (const s of phoneStudents) {
-          // Only adopt if unassigned to a conflicting auth user or conflicting student code
           if (!s.auth_user_id || s.auth_user_id === user.id) {
             matchedStudentsMap.set(s.id, s)
           }
@@ -188,6 +187,40 @@ export async function GET(req: NextRequest) {
       if (!primaryStudent.auth_user_id) {
         admin.from("students").update({ auth_user_id: user.id }).eq("id", primaryStudent.id).then()
       }
+    }
+
+    // Also find any sibling student records in the student's enrolled batches sharing the same name
+    const studentNames = new Set<string>()
+    if (primaryStudent?.name) studentNames.add(primaryStudent.name.trim().toLowerCase())
+    if (currentProfile?.name) studentNames.add(currentProfile.name.trim().toLowerCase())
+    matchedStudents.forEach((s: any) => {
+      if (s.name) studentNames.add(s.name.trim().toLowerCase())
+    })
+
+    const studentBatchIds = Array.from(new Set([
+      primaryStudent?.batch_id,
+      ...matchedStudents.map((s: any) => s.batch_id)
+    ].filter(Boolean)))
+
+    if (studentNames.size > 0 && studentBatchIds.length > 0) {
+      try {
+        const { data: batchSiblingStudents } = await admin
+          .from("students")
+          .select("*")
+          .in("batch_id", studentBatchIds)
+
+        if (batchSiblingStudents) {
+          for (const bs of batchSiblingStudents) {
+            const bsName = String(bs.name || "").trim().toLowerCase()
+            if (bsName && studentNames.has(bsName)) {
+              if (!bs.auth_user_id || bs.auth_user_id === user.id) {
+                matchedStudentsMap.set(bs.id, bs)
+                if (bs.student_id) candidateCodes.add(bs.student_id)
+              }
+            }
+          }
+        }
+      } catch {}
     }
 
     // Ensure candidateDbIds ONLY contains records that belong to THIS student
@@ -638,6 +671,42 @@ export async function GET(req: NextRequest) {
       }
       if (mIssRes.data) {
         materialIssues = mIssRes.data.filter((iss: any) => iss.status !== "returned")
+      }
+
+      // Also check issues in enrolled batches where student name, phone, or code matches
+      if (studentEnrolledBatchIds.length > 0) {
+        try {
+          const { data: bIssues } = await admin
+            .from("material_issues")
+            .select("*, material:materials(*), student:students(id, name, student_id, phone, email)")
+            .in("batch_id", studentEnrolledBatchIds)
+            .eq("status", "issued")
+
+          if (bIssues) {
+            const seenIds = new Set(materialIssues.map((i: any) => i.id))
+            for (const bi of bIssues) {
+              if (seenIds.has(bi.id)) continue
+              const st = bi.student || {}
+              const stId = st.id || bi.student_id
+              const stCode = (st.student_id || "").trim()
+              const stPhone = (st.phone || "").trim()
+              const stName = (st.name || "").trim().toLowerCase()
+
+              let isMatch = false
+              if (stId && cleanIssueStudentUuids.includes(stId)) isMatch = true
+              if (stCode && candidateCodes.has(stCode)) isMatch = true
+              if (stPhone && candidatePhones.has(stPhone)) isMatch = true
+              if (stName && studentNames.has(stName)) isMatch = true
+
+              if (isMatch) {
+                materialIssues.push(bi)
+                seenIds.add(bi.id)
+              }
+            }
+          }
+        } catch (bErr) {
+          console.warn("Batch material issues lookup note:", bErr)
+        }
       }
 
       const rawMats = bMatsRes.data || []

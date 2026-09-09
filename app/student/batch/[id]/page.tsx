@@ -688,11 +688,13 @@ export default function StudentBatchDetailPage() {
         const codeParam = studentData?.student_id || currentProfile?.user_id || ''
         const emailParam = studentData?.email || currentProfile?.email || ''
         const phoneParam = studentData?.phone || currentProfile?.phone || ''
+        const nameParam = studentData?.name || currentProfile?.name || ''
         const qParams = new URLSearchParams()
         if (sIdParam) qParams.set('student_id', sIdParam)
         if (codeParam) qParams.set('code', codeParam)
         if (emailParam) qParams.set('email', emailParam)
         if (phoneParam) qParams.set('phone', phoneParam)
+        if (nameParam) qParams.set('name', nameParam)
         const qStr = qParams.toString() ? `?${qParams.toString()}` : ''
 
         try {
@@ -830,11 +832,14 @@ export default function StudentBatchDetailPage() {
           const issCode = String(iss.student?.student_id || '').trim().toLowerCase()
           const issEmail = String(iss.student?.email || '').trim().toLowerCase()
           const issPhone = String(iss.student?.phone || '').trim().toLowerCase()
+          const issName = String(iss.student?.name || '').trim().toLowerCase()
+          const currentStudentName = String(studentData?.name || currentProfile?.name || '').trim().toLowerCase()
 
           if (issSid && candidateSids.includes(issSid)) return true
           if (issCode && candidateSids.includes(issCode)) return true
           if (issEmail && candidateSids.includes(issEmail)) return true
           if (issPhone && candidateSids.includes(issPhone)) return true
+          if (currentStudentName && issName && issName === currentStudentName) return true
           return false
         })
 
