@@ -629,6 +629,16 @@ export default function MaterialsClient({
       } catch {}
     }
 
+    // Broadcast cross-tab distribution event so student portal immediately reflects received
+    try {
+      localStorage.setItem("medhashiree_material_distributed", JSON.stringify({
+        material_id: distributeMaterial.id,
+        material_name: distributeMaterial.name,
+        student_ids: Array.from(distributeSelectedStudentIds),
+        timestamp: Date.now()
+      }))
+    } catch {}
+
     toast.success(`✓ Distributed ${countToIssue} copies of "${distributeMaterial.name}" across selected batches!`)
     setDistributeModalOpen(false)
   }
@@ -737,6 +747,16 @@ export default function MaterialsClient({
       } catch {}
     }
 
+    // Broadcast cross-tab distribution event
+    try {
+      localStorage.setItem("medhashiree_material_distributed", JSON.stringify({
+        material_id: whoGotItMaterial.id,
+        material_name: whoGotItMaterial.name,
+        student_ids: [student.id],
+        timestamp: Date.now()
+      }))
+    } catch {}
+
     toast.success(`✓ Marked ${student.name} as received.`)
   }
 
@@ -755,6 +775,16 @@ export default function MaterialsClient({
     })
     saveMaterials(nextMaterials)
     setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: prev.available_stock + 1 } : null)
+
+    // Broadcast cross-tab revoke event
+    try {
+      localStorage.setItem("medhashiree_material_distributed", JSON.stringify({
+        material_id: whoGotItMaterial.id,
+        material_name: whoGotItMaterial.name,
+        revoked_issue_id: issueId,
+        timestamp: Date.now()
+      }))
+    } catch {}
 
     try {
       await fetch("/api/materials/revoke", {

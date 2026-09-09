@@ -665,10 +665,28 @@ export default function StudentBatchDetailPage() {
         // 7. Get batch materials & student material issues
         let combinedMaterials: any[] = []
 
-        // Primary: Load directly from dedicated server API
+        // Resolve candidate student IDs for issue matching
+        const candidateSids = Array.from(new Set([
+          studentId,
+          studentData?.id,
+          studentData?.student_id,
+          currentProfile?.user_id,
+          currentProfile?.email,
+          studentData?.email,
+          studentData?.phone,
+        ].filter(Boolean).map(x => String(x).trim().toLowerCase())))
+
+        // Primary: Load directly from dedicated server API with student identifiers
         let loadedFromServer = false
+        const sIdParam = studentId || studentData?.id || ''
+        const codeParam = studentData?.student_id || currentProfile?.user_id || ''
+        const qParams = new URLSearchParams()
+        if (sIdParam) qParams.set('student_id', sIdParam)
+        if (codeParam) qParams.set('code', codeParam)
+        const qStr = qParams.toString() ? `?${qParams.toString()}` : ''
+
         try {
-          const apiMatRes = await fetch(`/api/student/batch/${batchId}/materials`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
+          const apiMatRes = await fetch(`/api/student/batch/${batchId}/materials${qStr}`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
           if (apiMatRes.ok) {
             const apiJson = await apiMatRes.json()
             if (Array.isArray(apiJson.materials)) {
@@ -745,97 +763,130 @@ export default function StudentBatchDetailPage() {
 
               return false
             })
+
+            combinedMaterials = rawBatchMaterials.map((mat: any) => ({
+              id: mat.id,
+              material: mat,
+              is_received: false,
+              issue_record: null,
+            }))
           } catch (mCatchErr) {
             console.warn("Materials loading error in batch page:", mCatchErr)
           }
-
-          let studentIssues: any[] = profileMaterialIssues || []
-          const candidateSids = Array.from(new Set([
-            studentId,
-            studentData?.id,
-            studentData?.student_id,
-            currentProfile?.user_id,
-          ].filter(Boolean)))
-
-          if (studentIssues.length === 0 && candidateSids.length > 0) {
-            try {
-              const { data: materialData } = await supabase
-                .from('material_issues')
-                .select('*, material:materials(*)')
-                .in('student_id', candidateSids)
-
-              if (materialData) {
-                studentIssues = materialData
-              }
-            } catch (mErr) {
-              console.warn('Material issues fetch note:', mErr)
-            }
-          }
-
-          // Map received materials
-          const issuesMap = new Map<string, any>()
-          studentIssues.forEach((iss: any) => {
-            if (iss.material_id) issuesMap.set(String(iss.material_id), iss)
-          })
-
-          const seenMatIds = new Set<string>()
-
-          rawBatchMaterials.forEach((mat: any) => {
-            seenMatIds.add(String(mat.id))
-            const iss = issuesMap.get(String(mat.id))
-            combinedMaterials.push({
-              id: mat.id,
-              material: mat,
-              is_received: !!iss && iss.status !== 'returned',
-              is_returned: !!iss?.returned_at || iss?.status === 'returned',
-              issue_record: iss || null,
-              issued_at: iss?.issued_at || null,
-              return_due_date: iss?.return_due_date || null,
-              returned_at: iss?.returned_at || null,
-            })
-          })
-
-          // Add any student issues for this batch not in rawBatchMaterials
-          studentIssues.forEach((iss: any) => {
-            if (iss.material_id && !seenMatIds.has(String(iss.material_id))) {
-              const isThisBatch = iss.batch_id === batchId || 
-                iss.material?.batch_id === batchId || 
-                iss.material?.course_id === batchId ||
-                (Array.isArray(iss.material?.batch_ids) && iss.material.batch_ids.includes(batchId)) ||
-                !iss.material?.batch_id
-
-              if (isThisBatch && iss.material) {
-                combinedMaterials.push({
-                  id: iss.material_id,
-                  material: iss.material,
-                  is_received: iss.status !== 'returned',
-                  is_returned: !!iss.returned_at || iss.status === 'returned',
-                  issue_record: iss,
-                  issued_at: iss.issued_at,
-                  return_due_date: iss.return_due_date,
-                  returned_at: iss.returned_at,
-                })
-              }
-            }
-          })
         }
 
-        // Deduplicate materials by ID and by signature (name + type + subject)
+        // Gather all issues across sources: profile API, local storage, and direct Supabase query
+        let allIssuesList: any[] = [...(profileMaterialIssues || [])]
+
+        // Load local issues from localStorage
+        try {
+          const rawLocal = localStorage.getItem("medhashiree_material_issues")
+          if (rawLocal) {
+            const parsed = JSON.parse(rawLocal)
+            if (Array.isArray(parsed)) {
+              allIssuesList = [...allIssuesList, ...parsed]
+            }
+          }
+        } catch {}
+
+        // Fallback direct query if needed
+        if (allIssuesList.length === 0 && candidateSids.length > 0) {
+          try {
+            const { data: materialData } = await supabase
+              .from('material_issues')
+              .select('*, material:materials(*)')
+              .in('student_id', candidateSids)
+
+            if (materialData && materialData.length > 0) {
+              allIssuesList = [...allIssuesList, ...materialData]
+            }
+          } catch (mErr) {
+            console.warn('Material issues fetch note:', mErr)
+          }
+        }
+
+        // Filter issues matching this student
+        const studentIssues = allIssuesList.filter((iss: any) => {
+          if (!iss || iss.status === 'returned') return false
+          const issSid = String(iss.student_id || '').trim().toLowerCase()
+          const issCode = String(iss.student?.student_id || '').trim().toLowerCase()
+          const issEmail = String(iss.student?.email || '').trim().toLowerCase()
+          const issPhone = String(iss.student?.phone || '').trim().toLowerCase()
+
+          if (issSid && candidateSids.includes(issSid)) return true
+          if (issCode && candidateSids.includes(issCode)) return true
+          if (issEmail && candidateSids.includes(issEmail)) return true
+          if (issPhone && candidateSids.includes(issPhone)) return true
+          return false
+        })
+
+        // Helper to match issue with material by both ID and Name
+        const isIssueMatch = (iss: any, mat: any) => {
+          if (!iss || !mat) return false
+          const matId = String(mat.id || '').trim()
+          if (iss.material_id && matId && String(iss.material_id).trim() === matId) return true
+          const issMatName = String(iss.material?.name || iss.material_name || iss.name || '').trim().toLowerCase()
+          const targetName = String(mat.name || '').trim().toLowerCase()
+          if (issMatName && targetName && issMatName === targetName) return true
+          return false
+        }
+
+        // Re-enrich combinedMaterials with received status
+        combinedMaterials = combinedMaterials.map((item: any) => {
+          const mat = item.material || item
+          const matchedIssue = studentIssues.find((iss: any) => isIssueMatch(iss, mat))
+          const isReceived = item.is_received || !!matchedIssue
+
+          return {
+            ...item,
+            id: mat.id || item.id,
+            material: mat,
+            is_received: isReceived,
+            issue_record: matchedIssue || item.issue_record || null,
+            issued_at: matchedIssue?.issued_at || item.issued_at || null,
+            return_due_date: matchedIssue?.return_due_date || item.return_due_date || null,
+          }
+        })
+
+        // Add any directly issued materials for this student that might not be in the batch list
+        studentIssues.forEach((iss: any) => {
+          if (iss.material) {
+            const alreadyInList = combinedMaterials.some((item: any) => isIssueMatch(iss, item.material || item))
+            if (!alreadyInList) {
+              combinedMaterials.push({
+                id: iss.material.id || iss.material_id,
+                material: iss.material,
+                is_received: true,
+                issue_record: iss,
+                issued_at: iss.issued_at,
+                return_due_date: iss.return_due_date,
+              })
+            }
+          }
+        })
+
+        // Deduplicate materials by ID and by signature (name + type + subject), preserving received status
         const dedupedBatchMaterials: any[] = []
-        const seenIds = new Set<string>()
-        const seenSignatures = new Set<string>()
 
         for (const item of combinedMaterials) {
           const mat = item.material || item
           const mId = String(mat.id || item.id || "")
           const sig = `${String(mat.name || "").trim().toLowerCase()}::${String(mat.type || "").trim()}::${String(mat.subject || "").trim().toLowerCase()}`
 
-          if (mId && seenIds.has(mId)) continue
-          if (sig && seenSignatures.has(sig)) continue
+          const existingIdx = dedupedBatchMaterials.findIndex(d => {
+            const dMat = d.material || d
+            const dId = String(dMat.id || d.id || "")
+            const dSig = `${String(dMat.name || "").trim().toLowerCase()}::${String(dMat.type || "").trim()}::${String(dMat.subject || "").trim().toLowerCase()}`
+            return (mId && dId && mId === dId) || (sig !== "::::" && dSig !== "::::" && sig === dSig)
+          })
 
-          if (mId) seenIds.add(mId)
-          if (sig) seenSignatures.add(sig)
-          dedupedBatchMaterials.push(item)
+          if (existingIdx >= 0) {
+            if (item.is_received && !dedupedBatchMaterials[existingIdx].is_received) {
+              dedupedBatchMaterials[existingIdx] = item
+            }
+          } else {
+            dedupedBatchMaterials.push(item)
+          }
         }
 
         setAllBatchMaterials(dedupedBatchMaterials)
@@ -860,7 +911,7 @@ export default function StudentBatchDetailPage() {
       fetchData()
     }
 
-    // Instant cross-tab sync when a material is deleted from admin panel (strictly by ID)
+    // Instant cross-tab sync when a material is deleted or distributed from admin panel
     const onStorageChange = (e: StorageEvent) => {
       if (e.key === "medhashiree_material_deleted" && e.newValue) {
         try {
@@ -871,6 +922,9 @@ export default function StudentBatchDetailPage() {
             setMaterials(prev => prev.filter(m => String(m.material_id || m.material?.id || m.id) !== idStr))
           }
         } catch {}
+      }
+      if (e.key === "medhashiree_material_distributed" || e.key === "medhashiree_material_issues") {
+        fetchData()
       }
     }
     window.addEventListener("storage", onStorageChange)

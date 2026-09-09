@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -110,34 +109,31 @@ export async function GET(
 
     // 3. Resolve student identity to check distribution records (material_issues)
     let candidateSids: string[] = []
+
+    // Accept student_id and code directly from query parameters if provided
+    const paramStudentId = req.nextUrl.searchParams.get("student_id")
+    const paramCode = req.nextUrl.searchParams.get("code")
+    if (paramStudentId) candidateSids.push(paramStudentId.trim())
+    if (paramCode) candidateSids.push(paramCode.trim())
+
     try {
-      const cookieStore = await cookies()
-      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-      const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-      if (supabaseUrl && supabaseKey && !supabaseUrl.includes("placeholder")) {
-        const client = createServerClient(supabaseUrl, supabaseKey, {
-          cookies: {
-            getAll() { return cookieStore.getAll() },
-            setAll() {}
-          }
-        })
-        const { data: { user } } = await client.auth.getUser()
-        if (user) {
-          candidateSids.push(user.id)
-          const { data: up } = await admin.from("user_profiles").select("user_id").eq("auth_user_id", user.id).maybeSingle()
-          if (up?.user_id) candidateSids.push(up.user_id)
+      const supabase = await createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        candidateSids.push(user.id)
+        const { data: up } = await admin.from("user_profiles").select("user_id").eq("auth_user_id", user.id).maybeSingle()
+        if (up?.user_id) candidateSids.push(up.user_id)
 
-          const { data: stList } = await admin
-            .from("students")
-            .select("id, student_id")
-            .or(`auth_user_id.eq.${user.id},email.ilike.${user.email || 'nonexistent'}${up?.user_id ? `,student_id.eq.${up.user_id}` : ''}`)
+        const { data: stList } = await admin
+          .from("students")
+          .select("id, student_id")
+          .or(`auth_user_id.eq.${user.id},email.ilike.${user.email || 'nonexistent'}${up?.user_id ? `,student_id.eq.${up.user_id}` : ''}`)
 
-          if (stList) {
-            stList.forEach((s: any) => {
-              if (s.id) candidateSids.push(s.id)
-              if (s.student_id) candidateSids.push(s.student_id)
-            })
-          }
+        if (stList) {
+          stList.forEach((s: any) => {
+            if (s.id) candidateSids.push(s.id)
+            if (s.student_id) candidateSids.push(s.student_id)
+          })
         }
       }
     } catch {}
@@ -156,13 +152,17 @@ export async function GET(
       }
     }
 
-    const issuesMap = new Map<string, any>()
-    studentIssues.forEach((iss: any) => {
-      if (iss.material_id) issuesMap.set(String(iss.material_id), iss)
-    })
+    const isIssueMatchingMat = (iss: any, mat: any) => {
+      if (!iss || !mat) return false
+      if (iss.material_id && String(iss.material_id) === String(mat.id)) return true
+      const issName = String(iss.material?.name || iss.material_name || iss.name || "").trim().toLowerCase()
+      const matName = String(mat.name || "").trim().toLowerCase()
+      if (issName && matName && issName === matName) return true
+      return false
+    }
 
     const combinedMaterials = batchMaterials.map((mat: any) => {
-      const iss = issuesMap.get(String(mat.id))
+      const iss = studentIssues.find((i: any) => isIssueMatchingMat(i, mat))
       return {
         id: mat.id,
         material: mat,
@@ -201,22 +201,28 @@ export async function GET(
       }
     })
 
-    // Deduplicate materials by ID and by signature (name + type + subject)
+    // Deduplicate materials by ID and by signature (name + type + subject), preserving received status
     const dedupedMaterials: any[] = []
-    const seenIds = new Set<string>()
-    const seenSignatures = new Set<string>()
 
     for (const item of combinedMaterials) {
       const mat = item.material || item
       const mId = String(mat.id || item.id || "")
       const sig = `${String(mat.name || "").trim().toLowerCase()}::${String(mat.type || "").trim()}::${String(mat.subject || "").trim().toLowerCase()}`
 
-      if (mId && seenIds.has(mId)) continue
-      if (sig && seenSignatures.has(sig)) continue
+      const existingIdx = dedupedMaterials.findIndex(d => {
+        const dMat = d.material || d
+        const dId = String(dMat.id || d.id || "")
+        const dSig = `${String(dMat.name || "").trim().toLowerCase()}::${String(dMat.type || "").trim()}::${String(dMat.subject || "").trim().toLowerCase()}`
+        return (mId && dId && mId === dId) || (sig !== "::::" && dSig !== "::::" && sig === dSig)
+      })
 
-      if (mId) seenIds.add(mId)
-      if (sig) seenSignatures.add(sig)
-      dedupedMaterials.push(item)
+      if (existingIdx >= 0) {
+        if (item.is_received && !dedupedMaterials[existingIdx].is_received) {
+          dedupedMaterials[existingIdx] = item
+        }
+      } else {
+        dedupedMaterials.push(item)
+      }
     }
 
     return NextResponse.json({

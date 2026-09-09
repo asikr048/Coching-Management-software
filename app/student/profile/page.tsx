@@ -109,6 +109,51 @@ export default function StudentProfilePage() {
           let currentMaterials = data.materials || []
           let currentIssues = data.materialIssues || []
 
+          // Merge issues from localStorage if available
+          try {
+            const rawLocalIssues = localStorage.getItem("medhashiree_material_issues")
+            if (rawLocalIssues) {
+              const parsed = JSON.parse(rawLocalIssues)
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                const existingIssueIds = new Set(currentIssues.map((i: any) => String(i.id)))
+                const studentIdCandidates = [
+                  data.student?.id,
+                  data.student?.student_id,
+                  data.profile?.user_id,
+                  data.profile?.email,
+                ].filter(Boolean).map(x => String(x).toLowerCase())
+
+                parsed.forEach((li: any) => {
+                  if (li.status === "returned") return
+                  const liSid = String(li.student_id || "").toLowerCase()
+                  const liCode = String(li.student?.student_id || "").toLowerCase()
+                  const matchesStudent = studentIdCandidates.includes(liSid) || studentIdCandidates.includes(liCode)
+                  if (matchesStudent && !existingIssueIds.has(String(li.id))) {
+                    currentIssues.push(li)
+                  }
+                })
+              }
+            }
+          } catch {}
+
+          // Enrich materials with is_received
+          currentMaterials = currentMaterials.map((m: any) => {
+            const mId = String(m.id || "")
+            const mName = String(m.name || "").trim().toLowerCase()
+            const iss = currentIssues.find((i: any) => {
+              if (i.status === "returned") return false
+              if (i.material_id && String(i.material_id) === mId) return true
+              const iName = String(i.material?.name || i.material_name || i.name || "").trim().toLowerCase()
+              return iName && mName && iName === mName
+            })
+            return {
+              ...m,
+              is_received: m.is_received || !!iss,
+              issue_record: iss || m.issue_record || null,
+              issued_at: iss?.issued_at || m.issued_at || null,
+            }
+          })
+
           setMaterials(currentMaterials)
           setMaterialIssues(currentIssues)
 
@@ -200,7 +245,7 @@ export default function StudentProfilePage() {
     }
     window.addEventListener("focus", onWindowFocus)
 
-    // Instant cross-tab sync when a material is deleted from admin panel
+    // Instant cross-tab sync when a material is deleted or distributed from admin panel
     const onStorageChange = (e: StorageEvent) => {
       if (e.key === "medhashiree_material_deleted" && e.newValue) {
         try {
@@ -212,6 +257,9 @@ export default function StudentProfilePage() {
             loadStudentProfile()
           }
         } catch {}
+      }
+      if (e.key === "medhashiree_material_distributed" || e.key === "medhashiree_material_issues") {
+        loadStudentProfile()
       }
     }
     window.addEventListener("storage", onStorageChange)
@@ -417,8 +465,21 @@ export default function StudentProfilePage() {
       .map((mi: any) => String(mi.material_id))
       .filter(Boolean)
   )
+  const receivedMaterialNames = new Set(
+    materialIssues
+      .filter((mi: any) => mi.status !== "returned")
+      .map((mi: any) => String(mi.material?.name || mi.material_name || mi.name || "").trim().toLowerCase())
+      .filter(Boolean)
+  )
   const totalMaterials = materials.length
-  const receivedMaterialsCount = materials.filter((m: any) => receivedMaterialIds.has(String(m.id)) || m.is_received).length
+  const receivedMaterialsCount = materials.filter((m: any) => {
+    if (m.is_received) return true
+    const mId = String(m.id || "")
+    const mName = String(m.name || "").trim().toLowerCase()
+    if (mId && receivedMaterialIds.has(mId)) return true
+    if (mName && receivedMaterialNames.has(mName)) return true
+    return false
+  }).length
 
   const inputClass = "w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
 

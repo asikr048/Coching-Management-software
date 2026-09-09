@@ -631,6 +631,9 @@ export async function GET(req: NextRequest) {
 
       const rawMats = bMatsRes.data || []
       const issuedMatIds = new Set(materialIssues.map((iss: any) => String(iss.material_id)).filter(Boolean))
+      const issuedMatNames = new Set(
+        materialIssues.map((iss: any) => String(iss.material?.name || iss.material_name || iss.name || "").trim().toLowerCase()).filter(Boolean)
+      )
 
       const studentBranchIdSet = new Set(
         enrollments.map((e: any) => e.batch?.branch_id).filter(Boolean).map(String)
@@ -661,8 +664,8 @@ export async function GET(req: NextRequest) {
       }
 
       batchMaterials = rawMats.filter((m: any) => {
-        // 1. If student was issued this material directly, always show
-        if (issuedMatIds.has(m.id)) return true
+        // 1. If student was issued this material directly (by ID or by name), always show
+        if (issuedMatIds.has(m.id) || (m.name && issuedMatNames.has(m.name.trim().toLowerCase()))) return true
 
         // 2. Direct single batch match
         if (m.batch_id && studentBatchIdSet.has(String(m.batch_id))) return true
@@ -714,10 +717,16 @@ export async function GET(req: NextRequest) {
 
         return false
       }).map((m: any) => {
-        const iss = materialIssues.find((i: any) => String(i.material_id) === String(m.id))
+        const iss = materialIssues.find((i: any) => {
+          if (i.status === "returned") return false
+          if (i.material_id && String(i.material_id) === String(m.id)) return true
+          const iName = String(i.material?.name || i.material_name || i.name || "").trim().toLowerCase()
+          const mName = String(m.name || "").trim().toLowerCase()
+          return iName && mName && iName === mName
+        })
         return {
           ...m,
-          is_received: !!iss,
+          is_received: !!iss && iss.status !== "returned",
           issued_at: iss?.issued_at || null,
           issue_record: iss || null,
         }
@@ -881,19 +890,26 @@ export async function GET(req: NextRequest) {
       return m
     })
 
-    // Deduplicate materials by ID and content signature
+    // Deduplicate materials by ID and content signature, preserving received status
     const dedupedMaterials: any[] = []
-    const seenMatIds = new Set<string>()
-    const seenMatSigs = new Set<string>()
 
     for (const m of enrichedMaterials) {
       const mId = String(m.id || "")
       const sig = `${String(m.name || "").trim().toLowerCase()}::${String(m.type || "").trim()}::${String(m.subject || "").trim().toLowerCase()}`
-      if (mId && seenMatIds.has(mId)) continue
-      if (sig && seenMatSigs.has(sig)) continue
-      if (mId) seenMatIds.add(mId)
-      if (sig) seenMatSigs.add(sig)
-      dedupedMaterials.push(m)
+
+      const existingIdx = dedupedMaterials.findIndex(d => {
+        const dId = String(d.id || "")
+        const dSig = `${String(d.name || "").trim().toLowerCase()}::${String(d.type || "").trim()}::${String(d.subject || "").trim().toLowerCase()}`
+        return (mId && dId && mId === dId) || (sig !== "::::" && dSig !== "::::" && sig === dSig)
+      })
+
+      if (existingIdx >= 0) {
+        if (m.is_received && !dedupedMaterials[existingIdx].is_received) {
+          dedupedMaterials[existingIdx] = m
+        }
+      } else {
+        dedupedMaterials.push(m)
+      }
     }
 
     return NextResponse.json({

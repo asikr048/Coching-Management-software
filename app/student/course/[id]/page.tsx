@@ -83,14 +83,65 @@ export default function StudentCoursePage() {
           }
         }
 
-        if (Array.isArray(profileData.materialIssues)) {
-          setMaterialIssues(profileData.materialIssues)
-        } else {
+        let currentCourseIssues: any[] = Array.isArray(profileData.materialIssues) ? [...profileData.materialIssues] : []
+
+        // Merge local issues from localStorage
+        try {
+          const rawLocal = localStorage.getItem("medhashiree_material_issues")
+          if (rawLocal) {
+            const parsed = JSON.parse(rawLocal)
+            if (Array.isArray(parsed)) {
+              const studentCandidates = [
+                profileData.student?.id,
+                profileData.student?.student_id,
+                profileData.profile?.user_id,
+                profileData.profile?.email,
+              ].filter(Boolean).map(x => String(x).toLowerCase())
+
+              parsed.forEach((li: any) => {
+                if (li.status === "returned") return
+                const liSid = String(li.student_id || "").toLowerCase()
+                const liCode = String(li.student?.student_id || "").toLowerCase()
+                if (studentCandidates.includes(liSid) || studentCandidates.includes(liCode)) {
+                  currentCourseIssues.push(li)
+                }
+              })
+            }
+          }
+        } catch {}
+
+        if (currentCourseIssues.length === 0) {
           try {
             const { data: dbIssues } = await supabase.from("material_issues").select("*")
-            if (dbIssues) setMaterialIssues(dbIssues)
+            if (dbIssues) currentCourseIssues = dbIssues
           } catch {}
         }
+
+        setMaterialIssues(currentCourseIssues)
+
+        // Helper to match issue with material by both ID and Name
+        const isIssueMatch = (iss: any, mat: any) => {
+          if (!iss || !mat) return false
+          const matId = String(mat.id || "").trim()
+          if (iss.material_id && matId && String(iss.material_id).trim() === matId) return true
+          const issMatName = String(iss.material?.name || iss.material_name || iss.name || "").trim().toLowerCase()
+          const targetName = String(mat.name || "").trim().toLowerCase()
+          if (issMatName && targetName && issMatName === targetName) return true
+          return false
+        }
+
+        // Enrich course materials with received status
+        setMaterials((prevMats) =>
+          prevMats.map((m: any) => {
+            const matched = currentCourseIssues.find((iss: any) => isIssueMatch(iss, m))
+            return {
+              ...m,
+              is_received: m.is_received || !!matched,
+              issue_record: matched || m.issue_record || null,
+              issued_at: matched?.issued_at || m.issued_at || null,
+            }
+          })
+        )
 
         // Fetch course details & lessons from Supabase
         const { data: courseData, error: cErr } = await supabase
@@ -131,7 +182,7 @@ export default function StudentCoursePage() {
       loadCourseData()
     }
 
-    // Instant cross-tab sync when a material is deleted from admin panel
+    // Instant cross-tab sync when a material is deleted or distributed from admin panel
     const onStorageChange = (e: StorageEvent) => {
       if (e.key === "medhashiree_material_deleted" && e.newValue) {
         try {
@@ -142,6 +193,9 @@ export default function StudentCoursePage() {
             setMaterialIssues(prev => prev.filter(i => String(i.material_id) !== idStr))
           }
         } catch {}
+      }
+      if (e.key === "medhashiree_material_distributed" || e.key === "medhashiree_material_issues") {
+        loadCourseData()
       }
     }
     window.addEventListener("storage", onStorageChange)
