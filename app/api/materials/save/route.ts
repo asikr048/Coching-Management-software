@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
     let savedMaterial: any = null
     let saveError: any = null
 
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 6; attempt++) {
       let res: any
       if (isExistingUuid) {
         res = await admin
@@ -124,6 +124,17 @@ export async function POST(req: NextRequest) {
       if (errMsg.includes("branch_id") && "branch_id" in currentPayload) {
         delete currentPayload.branch_id
         continue
+      }
+      // Fallback 4: materials_type_check constraint violation ('sheet', 'exam_paper', etc.)
+      if (errMsg.includes("materials_type_check") || (errMsg.includes("violates check constraint") && errMsg.includes("type"))) {
+        if (currentPayload.type === "sheet" || currentPayload.type === "exam_paper") {
+          currentPayload.type = "worksheet"
+          continue
+        }
+        if (currentPayload.type !== "other") {
+          currentPayload.type = "other"
+          continue
+        }
       }
 
       saveError = res.error

@@ -18,5 +18,8 @@ ALTER TABLE public.materials
 -- 4. Index for fast querying
 CREATE INDEX IF NOT EXISTS idx_materials_batch_ids ON public.materials USING gin (batch_ids);
 
--- 5. Refresh PostgREST schema cache so the API recognizes the columns immediately
+-- 5. Drop restrictive type check constraint so 'sheet', 'exam_paper', etc. are allowed
+ALTER TABLE public.materials DROP CONSTRAINT IF EXISTS materials_type_check;
+
+-- 6. Refresh PostgREST schema cache so the API recognizes the columns immediately
 NOTIFY pgrst, 'reload schema';
