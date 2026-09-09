@@ -637,7 +637,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 3. ROYAL INSTITUTIONAL NAVIGATION BAR (Gold Highlight Border) */}
       {/* ========================================================================= */}
-      <nav className="bg-[#4c1d95] text-white shadow-md border-b-2 border-amber-400 sticky top-[65px] sm:top-[85px] z-30 overflow-x-auto scrollbar-none">
+      <nav className="bg-[#4c1d95] text-white shadow-md border-b-2 border-amber-400 relative z-30 overflow-x-auto scrollbar-none">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 flex items-center justify-between">
           <div className="flex items-center space-x-1 sm:space-x-2 py-1 text-xs sm:text-sm font-semibold whitespace-nowrap">
             <Link href="/" className="px-3 py-2.5 rounded-lg bg-white/10 text-amber-300 font-bold">
@@ -765,7 +765,7 @@ export default function HomePage() {
           </div>
 
           {/* Right: 35% Notice Book / Notice Board ("সর্বশেষ নোটিশ :") (4 columns on lg) */}
-          <div id="notices" className="lg:col-span-4 flex flex-col scroll-mt-28 sm:scroll-mt-32">
+          <div id="notices" className="lg:col-span-4 flex flex-col scroll-mt-20 sm:scroll-mt-24">
             <div className="bg-white rounded-2xl border border-gray-200/90 shadow-md overflow-hidden flex flex-col h-full">
               {/* Notice Book Header (Matches Reference Style with Dark Navy Ribbon) */}
               <div className="bg-[#1e3a5f] text-white px-5 py-3.5 border-l-4 border-amber-400 flex items-center justify-between">
@@ -837,7 +837,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 5. BATCHES SECTION ("চলমান ও আসন্ন ব্যাচসমূহ") */}
       {/* ========================================================================= */}
-      <section id="batches" className="max-w-7xl mx-auto px-4 sm:px-8 py-8 sm:py-12 scroll-mt-28 sm:scroll-mt-32">
+      <section id="batches" className="max-w-7xl mx-auto px-4 sm:px-8 py-8 sm:py-12 scroll-mt-20 sm:scroll-mt-24">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6 sm:mb-8 border-b border-gray-200/80 pb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -975,7 +975,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 5.5. PUBLISHED EXAMS & MERIT LIST SECTION ("পরীক্ষার ফলাফল ও মেরিট লিস্ট") */}
       {/* ========================================================================= */}
-      <section id="results" className="bg-gradient-to-b from-slate-50 to-indigo-50/40 border-y border-gray-200/80 py-10 sm:py-16 scroll-mt-28 sm:scroll-mt-32">
+      <section id="results" className="bg-gradient-to-b from-slate-50 to-indigo-50/40 border-y border-gray-200/80 py-10 sm:py-16 scroll-mt-20 sm:scroll-mt-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 sm:mb-10 pb-4 border-b border-indigo-100">
             <div>
@@ -1123,7 +1123,7 @@ export default function HomePage() {
       {/* 6. COURSES SECTION ("বিশেষ কোর্সসমূহ") */}
       {/* ========================================================================= */}
       {courses.length > 0 && (
-        <section id="courses" className="bg-white border-y border-gray-200/80 py-10 sm:py-14 scroll-mt-28 sm:scroll-mt-32">
+        <section id="courses" className="bg-white border-y border-gray-200/80 py-10 sm:py-14 scroll-mt-20 sm:scroll-mt-24">
           <div className="max-w-7xl mx-auto px-4 sm:px-8">
             <div className="mb-6 sm:mb-8 text-center max-w-2xl mx-auto">
               <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
@@ -1208,7 +1208,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 7. ACHIEVEMENTS SECTION ("আমাদের সাফল্য ও কৃতি শিক্ষার্থী") */}
       {/* ========================================================================= */}
-      <section id="achievements" className="max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14 scroll-mt-28 sm:scroll-mt-32">
+      <section id="achievements" className="max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14 scroll-mt-20 sm:scroll-mt-24">
         <div className="mb-6 sm:mb-8 text-center max-w-2xl mx-auto">
           <span className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center justify-center gap-1">
             <Trophy className="w-4 h-4" /> Proven Track Record
@@ -1272,7 +1272,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 8. EDUCATIONAL BLOGS SECTION ("ব্লগ ও শিক্ষামূলক পরামর্শ") */}
       {/* ========================================================================= */}
-      <section id="blogs" className="bg-gray-50 border-t border-gray-200 py-10 sm:py-14 scroll-mt-28 sm:scroll-mt-32">
+      <section id="blogs" className="bg-gray-50 border-t border-gray-200 py-10 sm:py-14 scroll-mt-20 sm:scroll-mt-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6 sm:mb-8 border-b border-gray-200 pb-4">
             <div>
@@ -1432,7 +1432,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 10. INSTITUTIONAL FOOTER */}
       {/* ========================================================================= */}
-      <footer id="contact" className="bg-[#0f172a] text-gray-300 text-xs pt-12 pb-6 border-t border-gray-800 scroll-mt-28 sm:scroll-mt-32">
+      <footer id="contact" className="bg-[#0f172a] text-gray-300 text-xs pt-12 pb-6 border-t border-gray-800 scroll-mt-20 sm:scroll-mt-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pb-10 border-b border-gray-800">
           {/* Col 1: About */}
           <div>
