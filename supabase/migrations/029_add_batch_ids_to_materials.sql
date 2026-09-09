@@ -15,11 +15,16 @@ ALTER TABLE public.materials
 ALTER TABLE public.materials 
   ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
 
--- 4. Index for fast querying
-CREATE INDEX IF NOT EXISTS idx_materials_batch_ids ON public.materials USING gin (batch_ids);
+-- 4. Add course_id column if missing (for linking study materials directly to online courses)
+ALTER TABLE public.materials 
+  ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES public.courses(id) ON DELETE SET NULL;
 
--- 5. Drop restrictive type check constraint so 'sheet', 'exam_paper', etc. are allowed
+-- 5. Indexes for fast querying
+CREATE INDEX IF NOT EXISTS idx_materials_batch_ids ON public.materials USING gin (batch_ids);
+CREATE INDEX IF NOT EXISTS idx_materials_course_id ON public.materials (course_id);
+
+-- 6. Drop restrictive type check constraint so 'sheet', 'exam_paper', etc. are allowed
 ALTER TABLE public.materials DROP CONSTRAINT IF EXISTS materials_type_check;
 
--- 6. Refresh PostgREST schema cache so the API recognizes the columns immediately
+-- 7. Refresh PostgREST schema cache so the API recognizes the columns immediately
 NOTIFY pgrst, 'reload schema';
