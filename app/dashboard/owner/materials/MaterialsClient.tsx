@@ -55,6 +55,11 @@ export interface MaterialIssue {
     id: string
     name: string
   }
+  material?: {
+    id: string
+    name: string
+  } | null
+  material_name?: string | null
 }
 
 export interface Batch {
@@ -126,12 +131,35 @@ export default function MaterialsClient({
   const [materials, setMaterials] = useState<Material[]>(initialMaterials)
   const [issues, setIssues] = useState<MaterialIssue[]>(initialIssues)
 
-  // Keep state synchronized with server props
+  // Keep state synchronized with server props, but preserve local distributed records
   useEffect(() => {
     setMaterials(initialMaterials)
   }, [initialMaterials])
 
   useEffect(() => {
+    try {
+      const localStr = localStorage.getItem("medhashiree_material_issues")
+      if (localStr) {
+        const localIssues = JSON.parse(localStr)
+        if (Array.isArray(localIssues) && localIssues.length > 0) {
+          const map = new Map<string, MaterialIssue>()
+          // 1. Add local stored items first
+          localIssues.forEach((li: any) => {
+            if (li.material_id && li.student_id) {
+              map.set(`${li.material_id}::${li.student_id}`, li)
+            }
+          })
+          // 2. Authoritative server issues take precedence / update IDs
+          initialIssues.forEach((si: any) => {
+            if (si.material_id && si.student_id) {
+              map.set(`${si.material_id}::${si.student_id}`, si)
+            }
+          })
+          setIssues(Array.from(map.values()))
+          return
+        }
+      }
+    } catch {}
     setIssues(initialIssues)
   }, [initialIssues])
 
@@ -150,40 +178,40 @@ export default function MaterialsClient({
     } catch {}
   }
 
-  // Auto-sync legacy mock materials (temporary 'mat_' IDs) with backend database
+  // Auto-sync legacy mock materials and unpersisted distribution issues with backend database
   useEffect(() => {
     async function syncLegacyMaterials() {
       // ONLY sync temporary mock items starting with 'mat_', NEVER re-save deleted materials
       const legacyMockMats = materials.filter(m => String(m.id).startsWith("mat_"))
-      if (legacyMockMats.length === 0) return
-
-      for (const lm of legacyMockMats) {
-        try {
-          const res = await fetch("/api/materials/save", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(lm)
-          })
-          if (res.ok) {
-            const data = await res.json()
-            if (data.material) {
-              setMaterials(prev => {
-                const updated = prev.map(m => m.id === lm.id ? data.material : m)
-                try { localStorage.setItem("medhashiree_materials", JSON.stringify(updated)) } catch {}
-                return updated
-              })
+      if (legacyMockMats.length > 0) {
+        for (const lm of legacyMockMats) {
+          try {
+            const res = await fetch("/api/materials/save", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(lm)
+            })
+            if (res.ok) {
+              const data = await res.json()
+              if (data.material) {
+                setMaterials(prev => {
+                  const updated = prev.map(m => m.id === lm.id ? data.material : m)
+                  try { localStorage.setItem("medhashiree_materials", JSON.stringify(updated)) } catch {}
+                  return updated
+                })
+              }
             }
+          } catch (syncErr) {
+            console.warn("Syncing legacy material note:", syncErr)
           }
-        } catch (syncErr) {
-          console.warn("Syncing legacy material note:", syncErr)
         }
       }
 
-      // Also sync any temporary distribution issues starting with 'issue_'
-      const legacyIssues = issues.filter(i => i.id && String(i.id).startsWith("issue_"))
-      for (const li of legacyIssues) {
+      // Also sync any temporary or pending distribution issues starting with 'issue_'
+      const pendingIssues = issues.filter(i => i.id && String(i.id).startsWith("issue_"))
+      for (const li of pendingIssues) {
         try {
-          await fetch("/api/materials/distribute", {
+          const res = await fetch("/api/materials/distribute", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -194,6 +222,17 @@ export default function MaterialsClient({
               notes: li.notes,
             })
           })
+          if (res.ok) {
+            const data = await res.json()
+            if (data?.success && data?.issues?.[0]) {
+              const dbIss = data.issues[0]
+              setIssues(curr => {
+                const updated = curr.map(item => (item.id === li.id ? { ...item, id: dbIss.id, issued_at: dbIss.issued_at } : item))
+                try { localStorage.setItem("medhashiree_material_issues", JSON.stringify(updated)) } catch {}
+                return updated
+              })
+            }
+          }
         } catch {}
       }
     }
@@ -539,8 +578,15 @@ export default function MaterialsClient({
       return
     }
 
-    if (countToIssue > distributeMaterial.available_stock) {
-      toast.error(`Cannot distribute ${countToIssue} items. Only ${distributeMaterial.available_stock} in stock.`)
+    // Exact dynamic stock check
+    const activeForMat = issues.filter(i => 
+      (i.material_id === distributeMaterial.id || (i.material?.name && i.material.name.toLowerCase() === distributeMaterial.name.toLowerCase())) &&
+      i.status === "issued"
+    ).length
+    const currentStock = Math.max(0, (distributeMaterial.total_stock || 0) - activeForMat)
+
+    if (countToIssue > currentStock) {
+      toast.error(`Cannot distribute ${countToIssue} items. Only ${currentStock} in stock.`)
       return
     }
 
@@ -570,16 +616,16 @@ export default function MaterialsClient({
       })
     })
 
-    // 1. Update issues state
+    // 1. Optimistically update issues state
     const nextIssues = [...newIssues, ...issues]
     saveIssues(nextIssues)
 
-    // 2. Decrement stock
+    // 2. Optimistically decrement stock
     const nextMaterials = materials.map(m => {
       if (m.id === distributeMaterial.id) {
         return {
           ...m,
-          available_stock: Math.max(0, m.available_stock - countToIssue)
+          available_stock: Math.max(0, currentStock - countToIssue)
         }
       }
       return m
@@ -601,32 +647,33 @@ export default function MaterialsClient({
         })
       })
       const data = await res.json()
-      if (data?.success) {
+      if (res.ok && data?.success) {
         if (data.issues && data.issues.length > 0) {
           const insertedMap = new Map(data.issues.map((iss: any) => [iss.student_id, iss]))
-          const resolvedIssues = newIssues.map(i => {
+          const resolvedIssues = nextIssues.map(i => {
             const dbIss: any = insertedMap.get(i.student_id)
             return dbIss ? { ...i, id: dbIss.id, issued_at: dbIss.issued_at } : i
           })
-          saveIssues([...resolvedIssues, ...issues])
+          saveIssues(resolvedIssues)
         }
+        if (typeof data.available_stock === "number") {
+          saveMaterials(materials.map(m => m.id === distributeMaterial.id ? { ...m, available_stock: data.available_stock } : m))
+        }
+        toast.success(`✓ Distributed ${countToIssue} copies of "${distributeMaterial.name}" across selected batches!`)
+        router.refresh()
       } else {
+        // Roll back on failure
+        saveIssues(issues)
+        saveMaterials(materials)
         toast.error(data?.error || "Failed to record distribution")
+        return
       }
-    } catch (e) {
-      console.warn("Could not save issues via API, falling back:", e)
-      try {
-        const rowsToInsert = newIssues.map(i => ({
-          material_id: i.material_id,
-          student_id: i.student_id,
-          batch_id: i.batch_id,
-          issued_by: currentStaff.id.startsWith("admin") ? undefined : currentStaff.id,
-          issued_at: i.issued_at,
-          status: "issued",
-          notes: i.notes
-        }))
-        await supabase.from("material_issues").insert(rowsToInsert)
-      } catch {}
+    } catch (e: any) {
+      console.warn("Distribution error:", e)
+      saveIssues(issues)
+      saveMaterials(materials)
+      toast.error(e?.message || "Distribution network error")
+      return
     }
 
     // Broadcast cross-tab distribution event so student portal immediately reflects received
@@ -637,9 +684,14 @@ export default function MaterialsClient({
         student_ids: Array.from(distributeSelectedStudentIds),
         timestamp: Date.now()
       }))
+      window.dispatchEvent(new CustomEvent("material_distributed", {
+        detail: {
+          material_id: distributeMaterial.id,
+          student_ids: Array.from(distributeSelectedStudentIds)
+        }
+      }))
     } catch {}
 
-    toast.success(`✓ Distributed ${countToIssue} copies of "${distributeMaterial.name}" across selected batches!`)
     setDistributeModalOpen(false)
   }
 
@@ -661,7 +713,10 @@ export default function MaterialsClient({
   // Active issues for the selected material
   const materialIssuesList = useMemo(() => {
     if (!whoGotItMaterial) return []
-    return issues.filter(i => i.material_id === whoGotItMaterial.id && i.status === "issued")
+    return issues.filter(i => 
+      (i.material_id === whoGotItMaterial.id || (i.material?.name && i.material.name.toLowerCase() === whoGotItMaterial.name.toLowerCase())) && 
+      i.status === "issued"
+    )
   }, [whoGotItMaterial, issues])
 
   // Target students for this material (across all assigned batches or all students)
@@ -680,7 +735,15 @@ export default function MaterialsClient({
   // Quick 1-click toggle Issue from inside the "Who Got It" manager
   const handleQuickIssueStudent = async (student: Student) => {
     if (!whoGotItMaterial) return
-    if (whoGotItMaterial.available_stock <= 0) {
+
+    // Dynamic stock calculation
+    const activeForMat = issues.filter(i => 
+      (i.material_id === whoGotItMaterial.id || (i.material?.name && i.material.name.toLowerCase() === whoGotItMaterial.name.toLowerCase())) &&
+      i.status === "issued"
+    ).length
+    const currentStock = Math.max(0, (whoGotItMaterial.total_stock || 0) - activeForMat)
+
+    if (currentStock <= 0) {
       toast.error("Cannot issue: Out of stock!")
       return
     }
@@ -708,12 +771,12 @@ export default function MaterialsClient({
 
     const nextMaterials = materials.map(m => {
       if (m.id === whoGotItMaterial.id) {
-        return { ...m, available_stock: Math.max(0, m.available_stock - 1) }
+        return { ...m, available_stock: Math.max(0, currentStock - 1) }
       }
       return m
     })
     saveMaterials(nextMaterials)
-    setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: Math.max(0, prev.available_stock - 1) } : null)
+    setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: Math.max(0, currentStock - 1) } : null)
 
     try {
       const res = await fetch("/api/materials/distribute", {
@@ -729,22 +792,32 @@ export default function MaterialsClient({
         })
       })
       const data = await res.json()
-      if (data?.success && data?.issues && data.issues.length > 0) {
-        const dbIss = data.issues[0]
-        const resolvedIssue = { ...newIssue, id: dbIss.id, issued_at: dbIss.issued_at }
-        saveIssues([resolvedIssue, ...issues])
+      if (res.ok && data?.success) {
+        if (data?.issues && data.issues.length > 0) {
+          const dbIss = data.issues[0]
+          const resolvedIssue = { ...newIssue, id: dbIss.id, issued_at: dbIss.issued_at }
+          saveIssues([resolvedIssue, ...issues])
+        }
+        if (typeof data.available_stock === "number") {
+          saveMaterials(materials.map(m => m.id === whoGotItMaterial.id ? { ...m, available_stock: data.available_stock } : m))
+          setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: data.available_stock } : null)
+        }
+        router.refresh()
+      } else {
+        // Roll back on failure
+        saveIssues(issues)
+        saveMaterials(materials)
+        setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: currentStock } : null)
+        toast.error(data?.error || "Failed to record distribution")
+        return
       }
-    } catch {
-      try {
-        await supabase.from("material_issues").insert({
-          material_id: whoGotItMaterial.id,
-          student_id: student.id,
-          batch_id: enrolledBatch,
-          issued_by: currentStaff.id.startsWith("admin") ? undefined : currentStaff.id,
-          status: "issued",
-          notes: "Quick distributed"
-        })
-      } catch {}
+    } catch (err: any) {
+      console.warn("Distribution error:", err)
+      saveIssues(issues)
+      saveMaterials(materials)
+      setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: currentStock } : null)
+      toast.error(err?.message || "Failed to record distribution")
+      return
     }
 
     // Broadcast cross-tab distribution event
@@ -754,6 +827,12 @@ export default function MaterialsClient({
         material_name: whoGotItMaterial.name,
         student_ids: [student.id],
         timestamp: Date.now()
+      }))
+      window.dispatchEvent(new CustomEvent("material_distributed", {
+        detail: {
+          material_id: whoGotItMaterial.id,
+          student_ids: [student.id]
+        }
       }))
     } catch {}
 
@@ -769,12 +848,12 @@ export default function MaterialsClient({
 
     const nextMaterials = materials.map(m => {
       if (m.id === whoGotItMaterial.id) {
-        return { ...m, available_stock: m.available_stock + 1 }
+        return { ...m, available_stock: (m.available_stock || 0) + 1 }
       }
       return m
     })
     saveMaterials(nextMaterials)
-    setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: prev.available_stock + 1 } : null)
+    setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: (prev.available_stock || 0) + 1 } : null)
 
     // Broadcast cross-tab revoke event
     try {
@@ -784,10 +863,16 @@ export default function MaterialsClient({
         revoked_issue_id: issueId,
         timestamp: Date.now()
       }))
+      window.dispatchEvent(new CustomEvent("material_revoked", {
+        detail: {
+          material_id: whoGotItMaterial.id,
+          issue_id: issueId
+        }
+      }))
     } catch {}
 
     try {
-      await fetch("/api/materials/revoke", {
+      const res = await fetch("/api/materials/revoke", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -795,10 +880,16 @@ export default function MaterialsClient({
           material_id: whoGotItMaterial.id
         })
       })
-    } catch {
-      try {
-        await supabase.from("material_issues").delete().eq("id", issueId)
-      } catch {}
+      const data = await res.json()
+      if (res.ok && data?.success) {
+        if (typeof data.available_stock === "number") {
+          saveMaterials(materials.map(m => m.id === whoGotItMaterial.id ? { ...m, available_stock: data.available_stock } : m))
+          setWhoGotItMaterial(prev => prev ? { ...prev, available_stock: data.available_stock } : null)
+        }
+        router.refresh()
+      }
+    } catch (err) {
+      console.warn("Revoke network note:", err)
     }
 
     toast.info(`Revoked distribution for ${studentName}. 1 unit restored to stock.`)
@@ -880,9 +971,22 @@ export default function MaterialsClient({
 
   // Overall stats
   const totalMaterialsCount = materials.length
-  const totalStockInHand = materials.reduce((acc, m) => acc + (m.available_stock || 0), 0)
   const totalDistributedCount = issues.filter(i => i.status === "issued").length
-  const lowStockCount = materials.filter(m => m.available_stock <= 5 && m.available_stock > 0).length
+  const totalStockInHand = materials.reduce((acc, m) => {
+    const dist = issues.filter(i => 
+      (i.material_id === m.id || (i.material?.name && i.material.name.toLowerCase() === m.name.toLowerCase())) && 
+      i.status === "issued"
+    ).length
+    return acc + Math.max(0, (m.total_stock || 0) - dist)
+  }, 0)
+  const lowStockCount = materials.filter(m => {
+    const dist = issues.filter(i => 
+      (i.material_id === m.id || (i.material?.name && i.material.name.toLowerCase() === m.name.toLowerCase())) && 
+      i.status === "issued"
+    ).length
+    const avail = Math.max(0, (m.total_stock || 0) - dist)
+    return avail <= 5 && avail > 0
+  }).length
 
   return (
     <div className="space-y-6">
@@ -1059,12 +1163,16 @@ export default function MaterialsClient({
               : (m.batch_id ? [m.batch_id] : [])
 
             const assignedBatches = batches.filter(b => assignedBatchIds.includes(b.id))
-            const distributedForThis = issues.filter(i => i.material_id === m.id && i.status === "issued").length
-            const isOutOfStock = m.available_stock <= 0
-            const isLowStock = m.available_stock <= 5 && !isOutOfStock
+            const distributedForThis = issues.filter(i => 
+              (i.material_id === m.id || (i.material?.name && i.material.name.toLowerCase() === m.name.toLowerCase())) && 
+              i.status === "issued"
+            ).length
+            const dynamicAvailable = Math.max(0, (m.total_stock || 0) - distributedForThis)
+            const isOutOfStock = dynamicAvailable <= 0
+            const isLowStock = dynamicAvailable <= 5 && !isOutOfStock
 
             const stockPct = m.total_stock > 0 
-              ? Math.min(100, Math.round((m.available_stock / m.total_stock) * 100)) 
+              ? Math.min(100, Math.round((dynamicAvailable / m.total_stock) * 100)) 
               : 0
 
             const assignedCourse = courses.find(c => c.id === m.course_id)
@@ -1144,7 +1252,7 @@ export default function MaterialsClient({
                   <div className="mt-4 pt-3 border-t border-slate-200">
                     <div className="flex items-center justify-between text-xs mb-1.5">
                       <span className="text-slate-600">
-                        In Stock: <strong className={isOutOfStock ? "text-rose-600" : isLowStock ? "text-amber-600" : "text-slate-900"}>{m.available_stock}</strong> / {m.total_stock} units
+                        In Stock: <strong className={isOutOfStock ? "text-rose-600" : isLowStock ? "text-amber-600" : "text-slate-900"}>{dynamicAvailable}</strong> / {m.total_stock} units
                       </span>
                       <span className="text-slate-500 font-mono">{stockPct}%</span>
                     </div>
@@ -1753,24 +1861,32 @@ export default function MaterialsClient({
               </div>
 
               {/* Stock Preview Alert */}
-              {distributeMaterial && (
-                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="text-slate-400">Selected: </span>
-                    <strong className="text-amber-400 font-bold">{distributeSelectedStudentIds.size} students</strong>
+              {distributeMaterial && (() => {
+                const activeCount = issues.filter(i => 
+                  (i.material_id === distributeMaterial.id || (i.material?.name && i.material.name.toLowerCase() === distributeMaterial.name.toLowerCase())) && 
+                  i.status === "issued"
+                ).length
+                const dynStock = Math.max(0, (distributeMaterial.total_stock || 0) - activeCount)
+                const remainingAfter = dynStock - distributeSelectedStudentIds.size
+                return (
+                  <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-slate-400">Selected: </span>
+                      <strong className="text-amber-400 font-bold">{distributeSelectedStudentIds.size} students</strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400">Stock After Issue: </span>
+                      <strong className={`font-bold ${
+                        remainingAfter < 0
+                          ? "text-rose-400"
+                          : "text-emerald-400"
+                      }`}>
+                        {remainingAfter} units
+                      </strong>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-slate-400">Stock After Issue: </span>
-                    <strong className={`font-bold ${
-                      distributeMaterial.available_stock - distributeSelectedStudentIds.size < 0
-                        ? "text-rose-400"
-                        : "text-emerald-400"
-                    }`}>
-                      {distributeMaterial.available_stock - distributeSelectedStudentIds.size} units
-                    </strong>
-                  </div>
-                </div>
-              )}
+                )
+              })()}
             </div>
 
             <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between bg-slate-950">
@@ -1788,7 +1904,15 @@ export default function MaterialsClient({
                 <button
                   type="button"
                   onClick={handleConfirmDistribution}
-                  disabled={distributeSelectedStudentIds.size === 0 || (distributeMaterial ? distributeSelectedStudentIds.size > distributeMaterial.available_stock : true)}
+                  disabled={distributeSelectedStudentIds.size === 0 || (() => {
+                    if (!distributeMaterial) return true
+                    const activeCount = issues.filter(i => 
+                      (i.material_id === distributeMaterial.id || (i.material?.name && i.material.name.toLowerCase() === distributeMaterial.name.toLowerCase())) && 
+                      i.status === "issued"
+                    ).length
+                    const dynStock = Math.max(0, (distributeMaterial.total_stock || 0) - activeCount)
+                    return distributeSelectedStudentIds.size > dynStock
+                  })()}
                   className="px-5 py-2 text-sm font-black text-slate-950 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 disabled:opacity-40 rounded-xl transition-all shadow-md shadow-amber-500/20 cursor-pointer"
                 >
                   Confirm & Issue ({distributeSelectedStudentIds.size})
@@ -1802,7 +1926,9 @@ export default function MaterialsClient({
       {/* ========================================== */}
       {/* 3. "WHO GOT IT" DISTRIBUTION CONTROLLER    */}
       {/* ========================================== */}
-      {whoGotItModalOpen && whoGotItMaterial && (
+      {whoGotItModalOpen && whoGotItMaterial && (() => {
+        const whoGotItAvailableStock = Math.max(0, (whoGotItMaterial.total_stock || 0) - materialIssuesList.length)
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-slate-900 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[90vh] text-white">
             {/* Modal Header */}
@@ -1839,7 +1965,7 @@ export default function MaterialsClient({
                 <span>Total Target: <strong className="text-white">{targetStudentsForMaterial.length}</strong></span>
                 <span>Distributed: <strong className="text-emerald-400">{materialIssuesList.length}</strong></span>
                 <span>Remaining: <strong className="text-amber-400">{Math.max(0, targetStudentsForMaterial.length - materialIssuesList.length)}</strong></span>
-                <span>Available Stock: <strong className="text-blue-400">{whoGotItMaterial.available_stock}</strong></span>
+                <span>Available Stock: <strong className="text-blue-400">{whoGotItAvailableStock}</strong></span>
               </div>
               <div>
                 <span className="font-bold text-amber-400">
@@ -2011,7 +2137,7 @@ export default function MaterialsClient({
             </div>
           </div>
         </div>
-      )}
+      )})()}
     </div>
   )
 }

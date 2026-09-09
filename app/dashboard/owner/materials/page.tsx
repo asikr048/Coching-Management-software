@@ -63,6 +63,40 @@ export default async function MaterialsPage() {
     console.warn("Could not load material_issues from supabase:", e)
   }
 
+  // 2b. Dynamic stock synchronization: compute available_stock directly from active issues
+  const activeIssuesByMatId = new Map<string, number>()
+  const activeIssuesByMatName = new Map<string, number>()
+
+  issues.forEach((iss: any) => {
+    if (iss.status === "issued") {
+      if (iss.material_id) {
+        activeIssuesByMatId.set(iss.material_id, (activeIssuesByMatId.get(iss.material_id) || 0) + 1)
+      }
+      const matName = (iss.material?.name || (iss as any).material_name || "").trim().toLowerCase()
+      if (matName) {
+        activeIssuesByMatName.set(matName, (activeIssuesByMatName.get(matName) || 0) + 1)
+      }
+    }
+  })
+
+  materials = materials.map((m: any) => {
+    const byId = activeIssuesByMatId.get(m.id) || 0
+    const byName = activeIssuesByMatName.get((m.name || "").trim().toLowerCase()) || 0
+    const activeCount = Math.max(byId, byName)
+    const totalStock = Number(m.total_stock) || 0
+    const dynamicAvailable = Math.max(0, totalStock - activeCount)
+
+    // In the background, ensure Supabase DB column reflects the exact dynamic stock
+    if (m.available_stock !== dynamicAvailable) {
+      admin.from("materials").update({ available_stock: dynamicAvailable }).eq("id", m.id).then(() => {})
+    }
+
+    return {
+      ...m,
+      available_stock: dynamicAvailable
+    }
+  })
+
   // 3. Batches with branch_id
   let batches: any[] = []
   try {

@@ -626,7 +626,7 @@ export async function GET(req: NextRequest) {
           })
       }
       if (mIssRes.data) {
-        materialIssues = mIssRes.data.filter((iss: any) => iss.status !== "returned" && iss.material != null)
+        materialIssues = mIssRes.data.filter((iss: any) => iss.status !== "returned")
       }
 
       const rawMats = bMatsRes.data || []

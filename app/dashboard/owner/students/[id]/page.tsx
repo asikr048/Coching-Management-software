@@ -20,7 +20,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   ])
 
   const duesList = duesRes.data || []
-  const issuesList = (issuesRes.data || []).filter((i: any) => i.material != null)
+  const issuesList = (issuesRes.data || []).filter((i: any) => i.status !== "returned")
   const totalPaid = (payments.data || []).reduce((s, p) => s + (p.total_paid || 0), 0)
   const totalOutstandingDue = duesList
     .filter(d => d.status !== "paid" && d.status !== "waived")

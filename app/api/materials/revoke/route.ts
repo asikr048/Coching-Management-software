@@ -30,21 +30,37 @@ export async function POST(req: NextRequest) {
       await admin.from("material_issues").delete().eq("id", issue_id)
     }
 
-    // Increment available stock if target material is found
+    // Dynamically recalculate available stock based on remaining active issues in DB
+    let newStock = 0
     if (targetMatId && uuidRegex.test(String(targetMatId))) {
       const { data: mat } = await admin
         .from("materials")
-        .select("available_stock, total_stock")
+        .select("total_stock")
         .eq("id", targetMatId)
         .maybeSingle()
 
       if (mat) {
-        const newStock = Math.min(mat.total_stock, (mat.available_stock || 0) + 1)
-        await admin.from("materials").update({ available_stock: newStock }).eq("id", targetMatId)
+        const { count: remainingActiveCount } = await admin
+          .from("material_issues")
+          .select("*", { count: "exact", head: true })
+          .eq("material_id", targetMatId)
+          .eq("status", "issued")
+
+        const totalStock = Number(mat.total_stock) || 0
+        const activeCount = typeof remainingActiveCount === "number" ? remainingActiveCount : 0
+        newStock = Math.max(0, totalStock - activeCount)
+        await admin
+          .from("materials")
+          .update({ available_stock: newStock, updated_at: new Date().toISOString() })
+          .eq("id", targetMatId)
       }
     }
 
-    return NextResponse.json({ success: true, message: "Distribution revoked and stock restored." })
+    return NextResponse.json({
+      success: true,
+      available_stock: newStock,
+      message: "Distribution revoked and stock restored."
+    })
   } catch (err: any) {
     console.error("Unexpected error in /api/materials/revoke:", err)
     return NextResponse.json(
