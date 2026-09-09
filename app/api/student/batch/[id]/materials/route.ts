@@ -3,6 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -206,6 +209,12 @@ export async function GET(
       total_count: combinedMaterials.length,
       received_count: combinedMaterials.filter(m => m.is_received).length,
       pending_count: combinedMaterials.filter(m => !m.is_received).length,
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      }
     })
   } catch (err: any) {
     console.error("Error in /api/student/batch/[id]/materials:", err)

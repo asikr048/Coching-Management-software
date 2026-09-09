@@ -40,7 +40,7 @@ export default function StudentCoursePage() {
         }
 
         // Fetch course profile via dedicated student API
-        const profileRes = await fetch("/api/student/profile")
+        const profileRes = await fetch("/api/student/profile", { cache: "no-store", headers: { "Cache-Control": "no-cache" } })
         if (!profileRes.ok) {
           throw new Error("Failed to verify course enrollment")
         }
@@ -55,7 +55,7 @@ export default function StudentCoursePage() {
           return
         }
 
-        if (Array.isArray(profileData.materials) && profileData.materials.length > 0) {
+        if (Array.isArray(profileData.materials)) {
           setMaterials(profileData.materials)
         } else {
           try {
@@ -63,18 +63,18 @@ export default function StudentCoursePage() {
               .from("materials")
               .select("*")
               .order("created_at", { ascending: false })
-            if (dbMats && dbMats.length > 0) setMaterials(dbMats)
+            if (dbMats) setMaterials(dbMats)
           } catch (mErr) {
             console.warn("Course direct materials fetch note:", mErr)
           }
         }
 
-        if (Array.isArray(profileData.materialIssues) && profileData.materialIssues.length > 0) {
+        if (Array.isArray(profileData.materialIssues)) {
           setMaterialIssues(profileData.materialIssues)
         } else {
           try {
             const { data: dbIssues } = await supabase.from("material_issues").select("*")
-            if (dbIssues && dbIssues.length > 0) setMaterialIssues(dbIssues)
+            if (dbIssues) setMaterialIssues(dbIssues)
           } catch {}
         }
 
@@ -115,6 +115,42 @@ export default function StudentCoursePage() {
 
     if (courseId) {
       loadCourseData()
+    }
+
+    // Instant cross-tab sync when a material is deleted from admin panel
+    const onStorageChange = (e: StorageEvent) => {
+      if (e.key === "medhashiree_material_deleted" && e.newValue) {
+        try {
+          const { id, name } = JSON.parse(e.newValue)
+          setMaterials(prev => prev.filter(m => String(m.id) !== String(id) && (!name || m.name !== name)))
+          setMaterialIssues(prev => prev.filter(i => String(i.material_id) !== String(id)))
+        } catch {}
+      }
+    }
+    window.addEventListener("storage", onStorageChange)
+
+    // Real-time Supabase subscriptions for materials
+    const courseMatsChannel = supabase
+      .channel("student-course-materials-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "materials" },
+        () => {
+          loadCourseData()
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "material_issues" },
+        () => {
+          loadCourseData()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      window.removeEventListener("storage", onStorageChange)
+      supabase.removeChannel(courseMatsChannel)
     }
   }, [courseId, router])
 

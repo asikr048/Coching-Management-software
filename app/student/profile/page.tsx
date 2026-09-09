@@ -90,7 +90,7 @@ export default function StudentProfilePage() {
 
     async function loadStudentProfile() {
       try {
-        const res = await fetch("/api/student/profile")
+        const res = await fetch("/api/student/profile", { cache: "no-store", headers: { "Cache-Control": "no-cache" } })
         if (res.ok) {
           const data = await res.json()
           if (data.profile) {
@@ -162,7 +162,7 @@ export default function StudentProfilePage() {
           // Direct client fallback for materials
           try {
             const { data: fbMats } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
-            if (fbMats && fbMats.length > 0) setMaterials(fbMats)
+            if (fbMats) setMaterials(fbMats)
             if (studentRecord?.id) {
               const { data: fbIssues } = await supabase.from("material_issues").select("*").eq("student_id", studentRecord.id)
               if (fbIssues) setMaterialIssues(fbIssues)
@@ -185,8 +185,43 @@ export default function StudentProfilePage() {
       loadStudentProfile()
     }
     window.addEventListener("focus", onWindowFocus)
+
+    // Instant cross-tab sync when a material is deleted from admin panel
+    const onStorageChange = (e: StorageEvent) => {
+      if (e.key === "medhashiree_material_deleted" && e.newValue) {
+        try {
+          const { id, name } = JSON.parse(e.newValue)
+          setMaterials(prev => prev.filter(m => String(m.id) !== String(id) && (!name || m.name !== name)))
+          setMaterialIssues(prev => prev.filter(i => String(i.material_id) !== String(id)))
+          loadStudentProfile()
+        } catch {}
+      }
+    }
+    window.addEventListener("storage", onStorageChange)
+
+    // Real-time Supabase subscriptions for materials
+    const materialsChannel = supabase
+      .channel("student-profile-materials-sync")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "materials" },
+        () => {
+          loadStudentProfile()
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "material_issues" },
+        () => {
+          loadStudentProfile()
+        }
+      )
+      .subscribe()
+
     return () => {
       window.removeEventListener("focus", onWindowFocus)
+      window.removeEventListener("storage", onStorageChange)
+      supabase.removeChannel(materialsChannel)
     }
   }, [])
 

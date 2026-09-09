@@ -299,7 +299,7 @@ export default function StudentBatchDetailPage() {
         let profileMaterialIssues: any[] = []
 
         try {
-          const profileRes = await fetch('/api/student/profile')
+          const profileRes = await fetch('/api/student/profile', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
           if (profileRes.ok) {
             const profileJson = await profileRes.json()
             if (profileJson.student) studentData = profileJson.student
@@ -666,20 +666,22 @@ export default function StudentBatchDetailPage() {
         let combinedMaterials: any[] = []
 
         // Primary: Load directly from dedicated server API
+        let loadedFromServer = false
         try {
-          const apiMatRes = await fetch(`/api/student/batch/${batchId}/materials`)
+          const apiMatRes = await fetch(`/api/student/batch/${batchId}/materials`, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
           if (apiMatRes.ok) {
             const apiJson = await apiMatRes.json()
-            if (Array.isArray(apiJson.materials) && apiJson.materials.length > 0) {
+            if (Array.isArray(apiJson.materials)) {
               combinedMaterials = apiJson.materials
+              loadedFromServer = true
             }
           }
         } catch (apiMatErr) {
           console.warn("API batch materials fetch notice:", apiMatErr)
         }
 
-        // Secondary / Fallback: Combine with profileMaterials and direct query
-        if (combinedMaterials.length === 0) {
+        // Secondary / Fallback: Combine with profileMaterials and direct query only if API failed
+        if (!loadedFromServer) {
           let rawBatchMaterials: any[] = []
           try {
             const { data: allMats } = await supabase
@@ -838,6 +840,42 @@ export default function StudentBatchDetailPage() {
     
     if (batchId) {
       fetchData()
+    }
+
+    // Instant cross-tab sync when a material is deleted from admin panel
+    const onStorageChange = (e: StorageEvent) => {
+      if (e.key === "medhashiree_material_deleted" && e.newValue) {
+        try {
+          const { id, name } = JSON.parse(e.newValue)
+          setAllBatchMaterials(prev => prev.filter(m => String(m.material?.id || m.id) !== String(id) && (!name || (m.material?.name || m.name) !== name)))
+          setMaterials(prev => prev.filter(m => String(m.material_id || m.material?.id || m.id) !== String(id)))
+        } catch {}
+      }
+    }
+    window.addEventListener("storage", onStorageChange)
+
+    // Real-time Supabase subscriptions for materials
+    const batchMatsChannel = supabase
+      .channel(`student-batch-materials-sync-${batchId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "materials" },
+        () => {
+          fetchData()
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "material_issues" },
+        () => {
+          fetchData()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      window.removeEventListener("storage", onStorageChange)
+      supabase.removeChannel(batchMatsChannel)
     }
   }, [batchId, router, supabase])
 

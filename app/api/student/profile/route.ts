@@ -895,6 +895,12 @@ export async function GET(req: NextRequest) {
       materials: enrichedMaterials,
       materialIssues,
       paymentAccounts,
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      }
     })
   } catch (error: any) {
     console.error("Student profile API exception:", error)

@@ -120,33 +120,20 @@ export default function MaterialsClient({
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId, currentBranch } = useBranch()
 
-  // Materials state (synced with localStorage backup)
-  const [materials, setMaterials] = useState<Material[]>(() => {
-    if (typeof window === "undefined") return initialMaterials
-    try {
-      const saved = localStorage.getItem("medhashiree_materials")
-      if (saved) {
-        const parsed: Material[] = JSON.parse(saved)
-        if (parsed.length > 0 && initialMaterials.length === 0) return parsed
-      }
-    } catch {}
-    return initialMaterials
-  })
+  // Materials state (Supabase database is the single source of truth)
+  const [materials, setMaterials] = useState<Material[]>(initialMaterials)
+  const [issues, setIssues] = useState<MaterialIssue[]>(initialIssues)
 
-  // Material issues state
-  const [issues, setIssues] = useState<MaterialIssue[]>(() => {
-    if (typeof window === "undefined") return initialIssues
-    try {
-      const saved = localStorage.getItem("medhashiree_material_issues")
-      if (saved) {
-        const parsed: MaterialIssue[] = JSON.parse(saved)
-        if (parsed.length > 0 && initialIssues.length === 0) return parsed
-      }
-    } catch {}
-    return initialIssues
-  })
+  // Keep state synchronized with server props
+  useEffect(() => {
+    setMaterials(initialMaterials)
+  }, [initialMaterials])
 
-  // Sync to localStorage
+  useEffect(() => {
+    setIssues(initialIssues)
+  }, [initialIssues])
+
+  // Sync helpers
   const saveMaterials = (updated: Material[]) => {
     setMaterials(updated)
     try {
@@ -161,14 +148,14 @@ export default function MaterialsClient({
     } catch {}
   }
 
-  // Auto-sync legacy localStorage materials with backend database so valid UUIDs are assigned
+  // Auto-sync legacy mock materials (temporary 'mat_' IDs) with backend database
   useEffect(() => {
     async function syncLegacyMaterials() {
-      const dbIds = new Set(initialMaterials.map(m => m.id))
-      const unsyncedMats = materials.filter(m => !dbIds.has(m.id) || String(m.id).startsWith("mat_"))
-      if (unsyncedMats.length === 0) return
+      // ONLY sync temporary mock items starting with 'mat_', NEVER re-save deleted materials
+      const legacyMockMats = materials.filter(m => String(m.id).startsWith("mat_"))
+      if (legacyMockMats.length === 0) return
 
-      for (const lm of unsyncedMats) {
+      for (const lm of legacyMockMats) {
         try {
           const res = await fetch("/api/materials/save", {
             method: "POST",
@@ -190,7 +177,7 @@ export default function MaterialsClient({
         }
       }
 
-      // Also sync any local distribution issues
+      // Also sync any temporary distribution issues starting with 'issue_'
       const legacyIssues = issues.filter(i => i.id && String(i.id).startsWith("issue_"))
       for (const li of legacyIssues) {
         try {
@@ -399,11 +386,19 @@ export default function MaterialsClient({
       return
     }
 
-    const nextMaterials = materials.filter(m => m.id !== id)
+    // 1. Immediately remove from local state
+    const nextMaterials = materials.filter(m => m.id !== id && (!name || m.name !== name))
     const nextIssues = issues.filter(i => i.material_id !== id)
     saveMaterials(nextMaterials)
     saveIssues(nextIssues)
 
+    // 2. Broadcast deletion event to other tabs (student profile / batch / course)
+    try {
+      localStorage.setItem("medhashiree_material_deleted", JSON.stringify({ id, name, timestamp: Date.now() }))
+      window.dispatchEvent(new CustomEvent("material_deleted", { detail: { id, name } }))
+    } catch {}
+
+    // 3. Delete from Supabase backend (materials & material_issues)
     try {
       const res = await fetch("/api/materials/delete", {
         method: "POST",
@@ -419,7 +414,9 @@ export default function MaterialsClient({
     } catch (e: any) {
       console.warn("Could not delete via API:", e)
       try {
+        await supabase.from("material_issues").delete().eq("material_id", id)
         await supabase.from("materials").delete().eq("id", id)
+        if (name) await supabase.from("materials").delete().ilike("name", name)
       } catch {}
       toast.success(`"${name}" deleted.`)
     }

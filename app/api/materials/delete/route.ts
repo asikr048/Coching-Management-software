@@ -4,40 +4,80 @@ import { createAdminClient } from "@/lib/supabase/admin"
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { id } = body
+    const { id, name } = body
 
-    if (!id) {
-      return NextResponse.json({ error: "Material ID is required." }, { status: 400 })
+    if (!id && !name) {
+      return NextResponse.json({ error: "Material ID or Name is required." }, { status: 400 })
     }
 
     const admin = createAdminClient()
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-    const idStr = String(id).trim()
-    const nameStr = body.name ? String(body.name).trim() : null
+    const idStr = id ? String(id).trim() : ""
+    const nameStr = name ? String(name).trim() : ""
 
-    if (uuidRegex.test(idStr)) {
-      // 1. Delete all distribution logs for this material first
-      await admin.from("material_issues").delete().eq("material_id", idStr)
+    const targetMaterialIds = new Set<string>()
+    if (idStr && uuidRegex.test(idStr)) {
+      targetMaterialIds.add(idStr)
+    }
 
-      // 2. Delete the material itself
-      const { error } = await admin.from("materials").delete().eq("id", idStr)
-      if (error) {
-        console.error("Error deleting material from database:", error)
-        return NextResponse.json({ error: error.message || "Failed to delete material" }, { status: 500 })
+    // 1. Search for all materials matching name (catches duplicates or legacy items)
+    if (nameStr) {
+      const { data: matsByName } = await admin
+        .from("materials")
+        .select("id")
+        .ilike("name", nameStr)
+      if (matsByName && matsByName.length > 0) {
+        matsByName.forEach((m: any) => {
+          if (m.id) targetMaterialIds.add(m.id)
+        })
       }
-    } else if (nameStr) {
-      // If id is not a valid UUID (e.g. legacy id), search and delete by name
-      const { data: found } = await admin.from("materials").select("id").ilike("name", nameStr).maybeSingle()
-      if (found?.id) {
-        await admin.from("material_issues").delete().eq("material_id", found.id)
-        await admin.from("materials").delete().eq("id", found.id)
+    }
+
+    const idList = Array.from(targetMaterialIds)
+
+    // 2. Cascade delete all distribution logs (material_issues)
+    if (idList.length > 0) {
+      const { error: issErr } = await admin
+        .from("material_issues")
+        .delete()
+        .in("material_id", idList)
+      if (issErr) {
+        console.warn("Notice: deleting material_issues by id list:", issErr)
       }
+    }
+    if (idStr && uuidRegex.test(idStr)) {
+      try {
+        await admin.from("material_issues").delete().eq("material_id", idStr)
+      } catch {}
+    }
+
+    // 3. Delete the material itself from materials table
+    if (idList.length > 0) {
+      const { error: matErr } = await admin
+        .from("materials")
+        .delete()
+        .in("id", idList)
+      if (matErr) {
+        console.error("Error deleting materials by id list:", matErr)
+      }
+    }
+    if (idStr && uuidRegex.test(idStr)) {
+      try {
+        await admin.from("materials").delete().eq("id", idStr)
+      } catch {}
+    }
+    if (nameStr) {
+      try {
+        await admin.from("materials").delete().ilike("name", nameStr)
+      } catch {}
     }
 
     return NextResponse.json({
       success: true,
-      deleted_id: id,
+      deleted_ids: idList,
+      deleted_id: idStr,
+      deleted_name: nameStr,
       message: "Material and all its distribution records deleted successfully."
     })
   } catch (err: any) {
