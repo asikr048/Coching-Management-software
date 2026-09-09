@@ -307,7 +307,7 @@ export default function OnlineResultPortalPage() {
           }
         }
         const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
-        const targetExamId = urlParams?.get("exam_id") || urlParams?.get("id")
+        const targetExamId = urlParams?.get("exam_id") || urlParams?.get("id") || "639d346a-bb1f-4b71-8715-b845872cc859"
         const targetDay = urlParams?.get("day")
         const targetTab = urlParams?.get("tab")
 

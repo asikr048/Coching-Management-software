@@ -614,7 +614,7 @@ export default function HomePage() {
 
             {/* Online Result Quick Link */}
             <Link
-              href="/online-result"
+              href="/online-result?exam_id=639d346a-bb1f-4b71-8715-b845872cc859"
               className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 rounded-xl text-xs sm:text-sm font-extrabold shadow-xs transition-all flex-shrink-0 cursor-pointer"
             >
               <Trophy className="w-4 h-4 text-amber-500" />
@@ -644,7 +644,7 @@ export default function HomePage() {
               মূল পাতা (Home)
             </Link>
             <Link 
-              href="/online-result" 
+              href="/online-result?exam_id=639d346a-bb1f-4b71-8715-b845872cc859" 
               className="px-3.5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black flex items-center gap-1.5 shadow-md shadow-amber-400/20 transition-all cursor-pointer"
             >
               <Trophy className="w-3.5 h-3.5 text-slate-950" />
@@ -653,13 +653,13 @@ export default function HomePage() {
             <a href="#batches" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
               ব্যাচসমূহ (Batches)
             </a>
-            <a 
-              href="#results" 
+            <Link 
+              href="/online-result?exam_id=639d346a-bb1f-4b71-8715-b845872cc859" 
               className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-amber-300 font-bold transition-colors flex items-center gap-1"
             >
               <Trophy className="w-3.5 h-3.5 text-amber-300" />
               <span>পরীক্ষার রেজাল্ট (Results)</span>
-            </a>
+            </Link>
             <a href="#courses" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
               কোর্সসমূহ (Courses)
             </a>
@@ -679,7 +679,7 @@ export default function HomePage() {
 
           <div className="hidden lg:flex items-center gap-2 py-1">
             <Link
-              href="/online-result"
+              href="/online-result?exam_id=639d346a-bb1f-4b71-8715-b845872cc859"
               className="text-xs text-slate-950 font-black bg-amber-400 hover:bg-amber-300 px-3 py-1 rounded-full flex items-center gap-1 shadow-xs transition-colors"
             >
               <Trophy className="w-3.5 h-3.5 text-slate-950" /> মেরিট লিস্ট
@@ -997,7 +997,7 @@ export default function HomePage() {
 
             <div className="flex items-center gap-3">
               <Link
-                href="/online-result"
+                href="/online-result?exam_id=639d346a-bb1f-4b71-8715-b845872cc859"
                 className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-bold text-xs sm:text-sm shadow-md shadow-amber-500/20 hover:scale-[1.01] transition-all flex items-center gap-2 flex-shrink-0 cursor-pointer"
               >
                 <Trophy className="w-4 h-4 text-amber-200" />
@@ -1024,7 +1024,7 @@ export default function HomePage() {
                 পরীক্ষা সম্পন্ন হওয়ার পর শাখাভিত্তিক ফলাফল সরাসরি এখানে এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান হবে।
               </p>
               <Link
-                href="/online-result"
+                href="/online-result?exam_id=639d346a-bb1f-4b71-8715-b845872cc859"
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 pt-1"
               >
                 <span>অনলাইন রেজাল্ট আর্কাইভ দেখুন</span> <ChevronRight className="w-3.5 h-3.5" />
