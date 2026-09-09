@@ -39,7 +39,6 @@ export default function HomePage() {
   const [blogs, setBlogs] = useState<any[]>([])
   const [publicExams, setPublicExams] = useState<any[]>([])
   const [loadingExams, setLoadingExams] = useState(true)
-  const [homepageResultTab, setHomepageResultTab] = useState<"all" | "weekly" | "daily">("all")
 
   // Modal states for full view
   const [activeNoticeModal, setActiveNoticeModal] = useState<any | null>(null)
@@ -340,13 +339,27 @@ export default function HomePage() {
     return b.branch_id === selectedBranchId || !b.branch_id
   })
 
+  // Handle smooth scroll to section on hash load
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash) {
+      const hash = window.location.hash.substring(1)
+      const timer = setTimeout(() => {
+        const element = document.getElementById(hash)
+        if (element) {
+          element.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [loadingExams, batches.length, notices.length])
+
   const publicResultCards = useMemo(() => {
     const cards: Array<{
       id: string
       examId: string
       title: string
       badgeText: string
-      badgeType: "daily" | "weekly" | "one_time"
+      badgeType: "weekly" | "one_time"
       subject?: string
       branchName?: string
       batchName?: string
@@ -355,18 +368,7 @@ export default function HomePage() {
       passMarks: number
       link: string
       buttonText: string
-      dayKey?: string
     }> = []
-
-    const ALL_WEEK_DAYS_LOCAL = [
-      { id: "saturday", bn: "শনিবার", en: "Saturday" },
-      { id: "sunday", bn: "রবিবার", en: "Sunday" },
-      { id: "monday", bn: "সোমবার", en: "Monday" },
-      { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
-      { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
-      { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
-      { id: "friday", bn: "শুক্রবার", en: "Friday" },
-    ]
 
     for (const ex of publicExams) {
       if (selectedBranchId !== "all") {
@@ -380,150 +382,43 @@ export default function HomePage() {
         ex.is_weekly_published === true ||
         Boolean(ex.title?.includes("সাপ্তাহিক"))
 
-      if (!isWeekly) {
-        cards.push({
-          id: ex.id,
-          examId: ex.id,
-          title: ex.title,
-          badgeText: "দৈনিক পরীক্ষা",
-          badgeType: "one_time",
-          subject: ex.subject,
-          branchName: ex.branch?.name,
-          batchName: ex.batch?.name,
-          routineText: ex.exam_date ? new Date(ex.exam_date).toLocaleDateString("en-GB") : "চলমান",
-          totalMarks: ex.total_marks || 50,
-          passMarks: ex.pass_marks || 20,
-          link: `/online-result?exam_id=${ex.id}`,
-          buttonText: "ফলাফল ও সম্পূর্ণ মেরিট লিস্ট দেখুন",
-        })
-      } else {
-        // Parse recurring days
-        const dayConfigMap: Record<string, any> = {}
-        if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
-          for (const item of ex.recurring_days) {
-            const isObj = typeof item === "object" && item !== null
-            const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
-            const dayKey = String(rawKey).toLowerCase()
-            const matched = ALL_WEEK_DAYS_LOCAL.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
-            const canonicalKey = matched?.id || dayKey
-            dayConfigMap[canonicalKey] = {
-              key: canonicalKey,
-              day_bn: matched?.bn || (isObj ? item.day_bn : rawKey),
-              day_en: matched?.en || (isObj ? item.day_en : rawKey),
-              exam_name: (isObj ? item.exam_name : null) || `${matched?.bn || rawKey}ের পরীক্ষা`,
-              subject: (isObj ? item.subject : null) || ex.subject || "",
-              total_marks: Number(isObj ? item.total_marks : 50) || 50,
-              pass_marks: Number(isObj ? item.pass_marks : 20) || 20,
-            }
-          }
-        }
+      let totalMarks = ex.total_marks || 50
+      let passMarks = ex.pass_marks || 20
 
-        const days = ALL_WEEK_DAYS_LOCAL.map((w) => {
-          if (dayConfigMap[w.id]) return dayConfigMap[w.id]
-          return {
-            key: w.id,
-            day_bn: w.bn,
-            day_en: w.en,
-            exam_name: `${w.bn}ের পরীক্ষা`,
-            subject: ex.subject || "",
-            total_marks: 50,
-            pass_marks: 20,
-          }
-        })
-
-        // Parse published days
-        let pubDays: string[] = []
-        if (Array.isArray(ex.published_days)) {
-          pubDays = ex.published_days.map((d: any) => String(d).toLowerCase())
-        } else if (typeof ex.published_days === "string" && ex.published_days.trim()) {
-          try {
-            const parsed = JSON.parse(ex.published_days)
-            if (Array.isArray(parsed)) pubDays = parsed.map((d: any) => String(d).toLowerCase())
-            else pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
-          } catch {
-            pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
-          }
-        }
-        if (pubDays.length === 0 && (ex as any).result_note?.includes("[PUBLISHED_DAYS:")) {
-          const match = (ex as any).result_note.match(/\[PUBLISHED_DAYS:(.*?)\]/)
-          if (match && match[1]) {
-            pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
-          }
-        }
-
-        // 1. ALWAYS ADD WEEKLY CONSOLIDATED RESULT CARD FIRST:
-        const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
-        const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
-        cards.push({
-          id: `${ex.id}-weekly`,
-          examId: ex.id,
-          title: ex.title,
-          badgeText: "সাপ্তাহিক সামগ্রিক রেজাল্ট (৭ দিন)",
-          badgeType: "weekly",
-          subject: ex.subject,
-          branchName: ex.branch?.name,
-          batchName: ex.batch?.name,
-          routineText: "শনিবার হতে শুক্রবার (মোট ৭ দিন)",
-          totalMarks: totalMarks,
-          passMarks: passMarks,
-          link: `/online-result?exam_id=${ex.id}`,
-          buttonText: "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন",
-        })
-
-        // 2. FOR EACH PUBLISHED DAY: Add daily cards
-        for (const dayConf of days) {
-          const isDayPub = pubDays.some((p) => {
-            const pLower = String(p).toLowerCase()
-            return (
-              pLower === dayConf.key?.toLowerCase() ||
-              pLower === dayConf.day_bn?.toLowerCase() ||
-              (dayConf.day_en && pLower === dayConf.day_en.toLowerCase())
-            )
-          })
-          if (isDayPub) {
-            cards.push({
-              id: `${ex.id}-day-${dayConf.key}`,
-              examId: ex.id,
-              dayKey: dayConf.key,
-              title: `${ex.title} - ${dayConf.day_bn}`,
-              badgeText: `দৈনিক পরীক্ষা (${dayConf.day_bn})`,
-              badgeType: "daily",
-              subject: dayConf.subject || ex.subject,
-              branchName: ex.branch?.name,
-              batchName: ex.batch?.name,
-              routineText: `${dayConf.day_bn}ের পরীক্ষা`,
-              totalMarks: dayConf.total_marks || 50,
-              passMarks: dayConf.pass_marks || 20,
-              link: `/online-result?exam_id=${ex.id}&day=${dayConf.key}`,
-              buttonText: `${dayConf.day_bn}ের মেরিট লিস্ট দেখুন`,
-            })
-          }
-        }
+      if (isWeekly && Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
+        const sumTotal = ex.recurring_days.reduce((acc: number, d: any) => {
+          const m = typeof d === "object" && d !== null ? Number(d.total_marks) : 0
+          return acc + (m || 0)
+        }, 0)
+        const sumPass = ex.recurring_days.reduce((acc: number, d: any) => {
+          const p = typeof d === "object" && d !== null ? Number(d.pass_marks) : 0
+          return acc + (p || 0)
+        }, 0)
+        if (sumTotal > 0) totalMarks = sumTotal
+        if (sumPass > 0) passMarks = sumPass
       }
+
+      cards.push({
+        id: ex.id,
+        examId: ex.id,
+        title: ex.title,
+        badgeText: isWeekly ? "সাপ্তাহিক রেজাল্ট" : "পরীক্ষার রেজাল্ট",
+        badgeType: isWeekly ? "weekly" : "one_time",
+        subject: ex.subject,
+        branchName: ex.branch?.name,
+        batchName: ex.batch?.name,
+        routineText: ex.exam_date 
+          ? new Date(ex.exam_date).toLocaleDateString("en-GB") 
+          : (isWeekly ? "সাপ্তাহিক মূল্যায়ন" : "চলমান"),
+        totalMarks: totalMarks,
+        passMarks: passMarks,
+        link: `/online-result?exam_id=${ex.id}`,
+        buttonText: "ফলাফল ও সম্পূর্ণ মেরিট লিস্ট দেখুন",
+      })
     }
 
     return cards
   }, [publicExams, selectedBranchId])
-
-  // Filtered public result cards for homepage results bar
-  const filteredHomepageResultCards = useMemo(() => {
-    if (homepageResultTab === "weekly") {
-      return publicResultCards.filter((c) => c.badgeType === "weekly")
-    }
-    if (homepageResultTab === "daily") {
-      return publicResultCards.filter((c) => c.badgeType === "daily" || c.badgeType === "one_time")
-    }
-    // "all": shows both weekly and daily results
-    return publicResultCards
-  }, [publicResultCards, homepageResultTab])
-
-  const weeklyResultCardsCount = useMemo(() => {
-    return publicResultCards.filter((c) => c.badgeType === "weekly").length
-  }, [publicResultCards])
-
-  const dailyResultCardsCount = useMemo(() => {
-    return publicResultCards.filter((c) => c.badgeType !== "weekly").length
-  }, [publicResultCards])
 
   async function handleFeedbackSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -760,19 +655,10 @@ export default function HomePage() {
             </a>
             <a 
               href="#results" 
-              onClick={() => setHomepageResultTab("all")}
               className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-amber-300 font-bold transition-colors flex items-center gap-1"
             >
               <Trophy className="w-3.5 h-3.5 text-amber-300" />
               <span>পরীক্ষার রেজাল্ট (Results)</span>
-            </a>
-            <a 
-              href="#results" 
-              onClick={() => setHomepageResultTab("weekly")}
-              className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-purple-200 hover:text-purple-100 font-bold transition-colors flex items-center gap-1"
-            >
-              <CalendarDays className="w-3.5 h-3.5 text-purple-300" />
-              <span>সাপ্তাহিক রেজাল্ট (Weekly)</span>
             </a>
             <a href="#courses" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
               কোর্সসমূহ (Courses)
@@ -879,7 +765,7 @@ export default function HomePage() {
           </div>
 
           {/* Right: 35% Notice Book / Notice Board ("সর্বশেষ নোটিশ :") (4 columns on lg) */}
-          <div id="notices" className="lg:col-span-4 flex flex-col">
+          <div id="notices" className="lg:col-span-4 flex flex-col scroll-mt-28 sm:scroll-mt-32">
             <div className="bg-white rounded-2xl border border-gray-200/90 shadow-md overflow-hidden flex flex-col h-full">
               {/* Notice Book Header (Matches Reference Style with Dark Navy Ribbon) */}
               <div className="bg-[#1e3a5f] text-white px-5 py-3.5 border-l-4 border-amber-400 flex items-center justify-between">
@@ -951,7 +837,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 5. BATCHES SECTION ("চলমান ও আসন্ন ব্যাচসমূহ") */}
       {/* ========================================================================= */}
-      <section id="batches" className="max-w-7xl mx-auto px-4 sm:px-8 py-8 sm:py-12">
+      <section id="batches" className="max-w-7xl mx-auto px-4 sm:px-8 py-8 sm:py-12 scroll-mt-28 sm:scroll-mt-32">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6 sm:mb-8 border-b border-gray-200/80 pb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -1089,7 +975,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 5.5. PUBLISHED EXAMS & MERIT LIST SECTION ("পরীক্ষার ফলাফল ও মেরিট লিস্ট") */}
       {/* ========================================================================= */}
-      <section id="results" className="bg-gradient-to-b from-slate-50 to-indigo-50/40 border-y border-gray-200/80 py-10 sm:py-16">
+      <section id="results" className="bg-gradient-to-b from-slate-50 to-indigo-50/40 border-y border-gray-200/80 py-10 sm:py-16 scroll-mt-28 sm:scroll-mt-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8 sm:mb-10 pb-4 border-b border-indigo-100">
             <div>
@@ -1105,7 +991,7 @@ export default function HomePage() {
                 প্রকাশিত পরীক্ষার ফলাফল ও মেধা তালিকা
               </h2>
               <p className="text-xs sm:text-sm text-gray-600 mt-1">
-                শিক্ষার্থী ও অভিভাবকদের অবগতির জন্য প্রতিটি শাখার দৈনিক ও সাপ্তাহিক পরীক্ষার ফলাফল সরাসরি এই তালিকায় দেখতে পাবেন
+                শিক্ষার্থী ও অভিভাবকদের অবগতির জন্য প্রতিটি শাখার পরীক্ষার ফলাফল সরাসরি এই তালিকায় দেখতে পাবেন
               </p>
             </div>
 
@@ -1121,96 +1007,32 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Interactive Results Filter Bar on Homepage */}
-          <div className="bg-white p-2.5 rounded-2xl border border-indigo-100 shadow-xs mb-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-1.5 sm:gap-2 p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 w-full sm:w-auto overflow-x-auto">
-              <button
-                type="button"
-                onClick={() => setHomepageResultTab("all")}
-                className={`px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-extrabold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
-                  homepageResultTab === "all"
-                    ? "bg-indigo-700 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                }`}
-              >
-                <Trophy className="w-4 h-4 text-amber-300" />
-                <span>সকল ফলাফল ({publicResultCards.length})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setHomepageResultTab("weekly")}
-                className={`px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-extrabold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
-                  homepageResultTab === "weekly"
-                    ? "bg-purple-700 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                }`}
-              >
-                <CalendarDays className="w-4 h-4 text-purple-300" />
-                <span>সাপ্তাহিক রেজাল্ট ({weeklyResultCardsCount})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setHomepageResultTab("daily")}
-                className={`px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-extrabold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 cursor-pointer ${
-                  homepageResultTab === "daily"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
-                }`}
-              >
-                <Calendar className="w-4 h-4 text-amber-200" />
-                <span>দৈনিক পরীক্ষা ({dailyResultCardsCount})</span>
-              </button>
-            </div>
-
-            <div className="text-xs text-slate-500 font-medium px-2 hidden md:block">
-              {homepageResultTab === "all" && "সকল সাপ্তাহিক ও দৈনিক পরীক্ষার সমন্বিত মেধা তালিকা"}
-              {homepageResultTab === "weekly" && "৭ দিনের মোট নম্বরের ভিত্তিতে প্রকাশিত সাপ্তাহিক ফলাফল"}
-              {homepageResultTab === "daily" && "প্রতিদিনের বিষয়ভিত্তিক পরীক্ষার ফলাফল ও মেরিট লিস্ট"}
-            </div>
-          </div>
-
           {loadingExams ? (
             <div className="py-12 text-center text-gray-500">
               <Loader2 className="w-8 h-8 animate-spin text-amber-500 mx-auto mb-2" />
               <p className="text-xs font-semibold">ফলাফল লোড হচ্ছে...</p>
             </div>
-          ) : filteredHomepageResultCards.length === 0 ? (
+          ) : publicResultCards.length === 0 ? (
             <div className="bg-white rounded-3xl border border-dashed border-indigo-200 p-10 text-center text-gray-500 shadow-xs max-w-xl mx-auto space-y-3">
               <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-500 flex items-center justify-center mx-auto">
                 <Trophy className="w-6 h-6" />
               </div>
               <h4 className="font-bold text-gray-800 text-base">
-                {homepageResultTab === "weekly"
-                  ? "বর্তমানে কোনো সাপ্তাহিক পরীক্ষার ফলাফল প্রকাশ হয়নি"
-                  : homepageResultTab === "daily"
-                  ? "বর্তমানে কোনো দৈনিক পরীক্ষার ফলাফল প্রকাশ হয়নি"
-                  : "বর্তমানে কোনো নতুন পরীক্ষার রেজাল্ট প্রকাশ হয়নি"}
+                বর্তমানে কোনো নতুন পরীক্ষার রেজাল্ট প্রকাশ হয়নি
               </h4>
               <p className="text-xs text-gray-500">
                 পরীক্ষা সম্পন্ন হওয়ার পর শাখাভিত্তিক ফলাফল সরাসরি এখানে এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান হবে।
               </p>
-              {homepageResultTab !== "all" ? (
-                <button
-                  type="button"
-                  onClick={() => setHomepageResultTab("all")}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 pt-1 cursor-pointer"
-                >
-                  <span>সকল ফলাফল দেখুন</span> <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              ) : (
-                <Link
-                  href="/online-result"
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 pt-1"
-                >
-                  <span>অনলাইন রেজাল্ট আর্কাইভ দেখুন</span> <ChevronRight className="w-3.5 h-3.5" />
-                </Link>
-              )}
+              <Link
+                href="/online-result"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-indigo-700 hover:text-indigo-900 pt-1"
+              >
+                <span>অনলাইন রেজাল্ট আর্কাইভ দেখুন</span> <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredHomepageResultCards.map((card) => {
+              {publicResultCards.map((card) => {
                 const isWeekly = card.badgeType === "weekly"
 
                 return (
@@ -1227,17 +1049,14 @@ export default function HomePage() {
                     <div className="space-y-3 relative">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          {isWeekly ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-300">
-                              <CalendarDays className="w-3 h-3 text-purple-700" />
-                              {card.badgeText}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-200">
-                              <Calendar className="w-3 h-3 text-amber-700" />
-                              {card.badgeText}
-                            </span>
-                          )}
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black ${
+                            isWeekly
+                              ? "bg-purple-100 text-purple-900 border border-purple-300"
+                              : "bg-amber-100 text-amber-900 border border-amber-200"
+                          }`}>
+                            <Trophy className="w-3 h-3 text-amber-700" />
+                            {card.badgeText}
+                          </span>
                           {card.subject && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
                               {card.subject}
@@ -1285,11 +1104,7 @@ export default function HomePage() {
                     <div className="pt-4 mt-4 border-t border-gray-100">
                       <Link
                         href={card.link}
-                        className={`w-full py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                          isWeekly
-                            ? "bg-gradient-to-r from-purple-700 to-indigo-800 hover:from-purple-800 hover:to-indigo-900 text-white"
-                            : "bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-amber-600 hover:to-amber-700 text-white"
-                        }`}
+                        className="w-full py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer bg-gradient-to-r from-indigo-900 to-indigo-800 hover:from-amber-600 hover:to-amber-700 text-white"
                       >
                         <Trophy className="w-4 h-4 text-amber-400" />
                         <span>{card.buttonText}</span>
@@ -1308,7 +1123,7 @@ export default function HomePage() {
       {/* 6. COURSES SECTION ("বিশেষ কোর্সসমূহ") */}
       {/* ========================================================================= */}
       {courses.length > 0 && (
-        <section id="courses" className="bg-white border-y border-gray-200/80 py-10 sm:py-14">
+        <section id="courses" className="bg-white border-y border-gray-200/80 py-10 sm:py-14 scroll-mt-28 sm:scroll-mt-32">
           <div className="max-w-7xl mx-auto px-4 sm:px-8">
             <div className="mb-6 sm:mb-8 text-center max-w-2xl mx-auto">
               <span className="text-xs font-bold text-indigo-600 uppercase tracking-wider">
@@ -1393,7 +1208,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 7. ACHIEVEMENTS SECTION ("আমাদের সাফল্য ও কৃতি শিক্ষার্থী") */}
       {/* ========================================================================= */}
-      <section id="achievements" className="max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14">
+      <section id="achievements" className="max-w-7xl mx-auto px-4 sm:px-8 py-10 sm:py-14 scroll-mt-28 sm:scroll-mt-32">
         <div className="mb-6 sm:mb-8 text-center max-w-2xl mx-auto">
           <span className="text-xs font-bold text-amber-600 uppercase tracking-wider flex items-center justify-center gap-1">
             <Trophy className="w-4 h-4" /> Proven Track Record
@@ -1457,7 +1272,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 8. EDUCATIONAL BLOGS SECTION ("ব্লগ ও শিক্ষামূলক পরামর্শ") */}
       {/* ========================================================================= */}
-      <section id="blogs" className="bg-gray-50 border-t border-gray-200 py-10 sm:py-14">
+      <section id="blogs" className="bg-gray-50 border-t border-gray-200 py-10 sm:py-14 scroll-mt-28 sm:scroll-mt-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-8">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-6 sm:mb-8 border-b border-gray-200 pb-4">
             <div>
@@ -1617,7 +1432,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 10. INSTITUTIONAL FOOTER */}
       {/* ========================================================================= */}
-      <footer id="contact" className="bg-[#0f172a] text-gray-300 text-xs pt-12 pb-6 border-t border-gray-800">
+      <footer id="contact" className="bg-[#0f172a] text-gray-300 text-xs pt-12 pb-6 border-t border-gray-800 scroll-mt-28 sm:scroll-mt-32">
         <div className="max-w-7xl mx-auto px-4 sm:px-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pb-10 border-b border-gray-800">
           {/* Col 1: About */}
           <div>
