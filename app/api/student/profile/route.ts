@@ -650,6 +650,16 @@ export async function GET(req: NextRequest) {
         if (cp.course?.title) enrolledCourseTitles.add(String(cp.course.title).trim().toLowerCase())
       })
 
+      // Also include any approved payment submissions for courses
+      for (const sr of subResults) {
+        sr.data?.forEach((sub: any) => {
+          if (sub.status === "approved" && sub.course_id) {
+            enrolledCourseIdSet.add(String(sub.course_id))
+            if (sub.course?.title) enrolledCourseTitles.add(String(sub.course.title).trim().toLowerCase())
+          }
+        })
+      }
+
       batchMaterials = rawMats.filter((m: any) => {
         // 1. If student was issued this material directly, always show
         if (issuedMatIds.has(m.id)) return true
@@ -864,6 +874,13 @@ export async function GET(req: NextRequest) {
 
     const purchasedCourses = Array.from(courseMap.values())
 
+    const enrichedMaterials = batchMaterials.map((m: any) => {
+      if (m.course_id && !m.course) {
+        return { ...m, course: courseInfoMap.get(m.course_id) || null }
+      }
+      return m
+    })
+
     return NextResponse.json({
       success: true,
       profile: currentProfile,
@@ -875,7 +892,7 @@ export async function GET(req: NextRequest) {
       dues,
       examResults,
       batchExams,
-      materials: batchMaterials,
+      materials: enrichedMaterials,
       materialIssues,
       paymentAccounts,
     })

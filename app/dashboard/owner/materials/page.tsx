@@ -58,6 +58,18 @@ export default async function MaterialsPage() {
     console.warn("Could not load branches from supabase:", e)
   }
 
+  // 3c. Courses
+  let courses: any[] = []
+  try {
+    const { data: cData } = await admin
+      .from("courses")
+      .select("id, title, category, branch_id, price")
+      .order("title")
+    if (cData) courses = cData
+  } catch (e) {
+    console.warn("Could not load courses from supabase:", e)
+  }
+
   // 4. Students
   let students: any[] = []
   try {
@@ -90,6 +102,7 @@ export default async function MaterialsPage() {
       initialIssues={issues}
       batches={batches}
       branches={branches}
+      courses={courses}
       students={students}
       currentStaff={currentStaff}
     />

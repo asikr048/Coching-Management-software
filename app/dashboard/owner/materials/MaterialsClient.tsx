@@ -22,12 +22,14 @@ export interface Material {
   branch_id?: string | null
   batch_id?: string | null
   batch_ids?: string[] | null
+  course_id?: string | null
   subject?: string | null
   total_stock: number
   available_stock: number
   price: number
   description?: string | null
   created_at: string
+  course?: { id: string; title: string } | null
 }
 
 export interface MaterialIssue {
@@ -62,6 +64,14 @@ export interface Batch {
   branch_id?: string | null
 }
 
+export interface Course {
+  id: string
+  title: string
+  category?: string | null
+  branch_id?: string | null
+  price?: number
+}
+
 export interface Student {
   id: string
   name: string
@@ -84,6 +94,7 @@ interface Props {
   initialIssues: MaterialIssue[]
   batches: Batch[]
   branches?: Branch[]
+  courses?: Course[]
   students: Student[]
   currentStaff: CurrentStaff
 }
@@ -102,6 +113,7 @@ export default function MaterialsClient({
   initialIssues = [],
   batches = [],
   branches = [],
+  courses = [],
   students = [],
   currentStaff
 }: Props) {
@@ -204,6 +216,7 @@ export default function MaterialsClient({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedType, setSelectedType] = useState<string>("all")
   const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>("all")
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState<string>("all")
   const [stockFilter, setStockFilter] = useState<"all" | "in_stock" | "low_stock" | "out_of_stock">("all")
 
   // Modals
@@ -217,7 +230,7 @@ export default function MaterialsClient({
   const [whoGotItMaterial, setWhoGotItMaterial] = useState<Material | null>(null)
 
   // ==========================================
-  // ADD / EDIT MATERIAL FORM STATE (MULTI-BATCH)
+  // ADD / EDIT MATERIAL FORM STATE (MULTI-BATCH & COURSE)
   // ==========================================
   const [formData, setFormData] = useState({
     name: "",
@@ -225,6 +238,7 @@ export default function MaterialsClient({
     subject: "",
     branch_id: (selectedBranchId !== "all" ? selectedBranchId : "") as string,
     batch_ids: [] as string[],
+    course_id: "",
     total_stock: 50,
     price: 0,
     description: ""
@@ -238,6 +252,7 @@ export default function MaterialsClient({
       subject: "",
       branch_id: selectedBranchId !== "all" ? selectedBranchId : (branches[0]?.id || ""),
       batch_ids: [],
+      course_id: "",
       total_stock: 50,
       price: 0,
       description: ""
@@ -257,6 +272,7 @@ export default function MaterialsClient({
       subject: m.subject || "",
       branch_id: m.branch_id || (selectedBranchId !== "all" ? selectedBranchId : (branches[0]?.id || "")),
       batch_ids: initialBatchIds,
+      course_id: m.course_id || "",
       total_stock: m.total_stock,
       price: m.price || 0,
       description: m.description || ""
@@ -282,6 +298,7 @@ export default function MaterialsClient({
 
     const primaryBatchId = formData.batch_ids.length > 0 ? formData.batch_ids[0] : null
     const finalBranchId = formData.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null)
+    const finalCourseId = formData.course_id || null
 
     if (editingMaterial) {
       // Edit
@@ -296,6 +313,7 @@ export default function MaterialsClient({
         branch_id: finalBranchId,
         batch_id: primaryBatchId,
         batch_ids: formData.batch_ids,
+        course_id: finalCourseId,
         total_stock: Number(formData.total_stock),
         available_stock: updatedAvailable,
         price: Number(formData.price) || 0,
@@ -318,6 +336,7 @@ export default function MaterialsClient({
             branch_id: finalBranchId,
             batch_id: primaryBatchId,
             batch_ids: formData.batch_ids,
+            course_id: finalCourseId,
             total_stock: Number(formData.total_stock),
             available_stock: updatedAvailable,
             price: Number(formData.price) || 0,
@@ -350,6 +369,7 @@ export default function MaterialsClient({
             branch_id: finalBranchId,
             batch_id: primaryBatchId,
             batch_ids: formData.batch_ids,
+            course_id: finalCourseId,
             total_stock: Number(formData.total_stock),
             available_stock: Number(formData.total_stock),
             price: Number(formData.price) || 0,
@@ -808,6 +828,8 @@ export default function MaterialsClient({
         const hasBatch = (m.batch_ids && m.batch_ids.includes(selectedBatchFilter)) || m.batch_id === selectedBatchFilter
         if (!hasBatch) return false
       }
+      // 3.5. Course filter
+      if (selectedCourseFilter !== "all" && m.course_id !== selectedCourseFilter) return false
       // 4. Stock filter
       if (stockFilter === "in_stock" && m.available_stock <= 0) return false
       if (stockFilter === "low_stock" && (m.available_stock > 5 || m.available_stock <= 0)) return false
@@ -815,7 +837,7 @@ export default function MaterialsClient({
 
       return true
     })
-  }, [materials, selectedBranchId, searchQuery, selectedType, selectedBatchFilter, stockFilter])
+  }, [materials, selectedBranchId, searchQuery, selectedType, selectedBatchFilter, selectedCourseFilter, stockFilter])
 
   // Batches available for the add/edit modal (filtered by material's branch)
   const modalAvailableBatches = useMemo(() => {
@@ -949,6 +971,19 @@ export default function MaterialsClient({
                 ))}
             </select>
 
+            {courses.length > 0 && (
+              <select
+                value={selectedCourseFilter}
+                onChange={e => setSelectedCourseFilter(e.target.value)}
+                className="px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-purple-400 text-slate-900"
+              >
+                <option value="all">All Courses</option>
+                {courses.map(c => (
+                  <option key={c.id} value={c.id}>🎓 {c.title}</option>
+                ))}
+              </select>
+            )}
+
             <select
               value={stockFilter}
               onChange={e => setStockFilter(e.target.value as any)}
@@ -1000,6 +1035,8 @@ export default function MaterialsClient({
               ? Math.min(100, Math.round((m.available_stock / m.total_stock) * 100)) 
               : 0
 
+            const assignedCourse = courses.find(c => c.id === m.course_id)
+
             return (
               <div 
                 key={m.id} 
@@ -1017,6 +1054,11 @@ export default function MaterialsClient({
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                           <Building2 className="w-3 h-3 text-slate-500" />
                           {branches.find(b => b.id === m.branch_id)?.name || "Branch"}
+                        </span>
+                      )}
+                      {assignedCourse && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-purple-500/10 text-purple-700 border border-purple-500/20">
+                          🎓 {assignedCourse.title}
                         </span>
                       )}
                     </div>
@@ -1040,9 +1082,14 @@ export default function MaterialsClient({
                     {m.subject || "General Subject"}
                   </p>
 
-                  {/* Assigned Batches List */}
+                  {/* Assigned Batches & Course List */}
                   <div className="mt-2 flex flex-wrap gap-1 items-center">
-                    {assignedBatches.length === 0 ? (
+                    {assignedCourse && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-500/10 text-purple-700 border border-purple-500/20">
+                        🎓 Course: {assignedCourse.title}
+                      </span>
+                    )}
+                    {assignedBatches.length === 0 && !assignedCourse ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                         All Batches
                       </span>
@@ -1199,6 +1246,35 @@ export default function MaterialsClient({
                     <option value="">All Branches</option>
                     {branches.map(b => (
                       <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Target Online Course Selector */}
+              {courses.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Assign to Online Course <span className="text-purple-400 font-normal">(Optional — links to Student Course & Profile)</span>
+                  </label>
+                  <select
+                    value={formData.course_id}
+                    onChange={e => {
+                      const cId = e.target.value
+                      const selectedCourse = courses.find(c => c.id === cId)
+                      setFormData({ 
+                        ...formData, 
+                        course_id: cId,
+                        subject: !formData.subject && selectedCourse ? selectedCourse.title : formData.subject
+                      })
+                    }}
+                    className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-purple-400 text-slate-100"
+                  >
+                    <option value="">-- No Course / Offline Batches Only --</option>
+                    {courses.map(c => (
+                      <option key={c.id} value={c.id}>
+                        🎓 {c.title} {c.category ? `(${c.category})` : ""}
+                      </option>
                     ))}
                   </select>
                 </div>

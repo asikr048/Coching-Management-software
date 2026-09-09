@@ -55,12 +55,27 @@ export default function StudentCoursePage() {
           return
         }
 
-        setPurchaseInfo(found)
-        if (Array.isArray(profileData.materials)) {
+        if (Array.isArray(profileData.materials) && profileData.materials.length > 0) {
           setMaterials(profileData.materials)
+        } else {
+          try {
+            const { data: dbMats } = await supabase
+              .from("materials")
+              .select("*")
+              .order("created_at", { ascending: false })
+            if (dbMats && dbMats.length > 0) setMaterials(dbMats)
+          } catch (mErr) {
+            console.warn("Course direct materials fetch note:", mErr)
+          }
         }
-        if (Array.isArray(profileData.materialIssues)) {
+
+        if (Array.isArray(profileData.materialIssues) && profileData.materialIssues.length > 0) {
           setMaterialIssues(profileData.materialIssues)
+        } else {
+          try {
+            const { data: dbIssues } = await supabase.from("material_issues").select("*")
+            if (dbIssues && dbIssues.length > 0) setMaterialIssues(dbIssues)
+          } catch {}
         }
 
         // Fetch course details & lessons from Supabase

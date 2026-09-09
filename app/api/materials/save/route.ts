@@ -12,6 +12,7 @@ export async function POST(req: NextRequest) {
       branch_id,
       batch_id,
       batch_ids = [],
+      course_id,
       total_stock = 0,
       available_stock,
       price = 0,
@@ -36,6 +37,7 @@ export async function POST(req: NextRequest) {
     // Validate UUIDs: if empty string or invalid UUID format, treat as null to prevent Postgres error 22P02
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const validBranchId = branch_id && uuidRegex.test(String(branch_id)) ? String(branch_id) : null
+    const validCourseId = course_id && uuidRegex.test(String(course_id)) ? String(course_id) : null
     
     // Normalize batch_ids array
     let normalizedBatchIds: string[] = []
@@ -67,6 +69,7 @@ export async function POST(req: NextRequest) {
       branch_id: validBranchId,
       batch_id: validBatchId,
       batch_ids: normalizedBatchIds,
+      course_id: validCourseId,
       total_stock: parsedTotalStock,
       available_stock: parsedAvailableStock,
       price: parsedPrice,
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest) {
     let savedMaterial: any = null
     let saveError: any = null
 
-    for (let attempt = 0; attempt < 6; attempt++) {
+    for (let attempt = 0; attempt < 7; attempt++) {
       let res: any
       if (isExistingUuid) {
         res = await admin
@@ -125,7 +128,12 @@ export async function POST(req: NextRequest) {
         delete currentPayload.branch_id
         continue
       }
-      // Fallback 4: materials_type_check constraint violation ('sheet', 'exam_paper', etc.)
+      // Fallback 4: course_id missing in schema cache
+      if (errMsg.includes("course_id") && "course_id" in currentPayload) {
+        delete currentPayload.course_id
+        continue
+      }
+      // Fallback 5: materials_type_check constraint violation ('sheet', 'exam_paper', etc.)
       if (errMsg.includes("materials_type_check") || (errMsg.includes("violates check constraint") && errMsg.includes("type"))) {
         if (currentPayload.type === "sheet" || currentPayload.type === "exam_paper") {
           currentPayload.type = "worksheet"

@@ -796,7 +796,7 @@ export default function StudentProfilePage() {
                             return false
                           })
                           if (courseMatList.length === 0) return null
-                          const receivedForCourse = courseMatList.filter((m: any) => receivedMaterialIds.has(m.id)).length
+                          const receivedForCourse = courseMatList.filter((m: any) => receivedMaterialIds.has(String(m.id)) || m.is_received).length
 
                           return (
                             <div className="pt-2 border-t border-gray-100 flex items-center justify-between text-xs">
@@ -1463,6 +1463,9 @@ export default function StudentProfilePage() {
                       e.batch_id === m.batch_id || 
                       (Array.isArray(m.batch_ids) && m.batch_ids.includes(e.batch_id))
                     )?.batch
+                    const courseObj = courses.find((c: any) =>
+                      c.course_id === m.course_id || c.course?.id === m.course_id || c.id === m.course_id
+                    )?.course || m.course
                     const targetBatchId = m.batch_id || (Array.isArray(m.batch_ids) && m.batch_ids[0]) || (enrollments[0]?.batch_id)
                     const stockCount = m.available_stock ?? m.total_stock ?? m.quantity
 
@@ -1486,6 +1489,11 @@ export default function StudentProfilePage() {
                             {batchObj?.name && (
                               <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
                                 {batchObj.name}
+                              </span>
+                            )}
+                            {courseObj?.title && (
+                              <span className="text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100">
+                                🎓 {courseObj.title}
                               </span>
                             )}
                             {isReceived ? (
@@ -1528,14 +1536,21 @@ export default function StudentProfilePage() {
                               <FileText className="w-3 h-3 text-slate-500" /> Download
                             </a>
                           )}
-                          {targetBatchId && (
+                          {m.course_id ? (
+                            <Link
+                              href={`/student/course/${m.course_id}`}
+                              className="px-3 py-1 bg-white hover:bg-purple-50 text-purple-600 font-semibold rounded-xl text-xs border border-purple-200 transition-colors shadow-xs"
+                            >
+                              Course Page →
+                            </Link>
+                          ) : targetBatchId ? (
                             <Link
                               href={`/student/batch/${targetBatchId}`}
                               className="px-3 py-1 bg-white hover:bg-indigo-50 text-indigo-600 font-semibold rounded-xl text-xs border border-indigo-200 transition-colors shadow-xs"
                             >
                               Batch Page →
                             </Link>
-                          )}
+                          ) : null}
                         </div>
                       </div>
                     )

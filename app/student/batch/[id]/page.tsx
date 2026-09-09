@@ -726,11 +726,15 @@ export default function StudentBatchDetailPage() {
                 if (Array.isArray(m.batch_names) && m.batch_names.some((bn: any) => String(bn).trim().toLowerCase() === bNameLower)) return true
               }
 
-              // 4. Material with no specific batch (general material)
-              const hasNoBatch = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
-                (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]")
+              // 3.5. Course match
+              if (m.course_id && String(m.course_id) === bIdStr) return true
 
-              if (hasNoBatch) {
+              // 4. Material with no specific batch or course (general material)
+              const hasNoTarget = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
+                (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]") &&
+                !m.course_id
+
+              if (hasNoTarget) {
                 if (m.branch_id && currentBranchId) {
                   return String(m.branch_id) === String(currentBranchId)
                 }
@@ -794,6 +798,7 @@ export default function StudentBatchDetailPage() {
             if (iss.material_id && !seenMatIds.has(String(iss.material_id))) {
               const isThisBatch = iss.batch_id === batchId || 
                 iss.material?.batch_id === batchId || 
+                iss.material?.course_id === batchId ||
                 (Array.isArray(iss.material?.batch_ids) && iss.material.batch_ids.includes(batchId)) ||
                 !iss.material?.batch_id
 

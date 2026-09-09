@@ -16,16 +16,27 @@ export async function GET(
 
     const admin = createAdminClient()
 
-    // 1. Fetch batch information
-    const { data: batchData } = await admin
+    // 1. Fetch batch information (or course information if ID is a course)
+    const { data: bData } = await admin
       .from("batches")
       .select("id, name, subject, branch_id")
       .eq("id", batchId)
       .maybeSingle()
 
-    const batchName = batchData?.name || ""
+    let batchData = bData
+    let courseData: any = null
+    if (!batchData) {
+      const { data: cData } = await admin
+        .from("courses")
+        .select("id, title, category, branch_id")
+        .eq("id", batchId)
+        .maybeSingle()
+      courseData = cData
+    }
+
+    const batchName = batchData?.name || courseData?.title || ""
     const batchNameLower = batchName.trim().toLowerCase()
-    const branchId = batchData?.branch_id || null
+    const branchId = batchData?.branch_id || courseData?.branch_id || null
 
     // 2. Fetch all materials
     const { data: allMats, error: matErr } = await admin
@@ -41,7 +52,7 @@ export async function GET(
     const candidateMaterials = allMats || []
     const bIdStr = String(batchId)
 
-    // Filter materials for this batch
+    // Filter materials for this batch or course
     const batchMaterials = candidateMaterials.filter((m: any) => {
       if (!m) return false
 
@@ -62,6 +73,16 @@ export async function GET(
         }
       }
 
+      // Direct Course Match
+      if (m.course_id && (String(m.course_id) === bIdStr || (courseData && String(m.course_id) === String(courseData.id)))) return true
+
+      // Course Title Match
+      if (courseData?.title) {
+        const cTitleLower = courseData.title.trim().toLowerCase()
+        if (m.subject && String(m.subject).trim().toLowerCase() === cTitleLower) return true
+        if (m.name && String(m.name).trim().toLowerCase().includes(cTitleLower)) return true
+      }
+
       // Batch Name Match (e.g. "Asik")
       if (batchNameLower) {
         if (m.batch_name && String(m.batch_name).trim().toLowerCase() === batchNameLower) return true
@@ -69,11 +90,12 @@ export async function GET(
         if (Array.isArray(m.batch_names) && m.batch_names.some((bn: any) => String(bn).trim().toLowerCase() === batchNameLower)) return true
       }
 
-      // Material with no specific batch (general material for branch or coaching)
-      const hasNoBatch = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
-        (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]")
+      // Material with no specific batch or course (general material for branch or coaching)
+      const hasNoTarget = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
+        (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]") &&
+        !m.course_id
 
-      if (hasNoBatch) {
+      if (hasNoTarget) {
         if (m.branch_id && branchId) {
           return String(m.branch_id) === String(branchId)
         }
@@ -157,6 +179,7 @@ export async function GET(
         const mat = iss.material
         const isThisBatch = iss.batch_id === batchId ||
           mat?.batch_id === batchId ||
+          mat?.course_id === batchId ||
           (Array.isArray(mat?.batch_ids) && mat.batch_ids.includes(batchId))
 
         if (isThisBatch && mat) {
