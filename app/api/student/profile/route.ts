@@ -881,6 +881,21 @@ export async function GET(req: NextRequest) {
       return m
     })
 
+    // Deduplicate materials by ID and content signature
+    const dedupedMaterials: any[] = []
+    const seenMatIds = new Set<string>()
+    const seenMatSigs = new Set<string>()
+
+    for (const m of enrichedMaterials) {
+      const mId = String(m.id || "")
+      const sig = `${String(m.name || "").trim().toLowerCase()}::${String(m.type || "").trim()}::${String(m.subject || "").trim().toLowerCase()}`
+      if (mId && seenMatIds.has(mId)) continue
+      if (sig && seenMatSigs.has(sig)) continue
+      if (mId) seenMatIds.add(mId)
+      if (sig) seenMatSigs.add(sig)
+      dedupedMaterials.push(m)
+    }
+
     return NextResponse.json({
       success: true,
       profile: currentProfile,
@@ -892,7 +907,7 @@ export async function GET(req: NextRequest) {
       dues,
       examResults,
       batchExams,
-      materials: enrichedMaterials,
+      materials: dedupedMaterials,
       materialIssues,
       paymentAccounts,
     }, {

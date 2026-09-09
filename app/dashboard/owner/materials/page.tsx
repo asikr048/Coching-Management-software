@@ -2,19 +2,42 @@ import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import MaterialsClient from "./MaterialsClient"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function MaterialsPage() {
   const supabase = await createClient()
   const admin = createAdminClient()
 
-  // 1. Materials
+  // 1. Materials with automatic duplicate pruning
   let materials: any[] = []
   try {
     const { data } = await admin.from("materials").select("*").order("created_at", { ascending: false })
-    if (data && data.length > 0) {
-      materials = data
-    } else {
-      const { data: cData } = await supabase.from("materials").select("*").order("created_at", { ascending: false })
-      if (cData && cData.length > 0) materials = cData
+    const rawList = data && data.length > 0 ? data : (await supabase.from("materials").select("*").order("created_at", { ascending: false })).data || []
+
+    if (rawList.length > 0) {
+      const seenSignatures = new Map<string, string>()
+      const duplicateIdsToDelete: string[] = []
+
+      for (const m of rawList) {
+        const sig = `${(m.name || "").trim().toLowerCase()}::${(m.type || "").trim()}::${(m.subject || "").trim().toLowerCase()}::${m.batch_id || ""}::${m.course_id || ""}`
+        if (seenSignatures.has(sig)) {
+          duplicateIdsToDelete.push(m.id)
+        } else {
+          seenSignatures.set(sig, m.id)
+          materials.push(m)
+        }
+      }
+
+      // Automatically remove duplicate ghost rows from Supabase database in background
+      if (duplicateIdsToDelete.length > 0) {
+        try {
+          await admin.from("material_issues").delete().in("material_id", duplicateIdsToDelete)
+          await admin.from("materials").delete().in("id", duplicateIdsToDelete)
+        } catch (delErr) {
+          console.warn("Notice pruning duplicate materials:", delErr)
+        }
+      }
     }
   } catch (e) {
     console.warn("Could not load materials from supabase:", e)

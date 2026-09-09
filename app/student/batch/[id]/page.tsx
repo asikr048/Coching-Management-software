@@ -820,8 +820,26 @@ export default function StudentBatchDetailPage() {
           })
         }
 
-        setAllBatchMaterials(combinedMaterials)
-        setMaterials(combinedMaterials.filter((m: any) => m.is_received).map(m => m.issue_record || m))
+        // Deduplicate materials by ID and by signature (name + type + subject)
+        const dedupedBatchMaterials: any[] = []
+        const seenIds = new Set<string>()
+        const seenSignatures = new Set<string>()
+
+        for (const item of combinedMaterials) {
+          const mat = item.material || item
+          const mId = String(mat.id || item.id || "")
+          const sig = `${String(mat.name || "").trim().toLowerCase()}::${String(mat.type || "").trim()}::${String(mat.subject || "").trim().toLowerCase()}`
+
+          if (mId && seenIds.has(mId)) continue
+          if (sig && seenSignatures.has(sig)) continue
+
+          if (mId) seenIds.add(mId)
+          if (sig) seenSignatures.add(sig)
+          dedupedBatchMaterials.push(item)
+        }
+
+        setAllBatchMaterials(dedupedBatchMaterials)
+        setMaterials(dedupedBatchMaterials.filter((m: any) => m.is_received).map(m => m.issue_record || m))
 
         // 8. Get payment accounts (bKash, Nagad, etc.)
         const { data: acctData } = await supabase
@@ -842,13 +860,16 @@ export default function StudentBatchDetailPage() {
       fetchData()
     }
 
-    // Instant cross-tab sync when a material is deleted from admin panel
+    // Instant cross-tab sync when a material is deleted from admin panel (strictly by ID)
     const onStorageChange = (e: StorageEvent) => {
       if (e.key === "medhashiree_material_deleted" && e.newValue) {
         try {
-          const { id, name } = JSON.parse(e.newValue)
-          setAllBatchMaterials(prev => prev.filter(m => String(m.material?.id || m.id) !== String(id) && (!name || (m.material?.name || m.name) !== name)))
-          setMaterials(prev => prev.filter(m => String(m.material_id || m.material?.id || m.id) !== String(id)))
+          const { id } = JSON.parse(e.newValue)
+          if (id) {
+            const idStr = String(id)
+            setAllBatchMaterials(prev => prev.filter(m => String(m.material?.id || m.id) !== idStr))
+            setMaterials(prev => prev.filter(m => String(m.material_id || m.material?.id || m.id) !== idStr))
+          }
         } catch {}
       }
     }

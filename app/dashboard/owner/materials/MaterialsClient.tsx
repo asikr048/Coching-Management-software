@@ -10,6 +10,7 @@ import {
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 import { useBranch } from "@/components/providers/BranchContext"
 import type { Branch } from "@/lib/supabase/types"
 
@@ -118,6 +119,7 @@ export default function MaterialsClient({
   currentStaff
 }: Props) {
   const supabase = useMemo(() => createClient(), [])
+  const router = useRouter()
   const { selectedBranchId, currentBranch } = useBranch()
 
   // Materials state (Supabase database is the single source of truth)
@@ -382,43 +384,46 @@ export default function MaterialsClient({
   }
 
   const handleDeleteMaterial = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"? Any distribution logs will also be removed from student profiles.`)) {
+    if (!confirm(`Are you sure you want to delete "${name}"?`)) {
       return
     }
 
-    // 1. Immediately remove from local state
-    const nextMaterials = materials.filter(m => m.id !== id && (!name || m.name !== name))
-    const nextIssues = issues.filter(i => i.material_id !== id)
+    const targetIdStr = String(id)
+
+    // 1. Immediately remove ONLY this single material from local state
+    const nextMaterials = materials.filter(m => String(m.id) !== targetIdStr)
+    const nextIssues = issues.filter(i => String(i.material_id) !== targetIdStr)
     saveMaterials(nextMaterials)
     saveIssues(nextIssues)
 
-    // 2. Broadcast deletion event to other tabs (student profile / batch / course)
+    // 2. Broadcast deletion event with ID ONLY (never delete all or match by name)
     try {
-      localStorage.setItem("medhashiree_material_deleted", JSON.stringify({ id, name, timestamp: Date.now() }))
-      window.dispatchEvent(new CustomEvent("material_deleted", { detail: { id, name } }))
+      localStorage.setItem("medhashiree_material_deleted", JSON.stringify({ id: targetIdStr, timestamp: Date.now() }))
+      window.dispatchEvent(new CustomEvent("material_deleted", { detail: { id: targetIdStr } }))
     } catch {}
 
-    // 3. Delete from Supabase backend (materials & material_issues)
+    // 3. Delete THIS MATERIAL ONLY from Supabase backend
     try {
       const res = await fetch("/api/materials/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, name })
+        body: JSON.stringify({ id: targetIdStr })
       })
       const data = await res.json()
       if (data?.success) {
-        toast.success(`"${name}" deleted from batch and student profiles.`)
+        toast.success(`"${name}" deleted.`)
+        router.refresh()
       } else {
-        toast.error(data?.error || "Could not delete material from database")
+        toast.error(data?.error || "Could not delete material")
       }
     } catch (e: any) {
       console.warn("Could not delete via API:", e)
       try {
-        await supabase.from("material_issues").delete().eq("material_id", id)
-        await supabase.from("materials").delete().eq("id", id)
-        if (name) await supabase.from("materials").delete().ilike("name", name)
+        await supabase.from("material_issues").delete().eq("material_id", targetIdStr)
+        await supabase.from("materials").delete().eq("id", targetIdStr)
       } catch {}
       toast.success(`"${name}" deleted.`)
+      router.refresh()
     }
   }
 

@@ -63,7 +63,21 @@ export default function StudentCoursePage() {
               .from("materials")
               .select("*")
               .order("created_at", { ascending: false })
-            if (dbMats) setMaterials(dbMats)
+            if (dbMats) {
+              const seenIds = new Set<string>()
+              const seenSigs = new Set<string>()
+              const deduped: any[] = []
+              for (const m of dbMats) {
+                const idStr = String(m.id || "")
+                const sig = `${(m.name || "").trim().toLowerCase()}::${(m.type || "").trim().toLowerCase()}::${(m.subject || "").trim().toLowerCase()}`
+                if (idStr && seenIds.has(idStr)) continue
+                if (sig !== "::::" && seenSigs.has(sig)) continue
+                if (idStr) seenIds.add(idStr)
+                if (sig !== "::::") seenSigs.add(sig)
+                deduped.push(m)
+              }
+              setMaterials(deduped)
+            }
           } catch (mErr) {
             console.warn("Course direct materials fetch note:", mErr)
           }
@@ -121,9 +135,12 @@ export default function StudentCoursePage() {
     const onStorageChange = (e: StorageEvent) => {
       if (e.key === "medhashiree_material_deleted" && e.newValue) {
         try {
-          const { id, name } = JSON.parse(e.newValue)
-          setMaterials(prev => prev.filter(m => String(m.id) !== String(id) && (!name || m.name !== name)))
-          setMaterialIssues(prev => prev.filter(i => String(i.material_id) !== String(id)))
+          const { id } = JSON.parse(e.newValue)
+          if (id) {
+            const idStr = String(id)
+            setMaterials(prev => prev.filter(m => String(m.id) !== idStr))
+            setMaterialIssues(prev => prev.filter(i => String(i.material_id) !== idStr))
+          }
         } catch {}
       }
     }

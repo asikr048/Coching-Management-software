@@ -201,14 +201,32 @@ export async function GET(
       }
     })
 
+    // Deduplicate materials by ID and by signature (name + type + subject)
+    const dedupedMaterials: any[] = []
+    const seenIds = new Set<string>()
+    const seenSignatures = new Set<string>()
+
+    for (const item of combinedMaterials) {
+      const mat = item.material || item
+      const mId = String(mat.id || item.id || "")
+      const sig = `${String(mat.name || "").trim().toLowerCase()}::${String(mat.type || "").trim()}::${String(mat.subject || "").trim().toLowerCase()}`
+
+      if (mId && seenIds.has(mId)) continue
+      if (sig && seenSignatures.has(sig)) continue
+
+      if (mId) seenIds.add(mId)
+      if (sig) seenSignatures.add(sig)
+      dedupedMaterials.push(item)
+    }
+
     return NextResponse.json({
       success: true,
       batch_id: batchId,
       batch_name: batchName,
-      materials: combinedMaterials,
-      total_count: combinedMaterials.length,
-      received_count: combinedMaterials.filter(m => m.is_received).length,
-      pending_count: combinedMaterials.filter(m => !m.is_received).length,
+      materials: dedupedMaterials,
+      total_count: dedupedMaterials.length,
+      received_count: dedupedMaterials.filter(m => m.is_received).length,
+      pending_count: dedupedMaterials.filter(m => !m.is_received).length,
     }, {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
