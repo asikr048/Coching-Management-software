@@ -673,14 +673,32 @@ export async function GET(req: NextRequest) {
         materialIssues = mIssRes.data.filter((iss: any) => iss.status !== "returned")
       }
 
-      // Also check issues in enrolled batches where student name, phone, or code matches
-      if (studentEnrolledBatchIds.length > 0) {
+      // Also check issues in enrolled batches or matching available materials
+      const allBatchMatIds = (bMatsRes.data || []).map((m: any) => m.id).filter((id: any) => uuidRegex.test(String(id)))
+      if (studentEnrolledBatchIds.length > 0 || allBatchMatIds.length > 0) {
         try {
-          const { data: bIssues } = await admin
+          let bIssueQuery = admin
             .from("material_issues")
             .select("*, material:materials(*), student:students(id, name, student_id, phone, email)")
-            .in("batch_id", studentEnrolledBatchIds)
             .eq("status", "issued")
+
+          if (allBatchMatIds.length > 0) {
+            bIssueQuery = bIssueQuery.in("material_id", allBatchMatIds)
+          } else {
+            bIssueQuery = bIssueQuery.in("batch_id", studentEnrolledBatchIds)
+          }
+
+          const { data: bIssues } = await bIssueQuery
+
+          const isNameSimilar = (n1: string, n2: string) => {
+            if (!n1 || !n2) return false
+            const a = n1.trim().toLowerCase()
+            const b = n2.trim().toLowerCase()
+            if (a === b || a.includes(b) || b.includes(a)) return true
+            const wa = a.split(/\s+/).filter(w => w.length > 2)
+            const wb = b.split(/\s+/).filter(w => w.length > 2)
+            return wa.some(w => wb.includes(w))
+          }
 
           if (bIssues) {
             const seenIds = new Set(materialIssues.map((i: any) => i.id))
@@ -688,15 +706,17 @@ export async function GET(req: NextRequest) {
               if (seenIds.has(bi.id)) continue
               const st = bi.student || {}
               const stId = st.id || bi.student_id
-              const stCode = (st.student_id || "").trim()
+              const stCode = (st.student_id || "").trim().toLowerCase()
               const stPhone = (st.phone || "").trim()
+              const stEmail = (st.email || "").trim().toLowerCase()
               const stName = (st.name || "").trim().toLowerCase()
 
               let isMatch = false
               if (stId && cleanIssueStudentUuids.includes(stId)) isMatch = true
               if (stCode && candidateCodes.has(stCode)) isMatch = true
               if (stPhone && candidatePhones.has(stPhone)) isMatch = true
-              if (stName && studentNames.has(stName)) isMatch = true
+              if (stEmail && candidateEmails.has(stEmail)) isMatch = true
+              if (stName && Array.from(studentNames).some(sn => isNameSimilar(stName, sn))) isMatch = true
 
               if (isMatch) {
                 materialIssues.push(bi)

@@ -255,14 +255,32 @@ export async function GET(
       }
     }
 
-    // 2. Also load all issues for this batch and match by student name / phone / code
-    if (batchId) {
+    // 2. Load all issues for this batch's materials and match by student UUID / name / phone / code
+    const batchMaterialIds = batchMaterials.map(m => m.id).filter(id => uuidRegex.test(String(id)))
+    if (batchMaterialIds.length > 0 || batchId) {
       try {
-        const { data: batchIssues } = await admin
+        let issueQuery = admin
           .from("material_issues")
           .select("*, material:materials(*), student:students(id, name, student_id, phone, email)")
-          .eq("batch_id", batchId)
           .eq("status", "issued")
+
+        if (batchMaterialIds.length > 0) {
+          issueQuery = issueQuery.in("material_id", batchMaterialIds)
+        } else if (batchId) {
+          issueQuery = issueQuery.eq("batch_id", batchId)
+        }
+
+        const { data: batchIssues } = await issueQuery
+
+        const isNameSimilar = (n1: string, n2: string) => {
+          if (!n1 || !n2) return false
+          const a = n1.trim().toLowerCase()
+          const b = n2.trim().toLowerCase()
+          if (a === b || a.includes(b) || b.includes(a)) return true
+          const wa = a.split(/\s+/).filter(w => w.length > 2)
+          const wb = b.split(/\s+/).filter(w => w.length > 2)
+          return wa.some(w => wb.includes(w))
+        }
 
         if (batchIssues) {
           for (const bi of batchIssues) {
@@ -280,7 +298,10 @@ export async function GET(
             if (stCode && candidateCodes.has(stCode)) isMatch = true
             if (stPhone && candidatePhones.has(stPhone)) isMatch = true
             if (stEmail && candidateEmails.has(stEmail)) isMatch = true
-            if (stName && (studentNames.has(stName) || (paramName && stName === paramName.trim().toLowerCase()))) isMatch = true
+            if (stName && (
+              Array.from(studentNames).some(sn => isNameSimilar(stName, sn)) ||
+              (paramName && isNameSimilar(stName, paramName))
+            )) isMatch = true
 
             if (isMatch) {
               studentIssues.push(bi)

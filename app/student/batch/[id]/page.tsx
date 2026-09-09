@@ -823,6 +823,16 @@ export default function StudentBatchDetailPage() {
         // Filter issues matching this student
         const profileIssuesSet = new Set((profileMaterialIssues || []).map((i: any) => i.id).filter(Boolean))
 
+        const isNameSimilar = (n1: string, n2: string) => {
+          if (!n1 || !n2) return false
+          const a = n1.trim().toLowerCase()
+          const b = n2.trim().toLowerCase()
+          if (a === b || a.includes(b) || b.includes(a)) return true
+          const wa = a.split(/\s+/).filter(w => w.length > 2)
+          const wb = b.split(/\s+/).filter(w => w.length > 2)
+          return wa.some(w => wb.includes(w))
+        }
+
         const studentIssues = allIssuesList.filter((iss: any) => {
           if (!iss || iss.status === 'returned') return false
           // Any issue from profileMaterialIssues already belongs to this authenticated student
@@ -839,7 +849,7 @@ export default function StudentBatchDetailPage() {
           if (issCode && candidateSids.includes(issCode)) return true
           if (issEmail && candidateSids.includes(issEmail)) return true
           if (issPhone && candidateSids.includes(issPhone)) return true
-          if (currentStudentName && issName && issName === currentStudentName) return true
+          if (currentStudentName && issName && isNameSimilar(currentStudentName, issName)) return true
           return false
         })
 
@@ -952,6 +962,11 @@ export default function StudentBatchDetailPage() {
     }
     window.addEventListener("storage", onStorageChange)
 
+    const onCustomDistributed = () => {
+      fetchData()
+    }
+    window.addEventListener("medhashiree_material_distributed", onCustomDistributed)
+
     // Real-time Supabase subscriptions for materials
     const batchMatsChannel = supabase
       .channel(`student-batch-materials-sync-${batchId}`)
@@ -973,6 +988,7 @@ export default function StudentBatchDetailPage() {
 
     return () => {
       window.removeEventListener("storage", onStorageChange)
+      window.removeEventListener("medhashiree_material_distributed", onCustomDistributed)
       supabase.removeChannel(batchMatsChannel)
     }
   }, [batchId, router, supabase])

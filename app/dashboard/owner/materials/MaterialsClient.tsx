@@ -175,7 +175,13 @@ export default function MaterialsClient({
     setIssues(updated)
     try {
       localStorage.setItem("medhashiree_material_issues", JSON.stringify(updated))
+      localStorage.setItem("medhashiree_material_distributed", JSON.stringify({ timestamp: Date.now() }))
     } catch {}
+    if (typeof window !== "undefined") {
+      try {
+        window.dispatchEvent(new CustomEvent("medhashiree_material_distributed", { detail: { updated } }))
+      } catch {}
+    }
   }
 
   // Auto-sync legacy mock materials and unpersisted distribution issues with backend database
