@@ -2,7 +2,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Bell, LogOut, User, ChevronDown, Menu, Landmark, Building2, Check, Sparkles } from "lucide-react"
+import { Bell, LogOut, User, ChevronDown, Menu, Landmark, Building2, Check, Sparkles, ShieldAlert } from "lucide-react"
 import type { Staff } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
 import { cn } from "@/lib/utils"
@@ -36,6 +36,8 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
   }
 
   const visibleBranches = branches.filter(b => isAllBranchesPermitted || permittedBranchIds.includes(b.id))
+  const isCurrentPendingDeletion = selectedBranchId !== "all" && currentBranch?.is_pending_deletion
+  const anyBranchPendingDeletion = visibleBranches.some(b => b.is_pending_deletion)
 
   return (
     <header className="bg-white border-b border-slate-200/90 px-4 sm:px-6 py-3 flex items-center justify-between shadow-xs z-20 flex-shrink-0 text-slate-800">
@@ -80,21 +82,37 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
             <button
               type="button"
               onClick={() => setBranchMenuOpen(!branchMenuOpen)}
-              className="flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-50/90 to-amber-50/70 hover:from-indigo-100 hover:to-amber-100 text-indigo-950 text-xs sm:text-sm font-bold transition-all shadow-2xs"
-              title="Change active branch"
+              className={cn(
+                "flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-bold transition-all shadow-2xs",
+                isCurrentPendingDeletion
+                  ? "border-red-400 bg-red-50 text-red-900 hover:bg-red-100 ring-2 ring-red-400/30 animate-pulse"
+                  : anyBranchPendingDeletion && selectedBranchId === "all"
+                  ? "border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100"
+                  : "border-indigo-200 bg-gradient-to-r from-indigo-50/90 to-amber-50/70 hover:from-indigo-100 hover:to-amber-100 text-indigo-950"
+              )}
+              title={isCurrentPendingDeletion ? "This branch is scheduled for deletion" : "Change active branch"}
             >
-              <Building2 className="w-4 h-4 text-indigo-700 flex-shrink-0" />
+              {isCurrentPendingDeletion ? (
+                <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0 animate-bounce" />
+              ) : (
+                <Building2 className="w-4 h-4 text-indigo-700 flex-shrink-0" />
+              )}
               <span className="truncate max-w-[120px] sm:max-w-[190px]">
                 {selectedBranchId === "all"
                   ? "All Branches (সকল শাখা)"
                   : (currentBranch?.name || "Select Branch")}
               </span>
+              {isCurrentPendingDeletion && (
+                <span className="text-[10px] bg-red-600 text-white font-black px-1.5 py-0.2 rounded uppercase">
+                  48h Del
+                </span>
+              )}
               <ChevronDown className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
             </button>
 
             {branchMenuOpen && (
               <div
-                className="absolute right-0 top-full mt-1.5 w-68 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden py-1 text-slate-800"
+                className="absolute right-0 top-full mt-1.5 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden py-1 text-slate-800"
                 onMouseLeave={() => setBranchMenuOpen(false)}
               >
                 <div className="px-3.5 py-2.5 border-b border-slate-100 bg-slate-50 text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
@@ -135,12 +153,23 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
                         setBranchMenuOpen(false)
                       }}
                       className={cn(
-                        "w-full flex items-center justify-between px-3.5 py-2 text-left text-xs sm:text-sm transition-colors hover:bg-indigo-50/70",
-                        selectedBranchId === branch.id ? "text-indigo-900 font-bold bg-indigo-50/90 border-l-3 border-indigo-600" : "text-slate-700"
+                        "w-full flex items-center justify-between px-3.5 py-2 text-left text-xs sm:text-sm transition-colors",
+                        branch.is_pending_deletion
+                          ? "bg-red-50/70 hover:bg-red-100/80 text-red-950 border-l-3 border-red-500"
+                          : selectedBranchId === branch.id
+                          ? "text-indigo-900 font-bold bg-indigo-50/90 border-l-3 border-indigo-600 hover:bg-indigo-50/70"
+                          : "text-slate-700 hover:bg-indigo-50/70"
                       )}
                     >
                       <div className="min-w-0 pr-2">
-                        <p className="truncate font-bold text-slate-900 text-xs sm:text-sm">{branch.name}</p>
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate font-bold text-slate-900 text-xs sm:text-sm">{branch.name}</p>
+                          {branch.is_pending_deletion && (
+                            <span className="text-[9px] font-black bg-red-600 text-white px-1.5 py-0.5 rounded uppercase shrink-0">
+                              Deleting 48h
+                            </span>
+                          )}
+                        </div>
                         {branch.location && (
                           <p className="text-[10px] text-slate-500 truncate">{branch.location}</p>
                         )}

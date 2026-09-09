@@ -29,6 +29,11 @@ export interface Branch {
     [key: string]: any
   } | null
   is_active: boolean
+  is_pending_deletion?: boolean | null
+  deletion_scheduled_at?: string | null
+  deletion_requested_at?: string | null
+  deletion_requested_by?: string | null
+  deletion_reason?: string | null
   created_at?: string
 }
 
