@@ -297,6 +297,7 @@ export default function StudentBatchDetailPage() {
         let profileExamResults: any[] = []
         let profileMaterials: any[] = []
         let profileMaterialIssues: any[] = []
+        let profileAllStudentIds: any[] = []
 
         try {
           const profileRes = await fetch('/api/student/profile', { cache: 'no-store', headers: { 'Cache-Control': 'no-cache' } })
@@ -304,6 +305,9 @@ export default function StudentBatchDetailPage() {
             const profileJson = await profileRes.json()
             if (profileJson.student) studentData = profileJson.student
             if (profileJson.profile) currentProfile = profileJson.profile
+            if (Array.isArray(profileJson.allStudentIds)) {
+              profileAllStudentIds = profileJson.allStudentIds
+            }
             if (profileJson.enrollments) {
               currentEnrollment = profileJson.enrollments.find((e: any) => e.batch_id === batchId || e.batch?.id === batchId)
             }
@@ -674,15 +678,21 @@ export default function StudentBatchDetailPage() {
           currentProfile?.email,
           studentData?.email,
           studentData?.phone,
+          ...(currentEnrollment?.student_id ? [currentEnrollment.student_id] : []),
+          ...profileAllStudentIds,
         ].filter(Boolean).map(x => String(x).trim().toLowerCase())))
 
         // Primary: Load directly from dedicated server API with student identifiers
         let loadedFromServer = false
         const sIdParam = studentId || studentData?.id || ''
         const codeParam = studentData?.student_id || currentProfile?.user_id || ''
+        const emailParam = studentData?.email || currentProfile?.email || ''
+        const phoneParam = studentData?.phone || currentProfile?.phone || ''
         const qParams = new URLSearchParams()
         if (sIdParam) qParams.set('student_id', sIdParam)
         if (codeParam) qParams.set('code', codeParam)
+        if (emailParam) qParams.set('email', emailParam)
+        if (phoneParam) qParams.set('phone', phoneParam)
         const qStr = qParams.toString() ? `?${qParams.toString()}` : ''
 
         try {
@@ -789,13 +799,16 @@ export default function StudentBatchDetailPage() {
           }
         } catch {}
 
-        // Fallback direct query if needed
-        if (allIssuesList.length === 0 && candidateSids.length > 0) {
+        // Fallback direct query if needed (guarantee ONLY valid UUIDs are passed to avoid 22P02 error)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        const cleanCandidateUuids = candidateSids.filter(id => uuidRegex.test(id))
+
+        if (allIssuesList.length === 0 && cleanCandidateUuids.length > 0) {
           try {
             const { data: materialData } = await supabase
               .from('material_issues')
               .select('*, material:materials(*)')
-              .in('student_id', candidateSids)
+              .in('student_id', cleanCandidateUuids)
 
             if (materialData && materialData.length > 0) {
               allIssuesList = [...allIssuesList, ...materialData]
@@ -806,8 +819,13 @@ export default function StudentBatchDetailPage() {
         }
 
         // Filter issues matching this student
+        const profileIssuesSet = new Set((profileMaterialIssues || []).map((i: any) => i.id).filter(Boolean))
+
         const studentIssues = allIssuesList.filter((iss: any) => {
           if (!iss || iss.status === 'returned') return false
+          // Any issue from profileMaterialIssues already belongs to this authenticated student
+          if (iss.id && profileIssuesSet.has(iss.id)) return true
+
           const issSid = String(iss.student_id || '').trim().toLowerCase()
           const issCode = String(iss.student?.student_id || '').trim().toLowerCase()
           const issEmail = String(iss.student?.email || '').trim().toLowerCase()

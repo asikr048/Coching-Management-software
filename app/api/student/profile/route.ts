@@ -548,9 +548,20 @@ export async function GET(req: NextRequest) {
     let batchMaterials: any[] = []
     let materialIssues: any[] = []
 
-    try {
-      const candidateIssueIds = Array.from(new Set([...studentDbIdArray, ...Array.from(candidateCodes), user.id]))
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const allStudentUuidsSet = new Set<string>()
+    if (primaryStudent?.id && uuidRegex.test(String(primaryStudent.id))) {
+      allStudentUuidsSet.add(String(primaryStudent.id))
+    }
+    studentDbIdArray.forEach(id => {
+      if (id && uuidRegex.test(String(id))) allStudentUuidsSet.add(String(id))
+    })
+    matchedStudents.forEach((s: any) => {
+      if (s?.id && uuidRegex.test(String(s.id))) allStudentUuidsSet.add(String(s.id))
+    })
+    const cleanIssueStudentUuids = Array.from(allStudentUuidsSet)
 
+    try {
       const [bExamsRes, bMatsRes, mIssRes] = await Promise.all([
         studentEnrolledBatchIds.length > 0
           ? admin
@@ -562,11 +573,11 @@ export async function GET(req: NextRequest) {
           .from("materials")
           .select("*")
           .order("created_at", { ascending: false }),
-        candidateIssueIds.length > 0
+        cleanIssueStudentUuids.length > 0
           ? admin
               .from("material_issues")
               .select("*, material:materials(*)")
-              .in("student_id", candidateIssueIds)
+              .in("student_id", cleanIssueStudentUuids)
               .order("issued_at", { ascending: false })
             : Promise.resolve({ data: [] })
       ])
@@ -916,6 +927,7 @@ export async function GET(req: NextRequest) {
       success: true,
       profile: currentProfile,
       student: primaryStudent,
+      allStudentIds: cleanIssueStudentUuids,
       enrollments,
       courses: purchasedCourses,
       pendingSubmissions: enrichedPendingSubmissions,

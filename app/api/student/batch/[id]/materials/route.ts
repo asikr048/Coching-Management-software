@@ -108,45 +108,113 @@ export async function GET(
     })
 
     // 3. Resolve student identity to check distribution records (material_issues)
-    let candidateSids: string[] = []
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const candidateStudentUuids = new Set<string>()
+    const candidateCodes = new Set<string>()
+    const candidateEmails = new Set<string>()
+    const candidatePhones = new Set<string>()
 
-    // Accept student_id and code directly from query parameters if provided
+    // Accept student_id, code, email, and phone directly from query parameters if provided
     const paramStudentId = req.nextUrl.searchParams.get("student_id")
     const paramCode = req.nextUrl.searchParams.get("code")
-    if (paramStudentId) candidateSids.push(paramStudentId.trim())
-    if (paramCode) candidateSids.push(paramCode.trim())
+    const paramEmail = req.nextUrl.searchParams.get("email")
+    const paramPhone = req.nextUrl.searchParams.get("phone")
+
+    if (paramStudentId) {
+      const s = paramStudentId.trim()
+      if (uuidRegex.test(s)) candidateStudentUuids.add(s)
+      else candidateCodes.add(s)
+    }
+    if (paramCode) candidateCodes.add(paramCode.trim())
+    if (paramEmail) candidateEmails.add(paramEmail.trim().toLowerCase())
+    if (paramPhone) candidatePhones.add(paramPhone.trim())
 
     try {
       const supabase = await createClient()
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
-        candidateSids.push(user.id)
-        const { data: up } = await admin.from("user_profiles").select("user_id").eq("auth_user_id", user.id).maybeSingle()
-        if (up?.user_id) candidateSids.push(up.user_id)
+        if (uuidRegex.test(user.id)) candidateStudentUuids.add(user.id)
+        if (user.email) candidateEmails.add(user.email.trim().toLowerCase())
+        if (user.user_metadata?.phone) candidatePhones.add(String(user.user_metadata.phone).trim())
+        if (user.user_metadata?.user_id) candidateCodes.add(String(user.user_metadata.user_id).trim())
 
-        const { data: stList } = await admin
-          .from("students")
-          .select("id, student_id")
-          .or(`auth_user_id.eq.${user.id},email.ilike.${user.email || 'nonexistent'}${up?.user_id ? `,student_id.eq.${up.user_id}` : ''}`)
+        const { data: up } = await admin.from("user_profiles").select("user_id, email, phone").eq("auth_user_id", user.id).maybeSingle()
+        if (up?.user_id) candidateCodes.add(String(up.user_id).trim())
+        if (up?.email) candidateEmails.add(String(up.email).trim().toLowerCase())
+        if (up?.phone) candidatePhones.add(String(up.phone).trim())
+      }
+    } catch {}
 
-        if (stList) {
-          stList.forEach((s: any) => {
-            if (s.id) candidateSids.push(s.id)
-            if (s.student_id) candidateSids.push(s.student_id)
+    // Find all student records in database matching any candidate identifier
+    const lookupQueries: any[] = []
+    if (candidateStudentUuids.size > 0) {
+      lookupQueries.push(
+        admin.from("students").select("id, student_id, email, phone, auth_user_id").in("id", Array.from(candidateStudentUuids))
+      )
+    }
+    if (candidateCodes.size > 0) {
+      lookupQueries.push(
+        admin.from("students").select("id, student_id, email, phone, auth_user_id").in("student_id", Array.from(candidateCodes))
+      )
+    }
+    if (candidateEmails.size > 0) {
+      const emailList = Array.from(candidateEmails)
+      lookupQueries.push(
+        admin.from("students").select("id, student_id, email, phone, auth_user_id").or(emailList.map(e => `email.ilike.${e}`).join(","))
+      )
+    }
+    if (candidatePhones.size > 0) {
+      lookupQueries.push(
+        admin.from("students").select("id, student_id, email, phone, auth_user_id").in("phone", Array.from(candidatePhones))
+      )
+    }
+
+    try {
+      if (lookupQueries.length > 0) {
+        const results = await Promise.all(lookupQueries)
+        for (const res of results) {
+          if (res.data) {
+            for (const s of res.data) {
+              if (s.id && uuidRegex.test(s.id)) candidateStudentUuids.add(s.id)
+              if (s.email) candidateEmails.add(s.email.toLowerCase())
+              if (s.phone) candidatePhones.add(s.phone)
+            }
+          }
+        }
+      }
+
+      // Also find sibling student records in this batch or system sharing phone or email
+      if (candidatePhones.size > 0 || candidateEmails.size > 0) {
+        const siblingQueries: any[] = []
+        if (candidatePhones.size > 0) {
+          siblingQueries.push(admin.from("students").select("id").in("phone", Array.from(candidatePhones)))
+        }
+        if (candidateEmails.size > 0) {
+          const emailList = Array.from(candidateEmails)
+          siblingQueries.push(admin.from("students").select("id").or(emailList.map(e => `email.ilike.${e}`).join(",")))
+        }
+        const siblingResults = await Promise.all(siblingQueries)
+        for (const sr of siblingResults) {
+          sr.data?.forEach((s: any) => {
+            if (s.id && uuidRegex.test(s.id)) candidateStudentUuids.add(s.id)
           })
         }
       }
     } catch {}
 
-    candidateSids = Array.from(new Set(candidateSids.filter(Boolean)))
+    // Strictly ensure only valid UUIDs are ever queried against material_issues.student_id
+    const cleanStudentUuids = Array.from(candidateStudentUuids).filter(id => uuidRegex.test(id))
 
     let studentIssues: any[] = []
-    if (candidateSids.length > 0) {
-      const { data: issueData } = await admin
+    if (cleanStudentUuids.length > 0) {
+      const { data: issueData, error: issErr } = await admin
         .from("material_issues")
         .select("*, material:materials(*)")
-        .in("student_id", candidateSids)
+        .in("student_id", cleanStudentUuids)
 
+      if (issErr) {
+        console.warn("material_issues query warning in batch materials route:", issErr)
+      }
       if (issueData) {
         studentIssues = issueData
       }
