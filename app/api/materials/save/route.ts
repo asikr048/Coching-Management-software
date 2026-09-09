@@ -76,38 +76,63 @@ export async function POST(req: NextRequest) {
 
     // Check if updating existing material (only if id is a valid UUID)
     const isExistingUuid = id && uuidRegex.test(String(id))
+    // Execute with automatic schema fallback if database columns are missing from schema cache
+    let currentPayload = { ...payload }
     let savedMaterial: any = null
+    let saveError: any = null
 
-    if (isExistingUuid) {
-      // 1. UPDATE EXISTING
-      const { data, error } = await admin
-        .from("materials")
-        .update(payload)
-        .eq("id", id)
-        .select()
-        .single()
-
-      if (error) {
-        console.error("Material update error:", error)
-        return NextResponse.json({ error: error.message || "Failed to update material" }, { status: 500 })
+    for (let attempt = 0; attempt < 4; attempt++) {
+      let res: any
+      if (isExistingUuid) {
+        res = await admin
+          .from("materials")
+          .update(currentPayload)
+          .eq("id", id)
+          .select()
+          .single()
+      } else {
+        res = await admin
+          .from("materials")
+          .insert({
+            ...currentPayload,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .single()
       }
-      savedMaterial = data
-    } else {
-      // 2. CREATE NEW (let Postgres generate valid UUID)
-      const { data, error } = await admin
-        .from("materials")
-        .insert({
-          ...payload,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .single()
 
-      if (error) {
-        console.error("Material insert error:", error)
-        return NextResponse.json({ error: error.message || "Failed to insert material" }, { status: 500 })
+      if (!res.error) {
+        savedMaterial = res.data
+        saveError = null
+        break
       }
-      savedMaterial = data
+
+      const errMsg = String(res.error?.message || "")
+      console.warn(`[materials/save] Attempt ${attempt + 1} failed:`, errMsg)
+
+      // Fallback 1: batch_ids missing in schema cache
+      if (errMsg.includes("batch_ids") && "batch_ids" in currentPayload) {
+        delete currentPayload.batch_ids
+        continue
+      }
+      // Fallback 2: description missing in schema cache
+      if (errMsg.includes("description") && "description" in currentPayload) {
+        delete currentPayload.description
+        continue
+      }
+      // Fallback 3: branch_id missing in schema cache
+      if (errMsg.includes("branch_id") && "branch_id" in currentPayload) {
+        delete currentPayload.branch_id
+        continue
+      }
+
+      saveError = res.error
+      break
+    }
+
+    if (saveError || !savedMaterial) {
+      console.error("Material save error:", saveError)
+      return NextResponse.json({ error: saveError?.message || "Failed to save material" }, { status: 500 })
     }
 
     return NextResponse.json({
