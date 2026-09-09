@@ -82,10 +82,12 @@ export interface Student {
   id: string
   name: string
   student_id: string
+  roll_no?: number | null
+  batch_roll?: number | null
   phone?: string | null
   guardian_phone?: string | null
   is_active?: boolean
-  enrollments?: Array<{ batch_id: string; status?: string; batch?: { name: string } }>
+  enrollments?: Array<{ batch_id: string; roll_no?: number | null; status?: string; batch?: { name: string } }>
 }
 
 interface CurrentStaff {
@@ -527,6 +529,15 @@ export default function MaterialsClient({
         list.push(s)
       }
     })
+
+    list.sort((a, b) => {
+      const getRoll = (st: Student) => {
+        const enr = st.enrollments?.find(e => distributeSelectedBatchIds.includes(e.batch_id))
+        return enr?.roll_no != null && Number(enr.roll_no) > 0 ? Number(enr.roll_no) : (st.roll_no || st.batch_roll || 9999)
+      }
+      return getRoll(a) - getRoll(b)
+    })
+
     return list
   }, [students, distributeSelectedBatchIds])
 
@@ -534,11 +545,14 @@ export default function MaterialsClient({
   const searchStudents = useMemo(() => {
     const q = distributeSearchStudentQuery.trim().toLowerCase()
     if (!q) return students.slice(0, 30)
-    return students.filter(s => 
-      s.name.toLowerCase().includes(q) ||
-      s.student_id.toLowerCase().includes(q) ||
-      (s.phone && s.phone.includes(q))
-    ).slice(0, 40)
+    return students.filter(s => {
+      const nameMatch = s.name.toLowerCase().includes(q)
+      const idMatch = s.student_id.toLowerCase().includes(q)
+      const phoneMatch = s.phone && s.phone.includes(q)
+      const rollStr = String(s.roll_no || s.batch_roll || "")
+      const rollMatch = rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q)
+      return nameMatch || idMatch || phoneMatch || rollMatch
+    }).slice(0, 40)
   }, [students, distributeSearchStudentQuery])
 
   // Set of students who have already received this material
@@ -1730,6 +1744,8 @@ export default function MaterialsClient({
                         const alreadyIssued = alreadyIssuedStudentIds.has(student.id)
                         const isSelected = distributeSelectedStudentIds.has(student.id)
                         const studentBatchNames = student.enrollments?.map(e => e.batch?.name).filter(Boolean).join(", ")
+                        const enrObj = student.enrollments?.find(e => distributeSelectedBatchIds.includes(e.batch_id))
+                        const studentRoll = enrObj?.roll_no || student.roll_no || student.batch_roll
 
                         return (
                           <div
@@ -1752,7 +1768,14 @@ export default function MaterialsClient({
                                 className="w-4 h-4 text-amber-500 rounded cursor-pointer bg-slate-950 border-slate-700"
                               />
                               <div>
-                                <p className="font-bold text-slate-100">{student.name}</p>
+                                <div className="flex items-center gap-2">
+                                  {studentRoll && (
+                                    <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-black border border-amber-500/30">
+                                      Roll #{studentRoll}
+                                    </span>
+                                  )}
+                                  <p className="font-bold text-slate-100">{student.name}</p>
+                                </div>
                                 <p className="text-[11px] text-slate-400 font-mono">
                                   {student.student_id} • {studentBatchNames || "Enrolled"}
                                 </p>
@@ -1784,7 +1807,7 @@ export default function MaterialsClient({
                     <input
                       value={distributeSearchStudentQuery}
                       onChange={e => setDistributeSearchStudentQuery(e.target.value)}
-                      placeholder="Search student by name, student ID, or phone..."
+                      placeholder="Search student by name, roll (e.g. Roll 1), student ID, or phone..."
                       className="w-full pl-9 pr-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 placeholder:text-slate-500"
                     />
                   </div>
@@ -1809,6 +1832,7 @@ export default function MaterialsClient({
                       searchStudents.map(student => {
                         const alreadyIssued = alreadyIssuedStudentIds.has(student.id)
                         const isSelected = distributeSelectedStudentIds.has(student.id)
+                        const sRoll = student.roll_no || student.batch_roll || student.enrollments?.[0]?.roll_no
 
                         return (
                           <div
@@ -1831,7 +1855,14 @@ export default function MaterialsClient({
                                 className="w-4 h-4 text-amber-500 rounded cursor-pointer bg-slate-950 border-slate-700"
                               />
                               <div>
-                                <p className="font-bold text-slate-100">{student.name}</p>
+                                <div className="flex items-center gap-2">
+                                  {sRoll && (
+                                    <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono text-[10px] font-black border border-amber-500/30">
+                                      Roll #{sRoll}
+                                    </span>
+                                  )}
+                                  <p className="font-bold text-slate-100">{student.name}</p>
+                                </div>
                                 <p className="text-[11px] text-slate-400 font-mono">{student.student_id} • {student.phone || "No phone"}</p>
                               </div>
                             </div>

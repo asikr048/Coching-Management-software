@@ -60,7 +60,7 @@ export interface DeletionRequest {
 }
 
 interface Props { 
-  students: (Student & { enrollments?: { batch_id: string; batch?: { name: string }; status: string }[] })[]; 
+  students: (Student & { enrollments?: { batch_id: string; batch?: { name: string }; status: string; roll_no?: number | null }[] })[]; 
   batches: Batch[];
   dueData?: DueData[];
   examData?: ExamData[];
@@ -254,10 +254,16 @@ export default function StudentsClient({
 
   const filteredAndSorted = useMemo(() => {
     let result = enrichedStudents.filter(s => {
-      const matchQ = !query || 
-        s.name.toLowerCase().includes(query.toLowerCase()) ||
-        s.student_id.toLowerCase().includes(query.toLowerCase()) ||
-        s.phone?.toLowerCase().includes(query.toLowerCase())
+      const q = query.toLowerCase().trim()
+      const rollStr = s.roll_no != null ? String(s.roll_no) : (s.batch_roll != null ? String(s.batch_roll) : "")
+      const hasEnrRoll = (s.enrollments as any[])?.some(e => e.roll_no != null && (String(e.roll_no) === q || `roll ${e.roll_no}`.includes(q) || `roll #${e.roll_no}`.includes(q)))
+
+      const matchQ = !q || 
+        s.name.toLowerCase().includes(q) ||
+        s.student_id.toLowerCase().includes(q) ||
+        s.phone?.toLowerCase().includes(q) ||
+        (rollStr !== "" && (rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q)) ||
+        hasEnrRoll
       
       const matchB = !batchFilter || (s.enrollments?.some(e => e.batch_id === batchFilter))
       const matchBranch = selectedBranchId === "all" || !s.branch_id || s.branch_id === selectedBranchId
@@ -875,7 +881,7 @@ export default function StudentsClient({
               <input 
                 value={query} 
                 onChange={e => setQuery(e.target.value)} 
-                placeholder="Search by name, ID, phone..."
+                placeholder="Search by name, ID, Roll No, phone..."
                 className="w-full pl-9 pr-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 placeholder:text-slate-400 shadow-2xs" 
               />
             </div>
@@ -1017,11 +1023,17 @@ export default function StudentsClient({
                       <td className="px-4 py-4 text-sm">
                         {activeEnrollments.length > 0 ? (
                           <div className="flex flex-col gap-1">
-                            {activeEnrollments.map((e, i) => (
-                              <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 w-max">
-                                {e.batch?.name}
-                              </span>
-                            ))}
+                            {activeEnrollments.map((e, i) => {
+                              const roll = e.roll_no ?? student.roll_no ?? student.batch_roll
+                              return (
+                                <span key={i} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/15 text-amber-900 border border-amber-500/30 w-max">
+                                  {roll != null && (
+                                    <b className="font-mono text-amber-800 bg-amber-100 px-1 rounded text-[11px]">#{roll}</b>
+                                  )}
+                                  <span>{e.batch?.name}</span>
+                                </span>
+                              )
+                            })}
                           </div>
                         ) : (
                           <span className="text-slate-500 text-xs italic">Not enrolled</span>

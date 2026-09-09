@@ -162,11 +162,31 @@ export async function POST(req: NextRequest) {
         if (existingEnr.status !== "active") {
           await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
         }
-      } else {
+        // Calculate sequential batch roll starting from 1, 2, 3...
+        let nextRoll = 1
+        try {
+          const { data: maxEnr } = await admin
+            .from("enrollments")
+            .select("roll_no")
+            .eq("batch_id", sub.batch_id)
+            .order("roll_no", { ascending: false })
+            .limit(1)
+          if (maxEnr && maxEnr.length > 0 && maxEnr[0].roll_no != null && Number(maxEnr[0].roll_no) > 0) {
+            nextRoll = Number(maxEnr[0].roll_no) + 1
+          } else {
+            const { count } = await admin
+              .from("enrollments")
+              .select("id", { count: "exact", head: true })
+              .eq("batch_id", sub.batch_id)
+            nextRoll = (count || 0) + 1
+          }
+        } catch {}
+
         const enrPayload: Record<string, any> = {
           student_id: sub.student_id,
           batch_id: sub.batch_id,
           status: "active",
+          roll_no: nextRoll,
         }
         if (sub.branch_id) {
           enrPayload.branch_id = sub.branch_id
@@ -176,6 +196,12 @@ export async function POST(req: NextRequest) {
           enrPayload,
           { onConflict: "student_id,batch_id" }
         )
+
+        // Sync roll number to students table
+        await admin
+          .from("students")
+          .update({ roll_no: nextRoll, batch_roll: nextRoll })
+          .eq("id", sub.student_id)
 
         // If schema cache lacks branch_id column on enrollments, retry gracefully without branch_id
         if (enrErr && (

@@ -12,8 +12,8 @@ export default async function PaymentsPage() {
   const admin = createAdminClient()
 
   const [paymentsRes, studentsRes, batchesRes, duesRes, pendingRes, enrollmentsRes] = await Promise.all([
-    supabase.from("payments").select("*, student:students(name, student_id, phone, email, guardian_phone), batch:batches(name)").order("paid_at", { ascending: false }).limit(100),
-    supabase.from("students").select("id, name, student_id, phone, email, guardian_phone").eq("is_active", true),
+    supabase.from("payments").select("*, student:students(name, student_id, phone, email, guardian_phone, roll_no, batch_roll, enrollments(batch_id, roll_no)), batch:batches(name)").order("paid_at", { ascending: false }).limit(100),
+    supabase.from("students").select("id, name, student_id, phone, email, guardian_phone, roll_no, batch_roll, enrollments(batch_id, roll_no)").eq("is_active", true),
     supabase.from("batches").select("id, name, monthly_fee, admission_fee").eq("is_active", true),
     supabase.from("fee_dues").select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(name)").in("status", ["pending", "partial"]),
     admin.from("payment_submissions").select("id", { count: "exact", head: true }).eq("status", "pending"),

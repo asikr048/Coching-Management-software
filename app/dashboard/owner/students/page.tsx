@@ -6,7 +6,7 @@ export default async function StudentsPage() {
   const supabase = await createClient()
   const { data: students } = await supabase
     .from("students")
-    .select("*, enrollments(batch_id, status, batch:batches(name))")
+    .select("*, enrollments(batch_id, status, roll_no, batch:batches(name))")
     .order("created_at", { ascending: false })
 
   const { data: batches } = await supabase

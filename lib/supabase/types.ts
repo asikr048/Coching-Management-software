@@ -57,6 +57,7 @@ export interface Student {
   guardian_relation: string; date_of_birth?: string; gender?: "male" | "female" | "other"
   address?: string; school_college?: string; class_level?: string; photo_url?: string
   biometric_enrolled: boolean; referral_code?: string; referred_by_code?: string
+  roll_no?: number | null; batch_roll?: number | null
   is_active: boolean; enrollment_date: string; created_at: string
 }
 
@@ -73,6 +74,7 @@ export interface Batch {
 
 export interface Enrollment {
   id: string; student_id: string; batch_id: string; enrolled_by?: string
+  roll_no?: number | null
   enrollment_date: string; status: "active" | "inactive" | "transferred" | "completed"
   student?: Student; batch?: Batch; created_at: string
 }

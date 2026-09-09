@@ -1095,8 +1095,16 @@ export default function StudentBatchDetailPage() {
         <div className="relative z-10">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
-              <div className="inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-semibold tracking-wider uppercase mb-4 backdrop-blur-sm border border-white/10">
-                {batch.subject}
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <div className="inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-semibold tracking-wider uppercase backdrop-blur-sm border border-white/10">
+                  {batch.subject}
+                </div>
+                {(enrollment?.roll_no != null || student?.roll_no != null || student?.batch_roll != null) && (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400 text-slate-950 rounded-full text-xs font-black tracking-wider uppercase shadow-sm">
+                    <Award className="w-3.5 h-3.5" />
+                    <span>Batch Roll: #{enrollment?.roll_no ?? student?.roll_no ?? student?.batch_roll}</span>
+                  </div>
+                )}
               </div>
               <h1 className="text-3xl md:text-4xl font-bold mb-2">{batch.name}</h1>
               <div className="flex items-center gap-2 text-indigo-100 mt-2">

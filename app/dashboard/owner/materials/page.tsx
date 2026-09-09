@@ -132,7 +132,7 @@ export default async function MaterialsPage() {
   try {
     const { data } = await supabase
       .from("students")
-      .select("id, name, student_id, phone, guardian_phone, is_active, enrollments(batch_id, status, batch:batches(name))")
+      .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, is_active, enrollments(batch_id, roll_no, status, batch:batches(name))")
       .order("name")
     if (data) students = data
   } catch (e) {

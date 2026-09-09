@@ -13,10 +13,27 @@ import { checkFinancialAccess } from "@/lib/financial-access"
 interface Due {
   id: string; student_id: string; batch_id: string; due_month: string
   due_amount: number; paid_amount: number; due_date: string; status: string
-  student?: { id: string; name: string; student_id: string; guardian_phone?: string; phone?: string }
+  student?: {
+    id: string
+    name: string
+    student_id: string
+    roll_no?: number | null
+    batch_roll?: number | null
+    guardian_phone?: string
+    phone?: string
+    enrollments?: { batch_id: string; roll_no?: number | null }[]
+  }
   batch?: { id: string; name: string }
 }
 interface Batch { id: string; name: string }
+
+function getDueRoll(d: Due): number | null {
+  if (d.student?.enrollments && Array.isArray(d.student.enrollments)) {
+    const enr = d.student.enrollments.find((e: any) => e.batch_id === d.batch_id)
+    if (enr?.roll_no != null) return enr.roll_no
+  }
+  return d.student?.roll_no ?? d.student?.batch_roll ?? null
+}
 
 export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Due[]; batches: Batch[] }) {
   const supabase = createClient()
@@ -55,9 +72,15 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
   // Filter & Sort
   const filtered = dues.filter(d => {
-    const matchSearch = !search ||
-      d.student?.name?.toLowerCase().includes(search.toLowerCase()) ||
-      d.student?.student_id?.toLowerCase().includes(search.toLowerCase())
+    const roll = getDueRoll(d)
+    const rollStr = roll != null ? String(roll) : ""
+    const q = search.toLowerCase().trim()
+
+    const matchSearch = !q ||
+      d.student?.name?.toLowerCase().includes(q) ||
+      d.student?.student_id?.toLowerCase().includes(q) ||
+      (rollStr !== "" && (rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q))
+
     const matchBatch = !batchFilter || d.batch_id === batchFilter
 
     const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
@@ -275,9 +298,11 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
   }
 
   function downloadCSV() {
-    const rows = [["Student", "ID", "Batch", "Month", "Due Amount", "Paid", "Outstanding", "Due Date", "Status"]]
+    const rows = [["Roll", "Student", "ID", "Batch", "Month", "Due Amount", "Paid", "Outstanding", "Due Date", "Status"]]
     filtered.forEach(d => {
+      const roll = getDueRoll(d)
       rows.push([
+        roll != null ? String(roll) : "",
         d.student?.name || "", d.student?.student_id || "", d.batch?.name || "",
         d.due_month, String(d.due_amount), String(d.paid_amount || 0),
         String(Math.max(0, d.due_amount - (d.paid_amount || 0))),
@@ -317,7 +342,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 flex flex-wrap gap-3 items-center">
         <div className="flex-1 min-w-48 relative">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student name or student ID (MS-...)"
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search student name, student ID (MS-...), or Roll..."
             className="w-full pl-10 pr-3 py-2.5 text-sm text-slate-900 bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 placeholder:text-slate-400 transition-all" />
         </div>
         <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)}
@@ -347,6 +372,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
           <table className="w-full">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-bold text-slate-600 uppercase tracking-wider">
+                <th className="px-3 py-3.5 text-center w-16">Roll</th>
                 <th className="px-4 py-3.5 text-left">Student</th>
                 <th className="px-4 py-3.5 text-left">Batch</th>
                 <th className="px-4 py-3.5 text-left">Month</th>
@@ -360,8 +386,9 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
             </thead>
             <tbody className="divide-y divide-slate-100/70 text-sm">
               {filtered.length === 0 ? (
-                <tr><td colSpan={9} className="text-center py-14 text-slate-500 text-sm">No dues found for selected filter</td></tr>
+                <tr><td colSpan={10} className="text-center py-14 text-slate-500 text-sm">No dues found for selected filter</td></tr>
               ) : filtered.map(d => {
+                const roll = getDueRoll(d)
                 const outstanding = Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0))
                 const isSettled = d.status === "paid" || d.status === "waived" || outstanding <= 0
                 const overdue = !isSettled && new Date(d.due_date) < new Date()
@@ -369,6 +396,15 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                 return (
                   <Fragment key={d.id}>
                     <tr className={`transition-colors ${isSettled ? "bg-emerald-50/20" : overdue ? "bg-red-50/60" : isExpanded ? "bg-amber-50/80 font-medium" : "hover:bg-slate-50/70"}`}>
+                      <td className="px-3 py-3.5 text-center">
+                        {roll != null ? (
+                          <span className="inline-flex items-center justify-center font-mono font-bold text-xs bg-amber-50 text-amber-800 border border-amber-300 rounded-lg px-2 py-0.5">
+                            #{roll}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 font-mono">-</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3.5">
                         <p className="font-bold text-slate-900">{d.student?.name}</p>
                         <p className="text-xs text-amber-700 font-mono font-bold mt-0.5">{d.student?.student_id}</p>
@@ -439,7 +475,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                     {/* Expandable Detailed Payment Drawer */}
                     {isExpanded && (
                       <tr className="bg-amber-50/40 border-y border-amber-200">
-                        <td colSpan={9} className="p-3 sm:p-5">
+                        <td colSpan={10} className="p-3 sm:p-5">
                           <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-lg space-y-4 max-w-4xl mx-auto">
                             {/* Top Summary Banner */}
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200">

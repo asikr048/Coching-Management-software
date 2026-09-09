@@ -99,11 +99,48 @@ export default function NewStudentForm({
   const [selectedBranchId, setSelectedBranchId] = useState<string>(() => branches[0]?.id || "")
   const [form, setForm] = useState({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
   const [existingFix, setExistingFix] = useState({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
+  const [batchRoll, setBatchRoll] = useState<string>("")
   const [paidAmount, setPaidAmount] = useState("")
   const [dueDate, setDueDate] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10); return d.toISOString().split("T")[0] })
   
   const [enrolledBatchIds, setEnrolledBatchIds] = useState<string[]>([])
   const [allBatches, setAllBatches] = useState<Batch[]>(batches || [])
+
+  // Auto-calculate next batch roll (1, 2, 3...) when batch changes
+  useEffect(() => {
+    if (!form.batch_id) {
+      setBatchRoll("")
+      return
+    }
+    let isCancelled = false
+    async function loadNextRoll() {
+      try {
+        const { data: enrs } = await supabase
+          .from("enrollments")
+          .select("roll_no")
+          .eq("batch_id", form.batch_id)
+          .order("roll_no", { ascending: false })
+          .limit(1)
+
+        if (isCancelled) return
+        let nextRoll = 1
+        if (enrs && enrs.length > 0 && enrs[0].roll_no != null && Number(enrs[0].roll_no) > 0) {
+          nextRoll = Number(enrs[0].roll_no) + 1
+        } else {
+          const { count } = await supabase
+            .from("enrollments")
+            .select("id", { count: "exact", head: true })
+            .eq("batch_id", form.batch_id)
+          nextRoll = (count || 0) + 1
+        }
+        setBatchRoll(String(nextRoll))
+      } catch (err) {
+        if (!isCancelled) setBatchRoll("1")
+      }
+    }
+    loadNextRoll()
+    return () => { isCancelled = true }
+  }, [form.batch_id])
 
   useEffect(() => {
     if (initialEnrollments && initialEnrollments.length > 0) {
@@ -129,7 +166,7 @@ export default function NewStudentForm({
       const [enrRes, payRes, dueRes] = await Promise.all([
         supabase
           .from("enrollments")
-          .select("id, created_at, status, batch_id, student_id, branch_id, student:students(id, name, student_id, phone, email, guardian_name, guardian_phone, address, school_college, class_level), batch:batches(id, name, subject, class_level, monthly_fee, admission_fee, classroom, branch_id)")
+          .select("id, created_at, status, batch_id, student_id, branch_id, roll_no, student:students(id, name, student_id, phone, email, guardian_name, guardian_phone, address, school_college, class_level, roll_no, batch_roll), batch:batches(id, name, subject, class_level, monthly_fee, admission_fee, classroom, branch_id)")
           .order("created_at", { ascending: false })
           .limit(150),
         supabase
@@ -378,7 +415,9 @@ export default function NewStudentForm({
         const sPhone = (student.phone || "").toLowerCase()
         const gPhone = (student.guardian_phone || "").toLowerCase()
         const bName = (b.name || "").toLowerCase()
-        const match = sName.includes(q) || sId.includes(q) || sPhone.includes(q) || gPhone.includes(q) || bName.includes(q)
+        const rollVal = enr.roll_no != null ? String(enr.roll_no) : (student.roll_no != null ? String(student.roll_no) : "")
+        const matchRoll = rollVal !== "" && (rollVal === q || `roll ${rollVal}`.includes(q) || `roll #${rollVal}`.includes(q) || `r${rollVal}` === q)
+        const match = sName.includes(q) || sId.includes(q) || sPhone.includes(q) || gPhone.includes(q) || bName.includes(q) || matchRoll
         if (!match) return false
       }
 
@@ -558,6 +597,9 @@ export default function NewStudentForm({
       if (selectedBranchId || batch?.branch_id) {
         enrollPayload.branch_id = selectedBranchId || batch?.branch_id || null
       }
+      if (batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0) {
+        enrollPayload.roll_no = parseInt(batchRoll, 10)
+      }
 
       let { error: eErr } = await supabase.from("enrollments").insert(enrollPayload)
 
@@ -579,6 +621,14 @@ export default function NewStudentForm({
           return
         }
         throw new Error(eErr.message)
+      }
+
+      // Sync roll_no to student table as well
+      if (enrollPayload.roll_no != null) {
+        await supabase.from("students").update({
+          roll_no: enrollPayload.roll_no,
+          batch_roll: enrollPayload.roll_no
+        }).eq("id", sid)
       }
 
       // Update seats count
@@ -1313,7 +1363,18 @@ export default function NewStudentForm({
               <span className="text-slate-600">Admission Fee: <b className="text-slate-900">{formatCurrency(batch.admission_fee)}</b></span>
               <span className="sm:ml-auto text-amber-700 font-black text-sm w-full sm:w-auto text-right">Total Payable: {formatCurrency(total)}</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <label className={labelCls}>Batch Roll (রোল নং) *</label>
+                <input
+                  type="number"
+                  value={batchRoll}
+                  onChange={e => setBatchRoll(e.target.value)}
+                  className={`${ic} font-mono font-bold text-amber-950 bg-amber-50/70 border-amber-300`}
+                  placeholder="e.g. 1"
+                  min="1"
+                />
+              </div>
               <div><label className={labelCls}>Paid Amount (৳) *</label><input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${ic} font-bold text-slate-900`} placeholder="0" min="0" /></div>
               <div><label className={labelCls}>Remaining Due</label><div className={`px-3.5 py-2.5 rounded-xl text-sm font-black text-center ${due > 0 ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{formatCurrency(due)}</div></div>
               <div><label className={labelCls}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={ic} /></div>
@@ -1530,6 +1591,7 @@ export default function NewStudentForm({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="px-3 py-3 text-center w-16">Roll</th>
                       <th className="px-4 py-3">Student Info</th>
                       <th className="px-4 py-3">Batch & Campus</th>
                       <th className="px-4 py-3">Enrolled Date</th>
@@ -1548,9 +1610,19 @@ export default function NewStudentForm({
                       const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
                       const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
                       const isPaid = totalFee > 0 ? paidAmt >= totalFee : true
+                      const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
 
                       return (
                         <tr key={enr.id} className="hover:bg-amber-50/30 transition-colors">
+                          <td className="px-3 py-3.5 text-center">
+                            {roll != null ? (
+                              <span className="inline-flex items-center justify-center font-mono font-bold text-xs bg-amber-50 text-amber-800 border border-amber-300 rounded-lg px-2 py-0.5">
+                                #{roll}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-mono">-</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3.5">
                             <div className="font-bold text-slate-900 text-sm">{student.name || "Student"}</div>
                             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">

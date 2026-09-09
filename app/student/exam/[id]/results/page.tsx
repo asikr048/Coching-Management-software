@@ -412,7 +412,12 @@ export default function StudentExamResultsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 font-mono text-slate-600">
-                        {r.student?.student_id || r.roll || "N/A"}
+                        {r.roll_no || r.student?.roll_no ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-amber-50 border border-amber-200 text-amber-800 font-bold mr-1.5">
+                            Roll #{r.roll_no || r.student?.roll_no}
+                          </span>
+                        ) : null}
+                        <span className="text-slate-500">{r.student?.student_id || r.roll || "N/A"}</span>
                       </td>
                       <td className="px-4 py-3 text-center font-black text-amber-700 text-sm">
                         {r.obtained_marks} / {totalMarks}

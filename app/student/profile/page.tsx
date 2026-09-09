@@ -701,7 +701,14 @@ export default function StudentProfilePage() {
                         className="group bg-white rounded-2xl border border-gray-200 p-5 shadow-sm hover:shadow-lg hover:border-indigo-200 transition-all space-y-3 cursor-pointer">
                         <div className="flex items-start justify-between">
                           <div>
-                            <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-lg border border-indigo-100">{b?.subject || "Subject"}</span>
+                              {(enr.roll_no != null || studentData?.roll_no != null || studentData?.batch_roll != null) && (
+                                <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-900 font-bold rounded-lg border border-amber-300">
+                                  Roll #{enr.roll_no ?? studentData?.roll_no ?? studentData?.batch_roll}
+                                </span>
+                              )}
+                            </div>
                             <h3 className="text-base font-bold text-gray-900 mt-1.5 group-hover:text-indigo-600 transition-colors">{b?.name || "Batch"}</h3>
                           </div>
                           <span className="text-xs px-2 py-0.5 bg-emerald-50 text-emerald-700 font-semibold rounded-full border border-emerald-200">{enr.status || "Active"}</span>

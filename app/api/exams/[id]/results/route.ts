@@ -167,19 +167,36 @@ export async function GET(
       let allResults: any[] | null = null
       const { data: resultsData, error: resErr } = await admin
         .from("exam_results")
-        .select("*, student:students(id, name, student_id, phone)")
+        .select("*, student:students(id, name, student_id, roll_no, batch_roll, phone)")
         .eq("exam_id", examId)
 
       if (resErr) {
         // Fallback without wildcard if newer columns aren't in schema cache
         const { data: fbData, error: fbErr } = await admin
           .from("exam_results")
-          .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, phone)")
+          .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, roll_no, batch_roll, phone)")
           .eq("exam_id", examId)
         if (fbErr) return NextResponse.json({ error: fbErr.message }, { status: 500 })
         allResults = fbData
       } else {
         allResults = resultsData
+      }
+
+      // Fetch batch enrollments for roll numbers
+      const rollMap = new Map<string, number>()
+      if (exam.batch_id) {
+        try {
+          const { data: bEnrs } = await admin
+            .from("enrollments")
+            .select("student_id, roll_no")
+            .eq("batch_id", exam.batch_id)
+            .eq("status", "active")
+          if (bEnrs) {
+            bEnrs.forEach((e: any) => {
+              if (e.student_id && e.roll_no) rollMap.set(e.student_id, Number(e.roll_no))
+            })
+          }
+        } catch {}
       }
 
       // Extract day marks fallback note if available
@@ -199,8 +216,11 @@ export async function GET(
         if (Object.keys(sDayMarks).length === 0 && fallbackStudentDayMarks[item.student_id]) {
           sDayMarks = normalizeDayMarks(fallbackStudentDayMarks[item.student_id])
         }
+        const studentRoll = rollMap.get(item.student_id) || item.student?.roll_no || item.student?.batch_roll || null
         return {
           ...item,
+          roll_no: studentRoll,
+          student: item.student ? { ...item.student, roll_no: studentRoll } : item.student,
           day_marks: sDayMarks,
         }
       }).sort((a: any, b: any) => {

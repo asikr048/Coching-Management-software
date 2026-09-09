@@ -19,6 +19,9 @@ interface StudentOpt {
   phone?: string; 
   email?: string; 
   guardian_phone?: string;
+  roll_no?: number | null;
+  batch_roll?: number | null;
+  enrollments?: { batch_id: string; roll_no?: number | null }[];
 }
 
 interface BatchOpt { 
@@ -51,7 +54,16 @@ interface PaymentRow {
   paid_at: string; 
   student_id?: string;
   notes?: string;
-  student?: { name: string; student_id: string; phone?: string; email?: string; guardian_phone?: string }; 
+  student?: {
+    name: string;
+    student_id: string;
+    phone?: string;
+    email?: string;
+    guardian_phone?: string;
+    roll_no?: number | null;
+    batch_roll?: number | null;
+    enrollments?: { batch_id: string; roll_no?: number | null }[];
+  }; 
   batch?: { name: string };
 }
 
@@ -267,23 +279,35 @@ export default function PaymentsClient({
   // Top search filter for students
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return []
-    const q = searchQuery.toLowerCase()
-    return students.filter(s => 
-      s.name.toLowerCase().includes(q) || 
-      s.student_id.toLowerCase().includes(q) || 
-      (s.phone && s.phone.includes(q))
-    ).slice(0, 8)
+    const q = searchQuery.toLowerCase().trim()
+    return students.filter(s => {
+      const rollStr = s.roll_no != null ? String(s.roll_no) : (s.batch_roll != null ? String(s.batch_roll) : "")
+      const hasEnrRoll = s.enrollments?.some(e => e.roll_no != null && (String(e.roll_no) === q || `roll ${e.roll_no}`.includes(q) || `roll #${e.roll_no}`.includes(q)))
+      return (
+        s.name.toLowerCase().includes(q) || 
+        s.student_id.toLowerCase().includes(q) || 
+        (s.phone && s.phone.includes(q)) ||
+        (rollStr !== "" && (rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q)) ||
+        hasEnrRoll
+      )
+    }).slice(0, 8)
   }, [searchQuery, students])
 
   // Modal search filter for students
   const modalFilteredStudents = useMemo(() => {
     if (!modalSearchQuery.trim()) return []
-    const q = modalSearchQuery.toLowerCase()
-    return students.filter(s => 
-      s.name.toLowerCase().includes(q) || 
-      s.student_id.toLowerCase().includes(q) || 
-      (s.phone && s.phone.includes(q))
-    ).slice(0, 8)
+    const q = modalSearchQuery.toLowerCase().trim()
+    return students.filter(s => {
+      const rollStr = s.roll_no != null ? String(s.roll_no) : (s.batch_roll != null ? String(s.batch_roll) : "")
+      const hasEnrRoll = s.enrollments?.some(e => e.roll_no != null && (String(e.roll_no) === q || `roll ${e.roll_no}`.includes(q) || `roll #${e.roll_no}`.includes(q)))
+      return (
+        s.name.toLowerCase().includes(q) || 
+        s.student_id.toLowerCase().includes(q) || 
+        (s.phone && s.phone.includes(q)) ||
+        (rollStr !== "" && (rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q)) ||
+        hasEnrRoll
+      )
+    }).slice(0, 8)
   }, [modalSearchQuery, students])
 
   // Dues of selected student
@@ -740,7 +764,7 @@ export default function PaymentsClient({
               setSelectedStudent(null)
               setPayingDue(null) 
             }}
-            placeholder="Search student by name, student ID (MS-XXXXX), or phone..."
+            placeholder="Search student by name, student ID (MS-XXXXX), Roll No, or phone..."
             className="w-full pl-10 pr-4 py-2.5 text-sm text-white border border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-slate-950 placeholder:text-slate-500 hover:border-slate-600 transition-all"
           />
 
@@ -750,6 +774,7 @@ export default function PaymentsClient({
               {filteredStudents.map(s => {
                 const sDues = dues.filter(d => d.student_id === s.id)
                 const totalDue = sDues.reduce((sum, d) => sum + Math.max(0, (d.due_amount || 0) - (d.paid_amount || 0)), 0)
+                const roll = s.roll_no ?? s.batch_roll
                 return (
                   <button 
                     key={s.id} 
@@ -759,8 +784,14 @@ export default function PaymentsClient({
                   >
                     <div>
                       <p className="text-sm font-bold text-white">{s.name}</p>
-                      <p className="text-xs text-slate-400 font-mono mt-0.5">
-                        <span className="text-amber-400 font-semibold">{s.student_id}</span> {s.phone ? `• ${s.phone}` : ""}
+                      <p className="text-xs text-slate-400 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span className="text-amber-400 font-semibold">{s.student_id}</span>
+                        {roll != null && (
+                          <span className="bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded text-[11px] font-bold border border-amber-500/30">
+                            Roll #{roll}
+                          </span>
+                        )}
+                        {s.phone ? `• ${s.phone}` : ""}
                       </p>
                     </div>
                     {totalDue > 0 ? (
@@ -806,11 +837,16 @@ export default function PaymentsClient({
                 <User className="w-6 h-6 text-amber-400" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="font-bold text-xl text-slate-900">{selectedStudent.name}</h3>
                   <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono text-xs font-semibold border border-amber-500/30">
                     {selectedStudent.student_id}
                   </span>
+                  {(selectedStudent.roll_no != null || selectedStudent.batch_roll != null) && (
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/30">
+                      Roll #{selectedStudent.roll_no ?? selectedStudent.batch_roll}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {selectedStudent.phone ? `Phone: ${selectedStudent.phone}` : "No phone"} 
@@ -1117,7 +1153,14 @@ export default function PaymentsClient({
                     <td className="px-4 py-3 font-mono text-xs font-bold text-amber-400">{p.receipt_number}</td>
                     <td className="px-4 py-3">
                       <p className="font-bold text-slate-900 text-sm">{p.student?.name}</p>
-                      <span className="text-xs font-mono text-slate-400">{p.student?.student_id}</span>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs font-mono text-slate-400">{p.student?.student_id}</span>
+                        {(p.student?.roll_no != null || p.student?.batch_roll != null) && (
+                          <span className="text-[10px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-300 rounded px-1.5 py-0.2">
+                            Roll #{p.student.roll_no ?? p.student.batch_roll}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-300">{p.batch?.name || "—"}</td>
                     <td className="px-4 py-3 font-extrabold text-emerald-700">
@@ -1206,8 +1249,15 @@ export default function PaymentsClient({
                 {modalSelectedStudent ? (
                   <div className="flex items-center justify-between p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
                     <div>
-                      <p className="text-sm font-bold text-emerald-900">{modalSelectedStudent.name}</p>
-                      <p className="text-xs text-emerald-700 font-mono">{modalSelectedStudent.student_id} {modalSelectedStudent.phone ? `• ${modalSelectedStudent.phone}` : ""}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-bold text-emerald-900">{modalSelectedStudent.name}</p>
+                        {(modalSelectedStudent.roll_no != null || modalSelectedStudent.batch_roll != null) && (
+                          <span className="text-xs font-bold bg-emerald-200 text-emerald-900 px-1.5 py-0.5 rounded">
+                            Roll #{modalSelectedStudent.roll_no ?? modalSelectedStudent.batch_roll}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-emerald-700 font-mono mt-0.5">{modalSelectedStudent.student_id} {modalSelectedStudent.phone ? `• ${modalSelectedStudent.phone}` : ""}</p>
                     </div>
                     <button 
                       type="button" 
@@ -1223,23 +1273,33 @@ export default function PaymentsClient({
                     <input
                       value={modalSearchQuery}
                       onChange={e => setModalSearchQuery(e.target.value)}
-                      placeholder="Type student name or ID..."
+                      placeholder="Type student name, student ID, or Roll No..."
                       className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
                       autoFocus
                     />
                     {modalFilteredStudents.length > 0 && (
                       <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-900 rounded-xl border border-slate-200 shadow-2xl max-h-48 overflow-y-auto divide-y divide-slate-100">
-                        {modalFilteredStudents.map(s => (
-                          <button
-                            type="button"
-                            key={s.id}
-                            onClick={() => handleModalSelectStudent(s)}
-                            className="w-full text-left px-3.5 py-2.5 hover:bg-slate-800 text-sm flex items-center justify-between"
-                          >
-                            <span className="font-bold text-slate-900">{s.name}</span>
-                            <span className="text-xs text-amber-400 font-mono">{s.student_id}</span>
-                          </button>
-                        ))}
+                        {modalFilteredStudents.map(s => {
+                          const roll = s.roll_no ?? s.batch_roll
+                          return (
+                            <button
+                              type="button"
+                              key={s.id}
+                              onClick={() => handleModalSelectStudent(s)}
+                              className="w-full text-left px-3.5 py-2.5 hover:bg-slate-800 text-sm flex items-center justify-between"
+                            >
+                              <span className="font-bold text-slate-900">{s.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                {roll != null && (
+                                  <span className="text-xs bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded border border-amber-500/30">
+                                    Roll #{roll}
+                                  </span>
+                                )}
+                                <span className="text-xs text-amber-400 font-mono">{s.student_id}</span>
+                              </div>
+                            </button>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

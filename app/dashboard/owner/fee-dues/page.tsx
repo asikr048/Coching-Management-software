@@ -10,12 +10,12 @@ export default async function FeeDuesPage() {
   // 1. Fetch fee dues, batches, and payment submissions
   const [duesRes, batchesRes, pendingSubsRes] = await Promise.all([
     admin.from("fee_dues")
-      .select("*, student:students(id, name, student_id, guardian_phone, phone), batch:batches(id, name)")
+      .select("*, student:students(id, name, student_id, roll_no, batch_roll, guardian_phone, phone, enrollments(batch_id, roll_no)), batch:batches(id, name)")
       .in("status", ["pending", "partial", "paid", "waived"])
       .order("due_date", { ascending: false }),
     admin.from("batches").select("id, name, monthly_fee, admission_fee").eq("is_active", true).order("name"),
     admin.from("payment_submissions")
-      .select("*, student:students(id, name, student_id, guardian_phone, phone), batch:batches(id, name, monthly_fee, admission_fee)")
+      .select("*, student:students(id, name, student_id, roll_no, batch_roll, guardian_phone, phone, enrollments(batch_id, roll_no)), batch:batches(id, name, monthly_fee, admission_fee)")
       .in("status", ["pending", "approved"])
       .order("created_at", { ascending: false }),
   ])

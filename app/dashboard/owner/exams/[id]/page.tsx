@@ -41,6 +41,8 @@ interface Student {
   id: string
   name: string
   student_id: string
+  roll_no?: number | null
+  batch_roll?: number | null
   phone?: string | null
   guardian_phone?: string | null
 }
@@ -379,24 +381,42 @@ export default function ExamResultsPage() {
         if (ex?.batch_id) {
           const { data: enrollments } = await supabase
             .from("enrollments")
-            .select("student:students(id, name, student_id, phone, guardian_phone)")
+            .select("roll_no, enrollment_date, created_at, student:students(id, name, student_id, roll_no, batch_roll, phone, guardian_phone)")
             .eq("batch_id", ex.batch_id)
             .eq("status", "active")
+            .order("roll_no", { ascending: true, nullsFirst: false })
 
           const fetchedStudents: Student[] = (enrollments || [])
-            .map((e: any) => e.student)
+            .map((e: any, idx: number) => {
+              if (!e.student) return null
+              const rNo = e.roll_no != null && Number(e.roll_no) > 0 
+                ? Number(e.roll_no) 
+                : (e.student.roll_no || e.student.batch_roll || idx + 1)
+              return {
+                ...e.student,
+                roll_no: rNo,
+                batch_roll: rNo,
+              }
+            })
             .filter(Boolean)
-            .sort((a: Student, b: Student) => (a.name || "").localeCompare(b.name || ""))
+            .sort((a: Student, b: Student) => (a.roll_no || 9999) - (b.roll_no || 9999))
 
           setStudents(fetchedStudents)
         } else {
           const { data: allStudents } = await supabase
             .from("students")
-            .select("id, name, student_id, phone, guardian_phone")
-            .eq("status", "active")
-            .order("name", { ascending: true })
+            .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone")
+            .eq("is_active", true)
+            .order("roll_no", { ascending: true, nullsFirst: false })
 
-          setStudents(allStudents || [])
+          const mappedStudents: Student[] = (allStudents || []).map((s: any, idx: number) => ({
+            ...s,
+            roll_no: s.roll_no || s.batch_roll || idx + 1,
+            batch_roll: s.roll_no || s.batch_roll || idx + 1,
+          }))
+
+          mappedStudents.sort((a: Student, b: Student) => (a.roll_no || 9999) - (b.roll_no || 9999))
+          setStudents(mappedStudents)
         }
 
         // Load Existing Results
@@ -546,7 +566,9 @@ export default function ExamResultsPage() {
       const nameMatch = (s.name || "").toLowerCase().includes(q)
       const idMatch = (s.student_id || "").toLowerCase().includes(q)
       const phoneMatch = (s.phone || "").includes(q)
-      return nameMatch || idMatch || phoneMatch
+      const rollStr = String(s.roll_no || "")
+      const rollMatch = rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q)
+      return nameMatch || idMatch || phoneMatch || rollMatch
     })
   }, [students, studentSearchQuery])
 
@@ -1755,7 +1777,9 @@ export default function ExamResultsPage() {
       if (q) {
         const nameMatch = (s.name || "").toLowerCase().includes(q)
         const idMatch = (s.student_id || "").toLowerCase().includes(q)
-        if (!nameMatch && !idMatch) return false
+        const rollStr = String(s.roll_no || "")
+        const rollMatch = rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q)
+        if (!nameMatch && !idMatch && !rollMatch) return false
       }
 
       const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
@@ -2774,6 +2798,7 @@ export default function ExamResultsPage() {
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider text-[11px] font-bold">
                     <th className="px-4 py-3 w-12 text-center">#</th>
+                    <th className="px-4 py-3 w-16 text-center">Roll</th>
                     <th className="px-4 py-3">Student Name</th>
                     <th className="px-4 py-3">Student ID</th>
                     <th className="px-4 py-3 text-center">
@@ -2807,6 +2832,11 @@ export default function ExamResultsPage() {
                     return (
                       <tr key={s.id} className={cn("transition-colors", isAutoSaving ? "bg-amber-50/40" : isJustSaved ? "bg-emerald-50" : hasEntered ? "hover:bg-amber-50/20" : "hover:bg-slate-50")}>
                         <td className="px-4 py-3 text-xs text-slate-500 font-mono text-center font-bold">{idx + 1}</td>
+                        <td className="px-4 py-3 text-center">
+                          <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-amber-50 border border-amber-200 text-amber-800 font-mono text-xs font-black">
+                            {s.roll_no || idx + 1}
+                          </span>
+                        </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-full bg-amber-100 text-amber-800 font-bold text-xs flex items-center justify-center shrink-0">
