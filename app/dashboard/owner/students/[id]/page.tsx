@@ -1,22 +1,32 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { notFound } from "next/navigation"
 import { formatDate, formatCurrency } from "@/lib/utils"
 import { User, Phone, Mail, MapPin, BookOpen, CreditCard, Calendar, Fingerprint, AlertCircle, CheckCircle, Package } from "lucide-react"
 import Link from "next/link"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function StudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
-  const { data: student } = await supabase.from("students").select("*").eq("id", id).single()
+  const admin = createAdminClient()
+
+  let { data: student } = await admin.from("students").select("*").eq("id", id).maybeSingle()
+  if (!student) {
+    const { data: fallback } = await supabase.from("students").select("*").eq("id", id).maybeSingle()
+    student = fallback
+  }
   if (!student) notFound()
 
   const [enrollments, payments, attendance, results, duesRes, issuesRes] = await Promise.all([
-    supabase.from("enrollments").select("*, batch:batches(name, subject, monthly_fee)").eq("student_id", id),
-    supabase.from("payments").select("*, batch:batches(name)").eq("student_id", id).order("paid_at", { ascending: false }).limit(20),
-    supabase.from("attendance").select("date, status, batch:batches(name)").eq("student_id", id).order("date", { ascending: false }).limit(20),
-    supabase.from("exam_results").select("*, exam:exams(title, total_marks, exam_date)").eq("student_id", id).order("created_at", { ascending: false }),
-    supabase.from("fee_dues").select("*, batch:batches(name)").eq("student_id", id).order("due_date", { ascending: false }),
-    supabase.from("material_issues").select("*, material:materials(name, type, subject, total_stock), batch:batches(name)").eq("student_id", id).order("issued_at", { ascending: false }),
+    admin.from("enrollments").select("*, batch:batches(name, subject, monthly_fee)").eq("student_id", id),
+    admin.from("payments").select("*, batch:batches(name)").eq("student_id", id).order("paid_at", { ascending: false }).limit(20),
+    admin.from("attendance").select("date, status, batch:batches(name)").eq("student_id", id).order("date", { ascending: false }).limit(20),
+    admin.from("exam_results").select("*, exam:exams(title, total_marks, exam_date)").eq("student_id", id).order("created_at", { ascending: false }),
+    admin.from("fee_dues").select("*, batch:batches(name)").eq("student_id", id).order("due_date", { ascending: false }),
+    admin.from("material_issues").select("*, material:materials(name, type, subject, total_stock), batch:batches(name)").eq("student_id", id).order("issued_at", { ascending: false }),
   ])
 
   const duesList = duesRes.data || []
@@ -42,6 +52,11 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
             <p className="text-sm text-amber-600 font-mono font-bold">{student.student_id}</p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${student.is_active ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>{student.is_active ? "Active" : "Inactive"}</span>
+              {(student.roll_no != null || student.batch_roll != null) && (
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 font-mono">
+                  রোল #{student.roll_no || student.batch_roll}
+                </span>
+              )}
               {student.biometric_enrolled && <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-700 border border-blue-300 flex items-center gap-1"><Fingerprint className="w-3.5 h-3.5" /> Biometric</span>}
               {student.referral_code && <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-300">Ref: {student.referral_code}</span>}
             </div>
@@ -102,17 +117,27 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
           <h3 className="font-black text-slate-900 text-base mb-4">Enrolled Batches</h3>
           <div className="space-y-2.5">
-            {(enrollments.data || []).map(e => (
-              <div key={e.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                <div>
-                  <p className="font-bold text-slate-900 text-sm">{e.batch?.name}</p>
-                  <p className="text-xs text-slate-500">{e.batch?.subject || ""}</p>
+            {(enrollments.data || []).map(e => {
+              const roll = e.roll_no ?? student.roll_no ?? student.batch_roll
+              return (
+                <div key={e.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                  <div className="flex items-center gap-3">
+                    {roll != null && (
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                        রোল #{roll}
+                      </span>
+                    )}
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">{e.batch?.name}</p>
+                      <p className="text-xs text-slate-500">{e.batch?.subject || ""}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${e.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>{e.status}</span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${e.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>{e.status}</span>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
           {(!enrollments.data || enrollments.data.length === 0) && <p className="text-slate-500 text-sm text-center py-6">Not enrolled in any batches</p>}
         </div>

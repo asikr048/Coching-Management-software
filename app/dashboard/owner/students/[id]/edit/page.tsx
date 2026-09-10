@@ -15,6 +15,7 @@ export default function EditStudentPage() {
     name: "", phone: "", email: "", gender: "male", date_of_birth: "",
     guardian_name: "", guardian_phone: "", guardian_relation: "Parent",
     address: "", school_college: "", class_level: "", is_active: true,
+    roll_no: "",
   })
 
   function update(field: string, value: string | boolean) { setForm(f => ({ ...f, [field]: value })) }
@@ -30,6 +31,7 @@ export default function EditStudentPage() {
           guardian_relation: data.guardian_relation || "Parent", address: data.address || "",
           school_college: data.school_college || "", class_level: data.class_level || "",
           is_active: data.is_active,
+          roll_no: data.roll_no != null ? String(data.roll_no) : (data.batch_roll != null ? String(data.batch_roll) : ""),
         })
       }
       setFetching(false)
@@ -40,6 +42,7 @@ export default function EditStudentPage() {
   async function handleSave(e: React.FormEvent) {
     e.preventDefault(); setLoading(true)
     try {
+      const parsedRoll = form.roll_no.trim() ? parseInt(form.roll_no.trim(), 10) : null
       const { error } = await supabase.from("students").update({
         name: form.name, phone: form.phone || null, email: form.email || null,
         gender: form.gender, date_of_birth: form.date_of_birth || null,
@@ -47,8 +50,17 @@ export default function EditStudentPage() {
         guardian_relation: form.guardian_relation, address: form.address || null,
         school_college: form.school_college || null, class_level: form.class_level || null,
         is_active: form.is_active,
+        roll_no: parsedRoll,
+        batch_roll: parsedRoll,
       }).eq("id", params.id)
       if (error) throw error
+
+      if (parsedRoll != null) {
+        try {
+          await supabase.from("enrollments").update({ roll_no: parsedRoll }).eq("student_id", params.id)
+        } catch {}
+      }
+
       toast.success("Student updated!")
       router.push(`/dashboard/owner/students/${params.id}`)
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : "Failed") }
@@ -69,23 +81,24 @@ export default function EditStudentPage() {
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
           <h3 className="font-black text-slate-900 text-base mb-4">Personal Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={inputClass}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Email</label><input type="email" value={form.email} onChange={e => update("email", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => update("date_of_birth", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Class Level</label><input value={form.class_level} onChange={e => update("class_level", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">School / College</label><input value={form.school_college} onChange={e => update("school_college", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Address</label><input value={form.address} onChange={e => update("address", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Batch Roll No (রোল নম্বর)</label><input type="number" min="1" placeholder="e.g. 1, 2, 3..." value={form.roll_no} onChange={e => update("roll_no", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={inputClass}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Email</label><input type="email" value={form.email} onChange={e => update("email", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => update("date_of_birth", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Class Level</label><input value={form.class_level} onChange={e => update("class_level", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">School / College</label><input value={form.school_college} onChange={e => update("school_college", e.target.value)} className={inputClass} /></div>
+            <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-700 mb-1.5">Address</label><input value={form.address} onChange={e => update("address", e.target.value)} className={inputClass} /></div>
           </div>
         </div>
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
           <h3 className="font-black text-slate-900 text-base mb-4">Guardian Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Guardian Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Guardian Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-300 mb-1.5">Relation</label><select value={form.guardian_relation} onChange={e => update("guardian_relation", e.target.value)} className={inputClass}><option>Parent</option><option>Father</option><option>Mother</option><option>Guardian</option></select></div>
-            <div className="flex items-center gap-2.5 pt-6"><input type="checkbox" checked={form.is_active} onChange={e => update("is_active", e.target.checked)} className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400" /><label className="text-sm font-bold text-slate-200">Active Student</label></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Guardian Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Guardian Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Relation</label><select value={form.guardian_relation} onChange={e => update("guardian_relation", e.target.value)} className={inputClass}><option>Parent</option><option>Father</option><option>Mother</option><option>Guardian</option></select></div>
+            <div className="flex items-center gap-2.5 pt-6"><input type="checkbox" checked={form.is_active} onChange={e => update("is_active", e.target.checked)} className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400" /><label className="text-sm font-bold text-slate-900">Active Student</label></div>
           </div>
         </div>
         <div className="flex gap-3">

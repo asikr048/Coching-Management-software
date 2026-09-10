@@ -597,9 +597,31 @@ export default function NewStudentForm({
       if (selectedBranchId || batch?.branch_id) {
         enrollPayload.branch_id = selectedBranchId || batch?.branch_id || null
       }
-      if (batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0) {
-        enrollPayload.roll_no = parseInt(batchRoll, 10)
+
+      // Ensure batch roll number starts from 1, 2, 3... sequentially
+      let finalRoll = batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0 ? parseInt(batchRoll, 10) : null
+      if (finalRoll == null) {
+        try {
+          const { data: maxEnr } = await supabase
+            .from("enrollments")
+            .select("roll_no")
+            .eq("batch_id", form.batch_id)
+            .order("roll_no", { ascending: false })
+            .limit(1)
+          if (maxEnr && maxEnr.length > 0 && maxEnr[0].roll_no != null && Number(maxEnr[0].roll_no) > 0) {
+            finalRoll = Number(maxEnr[0].roll_no) + 1
+          } else {
+            const { count } = await supabase
+              .from("enrollments")
+              .select("id", { count: "exact", head: true })
+              .eq("batch_id", form.batch_id)
+            finalRoll = (count || 0) + 1
+          }
+        } catch {
+          finalRoll = 1
+        }
       }
+      enrollPayload.roll_no = finalRoll
 
       let { error: eErr } = await supabase.from("enrollments").insert(enrollPayload)
 

@@ -68,7 +68,7 @@ interface Props {
   initialDeletionRequests?: DeletionRequest[];
 }
 
-type SortOption = "default" | "due" | "performance" | "recent"
+type SortOption = "default" | "roll_asc" | "roll_desc" | "name" | "due" | "performance" | "recent"
 
 export default function StudentsClient({ 
   students, 
@@ -253,17 +253,37 @@ export default function StudentsClient({
   const { selectedBranchId } = useBranch()
 
   const filteredAndSorted = useMemo(() => {
+    const q = query.toLowerCase().trim()
+    // Extract pure numeric roll if user typed a number (e.g. "1" or "01" or "#1" or "roll 1" or "r1")
+    const qClean = q.replace(/^(roll|r|#|রোল|\s)+/i, "").trim()
+    const qNum = parseInt(qClean, 10)
+    const isNumericQuery = !isNaN(qNum) && qNum > 0
+
     let result = enrichedStudents.filter(s => {
-      const q = query.toLowerCase().trim()
       const rollStr = s.roll_no != null ? String(s.roll_no) : (s.batch_roll != null ? String(s.batch_roll) : "")
-      const hasEnrRoll = (s.enrollments as any[])?.some(e => e.roll_no != null && (String(e.roll_no) === q || `roll ${e.roll_no}`.includes(q) || `roll #${e.roll_no}`.includes(q)))
+      
+      // Match roll in any of student's enrollments
+      const hasEnrRoll = (s.enrollments as any[])?.some(e => {
+        if (e.roll_no == null) return false
+        const eRollNum = Number(e.roll_no)
+        const eRollStr = String(e.roll_no)
+        if (isNumericQuery && eRollNum === qNum) return true
+        if (eRollStr === q || eRollStr === qClean) return true
+        if (`roll ${eRollStr}`.includes(q) || `roll #${eRollStr}`.includes(q) || `r${eRollStr}` === q || `রোল ${eRollStr}`.includes(q)) return true
+        return false
+      })
+
+      const matchRoll = (isNumericQuery && (Number(s.roll_no) === qNum || Number(s.batch_roll) === qNum)) ||
+        (rollStr !== "" && (rollStr === q || rollStr === qClean || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q || `রোল ${rollStr}`.includes(q))) ||
+        hasEnrRoll
 
       const matchQ = !q || 
         s.name.toLowerCase().includes(q) ||
         s.student_id.toLowerCase().includes(q) ||
         s.phone?.toLowerCase().includes(q) ||
-        (rollStr !== "" && (rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q)) ||
-        hasEnrRoll
+        s.guardian_phone?.toLowerCase().includes(q) ||
+        s.email?.toLowerCase().includes(q) ||
+        matchRoll
       
       const matchB = !batchFilter || (s.enrollments?.some(e => e.batch_id === batchFilter))
       const matchBranch = selectedBranchId === "all" || !s.branch_id || s.branch_id === selectedBranchId
@@ -281,7 +301,49 @@ export default function StudentsClient({
       case "recent":
         result.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         break
+      case "name":
+        result.sort((a, b) => a.name.localeCompare(b.name))
+        break
+      case "roll_asc":
+        result.sort((a, b) => {
+          const rollA = (batchFilter ? a.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no : null) ?? a.enrollments?.[0]?.roll_no ?? a.roll_no ?? a.batch_roll ?? 999999
+          const rollB = (batchFilter ? b.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no : null) ?? b.enrollments?.[0]?.roll_no ?? b.roll_no ?? b.batch_roll ?? 999999
+          if (Number(rollA) !== Number(rollB)) return Number(rollA) - Number(rollB)
+          return a.name.localeCompare(b.name)
+        })
+        break
+      case "roll_desc":
+        result.sort((a, b) => {
+          const rollA = (batchFilter ? a.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no : null) ?? a.enrollments?.[0]?.roll_no ?? a.roll_no ?? a.batch_roll ?? -1
+          const rollB = (batchFilter ? b.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no : null) ?? b.enrollments?.[0]?.roll_no ?? b.roll_no ?? b.batch_roll ?? -1
+          if (Number(rollA) !== Number(rollB)) return Number(rollB) - Number(rollA)
+          return a.name.localeCompare(b.name)
+        })
+        break
+      case "default":
       default:
+        if (batchFilter) {
+          // When a batch is selected, sort strictly by that batch's roll number (1, 2, 3...)
+          result.sort((a, b) => {
+            const rollA = a.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no ?? a.roll_no ?? a.batch_roll ?? 999999
+            const rollB = b.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no ?? b.roll_no ?? b.batch_roll ?? 999999
+            if (Number(rollA) !== Number(rollB)) return Number(rollA) - Number(rollB)
+            return a.name.localeCompare(b.name)
+          })
+        } else {
+          // When All Batches is selected, group batchwise and sort by roll number within each batch
+          result.sort((a, b) => {
+            const bNameA = a.enrollments?.find(e => e.status === "active")?.batch?.name || a.enrollments?.[0]?.batch?.name || "ZZZ"
+            const bNameB = b.enrollments?.find(e => e.status === "active")?.batch?.name || b.enrollments?.[0]?.batch?.name || "ZZZ"
+            const bComp = bNameA.localeCompare(bNameB)
+            if (bComp !== 0) return bComp
+
+            const rollA = a.enrollments?.find(e => e.status === "active")?.roll_no ?? a.enrollments?.[0]?.roll_no ?? a.roll_no ?? a.batch_roll ?? 999999
+            const rollB = b.enrollments?.find(e => e.status === "active")?.roll_no ?? b.enrollments?.[0]?.roll_no ?? b.roll_no ?? b.batch_roll ?? 999999
+            if (Number(rollA) !== Number(rollB)) return Number(rollA) - Number(rollB)
+            return a.name.localeCompare(b.name)
+          })
+        }
         break
     }
 
@@ -566,13 +628,15 @@ export default function StudentsClient({
       return
     }
 
-    const headers = ["Name", "Student ID", "Phone", "Email", "Batch", "Performance%", "Due Amount", "Status"]
+    const headers = ["Name", "Student ID", "Roll No", "Phone", "Email", "Batch", "Performance%", "Due Amount", "Status"]
     const rows = dataToExport.map(s => {
       const activeEnrollments = s.enrollments?.filter(e => e.status === "active") || []
       const batchesStr = activeEnrollments.map(e => e.batch?.name).join("; ")
+      const rollsStr = activeEnrollments.map(e => e.roll_no != null ? `#${e.roll_no}` : "").filter(Boolean).join("; ") || (s.roll_no ? `#${s.roll_no}` : "")
       return [
         `"${s.name}"`,
         `"${s.student_id}"`,
+        `"${rollsStr || '-'}"`,
         `"${s.phone || ''}"`,
         `"${s.email || ''}"`,
         `"${batchesStr || 'Not enrolled'}"`,
@@ -897,8 +961,11 @@ export default function StudentsClient({
             <select 
               value={sortOption} 
               onChange={e => setSortOption(e.target.value as SortOption)}
-              className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-[180px] shadow-2xs">
-              <option value="default" className="bg-white text-slate-900">Default Sort</option>
+              className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-[200px] shadow-2xs font-medium">
+              <option value="default" className="bg-white text-slate-900">Batch & Roll No (১, ২, ৩...)</option>
+              <option value="roll_asc" className="bg-white text-slate-900">Roll No (Lowest: 1, 2, 3...)</option>
+              <option value="roll_desc" className="bg-white text-slate-900">Roll No (Highest first)</option>
+              <option value="name" className="bg-white text-slate-900">Student Name (A-Z)</option>
               <option value="due" className="bg-white text-slate-900">Due Payment (Highest)</option>
               <option value="performance" className="bg-white text-slate-900">Best Performance</option>
               <option value="recent" className="bg-white text-slate-900">Recently Enrolled</option>
@@ -977,6 +1044,7 @@ export default function StudentsClient({
                 <th className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider">#</th>
                 <th className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider">Student</th>
                 <th className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider">ID</th>
+                <th className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider text-amber-600">Roll No</th>
                 <th className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider">Batch</th>
                 <th className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider">Performance</th>
                 <th className="px-4 py-3.5 text-xs font-bold uppercase tracking-wider">Due Amount</th>
@@ -987,7 +1055,7 @@ export default function StudentsClient({
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredAndSorted.length === 0 ? (
-                <tr><td colSpan={10} className="text-center py-12 text-slate-500">No students found</td></tr>
+                <tr><td colSpan={11} className="text-center py-12 text-slate-500">No students found</td></tr>
               ) : (
                 filteredAndSorted.map((student, idx) => {
                   const activeEnrollments = student.enrollments?.filter(e => e.status === "active") || []
@@ -1020,15 +1088,55 @@ export default function StudentsClient({
                           {student.student_id}
                         </span>
                       </td>
+                      {/* Roll No Column */}
+                      <td className="px-4 py-4 text-sm">
+                        {batchFilter ? (
+                          (() => {
+                            const enr = student.enrollments?.find(e => e.batch_id === batchFilter)
+                            const r = enr?.roll_no ?? student.roll_no ?? student.batch_roll
+                            return r != null ? (
+                              <span className="inline-flex items-center gap-1 font-mono bg-amber-100/90 px-2.5 py-1 rounded-lg text-xs font-black text-amber-950 border border-amber-300 shadow-2xs">
+                                <span className="text-[10px] text-amber-700 font-sans font-bold">রোল</span> #{r}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-xs">-</span>
+                            )
+                          })()
+                        ) : (
+                          activeEnrollments.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 max-w-[140px]">
+                              {activeEnrollments.map((e, i) => {
+                                const r = e.roll_no ?? student.roll_no ?? student.batch_roll
+                                return r != null ? (
+                                  <span key={i} className="inline-flex items-center gap-1 font-mono bg-amber-100/90 px-2 py-0.5 rounded-lg text-xs font-black text-amber-950 border border-amber-300 shadow-2xs" title={`${e.batch?.name || 'Batch'}: Roll #${r}`}>
+                                    <span className="text-[10px] text-amber-700 font-sans font-bold">রোল</span> #{r}
+                                  </span>
+                                ) : null
+                              })}
+                              {!activeEnrollments.some(e => (e.roll_no ?? student.roll_no ?? student.batch_roll) != null) && (
+                                <span className="text-slate-400 text-xs">-</span>
+                              )}
+                            </div>
+                          ) : (
+                            student.roll_no != null ? (
+                              <span className="inline-flex items-center gap-1 font-mono bg-amber-100/90 px-2.5 py-1 rounded-lg text-xs font-black text-amber-950 border border-amber-300 shadow-2xs">
+                                <span className="text-[10px] text-amber-700 font-sans font-bold">রোল</span> #{student.roll_no}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-xs">-</span>
+                            )
+                          )
+                        )}
+                      </td>
                       <td className="px-4 py-4 text-sm">
                         {activeEnrollments.length > 0 ? (
                           <div className="flex flex-col gap-1">
                             {activeEnrollments.map((e, i) => {
                               const roll = e.roll_no ?? student.roll_no ?? student.batch_roll
                               return (
-                                <span key={i} className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold bg-amber-500/15 text-amber-900 border border-amber-500/30 w-max">
+                                <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-900 border border-amber-500/30 w-max shadow-2xs">
                                   {roll != null && (
-                                    <b className="font-mono text-amber-800 bg-amber-100 px-1 rounded text-[11px]">#{roll}</b>
+                                    <b className="font-mono text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded text-[11px] font-black">#{roll}</b>
                                   )}
                                   <span>{e.batch?.name}</span>
                                 </span>

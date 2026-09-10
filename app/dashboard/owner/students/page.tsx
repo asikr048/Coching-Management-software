@@ -1,42 +1,65 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import Link from "next/link"
 import StudentsClient from "./StudentsClient"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function StudentsPage() {
   const supabase = await createClient()
-  const { data: students } = await supabase
-    .from("students")
-    .select("*, enrollments(batch_id, status, roll_no, batch:batches(name))")
-    .order("created_at", { ascending: false })
+  const admin = createAdminClient()
 
-  const { data: batches } = await supabase
-    .from("batches")
-    .select("id, name")
-    .eq("is_active", true)
+  // Query with admin client to bypass any RLS policy restrictions for owner dashboard
+  const [studentsRes, batchesRes, feeDuesRes, examResultsRes, userRes] = await Promise.all([
+    admin
+      .from("students")
+      .select("*, enrollments(batch_id, status, roll_no, batch:batches(name))")
+      .order("created_at", { ascending: false }),
+    admin
+      .from("batches")
+      .select("id, name")
+      .eq("is_active", true),
+    admin
+      .from("fee_dues")
+      .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name)")
+      .order("due_date", { ascending: true }),
+    admin
+      .from("exam_results")
+      .select("student_id, obtained_marks, exams(total_marks)"),
+    supabase.auth.getUser()
+  ])
 
-  const { data: feeDues } = await supabase
-    .from("fee_dues")
-    .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name)")
-    .order("due_date", { ascending: true })
+  let students = studentsRes.data || []
+  if (students.length === 0) {
+    // Fallback to supabase session client if admin returned empty
+    const { data: fallbackStudents } = await supabase
+      .from("students")
+      .select("*, enrollments(batch_id, status, roll_no, batch:batches(name))")
+      .order("created_at", { ascending: false })
+    if (fallbackStudents && fallbackStudents.length > 0) {
+      students = fallbackStudents
+    }
+  }
 
-  const { data: examResults } = await supabase
-    .from("exam_results")
-    .select("student_id, obtained_marks, exams(total_marks)")
+  const batches = batchesRes.data || []
+  const feeDues = feeDuesRes.data || []
+  const examResults = examResultsRes.data || []
+  const user = userRes.data?.user
 
-  const { data: { user } } = await supabase.auth.getUser()
   const { data: staff } = user
-    ? await supabase.from("staff").select("id, name, email, role").eq("auth_user_id", user.id).maybeSingle()
+    ? await admin.from("staff").select("id, name, email, role").eq("auth_user_id", user.id).maybeSingle()
     : { data: null }
 
   let initialDeletionRequests: any[] = []
   try {
-    const { data: requests } = await supabase
+    const { data: requests } = await admin
       .from("student_deletion_requests")
       .select("*")
       .order("created_at", { ascending: false })
     if (requests) initialDeletionRequests = requests
   } catch (e) {
-    // Falls back gracefully to localStorage in client
+    // Falls back gracefully
   }
 
   const currentStaff = staff || {
