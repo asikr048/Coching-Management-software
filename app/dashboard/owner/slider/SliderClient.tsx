@@ -375,7 +375,7 @@ export default function SliderClient({
   // EXAM NOTIFICATIONS & RESULTS ACTIONS
   // ----------------------------------------------------
   async function handleUnpublishExam(examId: string, examTitle: string) {
-    if (!confirm(`Are you sure you want to remove the exam notification and results for "${examTitle}" from the public homepage and /online-result portal?`)) {
+    if (!confirm(`আপনি কি নিশ্চিত যে "${examTitle}" এর নোটিফিকেশন ও রেজাল্ট কার্ড ওয়েবসাইট হোমপেজ ও নোটিশ বোর্ড থেকে মুছে ফেলতে চান? (মূল পরীক্ষার ডাটাবেজ সুরক্ষিত থাকবে)`)) {
       return
     }
 
@@ -392,7 +392,7 @@ export default function SliderClient({
       })
 
       const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to unpublish exam notification")
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to delete exam notification")
 
       setExams(prev => prev.map(e => {
         if (e.id === examId) {
@@ -402,6 +402,11 @@ export default function SliderClient({
             is_published: false,
             is_weekly_published: false,
             published_days: [],
+            result_note: (e.result_note || "")
+              .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
+              .replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "")
+              .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
+              .trim() + " [PUBLIC_RESULT:false] [IS_WEEKLY_PUBLISHED:false] [PUBLISHED_DAYS:]",
           }
         }
         return e
@@ -409,7 +414,7 @@ export default function SliderClient({
 
       setNotices(prev => prev.filter(n => !(n.title?.includes(examTitle) || n.content?.includes(examTitle))))
 
-      toast.success(data.message || "Exam notification removed from online results portal!")
+      toast.success(data.message || "✓ হোমপেজ ও নোটিশ বোর্ড থেকে পরীক্ষার নোটিফিকেশন সফলভাবে মুছে ফেলা হয়েছে!")
     } catch (err: any) {
       toast.error(err.message || "Failed to unpublish exam")
     } finally {
@@ -443,14 +448,14 @@ export default function SliderClient({
         setNotices(prev => [data.notice, ...prev])
       }
 
-      toast.success("Exam published to online results and notice board!")
+      toast.success("✓ পরীক্ষা সফলভাবে হোমপেজ ও নোটিশ বোর্ডে প্রকাশ করা হয়েছে!")
     } catch (err: any) {
       toast.error(err.message || "Failed to publish exam")
     }
   }
 
   async function handleDeleteSpecificDay(examId: string, dayKey: string, dayLabel: string) {
-    if (!confirm(`Are you sure you want to remove "${dayLabel}" notification and results from the public portal?`)) {
+    if (!confirm(`আপনি কি নিশ্চিত যে "${dayLabel}" এর নোটিফিকেশন ও রেজাল্ট হোমপেজ থেকে মুছে ফেলতে চান?`)) {
       return
     }
 
@@ -487,7 +492,9 @@ export default function SliderClient({
         return e
       }))
 
-      toast.success(data.message || `${dayLabel} results removed from online portal!`)
+      setNotices(prev => prev.filter(n => !(n.title?.includes(dayLabel) || n.content?.includes(dayLabel))))
+
+      toast.success(data.message || `✓ ${dayLabel} এর নোটিফিকেশন হোমপেজ থেকে সফলভাবে মুছে ফেলা হয়েছে!`)
     } catch (err: any) {
       toast.error(err.message || "Failed to remove day")
     }
@@ -1176,17 +1183,17 @@ export default function SliderClient({
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">
                   <Award className="w-3.5 h-3.5 text-amber-400" />
-                  Homepage & Online Results Manager
+                  Homepage Notification Manager
                 </span>
-                <span className="text-xs bg-indigo-900/60 text-indigo-200 px-2.5 py-0.5 rounded-full font-bold border border-indigo-700/50">
-                  {publishedExamsCount} Live Online
+                <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full font-bold border border-emerald-500/30">
+                  {publishedExamsCount}টি নোটিফিকেশন হোমপেজে লাইভ
                 </span>
               </div>
               <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
-                Exam Notifications & Online Results (পরীক্ষার নোটিশ ও রেজাল্ট)
+                হোমপেজ পরীক্ষার নোটিফিকেশন ও রেজাল্ট কন্ট্রোল
               </h3>
               <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1 max-w-2xl">
-                Manage or delete exam notifications, weekly aggregate rankings, and daily test results published on the website homepage and <code className="text-amber-300 font-mono">/online-result</code>.
+                এখানে আপনি সরাসরি ওয়েবসাইট হোমপেজ ও নোটিশ বোর্ড থেকে পরীক্ষার নোটিফিকেশন ও রেজাল্ট কার্ড মুছতে (Delete from Homepage) বা নতুন করে প্রকাশ করতে পারবেন। মূল পরীক্ষার মার্কস ও ডাটাবেজ সুরক্ষিত থাকবে।
               </p>
             </div>
 
@@ -1197,7 +1204,7 @@ export default function SliderClient({
                 rel="noreferrer"
                 className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-xl text-xs sm:text-sm shadow-md transition-all hover:scale-105"
               >
-                <span>View Public Portal</span>
+                <span>লাইভ হোমপেজ রেজাল্ট</span>
                 <ExternalLink className="w-4 h-4" />
               </a>
               <a
@@ -1216,7 +1223,7 @@ export default function SliderClient({
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search exam title, subject, batch, or branch..."
+                  placeholder="পরীক্ষার নাম, বিষয়, ব্যাচ বা শাখা দিয়ে খুঁজুন..."
                   value={examSearch}
                   onChange={e => setExamSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all shadow-2xs"
@@ -1228,7 +1235,7 @@ export default function SliderClient({
                 onChange={e => setExamBranchFilter(e.target.value)}
                 className="px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500"
               >
-                <option value="all">All Branches (সকল শাখা)</option>
+                <option value="all">সকল শাখা (All Branches)</option>
                 {branches.map(b => (
                   <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
@@ -1241,7 +1248,7 @@ export default function SliderClient({
                     examStatusFilter === "all" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  All ({exams.length})
+                  সব পরীক্ষা ({exams.length})
                 </button>
                 <button
                   onClick={() => setExamStatusFilter("published")}
@@ -1249,7 +1256,7 @@ export default function SliderClient({
                     examStatusFilter === "published" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  Live ({publishedExamsCount})
+                  হোমপেজে লাইভ ({publishedExamsCount})
                 </button>
                 <button
                   onClick={() => setExamStatusFilter("unpublished")}
@@ -1257,7 +1264,7 @@ export default function SliderClient({
                     examStatusFilter === "unpublished" ? "bg-slate-700 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
-                  Unpublished
+                  আনপাবলিশড
                 </button>
               </div>
             </div>
@@ -1474,7 +1481,7 @@ export default function SliderClient({
                       )}
                     </div>
 
-                    {/* Bottom Action Buttons */}
+                    {/* Bottom Action Buttons: Purely for Homepage Notification Management */}
                     <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
                       <div className="flex items-center gap-2">
                         {isLive ? (
@@ -1482,34 +1489,34 @@ export default function SliderClient({
                             type="button"
                             onClick={() => handleUnpublishExam(ex.id, ex.title)}
                             disabled={isUnpublishing}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition-all shadow-2xs cursor-pointer hover:scale-[1.02] disabled:opacity-50"
-                            title="অনলাইন পোর্টাল ও হোমপেজ থেকে এই পরীক্ষার সকল নোটিফিকেশন ও রেজাল্ট মুছে ফেলুন"
+                            className="flex items-center gap-2 px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-all shadow-xs cursor-pointer hover:scale-[1.01] disabled:opacity-50 text-xs sm:text-sm"
+                            title="ওয়েবসাইট হোমপেজ ও নোটিশ বোর্ড থেকে এই পরীক্ষার নোটিফিকেশন সম্পূর্ণ মুছে ফেলুন (মূল ডাটাবেজ সুরক্ষিত থাকবে)"
                           >
-                            <EyeOff className="w-3.5 h-3.5" />
-                            <span>{isUnpublishing ? "মুছে ফেলা হচ্ছে..." : "সকল নোটিফিকেশন ও রেজাল্ট মুছুন (Unpublish All)"}</span>
+                            <Trash2 className="w-3.5 h-3.5 text-white" />
+                            <span>{isUnpublishing ? "হোমপেজ থেকে মোছা হচ্ছে..." : "হোমপেজ থেকে নোটিফিকেশন মুছুন (Delete from Homepage)"}</span>
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => handlePublishExam(ex.id, ex.title)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-xl transition-all shadow-2xs cursor-pointer hover:scale-[1.02]"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 font-bold rounded-xl transition-all shadow-2xs cursor-pointer hover:scale-[1.02]"
+                            title="হোমপেজ ও নোটিশ বোর্ডে এই পরীক্ষাটি প্রকাশ করুন"
                           >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>অনলাইনে প্রকাশ করুন (Publish Live)</span>
+                            <Plus className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>হোমপেজে প্রকাশ করুন (Publish Live)</span>
                           </button>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteExamPermanently(ex.id, ex.title)}
-                          className="flex items-center gap-1 px-2.5 py-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-slate-200 cursor-pointer font-semibold text-xs"
-                          title="ডাটাবেজ থেকে সম্পূর্ণ পরীক্ষা ও এর সকল ফলাফল মুছুন"
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`/dashboard/owner/exams/${ex.id}`}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-colors border border-slate-200 cursor-pointer font-semibold text-xs"
+                          title="পরীক্ষার মার্কস ইনপুট ও বিস্তারিত দেখতে যান"
                         >
-                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
-                          <span>ডাটাবেজ ডিলিট</span>
-                        </button>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          <span>মার্কস ও বিস্তারিত</span>
+                        </a>
                       </div>
                     </div>
                   </div>

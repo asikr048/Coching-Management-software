@@ -452,13 +452,24 @@ export default function HomePage() {
         if (!matchesBranch) continue
       }
 
+      const note = ex.result_note || ""
+      const isExplicitlyUnpublished =
+        note.includes("[PUBLIC_RESULT:false]") ||
+        (ex.is_public_result === false && ex.is_published === false && !note.includes("[PUBLIC_RESULT:true]"))
+
+      if (isExplicitlyUnpublished) continue
+
       const isWeekly =
         ex.exam_schedule_type === "weekly" ||
         (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
-        ex.is_weekly_published === true ||
         Boolean(ex.title?.includes("সাপ্তাহিক"))
 
       if (!isWeekly) {
+        const isOneTimeLive =
+          (ex.is_published === true || ex.is_public_result === true || note.includes("[PUBLIC_RESULT:true]")) &&
+          !note.includes("[PUBLIC_RESULT:false]")
+        if (!isOneTimeLive) continue
+
         cards.push({
           id: ex.id,
           examId: ex.id,
@@ -495,17 +506,21 @@ export default function HomePage() {
             pubDays = rawPubDays.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
           }
         }
-        if (pubDays.length === 0 && ex.result_note?.includes("[PUBLISHED_DAYS:")) {
+        if (pubDays.length === 0 && note.includes("[PUBLISHED_DAYS:")) {
           try {
-            const match = ex.result_note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+            const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
             if (match && match[1]) {
               pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
             }
           } catch {}
         }
 
-        // 1. Weekly Consolidated Card (if is_weekly_published === true)
-        if (ex.is_weekly_published === true) {
+        // 1. Weekly Consolidated Card (if is_weekly_published === true and not explicitly hidden)
+        const isWeeklyPub =
+          (ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")) &&
+          !note.includes("[IS_WEEKLY_PUBLISHED:false]")
+
+        if (isWeeklyPub) {
           cards.push({
             id: `${ex.id}-weekly`,
             examId: ex.id,
