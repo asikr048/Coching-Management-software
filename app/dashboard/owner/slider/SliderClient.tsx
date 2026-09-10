@@ -6,7 +6,7 @@ import {
   Plus, Trash2, Image, Loader2, X, Eye, EyeOff, Pencil, Sparkles,
   Phone, Mail, MapPin, MessageSquare, Save, Sliders, Info, ExternalLink,
   Globe, Bell, Trophy, BookOpen, Award, Tag, Calendar, User, CheckCircle2,
-  Landmark, ArrowUpRight, Star
+  Landmark, ArrowUpRight, Star, Search
 } from "lucide-react"
 import type { Branch, Blog, Achievement, Notice } from "@/lib/supabase/types"
 
@@ -28,6 +28,7 @@ interface SliderClientProps {
   initialAchievements?: any[]
   initialNotices?: any[]
   initialFeedback?: any[]
+  initialExams?: any[]
   branches: Branch[]
 }
 
@@ -38,10 +39,19 @@ export default function SliderClient({
   initialAchievements = [],
   initialNotices = [],
   initialFeedback = [],
+  initialExams = [],
   branches,
 }: SliderClientProps) {
-  const [activeTab, setActiveTab] = useState<'slider' | 'notices' | 'achievements' | 'blogs' | 'feedback' | 'contact'>('slider')
+  const [activeTab, setActiveTab] = useState<'slider' | 'notices' | 'exams' | 'achievements' | 'blogs' | 'feedback' | 'contact'>('slider')
   const supabase = createClient()
+
+  // --- EXAMS & NOTIFICATIONS STATE ---
+  const [exams, setExams] = useState<any[]>(initialExams)
+  const [examSearch, setExamSearch] = useState("")
+  const [examBranchFilter, setExamBranchFilter] = useState("all")
+  const [examStatusFilter, setExamStatusFilter] = useState<"all" | "published" | "unpublished">("all")
+  const [unpublishingExamId, setUnpublishingExamId] = useState<string | null>(null)
+  const [noticeFilter, setNoticeFilter] = useState<"all" | "exam" | "general">("all")
 
   // --- SLIDER STATE ---
   const [slides, setSlides] = useState<Slide[]>(initialSlides)
@@ -283,6 +293,148 @@ export default function SliderClient({
   }
 
   // ----------------------------------------------------
+  // EXAM NOTIFICATIONS & RESULTS ACTIONS
+  // ----------------------------------------------------
+  async function handleUnpublishExam(examId: string, examTitle: string) {
+    if (!confirm(`Are you sure you want to remove the exam notification and results for "${examTitle}" from the public homepage and /online-result portal?`)) {
+      return
+    }
+
+    setUnpublishingExamId(examId)
+    try {
+      const res = await fetch("/api/exams/unpublish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exam_id: examId,
+          action: "unpublish",
+          delete_notices: true,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to unpublish exam notification")
+
+      setExams(prev => prev.map(e => {
+        if (e.id === examId) {
+          return {
+            ...e,
+            is_public_result: false,
+            is_published: false,
+            is_weekly_published: false,
+            published_days: [],
+          }
+        }
+        return e
+      }))
+
+      setNotices(prev => prev.filter(n => !(n.title?.includes(examTitle) || n.content?.includes(examTitle))))
+
+      toast.success(data.message || "Exam notification removed from online results portal!")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to unpublish exam")
+    } finally {
+      setUnpublishingExamId(null)
+    }
+  }
+
+  async function handlePublishExam(examId: string, examTitle: string) {
+    try {
+      const res = await fetch(`/api/exams/${examId}/publish-notice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "results" }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to publish exam")
+
+      setExams(prev => prev.map(e => {
+        if (e.id === examId) {
+          return {
+            ...e,
+            is_public_result: true,
+            is_published: true,
+            is_weekly_published: true,
+          }
+        }
+        return e
+      }))
+
+      if (data.notice) {
+        setNotices(prev => [data.notice, ...prev])
+      }
+
+      toast.success("Exam published to online results and notice board!")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to publish exam")
+    }
+  }
+
+  async function handleDeleteSpecificDay(examId: string, dayKey: string, dayLabel: string) {
+    if (!confirm(`Are you sure you want to remove "${dayLabel}" notification and results from the public portal?`)) {
+      return
+    }
+
+    try {
+      const res = await fetch("/api/exams/unpublish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exam_id: examId,
+          action: "delete_day",
+          day_key: dayKey,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to remove day notification")
+
+      setExams(prev => prev.map(e => {
+        if (e.id === examId) {
+          const currentDays = Array.isArray(e.published_days) ? e.published_days : []
+          return {
+            ...e,
+            published_days: currentDays.filter((d: any) => String(d).toLowerCase() !== dayKey.toLowerCase()),
+          }
+        }
+        return e
+      }))
+
+      toast.success(data.message || `${dayLabel} results removed from online portal!`)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to remove day")
+    }
+  }
+
+  async function handleDeleteExamPermanently(examId: string, examTitle: string) {
+    if (!confirm(`🔴 DANGER: Are you completely certain you want to permanently delete the exam "${examTitle}" and all its records and results from the database?`)) {
+      return
+    }
+
+    try {
+      const res = await fetch("/api/exams/unpublish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exam_id: examId,
+          action: "delete_exam",
+          delete_notices: true,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to delete exam")
+
+      setExams(prev => prev.filter(e => e.id !== examId))
+      setNotices(prev => prev.filter(n => !(n.title?.includes(examTitle) || n.content?.includes(examTitle))))
+
+      toast.success(data.message || `Exam "${examTitle}" permanently deleted!`)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete exam")
+    }
+  }
+
+  // ----------------------------------------------------
   // ACHIEVEMENTS ACTIONS
   // ----------------------------------------------------
   function openCreateAch() {
@@ -506,6 +658,54 @@ export default function SliderClient({
     }
   }
 
+  const publishedExamsCount = exams.filter(e => {
+    return (
+      e.is_public_result === true ||
+      e.is_published === true ||
+      e.is_weekly_published === true ||
+      (Array.isArray(e.published_days) && e.published_days.length > 0)
+    )
+  }).length
+
+  const filteredNotices = notices.filter(notice => {
+    const isExamNotice =
+      notice.title?.includes("পরীক্ষা") ||
+      notice.title?.includes("ফলাফল") ||
+      notice.title?.includes("মেরিট") ||
+      notice.title?.includes("রুটিন") ||
+      notice.content?.includes("পরীক্ষা") ||
+      notice.content?.includes("মেরিট তালিকা")
+
+    if (noticeFilter === "exam") return isExamNotice
+    if (noticeFilter === "general") return !isExamNotice
+    return true
+  })
+
+  const filteredExams = exams.filter(e => {
+    const q = examSearch.toLowerCase()
+    const matchesSearch =
+      (e.title && e.title.toLowerCase().includes(q)) ||
+      (e.subject && e.subject.toLowerCase().includes(q)) ||
+      (e.batch?.name && e.batch.name.toLowerCase().includes(q)) ||
+      (e.branch?.name && e.branch.name.toLowerCase().includes(q))
+
+    if (!matchesSearch) return false
+
+    if (examBranchFilter !== "all") {
+      if (e.branch_id !== examBranchFilter && e.branch?.id !== examBranchFilter) return false
+    }
+
+    const isPub =
+      e.is_public_result === true ||
+      e.is_published === true ||
+      e.is_weekly_published === true ||
+      (Array.isArray(e.published_days) && e.published_days.length > 0)
+
+    if (examStatusFilter === "published") return isPub
+    if (examStatusFilter === "unpublished") return !isPub
+    return true
+  })
+
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
@@ -530,6 +730,17 @@ export default function SliderClient({
           }`}
         >
           <Bell className="w-4 h-4" /> Notice Book ({notices.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('exams')}
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+            activeTab === 'exams'
+              ? 'bg-amber-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+          }`}
+        >
+          <Award className="w-4 h-4" /> Exam Notifications & Results ({publishedExamsCount})
         </button>
 
         <button
@@ -682,31 +893,72 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'notices' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl">
             <div>
               <h3 className="font-extrabold text-slate-900 text-base">Notice Book ("সর্বশেষ নোটিশ :")</h3>
-              <p className="text-xs text-amber-400/90 font-medium">
-                Notices displayed in the side-by-side institutional notice box next to the slider
+              <p className="text-xs text-slate-500 font-medium">
+                Notices displayed in the side-by-side institutional notice box next to the slider & public portal
               </p>
             </div>
-            <button
-              onClick={openCreateNotice}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02]"
-            >
-              <Plus className="w-4 h-4" /> Post Notice
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold">
+                <button
+                  onClick={() => setNoticeFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    noticeFilter === "all" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  All ({notices.length})
+                </button>
+                <button
+                  onClick={() => setNoticeFilter("exam")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    noticeFilter === "exam" ? "bg-amber-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Exam Notices (পরীক্ষা)
+                </button>
+                <button
+                  onClick={() => setNoticeFilter("general")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    noticeFilter === "general" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  General
+                </button>
+              </div>
+
+              <button
+                onClick={openCreateNotice}
+                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02] cursor-pointer"
+              >
+                <Plus className="w-4 h-4" /> Post Notice
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden shadow-xl">
             <div className="divide-y divide-slate-100">
-              {notices.map(notice => {
+              {filteredNotices.map(notice => {
                 const noticeBranch = branches.find(b => b.id === notice.branch_id)
+                const isExamNotice =
+                  notice.title?.includes("পরীক্ষা") ||
+                  notice.title?.includes("ফলাফল") ||
+                  notice.title?.includes("মেরিট") ||
+                  notice.title?.includes("রুটিন") ||
+                  notice.content?.includes("পরীক্ষা")
+
                 return (
                   <div key={notice.id} className="p-4 flex items-start justify-between gap-4 hover:bg-amber-50/30 transition-colors">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
                         <span className="text-amber-600 font-bold text-base">»</span>
                         <h4 className="font-bold text-slate-900 text-sm">{notice.title}</h4>
+                        {isExamNotice && (
+                          <span className="text-[10px] bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                            <Award className="w-3 h-3 text-amber-600" /> Exam Notice
+                          </span>
+                        )}
                         <span className="text-xs text-slate-400 font-medium">
                           {notice.created_at ? new Date(notice.created_at).toLocaleDateString("en-GB") : ""}
                         </span>
@@ -715,7 +967,7 @@ export default function SliderClient({
                             {noticeBranch.name}
                           </span>
                         ) : (
-                          <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-medium">
+                          <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-medium">
                             All Branches
                           </span>
                         )}
@@ -728,14 +980,14 @@ export default function SliderClient({
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button
                         onClick={() => openEditNotice(notice)}
-                        className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-slate-200"
+                        className="p-1.5 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors border border-slate-200 cursor-pointer"
                         title="Edit Notice"
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteNotice(notice.id)}
-                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-slate-200"
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-slate-200 cursor-pointer"
                         title="Delete Notice"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -744,9 +996,9 @@ export default function SliderClient({
                   </div>
                 )
               })}
-              {notices.length === 0 && (
+              {filteredNotices.length === 0 && (
                 <div className="p-12 text-center text-slate-500 text-sm">
-                  No notices published yet. Click "Post Notice" to create your first notice.
+                  {noticeFilter === "exam" ? "No exam notices found." : "No notices published yet."}
                 </div>
               )}
             </div>
@@ -755,7 +1007,304 @@ export default function SliderClient({
       )}
 
       {/* ---------------------------------------------------- */}
-      {/* 3. ACHIEVEMENTS TAB */}
+      {/* 3. EXAM NOTIFICATIONS & ONLINE RESULTS TAB (NEW)    */}
+      {/* ---------------------------------------------------- */}
+      {activeTab === 'exams' && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl border border-indigo-900/60 shadow-xl text-white">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">
+                  <Award className="w-3.5 h-3.5 text-amber-400" />
+                  Homepage & Online Results Manager
+                </span>
+                <span className="text-xs bg-indigo-900/60 text-indigo-200 px-2.5 py-0.5 rounded-full font-bold border border-indigo-700/50">
+                  {publishedExamsCount} Live Online
+                </span>
+              </div>
+              <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                Exam Notifications & Online Results (পরীক্ষার নোটিশ ও রেজাল্ট)
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-300 font-medium mt-1 max-w-2xl">
+                Manage or delete exam notifications, weekly aggregate rankings, and daily test results published on the website homepage and <code className="text-amber-300 font-mono">/online-result</code>.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
+              <a
+                href="/online-result"
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-extrabold rounded-xl text-xs sm:text-sm shadow-md transition-all hover:scale-105"
+              >
+                <span>View Public Portal</span>
+                <ExternalLink className="w-4 h-4" />
+              </a>
+              <a
+                href="/dashboard/owner/exams"
+                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl text-xs border border-white/10 transition-colors"
+              >
+                <span>Exam Center →</span>
+              </a>
+            </div>
+          </div>
+
+          {/* Filter Bar */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search exam title, subject, batch, or branch..."
+                  value={examSearch}
+                  onChange={e => setExamSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 text-xs sm:text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all shadow-2xs"
+                />
+              </div>
+
+              <select
+                value={examBranchFilter}
+                onChange={e => setExamBranchFilter(e.target.value)}
+                className="px-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl text-slate-900 focus:outline-none focus:border-amber-500"
+              >
+                <option value="all">All Branches (সকল শাখা)</option>
+                {branches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+
+              <div className="flex items-center p-1 bg-slate-100 rounded-xl text-xs font-bold">
+                <button
+                  onClick={() => setExamStatusFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    examStatusFilter === "all" ? "bg-white text-slate-900 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  All ({exams.length})
+                </button>
+                <button
+                  onClick={() => setExamStatusFilter("published")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    examStatusFilter === "published" ? "bg-emerald-600 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Live ({publishedExamsCount})
+                </button>
+                <button
+                  onClick={() => setExamStatusFilter("unpublished")}
+                  className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+                    examStatusFilter === "unpublished" ? "bg-slate-700 text-white shadow-xs" : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  Unpublished
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Exam Cards Grid */}
+          {filteredExams.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-dashed border-slate-200 p-12 text-center shadow-xs">
+              <Award className="w-12 h-12 text-slate-400 mx-auto mb-3" />
+              <h4 className="text-base font-bold text-slate-900">No exams found</h4>
+              <p className="text-xs text-slate-500 mt-1">
+                {examSearch ? "No exams match your search query." : "No exams created yet."}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {filteredExams.map(ex => {
+                const isWeekly =
+                  ex.exam_schedule_type === "weekly" ||
+                  (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
+                  Boolean(ex.title?.includes("সাপ্তাহিক"))
+
+                const isLive =
+                  ex.is_public_result === true ||
+                  ex.is_published === true ||
+                  ex.is_weekly_published === true ||
+                  (Array.isArray(ex.published_days) && ex.published_days.length > 0)
+
+                const rawDays: any[] = Array.isArray(ex.recurring_days) ? ex.recurring_days : []
+                const publishedDaysList: string[] = Array.isArray(ex.published_days)
+                  ? ex.published_days.map((d: any) => String(d).toLowerCase())
+                  : []
+
+                const isUnpublishing = unpublishingExamId === ex.id
+
+                return (
+                  <div
+                    key={ex.id}
+                    className={`bg-white rounded-2xl border p-5 shadow-sm transition-all flex flex-col justify-between ${
+                      isLive ? "border-amber-200/90 hover:border-amber-400 hover:shadow-md" : "border-slate-200 opacity-75"
+                    }`}
+                  >
+                    <div>
+                      {/* Top Header with Badges */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                              isLive
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-slate-100 text-slate-600 border border-slate-200"
+                            }`}>
+                              {isLive ? "● Live on Online Portal" : "○ Draft / Unpublished"}
+                            </span>
+
+                            {isWeekly ? (
+                              <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold">
+                                📅 Weekly 7-Day Model Test
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded font-bold">
+                                📝 Standard Exam
+                              </span>
+                            )}
+
+                            {ex.branch?.name && (
+                              <span className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded font-medium">
+                                {ex.branch.name}
+                              </span>
+                            )}
+                          </div>
+
+                          <h4 className="text-base font-extrabold text-slate-900 leading-snug">
+                            {ex.title}
+                          </h4>
+                          {ex.subject && (
+                            <p className="text-xs text-amber-700 font-semibold mt-0.5">
+                              বিষয়: {ex.subject} {ex.batch?.name ? `• ব্যাচ: ${ex.batch.name}` : ""}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Top Direct Action Link */}
+                        {isLive && (
+                          <a
+                            href={`/online-result?exam_id=${ex.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-xl transition-colors border border-amber-200 shrink-0"
+                            title="View Public Result Page"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Marks / Stats Pill */}
+                      <div className="grid grid-cols-3 gap-2 py-2 px-3 bg-slate-50 rounded-xl mb-3 text-center border border-slate-100 text-xs">
+                        <div>
+                          <p className="font-extrabold text-slate-900">{ex.total_marks || 100}</p>
+                          <p className="text-[10px] text-slate-500">মোট পূর্ণমান</p>
+                        </div>
+                        <div>
+                          <p className="font-extrabold text-slate-900">{ex.pass_marks || 40}</p>
+                          <p className="text-[10px] text-slate-500">পাস নম্বর</p>
+                        </div>
+                        <div>
+                          <p className="font-extrabold text-amber-700">
+                            {ex.exam_date ? new Date(ex.exam_date).toLocaleDateString("en-GB") : "সাপ্তাহিক রুটিন"}
+                          </p>
+                          <p className="text-[10px] text-slate-500">তারিখ / সূচি</p>
+                        </div>
+                      </div>
+
+                      {/* Day-Wise Published Breakdown (for Weekly Exams) */}
+                      {isWeekly && rawDays.length > 0 && (
+                        <div className="mb-4 bg-purple-50/50 p-3 rounded-xl border border-purple-100 space-y-2">
+                          <div className="flex items-center justify-between text-[11px] font-bold text-purple-900">
+                            <span>সাপ্তাহিক দিনসমূহের রেজাল্ট নোটিফিকেশন:</span>
+                            <span className="text-[10px] text-purple-700 font-medium">
+                              (নির্দিষ্ট দিনের নোটিফিকেশন মুছতে <span className="text-red-600 font-bold">✕</span> চাপুন)
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1.5">
+                            {rawDays.map((d: any, i: number) => {
+                              const isObj = typeof d === "object" && d !== null
+                              const dKey = isObj ? (d.day || d.day_bn || `day_${i}`) : String(d)
+                              const dLabel = isObj ? (d.day_bn || d.day || `দিন ${i + 1}`) : String(d)
+                              const isDayPublished = publishedDaysList.includes(String(dKey).toLowerCase()) || publishedDaysList.includes(String(dLabel).toLowerCase())
+
+                              return (
+                                <span
+                                  key={i}
+                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${
+                                    isDayPublished
+                                      ? "bg-white text-purple-900 border-purple-300 shadow-2xs"
+                                      : "bg-slate-100 text-slate-600 border-slate-200"
+                                  }`}
+                                >
+                                  <span>{dLabel}</span>
+                                  {isDayPublished && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteSpecificDay(ex.id, dKey, dLabel)}
+                                      className="w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center font-black text-[10px] cursor-pointer transition-colors"
+                                      title={`${dLabel} এর রেজাল্ট নোটিফিকেশন মুছে ফেলুন`}
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </span>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bottom Action Buttons */}
+                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        {isLive ? (
+                          <button
+                            type="button"
+                            onClick={() => handleUnpublishExam(ex.id, ex.title)}
+                            disabled={isUnpublishing}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition-all shadow-2xs cursor-pointer hover:scale-[1.02] disabled:opacity-50"
+                            title="অনলাইন পোর্টাল ও হোমপেজ থেকে এই পরীক্ষার নোটিফিকেশন ও রেজাল্ট মুছে ফেলুন"
+                          >
+                            <EyeOff className="w-3.5 h-3.5" />
+                            <span>{isUnpublishing ? "মুছে ফেলা হচ্ছে..." : "রেজাল্ট পোর্টাল থেকে মুছে ফেলুন (Unpublish)"}</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handlePublishExam(ex.id, ex.title)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold rounded-xl transition-all shadow-2xs cursor-pointer hover:scale-[1.02]"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>অনলাইনে প্রকাশ করুন (Publish Live)</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExamPermanently(ex.id, ex.title)}
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                          title="ডাটাবেজ থেকে সম্পূর্ণ পরীক্ষা ও এর সকল ফলাফল মুছুন"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ---------------------------------------------------- */}
+      {/* 4. ACHIEVEMENTS TAB */}
       {/* ---------------------------------------------------- */}
       {activeTab === 'achievements' && (
         <div className="space-y-6">

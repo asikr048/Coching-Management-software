@@ -51,41 +51,56 @@ function normalizeExam(ex: any) {
     recDays.length > 0 ||
     Boolean(ex.title?.includes("সাপ্তাহিক"))
 
-  // Parse is_weekly_published: any weekly exam in online results portal has its weekly result published
-  let isWeeklyPub = Boolean(isWeekly)
+  const isExplicitlyUnpublished =
+    ex.is_public_result === false ||
+    ex.is_published === false ||
+    note.includes("[PUBLIC_RESULT:false]")
+
+  // Parse is_weekly_published
+  let isWeeklyPub = false
+  if (!isExplicitlyUnpublished) {
+    if (ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")) {
+      isWeeklyPub = true
+    } else if (isWeekly && (ex.is_public_result === true || ex.is_published === true)) {
+      isWeeklyPub = true
+    }
+  }
 
   // Parse published_days
   let pubDays: string[] = []
-  if (Array.isArray(ex.published_days)) {
-    pubDays = ex.published_days.map((d: any) => String(d).toLowerCase())
-  } else if (typeof ex.published_days === "string" && ex.published_days.trim()) {
-    try {
-      const parsed = JSON.parse(ex.published_days)
-      if (Array.isArray(parsed)) {
-        pubDays = parsed.map((d: any) => String(d).toLowerCase())
-      } else {
+  if (!isExplicitlyUnpublished) {
+    if (Array.isArray(ex.published_days)) {
+      pubDays = ex.published_days.map((d: any) => String(d).toLowerCase())
+    } else if (typeof ex.published_days === "string" && ex.published_days.trim()) {
+      try {
+        const parsed = JSON.parse(ex.published_days)
+        if (Array.isArray(parsed)) {
+          pubDays = parsed.map((d: any) => String(d).toLowerCase())
+        } else {
+          pubDays = ex.published_days.split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
+        }
+      } catch {
         pubDays = ex.published_days.split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
       }
-    } catch {
-      pubDays = ex.published_days.split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
     }
-  }
-  if (pubDays.length === 0 && note.includes("[PUBLISHED_DAYS:")) {
-    try {
-      const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
-      if (match && match[1]) {
-        pubDays = match[1].split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
-      }
-    } catch {}
+    if (pubDays.length === 0 && note.includes("[PUBLISHED_DAYS:")) {
+      try {
+        const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+        if (match && match[1]) {
+          pubDays = match[1].split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
+        }
+      } catch {}
+    }
   }
 
   // Parse is_public_result
   const isPubResult =
-    ex.is_public_result === true ||
-    note.includes("[PUBLIC_RESULT:true]") ||
-    isWeeklyPub ||
-    pubDays.length > 0 ||
-    ex.is_published === true
+    !isExplicitlyUnpublished &&
+    (ex.is_public_result === true ||
+      note.includes("[PUBLIC_RESULT:true]") ||
+      isWeeklyPub ||
+      pubDays.length > 0 ||
+      ex.is_published === true)
 
   // Guarantee all 7 days for weekly exams
   let totalMarks = Number(ex.total_marks) || 100
@@ -124,7 +139,7 @@ function normalizeExam(ex: any) {
     published_days: pubDays,
     recurring_days: recDays,
     exam_schedule_type: isWeekly ? "weekly" : (ex.exam_schedule_type || "everyday"),
-    is_published: ex.is_published === true || isPubResult || isWeeklyPub || pubDays.length > 0,
+    is_published: isPubResult,
   }
 }
 

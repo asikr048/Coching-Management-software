@@ -13,6 +13,7 @@ export default async function SliderPage() {
     { data: notices },
     { data: branches },
     { data: feedback },
+    { data: exams },
   ] = await Promise.all([
     supabase.from("slider_images").select("*").order("sort_order"),
     supabase.from("site_settings").select("key, value"),
@@ -21,6 +22,7 @@ export default async function SliderPage() {
     supabase.from("notices").select("*").order("created_at", { ascending: false }),
     supabase.from("branches").select("*").order("name", { ascending: true }),
     supabase.from("feedback").select("*").order("created_at", { ascending: false }),
+    supabase.from("exams").select("*, branch:branches(id, name), batch:batches(id, name)").order("created_at", { ascending: false }),
   ])
 
   const settingsMap = (settings || []).reduce((acc: Record<string, string>, item: any) => {
@@ -156,6 +158,7 @@ export default async function SliderPage() {
         initialAchievements={achList}
         initialNotices={noticeList}
         initialFeedback={feedback || []}
+        initialExams={exams || []}
         branches={branches || []}
       />
     </div>
