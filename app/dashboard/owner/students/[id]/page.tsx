@@ -6,6 +6,7 @@ import { User, Phone, Mail, MapPin, BookOpen, CreditCard, Calendar, Fingerprint,
 import Link from "next/link"
 import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
 import AdmissionSlipTrigger from "@/components/id-card/AdmissionSlipTrigger"
+import StudentCredentialsCard from "./StudentCredentialsCard"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -41,6 +42,35 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   const presentDays = (attendance.data || []).filter(a => a.status === "present").length
   const totalDays = attendance.data?.length || 0
   const attendancePct = totalDays > 0 ? Math.round((presentDays / totalDays) * 100) : 0
+
+  let initialPassword: string | null = null
+  let loginEmail = student.email || `${student.student_id.toLowerCase()}@medhashiree.local`
+
+  try {
+    const candidateEmails = [
+      student.email?.toLowerCase(),
+      `${student.student_id.toLowerCase()}@medhashiree.local`,
+    ].filter(Boolean)
+
+    const { data: userList } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 })
+    const matchingAuthUser = userList?.users?.find(
+      (u) =>
+        candidateEmails.includes(u.email?.toLowerCase() || "") ||
+        u.user_metadata?.user_id?.toString().toUpperCase() === student.student_id.toUpperCase()
+    )
+
+    if (matchingAuthUser) {
+      if (matchingAuthUser.email) {
+        loginEmail = matchingAuthUser.email
+      }
+      initialPassword =
+        matchingAuthUser.user_metadata?.initial_password ||
+        matchingAuthUser.user_metadata?.password ||
+        null
+    }
+  } catch (e) {
+    console.error("Error retrieving student credentials:", e)
+  }
 
   return (
     <div className="space-y-6">
@@ -121,22 +151,32 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
-          <h3 className="font-black text-slate-900 text-base mb-4">Personal Details</h3>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-center gap-2.5 text-slate-600"><User className="w-4 h-4 text-amber-600" /> Gender: <span className="font-semibold text-slate-900">{student.gender || "-"}</span></div>
-            <div className="flex items-center gap-2.5 text-slate-600"><Calendar className="w-4 h-4 text-amber-600" /> DOB: <span className="font-semibold text-slate-900">{student.date_of_birth ? formatDate(student.date_of_birth) : "-"}</span></div>
-            <div className="flex items-center gap-2.5 text-slate-600"><Phone className="w-4 h-4 text-amber-600" /> Phone: <span className="font-semibold text-slate-900">{student.phone || "-"}</span></div>
-            <div className="flex items-center gap-2.5 text-slate-600"><Mail className="w-4 h-4 text-amber-600" /> Email: <span className="font-semibold text-slate-900">{student.email || "-"}</span></div>
-            <div className="flex items-center gap-2.5 text-slate-600"><MapPin className="w-4 h-4 text-amber-600" /> Address: <span className="font-semibold text-slate-900">{student.address || "-"}</span></div>
-            <div className="flex items-center gap-2.5 text-slate-600"><BookOpen className="w-4 h-4 text-amber-600" /> Academic: <span className="font-semibold text-slate-900">{student.school_college || "-"} ({student.class_level || "-"})</span></div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+        <div className="space-y-6">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
+            <h3 className="font-black text-slate-900 text-base mb-4">Personal Details</h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-2.5 text-slate-600"><User className="w-4 h-4 text-amber-600" /> Gender: <span className="font-semibold text-slate-900">{student.gender || "-"}</span></div>
+              <div className="flex items-center gap-2.5 text-slate-600"><Calendar className="w-4 h-4 text-amber-600" /> DOB: <span className="font-semibold text-slate-900">{student.date_of_birth ? formatDate(student.date_of_birth) : "-"}</span></div>
+              <div className="flex items-center gap-2.5 text-slate-600"><Phone className="w-4 h-4 text-amber-600" /> Phone: <span className="font-semibold text-slate-900">{student.phone || "-"}</span></div>
+              <div className="flex items-center gap-2.5 text-slate-600"><Mail className="w-4 h-4 text-amber-600" /> Email: <span className="font-semibold text-slate-900">{student.email || "-"}</span></div>
+              <div className="flex items-center gap-2.5 text-slate-600"><MapPin className="w-4 h-4 text-amber-600" /> Address: <span className="font-semibold text-slate-900">{student.address || "-"}</span></div>
+              <div className="flex items-center gap-2.5 text-slate-600"><BookOpen className="w-4 h-4 text-amber-600" /> Academic: <span className="font-semibold text-slate-900">{student.school_college || "-"} ({student.class_level || "-"})</span></div>
+            </div>
+            <div className="border-t border-slate-200 pt-4 mt-4">
+              <h4 className="font-bold text-slate-800 text-sm mb-2">Guardian Information</h4>
+              <p className="text-sm text-slate-700">{student.guardian_name || "-"} <span className="text-slate-500">({student.guardian_relation})</span></p>
+              <p className="text-sm text-amber-700 font-mono font-bold mt-0.5">{student.guardian_phone || "No phone registered"}</p>
+            </div>
           </div>
-          <div className="border-t border-slate-200 pt-4 mt-4">
-            <h4 className="font-bold text-slate-800 text-sm mb-2">Guardian Information</h4>
-            <p className="text-sm text-slate-700">{student.guardian_name || "-"} <span className="text-slate-500">({student.guardian_relation})</span></p>
-            <p className="text-sm text-amber-700 font-mono font-bold mt-0.5">{student.guardian_phone || "No phone registered"}</p>
-          </div>
+
+          <StudentCredentialsCard
+            studentId={student.id}
+            studentCode={student.student_id}
+            studentName={student.name}
+            loginEmail={loginEmail}
+            initialPassword={initialPassword}
+          />
         </div>
 
         <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">

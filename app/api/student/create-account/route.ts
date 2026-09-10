@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
         full_name: fullName,
         user_id: studentId,
         phone: phone || null,
+        initial_password: password,
       },
     })
 
@@ -57,6 +58,7 @@ export async function POST(req: NextRequest) {
               full_name: fullName,
               user_id: studentId,
               phone: phone || null,
+              initial_password: password,
             }
           })
           return NextResponse.json({ success: true, userId: existing.id, email: targetEmail })

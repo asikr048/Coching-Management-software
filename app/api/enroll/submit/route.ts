@@ -148,6 +148,7 @@ export async function POST(req: NextRequest) {
             full_name: form.name.trim(),
             user_id: studentCode,
             phone: cleanPhone || null,
+            initial_password: password,
           },
         })
 
