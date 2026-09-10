@@ -29,16 +29,21 @@ export default async function ReceptionStudentsPage() {
   // 2. Fetch enrollments & batches reliably
   let rawEnrollments: any[] = []
   try {
-    const { data: enrData } = await admin.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
-    if (enrData && enrData.length > 0) {
+    const { data: enrData, error: enrErr } = await admin.from("enrollments").select("id, student_id, batch_id, status, branch_id")
+    if (!enrErr && enrData && enrData.length > 0) {
       rawEnrollments = enrData
     } else {
-      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
-      if (fbEnr) rawEnrollments = fbEnr
+      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id")
+      if (fbEnr && fbEnr.length > 0) {
+        rawEnrollments = fbEnr
+      } else {
+        const { data: rawAll } = await admin.from("enrollments").select("*")
+        if (rawAll) rawEnrollments = rawAll
+      }
     }
   } catch {
     try {
-      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
+      const { data: fbEnr } = await supabase.from("enrollments").select("*")
       if (fbEnr) rawEnrollments = fbEnr
     } catch {}
   }

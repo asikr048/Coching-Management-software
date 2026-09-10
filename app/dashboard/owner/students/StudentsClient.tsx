@@ -89,15 +89,22 @@ export default function StudentsClient({
   const fetchStudentsClient = async () => {
     setLoadingFresh(true)
     try {
-      const [stRes, enrRes, bRes, dueRes] = await Promise.all([
+      let rawEnr: any[] = []
+      const { data: enrData, error: enrErr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id")
+      if (!enrErr && enrData) {
+        rawEnr = enrData
+      } else {
+        const { data: rawAll } = await supabase.from("enrollments").select("*")
+        if (rawAll) rawEnr = rawAll
+      }
+
+      const [stRes, bRes, dueRes] = await Promise.all([
         supabase.from("students").select("*").order("created_at", { ascending: false }),
-        supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id"),
         supabase.from("batches").select("id, name, branch_id, is_active"),
         supabase.from("fee_dues").select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status")
       ])
 
       const rawSt = stRes.data || []
-      const rawEnr = enrRes.data || []
       const rawBat = bRes.data || []
 
       if (rawBat.length > 0) {

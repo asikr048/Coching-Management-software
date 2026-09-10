@@ -178,23 +178,60 @@ export default function NewStudentForm({
   async function fetchHistory() {
     setHistoryLoading(true)
     try {
-      const [enrRes, payRes, dueRes] = await Promise.all([
-        supabase
+      let rawEnrs: any[] = []
+
+      // 1. Fetch enrollments safely (without roll_no column in query to prevent schema cache PGRST204)
+      const { data: enr1, error: err1 } = await supabase
+        .from("enrollments")
+        .select("id, created_at, status, batch_id, student_id, branch_id")
+        .order("created_at", { ascending: false })
+        .limit(200)
+
+      if (!err1 && enr1 && enr1.length > 0) {
+        rawEnrs = enr1
+      } else {
+        const { data: rawAll } = await supabase
           .from("enrollments")
-          .select("id, created_at, status, batch_id, student_id, branch_id, roll_no, student:students(id, name, student_id, phone, email, guardian_name, guardian_phone, address, school_college, class_level, roll_no, batch_roll), batch:batches(id, name, subject, class_level, monthly_fee, admission_fee, classroom, branch_id)")
+          .select("*")
           .order("created_at", { ascending: false })
-          .limit(150),
+          .limit(200)
+        if (rawAll) rawEnrs = rawAll
+      }
+
+      // 2. Fetch payments, dues, and fresh students
+      const [payRes, dueRes, freshStRes] = await Promise.all([
         supabase
           .from("payments")
           .select("id, student_id, batch_id, amount, total_paid, payment_method, payment_for, payment_month, receipt_number, created_at, paid_at")
           .order("created_at", { ascending: false })
-          .limit(250),
+          .limit(300),
         supabase
           .from("fee_dues")
           .select("id, student_id, batch_id, due_amount, paid_amount, due_date, status")
-          .limit(250),
+          .limit(300),
+        supabase
+          .from("students")
+          .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll")
+          .order("name")
+          .limit(500)
       ])
-      if (enrRes.data && enrRes.data.length > 0) setEnrollmentsList(enrRes.data)
+
+      const combinedStudents = (freshStRes.data && freshStRes.data.length > 0) ? freshStRes.data : students
+      const studentMap = new Map((combinedStudents || []).map((s: any) => [s.id, s]))
+      const batchMap = new Map((allBatches || []).map((b: any) => [b.id, b]))
+
+      const enriched = rawEnrs.map((e: any) => {
+        const student = e.student || studentMap.get(e.student_id) || {}
+        const batch = e.batch || batchMap.get(e.batch_id) || {}
+        return {
+          ...e,
+          roll_no: e.roll_no || (student as any).roll_no || (student as any).batch_roll || null,
+          student,
+          batch
+        }
+      })
+
+      setEnrollmentsList(enriched)
       if (payRes.data) setPaymentsList(payRes.data)
       if (dueRes.data) setDuesList(dueRes.data)
     } catch (err) {
