@@ -37,8 +37,7 @@ export default function ReceptionAttendancePage() {
   useEffect(() => {
     supabase
       .from("batches")
-      .select("id, name, classroom, subject, current_seats")
-      .eq("is_active", true)
+      .select("id, name, classroom, subject, current_seats, is_active, status")
       .order("name")
       .then(({ data }) => {
         setBatches(data || [])
@@ -344,13 +343,24 @@ export default function ReceptionAttendancePage() {
                 <select
                   value={selectedBatch}
                   onChange={(e) => setSelectedBatch(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-amber-500 cursor-pointer"
+                  className="w-full px-4 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-amber-500 cursor-pointer shadow-xs"
                 >
-                  {batches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} {b.subject ? `(${b.subject})` : ""}
+                  {batches.length === 0 ? (
+                    <option value="" disabled className="text-slate-400 bg-white">
+                      Loading batches / No batches found
                     </option>
-                  ))}
+                  ) : (
+                    <>
+                      <option value="" disabled className="text-slate-400 bg-white">
+                        -- Select a Batch --
+                      </option>
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id} className="text-slate-900 bg-white py-1.5 font-medium">
+                          {b.name} {b.subject ? `(${b.subject})` : ""} {b.classroom ? `• Room ${b.classroom}` : ""}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -540,13 +550,24 @@ export default function ReceptionAttendancePage() {
                   <select
                     value={resultBatchId}
                     onChange={(e) => setResultBatchId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-emerald-500 cursor-pointer"
+                    className="w-full px-4 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-emerald-500 cursor-pointer shadow-xs"
                   >
-                    {batches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} {b.subject ? `(${b.subject})` : ""}
+                    {batches.length === 0 ? (
+                      <option value="" disabled className="text-slate-400 bg-white">
+                        No Batches Available
                       </option>
-                    ))}
+                    ) : (
+                      <>
+                        <option value="" disabled className="text-slate-400 bg-white">
+                          -- Select a Batch --
+                        </option>
+                        {batches.map((b) => (
+                          <option key={b.id} value={b.id} className="text-slate-900 bg-white py-1.5 font-medium">
+                            {b.name} {b.subject ? `(${b.subject})` : ""} {b.classroom ? `• Room ${b.classroom}` : ""}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
                 <div className="w-full sm:w-48">

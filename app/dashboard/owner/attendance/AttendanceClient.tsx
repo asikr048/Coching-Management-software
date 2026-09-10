@@ -4,12 +4,14 @@ import { useState, useEffect, useMemo } from "react"
 import { 
   Users, UserCheck, UserX, Clock, CalendarDays, TrendingUp, TrendingDown, 
   Activity, CheckCircle2, AlertCircle, Search, Printer, Download, 
-  Save, RefreshCw, Award, Calendar, FileSpreadsheet, Sparkles, Check, X,
-  HelpCircle, ChevronRight, BookOpen, Layers
+  Save, RefreshCw, Award, Calendar, FileSpreadsheet, Check, X,
+  HelpCircle, UserPlus, ArrowRight
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { formatDate } from "@/lib/utils"
 import { toast } from "sonner"
+import { useBranch } from "@/components/providers/BranchContext"
+import Link from "next/link"
 
 interface AttendanceClientProps {
   todayAttendance: any[]
@@ -28,19 +30,50 @@ function normalizeBanglaDigits(str: string): string {
 
 export default function AttendanceClient({
   todayAttendance: initialTodayAttendance,
-  batches,
+  batches: initialBatches,
   recentAttendance,
   top10,
   bottom10,
   todayDate,
 }: AttendanceClientProps) {
   const supabase = createClient()
+  const { selectedBranchId } = useBranch()
+
+  // Batches state with fallback client-side fetch
+  const [allBatches, setAllBatches] = useState<any[]>(initialBatches || [])
+
+  // Auto-sync batches client-side on mount to guarantee fresh list
+  useEffect(() => {
+    let isMounted = true
+    supabase
+      .from("batches")
+      .select("id, name, branch_id, classroom, subject, current_seats, max_seats, is_active, status")
+      .order("name")
+      .then(({ data, error }) => {
+        if (isMounted && !error && data && data.length > 0) {
+          setAllBatches(data)
+        }
+      })
+    return () => {
+      isMounted = false
+    }
+  }, [supabase])
+
+  // Filter batches by active branch, with safe fallback to all batches if empty
+  const displayBatches = useMemo(() => {
+    if (!allBatches || allBatches.length === 0) return []
+    if (!selectedBranchId || selectedBranchId === "all") return allBatches
+    const filtered = allBatches.filter((b) => !b.branch_id || b.branch_id === selectedBranchId)
+    return filtered.length > 0 ? filtered : allBatches
+  }, [allBatches, selectedBranchId])
 
   // Tab State
   const [activeTab, setActiveTab] = useState<"overview" | "take" | "result">("overview")
 
   // Shared / Take Attendance State
-  const [selectedBatchId, setSelectedBatchId] = useState<string>(batches[0]?.id || "")
+  const [selectedBatchId, setSelectedBatchId] = useState<string>(
+    initialBatches[0]?.id || ""
+  )
   const [attendanceDate, setAttendanceDate] = useState<string>(todayDate)
   const [students, setStudents] = useState<any[]>([])
   const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: string; note: string }>>({})
@@ -49,7 +82,9 @@ export default function AttendanceClient({
   const [searchQuery, setSearchQuery] = useState("")
 
   // Batch Attendance Result State
-  const [resultBatchId, setResultBatchId] = useState<string>(batches[0]?.id || "")
+  const [resultBatchId, setResultBatchId] = useState<string>(
+    initialBatches[0]?.id || ""
+  )
   const [resultDateFilter, setResultDateFilter] = useState<"all" | "this_month" | "last_month">("all")
   const [loadingResult, setLoadingResult] = useState(false)
   const [batchAttendanceData, setBatchAttendanceData] = useState<any[]>([])
@@ -57,6 +92,18 @@ export default function AttendanceClient({
 
   // Keep local today attendance updated
   const [todayAttendance, setTodayAttendance] = useState<any[]>(initialTodayAttendance)
+
+  // Ensure selectedBatchId and resultBatchId are valid whenever displayBatches updates
+  useEffect(() => {
+    if (displayBatches.length > 0) {
+      if (!selectedBatchId || !displayBatches.some((b) => b.id === selectedBatchId)) {
+        setSelectedBatchId(displayBatches[0].id)
+      }
+      if (!resultBatchId || !displayBatches.some((b) => b.id === resultBatchId)) {
+        setResultBatchId(displayBatches[0].id)
+      }
+    }
+  }, [displayBatches, selectedBatchId, resultBatchId])
 
   // -------------------------------------------------------------
   // Overview Tab Calculations
@@ -68,7 +115,7 @@ export default function AttendanceClient({
   const totalMarked = todayAttendance.length
   const presentRate = totalMarked > 0 ? Math.round(((presentCount + lateCount) / totalMarked) * 100) : 0
 
-  const batchBreakdown = batches
+  const batchBreakdown = displayBatches
     .map((batch) => {
       const batchAtt = todayAttendance.filter((a) => a.batch_id === batch.id)
       const bPresent = batchAtt.filter((a) => a.status === "present" || a.status === "late").length
@@ -109,7 +156,11 @@ export default function AttendanceClient({
   // Load Students & Existing Attendance for "Take Attendance"
   // -------------------------------------------------------------
   useEffect(() => {
-    if (!selectedBatchId) return
+    if (!selectedBatchId) {
+      setStudents([])
+      setAttendanceMap({})
+      return
+    }
 
     let isMounted = true
     async function fetchSheetData() {
@@ -285,7 +336,11 @@ export default function AttendanceClient({
   // Load Data for "Batch Attendance Result"
   // -------------------------------------------------------------
   useEffect(() => {
-    if (!resultBatchId) return
+    if (!resultBatchId) {
+      setBatchEnrolledStudents([])
+      setBatchAttendanceData([])
+      return
+    }
 
     let isMounted = true
     async function fetchResultData() {
@@ -365,15 +420,12 @@ export default function AttendanceClient({
     batchResults,
     avgAttendanceRate,
     perfectAttendanceCount,
-    criticalAbsentCount,
   } = useMemo(() => {
-    // Distinct class dates held for this batch
     const distinctDates = Array.from(new Set(batchAttendanceData.map((a) => a.date))).sort()
     const totalHeld = distinctDates.length
 
     let totalPercentSum = 0
     let perfectCount = 0
-    let criticalCount = 0
 
     const results = batchEnrolledStudents.map((student) => {
       const studentRecords = batchAttendanceData.filter((a) => a.student_id === student.id)
@@ -382,15 +434,12 @@ export default function AttendanceClient({
       const absentCount = studentRecords.filter((a) => a.status === "absent").length
       const excusedCount = studentRecords.filter((a) => a.status === "excused").length
 
-      // Present + Late count as attended
       const attendedCount = presentCount + lateCount
       const percentage = totalHeld > 0 ? Math.round((attendedCount / totalHeld) * 100) : 0
 
       totalPercentSum += percentage
       if (percentage === 100 && totalHeld > 0) perfectCount++
-      if (percentage < 50 && totalHeld > 0) criticalCount++
 
-      // Result Grade / Performance Tag
       let statusTag = {
         label: "Regular",
         color: "text-emerald-700 bg-emerald-50 border-emerald-200",
@@ -446,14 +495,13 @@ export default function AttendanceClient({
       batchResults: results,
       avgAttendanceRate: avgRate,
       perfectAttendanceCount: perfectCount,
-      criticalAbsentCount: criticalCount,
     }
   }, [batchAttendanceData, batchEnrolledStudents])
 
   // Export CSV
   const handleExportCSV = () => {
-    const selectedBatchObj = batches.find((b) => b.id === resultBatchId)
-    const batchName = selectedBatchObj?.name || "Batch"
+    const batchObj = displayBatches.find((b) => b.id === resultBatchId)
+    const batchName = batchObj?.name || "Batch"
     const headers = [
       "Roll No",
       "Student Name",
@@ -491,15 +539,9 @@ export default function AttendanceClient({
     toast.success("CSV file downloaded!")
   }
 
-  // Print Result Sheet
-  const handlePrintResult = () => {
-    window.print()
-  }
+  const selectedBatchObj = displayBatches.find((b) => b.id === selectedBatchId)
+  const resultBatchObj = displayBatches.find((b) => b.id === resultBatchId)
 
-  const selectedBatchObj = batches.find((b) => b.id === selectedBatchId)
-  const resultBatchObj = batches.find((b) => b.id === resultBatchId)
-
-  // Current Sheet summary counts
   const sheetPresent = Object.values(attendanceMap).filter((v) => v.status === "present").length
   const sheetLate = Object.values(attendanceMap).filter((v) => v.status === "late").length
   const sheetAbsent = Object.values(attendanceMap).filter((v) => v.status === "absent").length
@@ -559,9 +601,7 @@ export default function AttendanceClient({
               </h3>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => {
-                    setActiveTab("take")
-                  }}
+                  onClick={() => setActiveTab("take")}
                   className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition-all cursor-pointer"
                 >
                   <UserCheck className="w-3.5 h-3.5" />
@@ -621,9 +661,8 @@ export default function AttendanceClient({
             </div>
           </section>
 
-          {/* Batchwise Breakdown & Trend */}
+          {/* Batch Breakdown */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Batch Breakdown */}
             <section>
               <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <Users className="w-5 h-5 text-amber-500" /> Batchwise Breakdown
@@ -692,7 +731,7 @@ export default function AttendanceClient({
                       ) : (
                         <tr>
                           <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
-                            No batches available.
+                            No batches available for this branch.
                           </td>
                         </tr>
                       )}
@@ -831,18 +870,29 @@ export default function AttendanceClient({
               {/* Batch Selector */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Select Batch
+                  Select Batch {displayBatches.length > 0 ? `(${displayBatches.length} Available)` : ""}
                 </label>
                 <select
                   value={selectedBatchId}
                   onChange={(e) => setSelectedBatchId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 cursor-pointer"
+                  className="w-full px-4 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10 cursor-pointer shadow-xs"
                 >
-                  {batches.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} {b.subject ? `(${b.subject})` : ""}
+                  {displayBatches.length === 0 ? (
+                    <option value="" disabled className="text-slate-400 bg-white">
+                      Loading batches / No batches found
                     </option>
-                  ))}
+                  ) : (
+                    <>
+                      <option value="" disabled className="text-slate-400 bg-white">
+                        -- Select a Batch --
+                      </option>
+                      {displayBatches.map((b) => (
+                        <option key={b.id} value={b.id} className="text-slate-900 bg-white py-1.5 font-medium">
+                          {b.name} {b.subject ? `(${b.subject})` : ""} {b.classroom ? `• Room ${b.classroom}` : ""}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </div>
 
@@ -855,7 +905,7 @@ export default function AttendanceClient({
                   type="date"
                   value={attendanceDate}
                   onChange={(e) => setAttendanceDate(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10"
+                  className="w-full px-4 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10"
                 />
               </div>
 
@@ -871,7 +921,7 @@ export default function AttendanceClient({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search Roll (1, ২), Name, ID..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10"
+                    className="w-full pl-10 pr-4 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-xl text-sm focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/10"
                   />
                   {searchQuery && (
                     <button
@@ -1081,13 +1131,33 @@ export default function AttendanceClient({
                 </div>
               </div>
             </div>
+          ) : displayBatches.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-500">
+              <Users className="w-12 h-12 mx-auto text-slate-300 mb-3" />
+              <h4 className="text-base font-bold text-slate-800">No Batches Found</h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                No active batches are available for this branch yet. You can create a new batch to start tracking attendance.
+              </p>
+              <Link
+                href="/dashboard/owner/batches"
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              >
+                Go to Batches Page <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-12 text-center text-slate-500">
               <Users className="w-12 h-12 mx-auto text-slate-300 mb-3" />
-              <h4 className="text-base font-bold text-slate-800">No Students Enrolled</h4>
-              <p className="text-xs text-slate-400 mt-1">
-                There are no active student enrollments in this batch to take attendance for.
+              <h4 className="text-base font-bold text-slate-800">No Students Enrolled in this Batch</h4>
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                There are no active student enrollments in <span className="font-semibold text-slate-700">{selectedBatchObj?.name}</span> yet.
               </p>
+              <Link
+                href="/dashboard/owner/students/new"
+                className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> Enroll Students to Batch
+              </Link>
             </div>
           )}
         </div>
@@ -1098,7 +1168,7 @@ export default function AttendanceClient({
       {/* ============================================================= */}
       {activeTab === "result" && (
         <div className="space-y-6 animate-in fade-in duration-300">
-          {/* Controls Bar: Batch Selector, Period Filter, Actions */}
+          {/* Controls Bar */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4 print:hidden">
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
               <div className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-4">
@@ -1110,13 +1180,24 @@ export default function AttendanceClient({
                   <select
                     value={resultBatchId}
                     onChange={(e) => setResultBatchId(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 cursor-pointer"
+                    className="w-full px-4 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 cursor-pointer shadow-xs"
                   >
-                    {batches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} {b.subject ? `(${b.subject})` : ""}
+                    {displayBatches.length === 0 ? (
+                      <option value="" disabled className="text-slate-400 bg-white">
+                        No Batches Available
                       </option>
-                    ))}
+                    ) : (
+                      <>
+                        <option value="" disabled className="text-slate-400 bg-white">
+                          -- Select a Batch --
+                        </option>
+                        {displayBatches.map((b) => (
+                          <option key={b.id} value={b.id} className="text-slate-900 bg-white py-1.5 font-medium">
+                            {b.name} {b.subject ? `(${b.subject})` : ""} {b.classroom ? `• Room ${b.classroom}` : ""}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                 </div>
 
@@ -1128,11 +1209,11 @@ export default function AttendanceClient({
                   <select
                     value={resultDateFilter}
                     onChange={(e) => setResultDateFilter(e.target.value as any)}
-                    className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 cursor-pointer"
+                    className="w-full px-4 py-2.5 bg-white text-slate-900 border border-slate-300 rounded-xl text-sm font-semibold focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/10 cursor-pointer shadow-xs"
                   >
-                    <option value="all">All Time (Full Batch)</option>
-                    <option value="this_month">This Month</option>
-                    <option value="last_month">Last Month</option>
+                    <option value="all" className="text-slate-900 bg-white">All Time (Full Batch)</option>
+                    <option value="this_month" className="text-slate-900 bg-white">This Month</option>
+                    <option value="last_month" className="text-slate-900 bg-white">Last Month</option>
                   </select>
                 </div>
               </div>
@@ -1141,7 +1222,7 @@ export default function AttendanceClient({
               <div className="flex items-center gap-2 pt-2 md:pt-6">
                 <button
                   type="button"
-                  onClick={handlePrintResult}
+                  onClick={() => window.print()}
                   className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold shadow-sm transition-all cursor-pointer"
                 >
                   <Printer className="w-4 h-4 text-amber-400" />
@@ -1169,7 +1250,7 @@ export default function AttendanceClient({
                     Batch Attendance Result Sheet
                   </h3>
                   <p className="text-sm font-semibold text-slate-600 mt-1">
-                    Batch: <span className="text-amber-600 font-bold">{resultBatchObj?.name}</span>
+                    Batch: <span className="text-amber-600 font-bold">{resultBatchObj?.name || "All Batches"}</span>
                     {resultBatchObj?.subject && <span> • Subject: {resultBatchObj.subject}</span>}
                     {resultBatchObj?.classroom && <span> • Room: {resultBatchObj.classroom}</span>}
                   </p>
@@ -1250,43 +1331,26 @@ export default function AttendanceClient({
                       const StatusIcon = r.statusTag.icon
                       return (
                         <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                          {/* Roll No: Strictly 1..N */}
                           <td className="px-4 py-3 text-center">
                             <span className="inline-flex items-center justify-center min-w-[2.25rem] h-8 px-2 rounded-lg bg-amber-50 border border-amber-200 font-black text-amber-800 text-xs font-mono">
                               #{r.roll_no}
                             </span>
                           </td>
-
-                          {/* Student Name */}
                           <td className="px-4 py-3 font-bold text-slate-900">{r.name}</td>
-
-                          {/* Student ID */}
                           <td className="px-4 py-3 font-mono text-xs text-slate-500">{r.student_id}</td>
-
-                          {/* Total Held */}
                           <td className="px-4 py-3 text-center font-mono text-slate-600">{r.totalHeld}</td>
-
-                          {/* Present */}
                           <td className="px-4 py-3 text-center font-mono font-bold text-emerald-600">
                             {r.presentCount}
                           </td>
-
-                          {/* Late */}
                           <td className="px-4 py-3 text-center font-mono font-bold text-amber-600">
                             {r.lateCount}
                           </td>
-
-                          {/* Absent */}
                           <td className="px-4 py-3 text-center font-mono font-bold text-rose-600">
                             {r.absentCount}
                           </td>
-
-                          {/* Attended (Present + Late) */}
                           <td className="px-4 py-3 text-center font-mono font-bold text-slate-900">
                             {r.attendedCount} / {r.totalHeld}
                           </td>
-
-                          {/* Attendance Rate */}
                           <td className="px-4 py-3 text-right font-mono">
                             <span
                               className={`text-sm font-black ${
@@ -1300,8 +1364,6 @@ export default function AttendanceClient({
                               {r.percentage}%
                             </span>
                           </td>
-
-                          {/* Result Status Badge */}
                           <td className="px-4 py-3 text-center">
                             <span
                               className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold border ${r.statusTag.color}`}
@@ -1326,7 +1388,7 @@ export default function AttendanceClient({
               </div>
             )}
 
-            {/* Print Signatures Block (Only visible on paper print or at bottom) */}
+            {/* Print Signatures Block */}
             <div className="hidden print:grid grid-cols-3 gap-8 pt-16 mt-16 border-t border-slate-300 text-center text-xs text-slate-600 font-semibold">
               <div>
                 <div className="border-t border-slate-400 pt-2 w-40 mx-auto">Class Teacher / Instructor</div>
