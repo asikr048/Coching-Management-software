@@ -41,13 +41,14 @@ export default function AttendanceClient({
 
   // Batches state with fallback client-side fetch
   const [allBatches, setAllBatches] = useState<any[]>(initialBatches || [])
+  const [showAllBranches, setShowAllBranches] = useState<boolean>(false)
 
-  // Auto-sync batches client-side on mount to guarantee fresh list
+  // Auto-sync batches client-side on mount to guarantee fresh list matching Batches page
   useEffect(() => {
     let isMounted = true
     supabase
       .from("batches")
-      .select("id, name, branch_id, classroom, subject, current_seats, max_seats, is_active, status")
+      .select("*, branch:branches(id, name)")
       .order("name")
       .then(({ data, error }) => {
         if (isMounted && !error && data && data.length > 0) {
@@ -62,10 +63,12 @@ export default function AttendanceClient({
   // Filter batches by active branch, with safe fallback to all batches if empty
   const displayBatches = useMemo(() => {
     if (!allBatches || allBatches.length === 0) return []
-    if (!selectedBranchId || selectedBranchId === "all") return allBatches
-    const filtered = allBatches.filter((b) => !b.branch_id || b.branch_id === selectedBranchId)
+    if (showAllBranches || !selectedBranchId || selectedBranchId === "all") return allBatches
+    const filtered = allBatches.filter(
+      (b) => !b.branch_id || b.branch_id === selectedBranchId || b.origin_branch_id === selectedBranchId
+    )
     return filtered.length > 0 ? filtered : allBatches
-  }, [allBatches, selectedBranchId])
+  }, [allBatches, selectedBranchId, showAllBranches])
 
   // Tab State
   const [activeTab, setActiveTab] = useState<"overview" | "take" | "result">("overview")
@@ -731,7 +734,7 @@ export default function AttendanceClient({
                       ) : (
                         <tr>
                           <td colSpan={5} className="px-4 py-10 text-center text-slate-400">
-                            No batches available for this branch.
+                            No batches available.
                           </td>
                         </tr>
                       )}
@@ -869,9 +872,20 @@ export default function AttendanceClient({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Batch Selector */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Select Batch {displayBatches.length > 0 ? `(${displayBatches.length} Available)` : ""}
-                </label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Select Batch {displayBatches.length > 0 ? `(${displayBatches.length})` : ""}
+                  </label>
+                  {allBatches.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllBranches(!showAllBranches)}
+                      className="text-[11px] text-amber-600 hover:text-amber-700 font-semibold cursor-pointer underline"
+                    >
+                      {showAllBranches ? "Filter Branch" : "All Batches"}
+                    </button>
+                  )}
+                </div>
                 <select
                   value={selectedBatchId}
                   onChange={(e) => setSelectedBatchId(e.target.value)}
@@ -879,19 +893,14 @@ export default function AttendanceClient({
                 >
                   {displayBatches.length === 0 ? (
                     <option value="" disabled className="text-slate-400 bg-white">
-                      Loading batches / No batches found
+                      Loading batches...
                     </option>
                   ) : (
-                    <>
-                      <option value="" disabled className="text-slate-400 bg-white">
-                        -- Select a Batch --
+                    displayBatches.map((b) => (
+                      <option key={b.id} value={b.id} className="text-slate-900 bg-white py-1.5 font-medium">
+                        {b.name} {b.subject ? `(${b.subject})` : ""} {b.branch?.name ? `[${b.branch.name}]` : ""}
                       </option>
-                      {displayBatches.map((b) => (
-                        <option key={b.id} value={b.id} className="text-slate-900 bg-white py-1.5 font-medium">
-                          {b.name} {b.subject ? `(${b.subject})` : ""} {b.classroom ? `• Room ${b.classroom}` : ""}
-                        </option>
-                      ))}
-                    </>
+                    ))
                   )}
                 </select>
               </div>
@@ -1174,9 +1183,20 @@ export default function AttendanceClient({
               <div className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-4">
                 {/* Batch Selector */}
                 <div className="flex-1 max-w-sm">
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                    Select Batch for Result
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Select Batch for Result
+                    </label>
+                    {allBatches.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowAllBranches(!showAllBranches)}
+                        className="text-[11px] text-teal-600 hover:text-teal-700 font-semibold cursor-pointer underline"
+                      >
+                        {showAllBranches ? "Filter Branch" : "All Batches"}
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={resultBatchId}
                     onChange={(e) => setResultBatchId(e.target.value)}
@@ -1187,16 +1207,11 @@ export default function AttendanceClient({
                         No Batches Available
                       </option>
                     ) : (
-                      <>
-                        <option value="" disabled className="text-slate-400 bg-white">
-                          -- Select a Batch --
+                      displayBatches.map((b) => (
+                        <option key={b.id} value={b.id} className="text-slate-900 bg-white py-1.5 font-medium">
+                          {b.name} {b.subject ? `(${b.subject})` : ""} {b.branch?.name ? `[${b.branch.name}]` : ""}
                         </option>
-                        {displayBatches.map((b) => (
-                          <option key={b.id} value={b.id} className="text-slate-900 bg-white py-1.5 font-medium">
-                            {b.name} {b.subject ? `(${b.subject})` : ""} {b.classroom ? `• Room ${b.classroom}` : ""}
-                          </option>
-                        ))}
-                      </>
+                      ))
                     )}
                   </select>
                 </div>
