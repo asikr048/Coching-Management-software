@@ -124,6 +124,40 @@ function normalizeDayMarks(rawDays: Record<string, any> | undefined): Record<str
   return normalized
 }
 
+function isClassMatch(batchStr?: string | null, studentStr?: string | null): boolean {
+  if (!batchStr || !studentStr) return false
+  const b = String(batchStr).trim().toLowerCase()
+  const s = String(studentStr).trim().toLowerCase()
+  if (b === s) return true
+  if (b.includes(s) || s.includes(b)) return true
+
+  const bnToEnMap: Record<string, string> = { "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9" }
+  const bNorm = b.replace(/[০-৯]/g, (d) => bnToEnMap[d] || d)
+  const sNorm = s.replace(/[০-৯]/g, (d) => bnToEnMap[d] || d)
+
+  const bDigitMatch = bNorm.match(/\d+/)
+  const sDigitMatch = sNorm.match(/\d+/)
+  if (bDigitMatch && sDigitMatch && bDigitMatch[0] === sDigitMatch[0]) return true
+
+  const aliases: Record<string, string[]> = {
+    "6": ["6", "six", "vi", "ষষ্ঠ"],
+    "7": ["7", "seven", "vii", "সপ্তম"],
+    "8": ["8", "eight", "viii", "অষ্টম"],
+    "9": ["9", "nine", "ix", "নবম"],
+    "10": ["10", "ten", "x", "দশম"],
+    "11": ["11", "eleven", "xi", "একাদশ"],
+    "12": ["12", "twelve", "xii", "দ্বাদশ"],
+  }
+
+  for (const group of Object.values(aliases)) {
+    const bMatch = group.some((g) => bNorm.includes(g))
+    const sMatch = group.some((g) => sNorm.includes(g))
+    if (bMatch && sMatch) return true
+  }
+
+  return false
+}
+
 export default function ExamResultsPage() {
   const params = useParams()
   const router = useRouter()
@@ -497,19 +531,13 @@ export default function ExamResultsPage() {
             }
           }
 
-          // Fallback if no enrolled students found: match by Class 9 / class_level or load all students
+          // Fallback if no enrolled students found: match by class level or load all students
           if (resolvedStudents.length === 0) {
             const { data: allStData } = await supabase.from("students").select("*")
             const allSt = allStData || []
 
-            const bName = (ex?.batch?.name || ex?.title || "").toLowerCase()
-            const is9 = bName.includes("9") || bName.includes("nine") || bName.includes("class 9")
-            let matchingSt = is9
-              ? allSt.filter((s: any) => {
-                  const cl = String(s.class_level || "").toLowerCase()
-                  return cl.includes("9") || cl.includes("nine") || cl.includes("ix")
-                })
-              : []
+            const bName = ex?.batch?.name || ex?.title || ""
+            let matchingSt = allSt.filter((s: any) => isClassMatch(bName, s.class_level))
 
             if (matchingSt.length === 0 && ex?.branch_id) {
               matchingSt = allSt.filter((s: any) => !s.branch_id || s.branch_id === ex.branch_id)
@@ -654,10 +682,41 @@ export default function ExamResultsPage() {
       const res = await fetch(url)
       if (res.ok) {
         const data = await res.json()
-        if (Array.isArray(data.students)) {
+        if (Array.isArray(data.students) && data.students.length > 0) {
           setStudents(data.students)
           toast.success(`✓ ${data.students.length} জন শিক্ষার্থী লোড করা হয়েছে`)
+          return
         }
+      }
+
+      // Fallback: Query directly from client Supabase
+      const { data: allSt } = await supabase.from("students").select("*")
+      if (allSt && allSt.length > 0) {
+        let matched = allSt
+        if (batchId === "all") {
+          matched = allSt
+        } else if (batchId !== "auto") {
+          const { data: enrs } = await supabase.from("enrollments").select("*").eq("batch_id", batchId)
+          const sIds = new Set((enrs || []).map((e: any) => e.student_id).filter(Boolean))
+          matched = allSt.filter((s: any) => sIds.has(s.id))
+          if (matched.length === 0) {
+            const bObj = availableBatches.find((b) => b.id === batchId)
+            matched = allSt.filter((s: any) => isClassMatch(bObj?.name, s.class_level))
+          }
+        } else {
+          const bName = exam?.batch?.name || exam?.title || ""
+          matched = allSt.filter((s: any) => isClassMatch(bName, s.class_level))
+        }
+        if (matched.length === 0) matched = allSt
+
+        const fallbackResolved: Student[] = matched.map((s: any, idx: number) => ({
+          ...s,
+          roll_no: s.roll_no || s.batch_roll || idx + 1,
+          batch_roll: s.roll_no || s.batch_roll || idx + 1,
+        }))
+        fallbackResolved.sort((a, b) => (a.roll_no || 9999) - (b.roll_no || 9999))
+        setStudents(fallbackResolved)
+        toast.success(`✓ ${fallbackResolved.length} জন শিক্ষার্থী লোড করা হয়েছে`)
       } else {
         toast.error("শিক্ষার্থী লোড করতে সমস্যা হয়েছে")
       }

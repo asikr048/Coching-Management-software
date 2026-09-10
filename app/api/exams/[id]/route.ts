@@ -88,6 +88,40 @@ export async function GET(
 
     const existingGradedIds = new Set(existingResults.map((r) => r.student_id).filter(Boolean))
 
+    function isClassMatch(batchStr?: string | null, studentStr?: string | null): boolean {
+      if (!batchStr || !studentStr) return false
+      const b = String(batchStr).trim().toLowerCase()
+      const s = String(studentStr).trim().toLowerCase()
+      if (b === s) return true
+      if (b.includes(s) || s.includes(b)) return true
+
+      const bnToEnMap: Record<string, string> = { "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9" }
+      const bNorm = b.replace(/[০-৯]/g, (d) => bnToEnMap[d] || d)
+      const sNorm = s.replace(/[০-৯]/g, (d) => bnToEnMap[d] || d)
+
+      const bDigitMatch = bNorm.match(/\d+/)
+      const sDigitMatch = sNorm.match(/\d+/)
+      if (bDigitMatch && sDigitMatch && bDigitMatch[0] === sDigitMatch[0]) return true
+
+      const aliases: Record<string, string[]> = {
+        "6": ["6", "six", "vi", "ষষ্ঠ"],
+        "7": ["7", "seven", "vii", "সপ্তম"],
+        "8": ["8", "eight", "viii", "অষ্টম"],
+        "9": ["9", "nine", "ix", "নবম"],
+        "10": ["10", "ten", "x", "দশম"],
+        "11": ["11", "eleven", "xi", "একাদশ"],
+        "12": ["12", "twelve", "xii", "দ্বাদশ"],
+      }
+
+      for (const group of Object.values(aliases)) {
+        const bMatch = group.some((g) => bNorm.includes(g))
+        const sMatch = group.some((g) => sNorm.includes(g))
+        if (bMatch && sMatch) return true
+      }
+
+      return false
+    }
+
     // 7. Determine which students should be returned based on requestedBatch
     let selectedStudents: any[] = []
 
@@ -96,22 +130,38 @@ export async function GET(
       selectedStudents = rawStudents
     } else if (requestedBatch && requestedBatch !== "auto") {
       // User selected a specific batch UUID
+      const targetB = allBatches.find((b) => b.id === requestedBatch)
+      const matchingBatchIds = new Set<string>([requestedBatch])
+      if (targetB) {
+        allBatches.forEach((b) => {
+          if (
+            (targetB.name && (b.name || "").trim().toLowerCase() === targetB.name.trim().toLowerCase()) ||
+            isClassMatch(targetB.name, b.name) ||
+            isClassMatch(targetB.class_level, b.class_level)
+          ) {
+            matchingBatchIds.add(b.id)
+          }
+        })
+      }
+
       selectedStudents = rawStudents.filter((s) => {
         if (existingGradedIds.has(s.id)) return true
         const sEnrs = enrollmentsByStudent.get(s.id) || []
-        return sEnrs.some((e) => e.batch_id === requestedBatch)
-      })
-      // If none found by enrollment, check if batch has a class_level or name matching student class_level
-      if (selectedStudents.length === 0) {
-        const targetB = allBatches.find((b) => b.id === requestedBatch)
-        if (targetB) {
-          const bName = (targetB.name || "").toLowerCase()
-          const bClass = (targetB.class_level || "").toLowerCase()
-          selectedStudents = rawStudents.filter((s) => {
-            const sc = (s.class_level || "").toLowerCase()
-            return (bName && sc.includes(bName)) || (bClass && sc.includes(bClass))
-          })
+        if (sEnrs.some((e) => matchingBatchIds.has(e.batch_id))) return true
+        if (targetB && (isClassMatch(targetB.name, s.class_level) || isClassMatch(targetB.class_level, s.class_level))) {
+          return true
         }
+        return false
+      })
+
+      // If still 0, check branch match
+      if (selectedStudents.length === 0 && targetB?.branch_id) {
+        selectedStudents = rawStudents.filter((s) => !s.branch_id || s.branch_id === targetB.branch_id)
+      }
+
+      // If still 0, fallback to all students so teacher is never stuck
+      if (selectedStudents.length === 0) {
+        selectedStudents = rawStudents
       }
     } else {
       // Default / Auto: load students for the exam's batch(es)
@@ -123,11 +173,15 @@ export async function GET(
         })
       }
 
-      // Also add any batch with identical name (e.g. another batch named "Class 9")
-      const examBatchName = (exam.batch?.name || "").trim().toLowerCase()
+      // Also add any batch with identical or matching class name (e.g. "Class 9")
+      const examBatchName = exam.batch?.name || exam.title || ""
       if (examBatchName) {
         allBatches.forEach((b) => {
-          if ((b.name || "").trim().toLowerCase() === examBatchName) {
+          if (
+            (b.name || "").trim().toLowerCase() === examBatchName.trim().toLowerCase() ||
+            isClassMatch(examBatchName, b.name) ||
+            isClassMatch(examBatchName, b.class_level)
+          ) {
             targetBatchIds.add(b.id)
           }
         })
@@ -140,19 +194,13 @@ export async function GET(
         return sEnrs.some((e) => targetBatchIds.has(e.batch_id))
       })
 
-      // Strategy B: If no enrolled students found in batch, match by class_level
-      // (e.g. exam is for "Class 9" or batch is "Class 9", and student has class_level "Class 9" or "9")
-      if (selectedStudents.length === 0) {
-        const batchName = (exam.batch?.name || exam.title || "").toLowerCase()
-        const isClass9 = batchName.includes("9") || batchName.includes("nine") || batchName.includes("class 9")
-        if (isClass9) {
-          const class9Students = rawStudents.filter((s) => {
-            const cl = String(s.class_level || "").toLowerCase()
-            return cl.includes("9") || cl.includes("nine") || cl.includes("ix")
-          })
-          if (class9Students.length > 0) {
-            selectedStudents = class9Students
-          }
+      // Strategy B: If no enrolled students found, match by class_level
+      if (selectedStudents.length === 0 && examBatchName) {
+        const classMatchedStudents = rawStudents.filter((s) => {
+          return isClassMatch(examBatchName, s.class_level)
+        })
+        if (classMatchedStudents.length > 0) {
+          selectedStudents = classMatchedStudents
         }
       }
 
