@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { formatDate, formatCurrency } from "@/lib/utils"
 import { User, Phone, Mail, MapPin, BookOpen, CreditCard, Calendar, Fingerprint, AlertCircle, CheckCircle, Package } from "lucide-react"
 import Link from "next/link"
+import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -62,7 +63,21 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
         </div>
-        <Link href={`/dashboard/owner/students/${id}/edit`} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all shrink-0 self-start sm:self-center">Edit Student</Link>
+        <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center flex-wrap">
+          <StudentIdCardTrigger
+            student={{
+              ...student,
+              roll_no: student.roll_no || student.batch_roll || enrollments.data?.[0]?.roll_no,
+              batch_roll: student.roll_no || student.batch_roll || enrollments.data?.[0]?.roll_no,
+            }}
+            batchName={enrollments.data?.[0]?.batch?.name}
+            buttonVariant="primary"
+            buttonText="🪪 ID Card"
+          />
+          <Link href={`/dashboard/owner/students/${id}/edit`} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all">
+            Edit Student
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -132,7 +147,14 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                       <p className="text-xs text-slate-500">{e.batch?.subject || ""}</p>
                     </div>
                   </div>
-                  <div className="text-right">
+                  <div className="flex items-center gap-2">
+                    <StudentIdCardTrigger
+                      student={student}
+                      batchName={e.batch?.name}
+                      rollNo={roll}
+                      buttonVariant="badge"
+                      buttonText="🪪 ID Card"
+                    />
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${e.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>{e.status}</span>
                   </div>
                 </div>

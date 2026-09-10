@@ -13,6 +13,7 @@ import {
 import Link from "next/link"
 import { toast } from "sonner"
 import { getExamMarksConfig } from "@/app/student/batch/[id]/page"
+import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
 
 export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true)
@@ -517,9 +518,27 @@ export default function StudentProfilePage() {
               </div>
             </div>
           </div>
-          <div className="hidden sm:block bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/15 text-center">
-            <p className="text-xs text-indigo-300">MedhaShiree ID</p>
-            <p className="text-lg font-mono font-bold text-white">{profile?.user_id}</p>
+          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+            <StudentIdCardTrigger
+              student={{
+                ...studentData,
+                id: studentData?.id || profile?.id,
+                student_id: profile?.user_id || studentData?.student_id,
+                name: profile?.name || studentData?.name,
+                phone: profile?.phone || studentData?.phone,
+                batch_roll: enrollments[0]?.roll_no ?? studentData?.roll_no ?? studentData?.batch_roll,
+                roll_no: enrollments[0]?.roll_no ?? studentData?.roll_no ?? studentData?.batch_roll,
+                guardian_name: studentData?.guardian_name,
+                guardian_phone: studentData?.guardian_phone,
+              }}
+              batchName={enrollments[0]?.batch?.name}
+              buttonVariant="banner"
+              buttonText="🪪 ডিজিটাল আইডি কার্ড"
+            />
+            <div className="hidden sm:block bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/15 text-center">
+              <p className="text-xs text-indigo-300">MedhaShiree ID</p>
+              <p className="text-lg font-mono font-bold text-white">{profile?.user_id}</p>
+            </div>
           </div>
         </div>
       </div>
@@ -782,8 +801,29 @@ export default function StudentProfilePage() {
                           )
                         })()}
 
-                        <div className="flex items-center justify-end text-xs text-indigo-600 font-semibold opacity-0 group-hover:opacity-100 transition-opacity pt-1">
-                          View Details <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
+                          <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                            <StudentIdCardTrigger
+                              student={{
+                                ...studentData,
+                                id: studentData?.id || profile?.id,
+                                student_id: profile?.user_id || studentData?.student_id,
+                                name: profile?.name || studentData?.name,
+                                phone: profile?.phone || studentData?.phone,
+                                roll_no: enr.roll_no ?? studentData?.roll_no ?? studentData?.batch_roll,
+                                batch_roll: enr.roll_no ?? studentData?.roll_no ?? studentData?.batch_roll,
+                                guardian_name: studentData?.guardian_name,
+                                guardian_phone: studentData?.guardian_phone,
+                              }}
+                              batchName={b?.name}
+                              rollNo={enr.roll_no ?? studentData?.roll_no ?? studentData?.batch_roll}
+                              buttonVariant="badge"
+                              buttonText="🪪 আইডি কার্ড"
+                            />
+                          </div>
+                          <span className="text-indigo-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">
+                            বিস্তারিত দেখুন <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
+                          </span>
                         </div>
                       </Link>
                     )

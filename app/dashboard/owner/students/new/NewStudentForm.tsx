@@ -8,10 +8,13 @@ import {
   Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, 
   AlertCircle, Printer, Download, RefreshCw, Landmark, DoorOpen, History, 
   Calendar, Filter, Eye, Phone, Mail, UserCheck, ArrowRight, FileText, 
-  CheckCircle2, Clock, DollarSign, ChevronRight, ExternalLink, X 
+  CheckCircle2, Clock, DollarSign, ChevronRight, ExternalLink, X, Contact, Sparkles
 } from "lucide-react"
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
+import { StudentIdCardData, printStudentIdCard, printAdmissionAndIdCard, downloadStudentIdCardPDF } from "@/lib/id-card-generator"
+import StudentIdCardModal from "@/components/id-card/StudentIdCardModal"
+import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
 
 interface Batch { 
   id: string
@@ -50,6 +53,10 @@ interface EnrollmentReceipt {
   guardian_name?: string
   guardian_phone?: string
   batch_name: string
+  batch_roll?: number | string
+  branch_name?: string
+  blood_group?: string
+  photo_url?: string
   subject?: string
   date: string
   total_fee: number
@@ -225,8 +232,10 @@ export default function NewStudentForm({
     }
   }, [batches])
   
-  // Post-enrollment receipt modal
+  // Post-enrollment receipt & ID card modal
   const [receipt, setReceipt] = useState<EnrollmentReceipt | null>(null)
+  const [modalTab, setModalTab] = useState<"receipt" | "idcard">("receipt")
+  const [historyIdCardStudent, setHistoryIdCardStudent] = useState<StudentIdCardData | null>(null)
   const receiptRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { checkFinancialAccess().then(({ hasAccess }) => setFinancialAccess(hasAccess)) }, [])
@@ -766,7 +775,8 @@ export default function NewStudentForm({
       toast.success(`Enrolled successfully! ID: ${dispId}`)
 
       // Display receipt modal with print & save options, staying on this page
-      const qrData = `Student ID: ${dispId} | Name: ${studentName} | Batch: ${batch?.name || ''} | Fee: ${total} | Paid: ${paid}`
+      const branchName = selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.name : (batch?.branch_id ? branches.find(b => b.id === batch.branch_id)?.name : undefined)
+      const qrData = `Student ID: ${dispId} | Name: ${studentName} | Batch: ${batch?.name || ''} | Roll: #${enrollPayload.roll_no || finalRoll || 1} | Fee: ${total} | Paid: ${paid}`
       setReceipt({
         receipt_number: receiptNum,
         student_name: studentName,
@@ -777,6 +787,8 @@ export default function NewStudentForm({
         guardian_name: guardianName,
         guardian_phone: guardianPhone,
         batch_name: batch?.name || "Enrolled Batch",
+        batch_roll: enrollPayload.roll_no || finalRoll || 1,
+        branch_name: branchName,
         subject: batch?.subject || batch?.class_level || "General",
         date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
         total_fee: total,
@@ -786,6 +798,7 @@ export default function NewStudentForm({
         payment_method: "Cash / Counter",
         qr_data: qrData
       })
+      setModalTab("receipt")
 
       // Real-time update history lists
       const newEnrItem = {
@@ -793,6 +806,7 @@ export default function NewStudentForm({
         student_id: sid,
         batch_id: form.batch_id,
         branch_id: selectedBranchId || batch?.branch_id || null,
+        roll_no: enrollPayload.roll_no || finalRoll || 1,
         status: "active",
         created_at: new Date().toISOString(),
         student: {
@@ -806,6 +820,8 @@ export default function NewStudentForm({
           address: form.address,
           school_college: form.school_college,
           class_level: form.class_level,
+          roll_no: enrollPayload.roll_no || finalRoll || 1,
+          batch_roll: enrollPayload.roll_no || finalRoll || 1,
         },
         batch: batch || { id: form.batch_id, name: "Enrolled Batch", monthly_fee: 0, admission_fee: 0 },
       }
@@ -843,6 +859,61 @@ export default function NewStudentForm({
     } finally {
       setLoading(false)
     }
+  }
+
+  function getReceiptIdCardData(target: EnrollmentReceipt): StudentIdCardData {
+    return {
+      student_id: target.student_id,
+      student_name: target.student_name,
+      student_phone: target.student_phone,
+      guardian_name: target.guardian_name,
+      guardian_phone: target.guardian_phone,
+      batch_name: target.batch_name,
+      batch_roll: target.batch_roll,
+      branch_name: target.branch_name,
+      blood_group: target.blood_group,
+      avatar_url: target.photo_url,
+    }
+  }
+
+  function getHistoryIdCardData(enr: any): StudentIdCardData {
+    const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+    const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+    const branchObj = branches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+    const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
+    return {
+      student_id: student.student_id || "N/A",
+      student_name: student.name || "Student",
+      student_phone: student.phone,
+      guardian_name: student.guardian_name,
+      guardian_phone: student.guardian_phone,
+      batch_name: b.name || "Enrolled Batch",
+      batch_roll: roll,
+      branch_name: branchObj?.name,
+      blood_group: student.blood_group,
+      avatar_url: student.photo_url || student.avatar_url,
+    }
+  }
+
+  function handlePrintIdCard(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
+    const idCardData = getReceiptIdCardData(target)
+    printStudentIdCard(idCardData)
+  }
+
+  function handlePrintBoth(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
+    const idCardData = getReceiptIdCardData(target)
+    printAdmissionAndIdCard(target, idCardData)
+  }
+
+  async function handleDownloadIdCard(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
+    const idCardData = getReceiptIdCardData(target)
+    await downloadStudentIdCardPDF(idCardData)
   }
 
   // Print function
@@ -1708,12 +1779,20 @@ export default function NewStudentForm({
                             <div className="flex items-center justify-end gap-1.5">
                               <button
                                 type="button"
+                                onClick={() => setHistoryIdCardStudent(getHistoryIdCardData(enr))}
+                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                                title="View & Print Student ID Card"
+                              >
+                                <span>🪪 ID Card</span>
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => handlePrintFromHistory(enr)}
                                 className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                                 title="Print Admission & Payment Slip"
                               >
                                 <Printer className="w-3.5 h-3.5" />
-                                <span>Print</span>
+                                <span>Slip</span>
                               </button>
                               <button
                                 type="button"
@@ -1754,107 +1833,237 @@ export default function NewStudentForm({
         </div>
       )}
 
-      {/* Confirmation & Printable PDF Modal with QR Code */}
+      {/* Confirmation & Printable PDF Modal with QR Code & ID Card Tab */}
       {receipt && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[94vh] flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-amber-500 to-amber-600 p-6 text-white text-center relative">
+            <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-indigo-600 p-5 text-white text-center relative">
               <button 
                 type="button" 
                 onClick={() => setReceipt(null)} 
                 className="absolute top-4 right-4 text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                title="Close receipt"
+                title="Close"
               >
                 <X className="w-5 h-5" />
               </button>
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-xs rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
+              <div className="w-11 h-11 bg-white/20 backdrop-blur-xs rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
                 <Check className="w-6 h-6 text-white font-black" />
               </div>
-              <h3 className="text-xl font-black">Enrollment Confirmed!</h3>
-              <p className="text-xs text-amber-100 font-medium mt-1">Ready to print, download PDF, or start next enrollment</p>
+              <h3 className="text-xl font-black">ভর্তি সফলভাবে সম্পন্ন হয়েছে!</h3>
+              <p className="text-xs text-amber-100 font-medium mt-0.5">Admission Memo & Student ID Card Generated</p>
+
+              {/* Tab Switcher */}
+              <div className="flex items-center justify-center gap-2 mt-3 bg-black/20 p-1 rounded-xl max-w-sm mx-auto backdrop-blur-xs border border-white/20">
+                <button
+                  type="button"
+                  onClick={() => setModalTab("receipt")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    modalTab === "receipt" ? "bg-white text-slate-900 shadow-sm" : "text-white/80 hover:text-white"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 text-amber-600" />
+                  <span>📄 ভর্তি রশিদ (Slip)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab("idcard")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    modalTab === "idcard" ? "bg-white text-indigo-900 shadow-sm" : "text-white/80 hover:text-white"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>🪪 আইডি কার্ড (ID Card)</span>
+                </button>
+              </div>
             </div>
 
-            {/* Printable preview card */}
-            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
-              <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-slate-50 space-y-3">
-                <div className="text-center border-b border-dashed border-slate-300 pb-3">
-                  <h4 className="font-black text-indigo-950 text-base">MedhaShiree Coaching</h4>
-                  <p className="text-[11px] text-slate-500">Official Enrollment & Clearance Receipt</p>
-                  <span className="inline-block bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full mt-1">
-                    ID: {receipt.student_id}
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-500">Student Name:</span><span className="font-bold text-slate-900">{receipt.student_name}</span></div>
-                  {receipt.student_phone && <div className="flex justify-between"><span className="text-slate-500">Phone:</span><span className="font-medium text-slate-700">{receipt.student_phone}</span></div>}
-                  {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-500">Guardian Contact:</span><span className="font-medium text-slate-700">{receipt.guardian_phone}</span></div>}
-                  <div className="flex justify-between"><span className="text-slate-500">Batch Enrolled:</span><span className="font-bold text-indigo-700">{receipt.batch_name}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Date:</span><span className="text-slate-700">{receipt.date}</span></div>
-                </div>
-
-                {/* Account credentials box */}
-                {receipt.password && (
-                  <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 text-xs space-y-1">
-                    <div className="flex justify-between"><span className="text-indigo-800 font-medium">Login User ID:</span><span className="font-bold text-slate-900">{receipt.student_id}</span></div>
-                    <div className="flex justify-between"><span className="text-indigo-800 font-medium">Password:</span><span className="font-mono font-bold text-indigo-900">{receipt.password}</span></div>
+            {/* Scrollable Content */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+              {modalTab === "receipt" ? (
+                /* Printable preview slip */
+                <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-white space-y-3 shadow-xs">
+                  <div className="text-center border-b border-dashed border-slate-300 pb-3">
+                    <h4 className="font-black text-indigo-950 text-base">MedhaShiree Coaching</h4>
+                    <p className="text-[11px] text-slate-500">Official Enrollment & Clearance Receipt</p>
+                    <div className="flex items-center justify-center gap-2 mt-1">
+                      <span className="inline-block bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full font-mono">
+                        ID: {receipt.student_id}
+                      </span>
+                      {receipt.batch_roll != null && (
+                        <span className="inline-block bg-indigo-100 text-indigo-900 border border-indigo-300 text-[10px] font-black px-2.5 py-0.5 rounded-full font-mono">
+                          রোল #{receipt.batch_roll}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                )}
 
-                <div className="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-slate-500">Total Program Fee:</span><span className="font-bold text-slate-900">{formatCurrency(receipt.total_fee)}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-500">Amount Paid:</span><span className="font-bold text-emerald-700">{formatCurrency(receipt.paid_amount)}</span></div>
-                  <div className="flex justify-between text-sm font-black pt-1">
-                    <span className="text-slate-700">Due Remaining:</span>
-                    <span className={receipt.due_amount > 0 ? "text-rose-600" : "text-emerald-700"}>{formatCurrency(receipt.due_amount)}</span>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-500">Student Name:</span><span className="font-bold text-slate-900">{receipt.student_name}</span></div>
+                    {receipt.student_phone && <div className="flex justify-between"><span className="text-slate-500">Phone:</span><span className="font-medium text-slate-700">{receipt.student_phone}</span></div>}
+                    {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-500">Guardian Contact:</span><span className="font-medium text-slate-700">{receipt.guardian_phone}</span></div>}
+                    <div className="flex justify-between"><span className="text-slate-500">Batch Enrolled:</span><span className="font-bold text-indigo-700">{receipt.batch_name}</span></div>
+                    {receipt.branch_name && <div className="flex justify-between"><span className="text-slate-500">Campus/Branch:</span><span className="font-semibold text-slate-700">{receipt.branch_name}</span></div>}
+                    <div className="flex justify-between"><span className="text-slate-500">Date:</span><span className="text-slate-700">{receipt.date}</span></div>
                   </div>
-                  {receipt.due_date && (
-                    <div className="flex justify-between text-[11px] text-amber-700 pt-0.5 font-semibold">
-                      <span>Due Date:</span><span>{receipt.due_date}</span>
+
+                  {/* Account credentials box */}
+                  {receipt.password && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 text-xs space-y-1">
+                      <div className="flex justify-between"><span className="text-indigo-800 font-medium">Login User ID:</span><span className="font-bold text-slate-900">{receipt.student_id}</span></div>
+                      <div className="flex justify-between"><span className="text-indigo-800 font-medium">Password:</span><span className="font-mono font-bold text-indigo-900">{receipt.password}</span></div>
                     </div>
                   )}
-                </div>
 
-                {/* QR Code section */}
-                <div className="pt-2 border-t border-dashed border-slate-300 flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-slate-800">Verification QR</p>
-                    <p className="text-[10px] text-slate-500">Scan for student credentials</p>
+                  <div className="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-500">Total Program Fee:</span><span className="font-bold text-slate-900">{formatCurrency(receipt.total_fee)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Amount Paid:</span><span className="font-bold text-emerald-700">{formatCurrency(receipt.paid_amount)}</span></div>
+                    <div className="flex justify-between text-sm font-black pt-1">
+                      <span className="text-slate-700">Due Remaining:</span>
+                      <span className={receipt.due_amount > 0 ? "text-rose-600" : "text-emerald-700"}>{formatCurrency(receipt.due_amount)}</span>
+                    </div>
+                    {receipt.due_date && (
+                      <div className="flex justify-between text-[11px] text-amber-700 pt-0.5 font-semibold">
+                        <span>Due Date:</span><span>{receipt.due_date}</span>
+                      </div>
+                    )}
                   </div>
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(receipt.qr_data)}`}
-                    alt="QR Verification"
-                    className="w-16 h-16 border border-slate-200 rounded-lg p-0.5 bg-white"
-                  />
+
+                  {/* QR Code section */}
+                  <div className="pt-2 border-t border-dashed border-slate-300 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-800">Verification QR</p>
+                      <p className="text-[10px] text-slate-500">Scan to verify student admission status</p>
+                    </div>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(receipt.qr_data)}`}
+                      alt="QR Verification"
+                      className="w-16 h-16 border border-slate-200 rounded-lg p-0.5 bg-white"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* ID Card Preview */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Front Card */}
+                    <div className="bg-white rounded-2xl border border-indigo-200 shadow-md overflow-hidden flex flex-col justify-between p-3.5 relative min-h-[220px]">
+                      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-indigo-600 to-violet-600" />
+                      <div className="text-center pt-1 border-b border-slate-100 pb-2">
+                        <h5 className="font-black text-xs text-indigo-950 uppercase tracking-wider">MEDHASHIREE COACHING</h5>
+                        <p className="text-[9px] text-slate-500">Official Student Identity Card</p>
+                      </div>
+
+                      <div className="flex items-center gap-3 py-2">
+                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center font-black text-xl shadow-md shrink-0">
+                          {receipt.student_name ? receipt.student_name.charAt(0) : "S"}
+                        </div>
+                        <div className="space-y-0.5 min-w-0">
+                          <h4 className="font-black text-slate-900 text-xs truncate">{receipt.student_name}</h4>
+                          <p className="text-[10px] font-mono font-bold text-indigo-600">{receipt.student_id}</p>
+                          <div className="inline-block bg-amber-100 text-amber-900 border border-amber-300 font-bold font-mono text-[10px] px-1.5 py-0.2 rounded-md">
+                            রোল: #{receipt.batch_roll || 1}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-[10px] border-t border-slate-100 pt-2">
+                        <div className="flex justify-between"><span className="text-slate-400">Batch:</span><span className="font-bold text-slate-800 truncate max-w-[130px]">{receipt.batch_name}</span></div>
+                        {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-400">Guardian:</span><span className="font-mono text-slate-700">{receipt.guardian_phone}</span></div>}
+                      </div>
+
+                      <div className="bg-slate-50 rounded-lg p-1 text-center text-[9px] font-bold text-slate-600 mt-2">
+                        VALID SESSION: {new Date().getFullYear()}
+                      </div>
+                    </div>
+
+                    {/* Back Card */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden flex flex-col justify-between p-3.5 relative min-h-[220px]">
+                      <div className="text-center border-b border-slate-100 pb-1.5">
+                        <h6 className="font-black text-[11px] text-slate-800">TERMS & INSTRUCTIONS</h6>
+                      </div>
+
+                      <div className="space-y-1 text-[9px] text-slate-600 py-1">
+                        <p>1. Carry this card during all classes and exams.</p>
+                        <p>2. Non-transferable & property of MedhaShiree.</p>
+                        <p>3. If found, please return to coaching office.</p>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(`ID:${receipt.student_id}|Name:${receipt.student_name}|Batch:${receipt.batch_name}|Roll:${receipt.batch_roll || 1}`)}`}
+                          alt="QR"
+                          className="w-12 h-12 border border-slate-200 rounded-md p-0.5 bg-white"
+                        />
+                        <div className="text-right">
+                          <p className="text-[8px] text-slate-400">Authorized Signature</p>
+                          <div className="font-serif italic font-bold text-xs text-indigo-900 mt-1">Authority</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons Toolbar */}
+              <div className="space-y-2 pt-1">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePrint()}
+                    className="py-2.5 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> 
+                    <span>প্রিন্ট রসিদ</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrintIdCard()}
+                    className="py-2.5 px-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                  >
+                    <span>🪪 প্রিন্ট আইডি কার্ড</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePrintBoth()}
+                    className="col-span-2 sm:col-span-1 py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                    title="Print both Admission Memo and Student ID Card in one document"
+                  >
+                    <span>📑 উভয়ই প্রিন্ট করুন</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => modalTab === "idcard" ? handleDownloadIdCard() : handleSavePDF()}
+                    className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>{modalTab === "idcard" ? "আইডি কার্ড PDF" : "রসিদ PDF সেভ"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { resetForm(); setReceipt(null); }}
+                    className="py-2.5 border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> 
+                    <span>পরবর্তী শিক্ষার্থী ভর্তি</span>
+                  </button>
                 </div>
               </div>
-
-              {/* Modal Buttons: Print, Save, Close */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => handlePrint()}
-                  className="py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 text-sm shadow-md shadow-amber-500/20 transition-all cursor-pointer">
-                  <Printer className="w-4 h-4" /> Print Receipt
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSavePDF()}
-                  className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl font-bold flex items-center justify-center gap-2 text-sm transition-all cursor-pointer">
-                  <Download className="w-4 h-4" /> Save PDF
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => { resetForm(); setReceipt(null); }}
-                className="w-full py-2.5 border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-colors cursor-pointer">
-                <RefreshCw className="w-4 h-4" /> Close Slip / Next Student
-              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* History ID Card Modal */}
+      {historyIdCardStudent && (
+        <StudentIdCardModal
+          isOpen={!!historyIdCardStudent}
+          onClose={() => setHistoryIdCardStudent(null)}
+          cardData={historyIdCardStudent}
+        />
       )}
     </>
   )
