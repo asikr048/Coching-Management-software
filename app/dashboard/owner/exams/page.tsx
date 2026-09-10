@@ -17,6 +17,10 @@ export default async function ExamsPage() {
     .select("*")
     .eq("is_active", true)
     .order("name", { ascending: true })
+  const { data: notices } = await supabase
+    .from("notices")
+    .select("*")
+    .order("created_at", { ascending: false })
 
   return (
     <div className="space-y-6">
@@ -24,6 +28,7 @@ export default async function ExamsPage() {
         exams={exams || []} 
         batches={batches || []} 
         branches={branches || []} 
+        initialNotices={notices || []}
       />
     </div>
   )

@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { 
   Plus, X, Loader2, FileText, Trophy, Clock, CheckCircle, GripVertical, 
   Trash2, Edit2, PlayCircle, Eye, Globe, MessageSquare, Landmark, Building2, BookOpen,
-  Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle
+  Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle, Search, ExternalLink, Filter
 } from "lucide-react"
 import { formatDate, cn } from "@/lib/utils"
 import Link from "next/link"
@@ -21,6 +21,18 @@ export const WEEK_DAYS = [
   { id: "Thursday", bn: "বৃহস্পতিবার", short: "বৃহস্পতি" },
   { id: "Friday", bn: "শুক্রবার", short: "শুক্র" },
 ]
+
+export interface NoticeRow {
+  id: string
+  title: string
+  content: string
+  is_active: boolean
+  priority?: string
+  notice_date?: string | null
+  branch_id?: string | null
+  branch_ids?: string[] | null
+  created_at: string
+}
 
 interface ExamRow { 
   id: string
@@ -91,13 +103,16 @@ interface DraftQuestion {
 export default function ExamsClient({ 
   exams: initial, 
   batches,
-  branches = [] 
+  branches = [],
+  initialNotices = []
 }: { 
   exams: ExamRow[]
   batches: BatchOpt[]
   branches?: Branch[]
+  initialNotices?: NoticeRow[]
 }) {
   const [exams, setExams] = useState(initial)
+  const [notices, setNotices] = useState<NoticeRow[]>(initialNotices)
   const [showModal, setShowModal] = useState(false)
   const [editingExam, setEditingExam] = useState<ExamRow | null>(null)
   const [loading, setLoading] = useState(false)
@@ -107,8 +122,16 @@ export default function ExamsClient({
   const [pausingId, setPausingId] = useState<string | null>(null)
   const { selectedBranchId, currentBranch } = useBranch()
   
+  // Notice & Result Notification States
+  const [deletingNoticeId, setDeletingNoticeId] = useState<string | null>(null)
+  const [deleteConfirmNotice, setDeleteConfirmNotice] = useState<NoticeRow | null>(null)
+  const [selectedNoticeForView, setSelectedNoticeForView] = useState<NoticeRow | null>(null)
+  const [noticeSearch, setNoticeSearch] = useState("")
+  const [noticeTypeFilter, setNoticeTypeFilter] = useState<"all" | "results" | "routine">("all")
+  const [publishingNoticeExamId, setPublishingNoticeExamId] = useState<string | null>(null)
+
   // Filters
-  const [statusFilter, setStatusFilter] = useState<"all" | "one_time" | "weekly" | "published" | "draft" | "online">("all")
+  const [statusFilter, setStatusFilter] = useState<"all" | "one_time" | "weekly" | "published" | "draft" | "online" | "notices">("all")
   const [batchFilter, setBatchFilter] = useState<string>("all")
   
   // Modal State
@@ -228,6 +251,72 @@ export default function ExamsClient({
     return availableBatches
   }, [batches, form.branch_id, availableBatches])
 
+  // Published check helper (supports is_published, is_public_result, is_weekly_published, and result_note flags)
+  const isExamPublished = (ex: ExamRow) => {
+    return Boolean(
+      ex.is_published ||
+      ex.is_public_result ||
+      ex.is_weekly_published ||
+      ex.result_note?.includes("[PUBLIC_RESULT:true]") ||
+      ex.result_note?.includes("[IS_WEEKLY_PUBLISHED:true]")
+    )
+  }
+
+  // Notice classification helpers
+  const isResultNotice = (n: NoticeRow) => {
+    const t = (n.title || "").toLowerCase()
+    const c = (n.content || "").toLowerCase()
+    return (
+      t.includes("ফলাফল") ||
+      t.includes("মেরিট") ||
+      t.includes("result") ||
+      t.includes("merit") ||
+      t.includes("🏆") ||
+      c.includes("ফলাফল প্রকাশিত") ||
+      c.includes("মেধা তালিকা")
+    )
+  }
+
+  const isRoutineNotice = (n: NoticeRow) => {
+    const t = (n.title || "").toLowerCase()
+    const c = (n.content || "").toLowerCase()
+    return (
+      t.includes("রুটিন") ||
+      t.includes("সূচি") ||
+      t.includes("routine") ||
+      t.includes("📋") ||
+      c.includes("পরীক্ষার রুটিন") ||
+      c.includes("পরীক্ষার সূচি")
+    )
+  }
+
+  const isExamOrResultNotice = (n: NoticeRow) => {
+    const t = (n.title || "").toLowerCase()
+    const c = (n.content || "").toLowerCase()
+    return (
+      isResultNotice(n) ||
+      isRoutineNotice(n) ||
+      t.includes("পরীক্ষা") ||
+      t.includes("exam") ||
+      c.includes("পরীক্ষা") ||
+      c.includes("exam")
+    )
+  }
+
+  function getLinkedNotices(exam: ExamRow, allNotices: NoticeRow[]) {
+    return allNotices.filter(n => {
+      if (exam.schedule_notice_id && n.id === exam.schedule_notice_id) return true
+      if (exam.title) {
+        const cleanExamTitle = exam.title.trim().toLowerCase()
+        if (cleanExamTitle.length >= 3) {
+          if (n.title?.toLowerCase().includes(cleanExamTitle)) return true
+          if (n.content?.toLowerCase().includes(cleanExamTitle)) return true
+        }
+      }
+      return false
+    })
+  }
+
   // Filtered Exams
   const filteredExams = useMemo(() => {
     return exams.filter(ex => {
@@ -241,8 +330,8 @@ export default function ExamsClient({
         const matchMulti = Array.isArray(ex.batch_ids) && ex.batch_ids.includes(batchFilter)
         if (!matchPrimary && !matchMulti) return false
       }
-      if (statusFilter === "published" && !ex.is_published) return false
-      if (statusFilter === "draft" && ex.is_published) return false
+      if (statusFilter === "published" && !isExamPublished(ex)) return false
+      if (statusFilter === "draft" && isExamPublished(ex)) return false
       if (statusFilter === "online" && !ex.is_online) return false
       const isWeeklyEx =
         ex.exam_schedule_type === "weekly" ||
@@ -256,6 +345,118 @@ export default function ExamsClient({
       return true
     })
   }, [exams, statusFilter, batchFilter, selectedBranchId])
+
+  // Filtered Notices
+  const filteredNotices = useMemo(() => {
+    const selectedBatchObj = batches.find(b => b.id === batchFilter)
+    const batchName = selectedBatchObj?.name?.toLowerCase()
+
+    return notices.filter(n => {
+      if (!isExamOrResultNotice(n)) return false
+
+      // Branch filter
+      if (selectedBranchId !== "all") {
+        const bIds = Array.isArray(n.branch_ids) ? n.branch_ids : (n.branch_id ? [n.branch_id] : [])
+        if (bIds.length > 0 && !bIds.includes(selectedBranchId)) {
+          return false
+        }
+      }
+
+      // Type filter
+      if (noticeTypeFilter === "results" && !isResultNotice(n)) return false
+      if (noticeTypeFilter === "routine" && !isRoutineNotice(n)) return false
+
+      // Batch filter
+      if (batchFilter !== "all" && batchName) {
+        const t = (n.title || "").toLowerCase()
+        const c = (n.content || "").toLowerCase()
+        const mentionsBatch = t.includes(batchName) || c.includes(batchName)
+        const linkedExam = exams.find(ex => {
+          const inThisBatch = ex.batch_id === batchFilter || (Array.isArray(ex.batch_ids) && ex.batch_ids.includes(batchFilter))
+          if (!inThisBatch) return false
+          return ex.schedule_notice_id === n.id || (ex.title && (t.includes(ex.title.toLowerCase()) || c.includes(ex.title.toLowerCase())))
+        })
+        if (!mentionsBatch && !linkedExam) return false
+      }
+
+      // Search filter
+      if (noticeSearch.trim()) {
+        const q = noticeSearch.trim().toLowerCase()
+        const matchTitle = n.title?.toLowerCase().includes(q)
+        const matchContent = n.content?.toLowerCase().includes(q)
+        if (!matchTitle && !matchContent) return false
+      }
+
+      return true
+    })
+  }, [notices, selectedBranchId, batchFilter, batches, exams, noticeSearch, noticeTypeFilter])
+
+  const resultNoticesCount = useMemo(() => {
+    return notices.filter(isExamOrResultNotice).length
+  }, [notices])
+
+  // Delete Notice Handler
+  async function handleDeleteNotice(noticeId: string) {
+    setDeletingNoticeId(noticeId)
+    try {
+      const res = await fetch("/api/notices/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: noticeId }),
+      })
+
+      if (!res.ok) {
+        // Direct Supabase fallback
+        const { error: sbErr } = await supabase.from("notices").delete().eq("id", noticeId)
+        if (sbErr) throw sbErr
+      }
+
+      // Clear schedule_notice_id if any exam referenced it
+      setExams(prev => prev.map(ex => ex.schedule_notice_id === noticeId ? { ...ex, schedule_notice_id: null } : ex))
+      try {
+        await supabase.from("exams").update({ schedule_notice_id: null }).eq("schedule_notice_id", noticeId)
+      } catch {}
+
+      setNotices(prev => prev.filter(n => n.id !== noticeId))
+      setDeleteConfirmNotice(null)
+      if (selectedNoticeForView?.id === noticeId) {
+        setSelectedNoticeForView(null)
+      }
+      toast.success("✓ নোটিশ সফলভাবে মুছে ফেলা হয়েছে (Notice deleted successfully)")
+    } catch (err: any) {
+      console.error("Delete notice error:", err)
+      toast.error(err?.message || "Failed to delete notice")
+    } finally {
+      setDeletingNoticeId(null)
+    }
+  }
+
+  // Publish Notice for Exam Handler
+  async function handlePublishExamNotice(exam: ExamRow) {
+    setPublishingNoticeExamId(exam.id)
+    try {
+      const isWeekly = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)
+      const res = await fetch(`/api/exams/${exam.id}/publish-notice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: isWeekly ? "weekly_aggregate" : "results",
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to publish notice")
+
+      if (data.notice) {
+        setNotices(prev => [data.notice, ...prev.filter(n => n.id !== data.notice.id)])
+        setExams(prev => prev.map(ex => ex.id === exam.id ? { ...ex, schedule_notice_id: data.notice.id, is_public_result: true } : ex))
+      }
+      toast.success("✓ " + (data.message || "নোটিশ বোর্ডে সফলভাবে প্রকাশিত হয়েছে!"))
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to publish notice")
+    } finally {
+      setPublishingNoticeExamId(null)
+    }
+  }
 
   async function handleTogglePause(exam: ExamRow) {
     const nextPaused = !exam.is_paused
@@ -849,7 +1050,7 @@ export default function ExamsClient({
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex p-1 bg-white border border-slate-300 rounded-xl overflow-x-auto">
+          <div className="flex p-1 bg-white border border-slate-300 rounded-xl overflow-x-auto shadow-2xs">
             {[
               { id: "all", label: "All" },
               { id: "one_time", label: "One-Time" },
@@ -870,6 +1071,28 @@ export default function ExamsClient({
               </button>
             ))}
           </div>
+
+          {/* Dedicated Result & Exam Notices Tab */}
+          <button
+            type="button"
+            onClick={() => setStatusFilter("notices")}
+            className={cn(
+              "flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all border whitespace-nowrap shadow-2xs cursor-pointer",
+              statusFilter === "notices"
+                ? "bg-amber-600 text-white border-amber-600 shadow-sm"
+                : "bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-300 hover:border-amber-400"
+            )}
+          >
+            <Bell className={cn("w-4 h-4", statusFilter === "notices" ? "text-white fill-white" : "text-amber-600 fill-amber-600")} />
+            <span>Result & Exam Notices (ফলাফল নোটিশ)</span>
+            <span className={cn(
+              "px-2 py-0.5 rounded-full text-xs font-black",
+              statusFilter === "notices" ? "bg-white text-amber-700" : "bg-amber-200 text-amber-950"
+            )}>
+              {resultNoticesCount}
+            </span>
+          </button>
+
           <select value={batchFilter} onChange={e => setBatchFilter(e.target.value)} className={inputClass + " w-48 font-semibold"}>
             <option value="all" className="bg-white text-slate-900">All Batches (সব ব্যাচ)</option>
             {availableBatches.map(b => <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>)}
@@ -884,255 +1107,695 @@ export default function ExamsClient({
         </button>
       </div>
 
-      {/* Exam Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredExams.map(exam => {
-          const isWeekly =
-            exam.exam_schedule_type === "weekly" ||
-            (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
-            Boolean(exam.title?.includes("সাপ্তাহিক")) ||
-            Boolean(exam.subject?.includes("সাপ্তাহিক")) ||
-            Boolean(exam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
-            (Number(exam.total_marks) === 350 && !exam.exam_date)
-
-          let recurringDaysList: any[] = []
-          if (Array.isArray(exam.recurring_days)) {
-            recurringDaysList = exam.recurring_days
-          } else if (typeof exam.recurring_days === "string") {
-            try {
-              recurringDaysList = JSON.parse(exam.recurring_days)
-            } catch {}
-          }
-          if (recurringDaysList.length === 0 && exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
-            try {
-              const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-              if (match && match[1]) {
-                recurringDaysList = JSON.parse(match[1])
-              }
-            } catch {}
-          }
-
-          const daysBengali = recurringDaysList.map((d: any) => {
-            if (typeof d === "object" && d !== null) {
-              return `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (${d.total_marks || ""} নম্বর)`
-            }
-            return WEEK_DAYS.find(w => w.id === d)?.short || d
-          }).join(", ")
-
-          return (
-            <div key={exam.id} className={cn(
-              "bg-white rounded-2xl border shadow-sm p-5 shadow-xl transition-all flex flex-col h-full",
-              exam.is_paused ? "border-rose-200 bg-rose-50/20" : "border-slate-200/90 hover:border-amber-500/40"
-            )}>
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-start gap-3">
-                  <div className={cn(
-                    "p-2.5 rounded-xl border mt-0.5", 
-                    exam.is_online 
-                      ? "bg-blue-50 text-blue-600 border-blue-200" 
-                      : isWeekly
-                        ? "bg-purple-50 text-purple-600 border-purple-200"
-                        : "bg-amber-50 text-amber-600 border-amber-200"
-                  )}>
-                    {exam.is_online ? <Globe className="w-5 h-5" /> : isWeekly ? <CalendarDays className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <p className="font-extrabold text-slate-900 text-base leading-snug">{exam.title}</p>
-                      {exam.is_paused && (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
-                          PAUSED (স্থগিত)
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-500 mt-0.5 font-medium">{exam.subject || "General Subject"}</p>
-                    
-                    {/* Configured Batches & Branch badges */}
-                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                      {exam.branch?.name && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                          <Landmark className="w-2.5 h-2.5" /> {exam.branch.name}
-                        </span>
-                      )}
-                      {Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? (
-                        exam.batch_ids.map(bId => {
-                          const bName = batches.find(b => b.id === bId)?.name || (exam.batch_id === bId ? exam.batch?.name : null)
-                          if (!bName) return null
-                          return (
-                            <span key={bId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
-                              <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {bName}
-                            </span>
-                          )
-                        })
-                      ) : exam.batch?.name ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
-                          <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {exam.batch.name}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                          All Batches
-                        </span>
-                      )}
-                    </div>
-                  </div>
+      {/* NOTICES MANAGEMENT VIEW (When "notices" tab is active) */}
+      {statusFilter === "notices" ? (
+        <div className="space-y-5">
+          {/* Header Bar */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-amber-500 text-white rounded-2xl flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/20">
+                  <Bell className="w-6 h-6 fill-white" />
                 </div>
-                <div className="flex flex-col gap-1.5 items-end shrink-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", exam.is_published ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
-                      {exam.is_published ? "Published" : "Draft"}
-                    </span>
-                    {/* EDIT EXAM BUTTON */}
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEdit(exam)}
-                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-indigo-200"
-                      title="Edit Exam (পরীক্ষা সম্পাদনা করুন)"
-                    >
-                      <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
-                    </button>
-                    {/* ONLY UPPER DELETE BUTTON */}
-                    <button
-                      type="button"
-                      onClick={() => setDeleteConfirmExam(exam)}
-                      disabled={deletingId === exam.id}
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
-                      title="Delete Exam"
-                    >
-                      {deletingId === exam.id ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
-                      ) : (
-                        <Trash2 className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
-                  <div className="flex items-center gap-1 flex-wrap justify-end">
-                    {isWeekly ? (
-                      <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1">
-                        <CalendarDays className="w-3 h-3" /> WEEKLY
-                      </span>
-                    ) : (
-                      <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-bold">
-                        ONE-TIME
-                      </span>
-                    )}
-                    {exam.is_online && <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-extrabold">ONLINE</span>}
-                    {exam.is_public_result && (
-                      <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md font-bold" title="Public in Online Results portal">
-                        PUBLIC RESULT
-                      </span>
-                    )}
-                  </div>
+                <div>
+                  <h3 className="text-lg font-extrabold text-slate-900">
+                    পরীক্ষার ফলাফল ও রুটিন নোটিশ ব্যবস্থাপনা (Live Notices)
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    ওয়েবসাইট ও স্টুডেন্ট পোর্টালে প্রকাশিত ফলাফল ও রুটিন নোটিশ দেখুন এবং অপ্রয়োজনীয় নোটিশ এখান থেকেই সরাসরি মুছে ফেলুন।
+                  </p>
                 </div>
               </div>
-              
-              <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex-grow">
-                <div className="flex flex-col">
-                  <span className="text-[11px] text-slate-500 font-medium">Total Marks</span>
-                  <span className="font-extrabold text-amber-700 text-sm">
-                    {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                      ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-                      : exam.total_marks}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    {isWeekly ? "Weekly Day(s)" : "Exam Date"}
-                  </span>
-                  <span className="font-semibold text-slate-800 text-sm truncate">
-                    {isWeekly 
-                      ? (daysBengali ? `প্রতি ${daysBengali}` : "সাপ্তাহিক নির্ধারিত দিন")
-                      : (exam.exam_date ? formatDate(exam.exam_date) : "TBD")}
-                  </span>
-                </div>
-                {exam.is_online && (
-                  <>
-                    <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Duration</span><span className="font-semibold text-slate-800 text-sm">{exam.time_limit_minutes} min</span></div>
-                    <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Questions</span><span className="font-semibold text-slate-800 text-sm">{exam.exam_questions?.[0]?.count || 0}</span></div>
-                  </>
-                )}
-                {isWeekly && (
-                  <div className="col-span-2 flex items-center justify-between pt-1 border-t border-slate-200 mt-1">
-                    <span className="text-[11px] text-slate-500 font-medium">Weekly Status:</span>
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePause(exam)}
-                      disabled={pausingId === exam.id}
-                      className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition-colors border cursor-pointer",
-                        exam.is_paused 
-                          ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 shadow-2xs" 
-                          : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
-                      )}
-                    >
-                      {pausingId === exam.id ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : exam.is_paused ? (
-                        <>
-                          <Play className="w-3 h-3 text-rose-600 fill-rose-600" />
-                          <span>Resume (সচল করুন)</span>
-                        </>
-                      ) : (
-                        <>
-                          <Pause className="w-3 h-3 text-amber-700 fill-amber-700" />
-                          <span>Pause (স্থগিত করুন)</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
 
-              <div className="pt-3 border-t border-slate-200 flex flex-col gap-2 mt-auto">
-                <div className="flex items-center gap-2 w-full">
-                  {exam.is_online ? (
-                    <>
-                      {!exam.is_published && (
-                        <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 font-bold transition-colors cursor-pointer">
-                          {publishing === exam.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />} Publish
-                        </button>
-                      )}
-                      <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold transition-colors border border-slate-300">
-                        <Eye className="w-3.5 h-3.5" /> Questions
-                      </Link>
-                    </>
-                  ) : (
-                    <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex-1 flex justify-center items-center gap-2 py-2 bg-amber-500/15 text-amber-900 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/25 transition-colors">
-                      <Trophy className="w-4 h-4 text-amber-600" /> Enter Results & Merit
-                    </Link>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 w-full">
+              {/* Type Filter Pills */}
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { id: "all", label: `সকল নোটিশ (${notices.filter(isExamOrResultNotice).length})` },
+                  { id: "results", label: `🏆 ফলাফল নোটিশ (${notices.filter(isResultNotice).length})` },
+                  { id: "routine", label: `📋 রুটিন নোটিশ (${notices.filter(isRoutineNotice).length})` },
+                ].map(({ id, label }) => (
                   <button
+                    key={id}
                     type="button"
-                    onClick={() => handleOpenEdit(exam)}
-                    className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    onClick={() => setNoticeTypeFilter(id as any)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-bold transition-all border cursor-pointer",
+                      noticeTypeFilter === id
+                        ? "bg-amber-500 text-white border-amber-500 shadow-2xs"
+                        : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                    )}
                   >
-                    <Edit2 className="w-3.5 h-3.5 text-indigo-600" /> Edit Exam
+                    {label}
                   </button>
-                  <Link
-                    href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-                    className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Result SMS
-                  </Link>
-                </div>
+                ))}
               </div>
             </div>
-          )
-        })}
-        {filteredExams.length === 0 && <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 shadow-xs">No exams match your filters.</div>}
-      </div>
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={noticeSearch}
+                onChange={e => setNoticeSearch(e.target.value)}
+                placeholder="নোটিশের শিরোনাম, বিষয়, বা ব্যাচের নাম দিয়ে সার্চ করুন..."
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-500/20 transition-all"
+              />
+              {noticeSearch && (
+                <button
+                  type="button"
+                  onClick={() => setNoticeSearch("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-md"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Notice Cards Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredNotices.map(notice => {
+              const isRes = isResultNotice(notice)
+              const isRout = isRoutineNotice(notice)
+
+              // Try finding matching exam
+              const linkedExam = exams.find(e => 
+                e.schedule_notice_id === notice.id ||
+                (e.title && (notice.title.toLowerCase().includes(e.title.toLowerCase()) || notice.content.toLowerCase().includes(e.title.toLowerCase())))
+              )
+
+              return (
+                <div
+                  key={notice.id}
+                  className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 hover:border-amber-500/40 transition-all flex flex-col justify-between h-full"
+                >
+                  <div>
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="flex items-start gap-2.5 min-w-0">
+                        <div className={cn(
+                          "p-2.5 rounded-xl border shrink-0 mt-0.5",
+                          isRes
+                            ? "bg-amber-50 text-amber-700 border-amber-200"
+                            : isRout
+                              ? "bg-purple-50 text-purple-700 border-purple-200"
+                              : "bg-blue-50 text-blue-700 border-blue-200"
+                        )}>
+                          {isRes ? <Trophy className="w-5 h-5 text-amber-600" /> : isRout ? <FileText className="w-5 h-5 text-purple-600" /> : <Bell className="w-5 h-5 text-blue-600" />}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-black text-slate-900 text-sm leading-snug break-words">
+                            {notice.title}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                            <span className="text-[10px] text-slate-500 font-medium flex items-center gap-1">
+                              <CalendarDays className="w-3 h-3 text-slate-400" />
+                              {formatDate(notice.notice_date || notice.created_at)}
+                            </span>
+                            {isRes && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                ফলাফল নোটিশ
+                              </span>
+                            )}
+                            {isRout && (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                                রুটিন নোটিশ
+                              </span>
+                            )}
+                            {notice.priority === "high" && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-50 text-rose-700 border border-rose-200">
+                                জরুরি
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Quick Delete Trash Button */}
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmNotice(notice)}
+                        disabled={deletingNoticeId === notice.id}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors shrink-0 border border-transparent hover:border-rose-200 cursor-pointer"
+                        title="Delete Notice (নোটিশ মুছুন)"
+                      >
+                        {deletingNoticeId === notice.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-rose-600" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Preview Content */}
+                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 text-xs text-slate-700 font-normal leading-relaxed whitespace-pre-line max-h-36 overflow-y-auto mb-4">
+                      {notice.content}
+                    </div>
+
+                    {linkedExam && (
+                      <div className="mb-3 px-2.5 py-1.5 bg-indigo-50/70 border border-indigo-200/80 rounded-lg flex items-center justify-between text-[11px] text-indigo-900 font-semibold">
+                        <span className="truncate">সংযুক্ত পরীক্ষা: {linkedExam.title}</span>
+                        <Link href={`/dashboard/owner/exams/${linkedExam.id}`} className="text-indigo-600 hover:text-indigo-800 underline font-bold shrink-0 ml-1">
+                          মেধা তালিকা
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-3 border-t border-slate-100 flex items-center gap-2 mt-auto">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedNoticeForView(notice)}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5 text-amber-600" />
+                      <span>সম্পূর্ণ পড়ুন</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmNotice(notice)}
+                      disabled={deletingNoticeId === notice.id}
+                      className="flex items-center justify-center gap-1.5 py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>নোটিশ মুছুন</span>
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {filteredNotices.length === 0 && (
+              <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 shadow-xs space-y-3">
+                <Bell className="w-8 h-8 text-slate-300 mx-auto" />
+                <p className="font-bold text-slate-700">কোনো ফলাফল বা রুটিন নোটিশ পাওয়া যায়নি।</p>
+                <p className="text-xs text-slate-400">পরীক্ষার ফলাফল প্রকাশের পর নোটিশ বোর্ডে প্রকাশ করলে তা এখানে প্রদর্শিত হবে।</p>
+                {(noticeSearch || noticeTypeFilter !== "all" || batchFilter !== "all") && (
+                  <button
+                    type="button"
+                    onClick={() => { setNoticeSearch(""); setNoticeTypeFilter("all"); setBatchFilter("all") }}
+                    className="px-4 py-2 bg-amber-500 text-white rounded-xl text-xs font-bold shadow-xs hover:bg-amber-600 transition-all cursor-pointer inline-block"
+                  >
+                    ফিল্টার রিসেট করুন
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Active Result Notices Notification Banner */}
+          {resultNoticesCount > 0 && (
+            <div className="bg-gradient-to-r from-amber-500/10 via-amber-50/80 to-orange-50/60 border border-amber-200 rounded-2xl p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                  <Bell className="w-5 h-5 fill-white" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-extrabold text-slate-900 text-sm sm:text-base">
+                      ফলাফল ও পরীক্ষার নোটিশ সক্রিয় রয়েছে ({resultNoticesCount}টি নোটিশ)
+                    </h4>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900">
+                      LIVE NOTICES
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    ওয়েবসাইট ও স্টুডেন্ট পোর্টালে ফলাফল ও রুটিন প্রদর্শিত হচ্ছে। এখান থেকেই নোটিশ দেখুন বা সরাসরি ডিলিট করুন।
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("notices")}
+                  className="px-3.5 py-2 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5 text-amber-600" />
+                  <span>সকল নোটিশ দেখুন ও মুছুন ({resultNoticesCount})</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Exam Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredExams.map(exam => {
+              const isWeekly =
+                exam.exam_schedule_type === "weekly" ||
+                (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+                Boolean(exam.title?.includes("সাপ্তাহিক")) ||
+                Boolean(exam.subject?.includes("সাপ্তাহিক")) ||
+                Boolean(exam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
+                (Number(exam.total_marks) === 350 && !exam.exam_date)
+
+              let recurringDaysList: any[] = []
+              if (Array.isArray(exam.recurring_days)) {
+                recurringDaysList = exam.recurring_days
+              } else if (typeof exam.recurring_days === "string") {
+                try {
+                  recurringDaysList = JSON.parse(exam.recurring_days)
+                } catch {}
+              }
+              if (recurringDaysList.length === 0 && exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+                try {
+                  const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+                  if (match && match[1]) {
+                    recurringDaysList = JSON.parse(match[1])
+                  }
+                } catch {}
+              }
+
+              const daysBengali = recurringDaysList.map((d: any) => {
+                if (typeof d === "object" && d !== null) {
+                  return `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (${d.total_marks || ""} নম্বর)`
+                }
+                return WEEK_DAYS.find(w => w.id === d)?.short || d
+              }).join(", ")
+
+              const linkedNoticeList = getLinkedNotices(exam, notices)
+
+              return (
+                <div key={exam.id} className={cn(
+                  "bg-white rounded-2xl border shadow-sm p-5 shadow-xl transition-all flex flex-col h-full",
+                  exam.is_paused ? "border-rose-200 bg-rose-50/20" : "border-slate-200/90 hover:border-amber-500/40"
+                )}>
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-start gap-3">
+                      <div className={cn(
+                        "p-2.5 rounded-xl border mt-0.5", 
+                        exam.is_online 
+                          ? "bg-blue-50 text-blue-600 border-blue-200" 
+                          : isWeekly
+                            ? "bg-purple-50 text-purple-600 border-purple-200"
+                            : "bg-amber-50 text-amber-600 border-amber-200"
+                      )}>
+                        {exam.is_online ? <Globe className="w-5 h-5" /> : isWeekly ? <CalendarDays className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className="font-extrabold text-slate-900 text-base leading-snug">{exam.title}</p>
+                          {exam.is_paused && (
+                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
+                              PAUSED (স্থগিত)
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5 font-medium">{exam.subject || "General Subject"}</p>
+                        
+                        {/* Configured Batches & Branch badges */}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          {exam.branch?.name && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                              <Landmark className="w-2.5 h-2.5" /> {exam.branch.name}
+                            </span>
+                          )}
+                          {Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? (
+                            exam.batch_ids.map(bId => {
+                              const bName = batches.find(b => b.id === bId)?.name || (exam.batch_id === bId ? exam.batch?.name : null)
+                              if (!bName) return null
+                              return (
+                                <span key={bId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                                  <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {bName}
+                                </span>
+                              )
+                            })
+                          ) : exam.batch?.name ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                              <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {exam.batch.name}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                              All Batches
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5 items-end shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", isExamPublished(exam) ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
+                          {isExamPublished(exam) ? "Published" : "Draft"}
+                        </span>
+                        {/* EDIT EXAM BUTTON */}
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(exam)}
+                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-indigo-200"
+                          title="Edit Exam (পরীক্ষা সম্পাদনা করুন)"
+                        >
+                          <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+                        </button>
+                        {/* ONLY UPPER DELETE BUTTON */}
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmExam(exam)}
+                          disabled={deletingId === exam.id}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                          title="Delete Exam"
+                        >
+                          {deletingId === exam.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-1 flex-wrap justify-end">
+                        {isWeekly ? (
+                          <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1">
+                            <CalendarDays className="w-3 h-3" /> WEEKLY
+                          </span>
+                        ) : (
+                          <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-bold">
+                            ONE-TIME
+                          </span>
+                        )}
+                        {exam.is_online && <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-extrabold">ONLINE</span>}
+                        {exam.is_public_result && (
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md font-bold" title="Public in Online Results portal">
+                            PUBLIC RESULT
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex-grow">
+                    <div className="flex flex-col">
+                      <span className="text-[11px] text-slate-500 font-medium">Total Marks</span>
+                      <span className="font-extrabold text-amber-700 text-sm">
+                        {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+                          ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+                          : exam.total_marks}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[11px] text-slate-500 font-medium">
+                        {isWeekly ? "Weekly Day(s)" : "Exam Date"}
+                      </span>
+                      <span className="font-semibold text-slate-800 text-sm truncate">
+                        {isWeekly 
+                          ? (daysBengali ? `প্রতি ${daysBengali}` : "সাপ্তাহিক নির্ধারিত দিন")
+                          : (exam.exam_date ? formatDate(exam.exam_date) : "TBD")}
+                      </span>
+                    </div>
+                    {exam.is_online && (
+                      <>
+                        <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Duration</span><span className="font-semibold text-slate-800 text-sm">{exam.time_limit_minutes} min</span></div>
+                        <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Questions</span><span className="font-semibold text-slate-800 text-sm">{exam.exam_questions?.[0]?.count || 0}</span></div>
+                      </>
+                    )}
+                    {isWeekly && (
+                      <div className="col-span-2 flex items-center justify-between pt-1 border-t border-slate-200 mt-1">
+                        <span className="text-[11px] text-slate-500 font-medium">Weekly Status:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePause(exam)}
+                          disabled={pausingId === exam.id}
+                          className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition-colors border cursor-pointer",
+                            exam.is_paused 
+                              ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 shadow-2xs" 
+                              : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
+                          )}
+                        >
+                          {pausingId === exam.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : exam.is_paused ? (
+                            <>
+                              <Play className="w-3 h-3 text-rose-600 fill-rose-600" />
+                              <span>Resume (সচল করুন)</span>
+                            </>
+                          ) : (
+                            <>
+                              <Pause className="w-3 h-3 text-amber-700 fill-amber-700" />
+                              <span>Pause (স্থগিত করুন)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Linked Notice Section on Exam Card */}
+                  {linkedNoticeList.length > 0 ? (
+                    <div className="mb-3 p-2.5 bg-amber-50/90 border border-amber-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 border border-amber-300">
+                          <Bell className="w-3.5 h-3.5 fill-amber-600 text-amber-600" />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-amber-950 truncate" title={linkedNoticeList[0].title}>
+                            {linkedNoticeList[0].title}
+                          </p>
+                          <p className="text-[10px] text-amber-700 font-semibold">
+                            {linkedNoticeList.length > 1 ? `${linkedNoticeList.length}টি নোটিশ সক্রিয় • ` : ""}নোটিশ বোর্ডে প্রকাশিত
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedNoticeForView(linkedNoticeList[0])}
+                          className="p-1.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                          title="View Notice (নোটিশ দেখুন)"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirmNotice(linkedNoticeList[0])}
+                          disabled={deletingNoticeId === linkedNoticeList[0].id}
+                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                          title="Delete Notice (নোটিশ ডিলিট করুন)"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : isExamPublished(exam) ? (
+                    <div className="mb-3">
+                      <button
+                        type="button"
+                        onClick={() => handlePublishExamNotice(exam)}
+                        disabled={publishingNoticeExamId === exam.id}
+                        className="w-full py-1.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 border-dashed rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                        title="ফলাফল নোটিশ বোর্ডে পোস্ট করুন"
+                      >
+                        {publishingNoticeExamId === exam.id ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                            <span>নোটিশ তৈরি হচ্ছে...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Bell className="w-3.5 h-3.5 text-amber-600" />
+                            <span>নোটিশ বোর্ডে প্রকাশ করুন (Publish Notice)</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ) : null}
+
+                  <div className="pt-3 border-t border-slate-200 flex flex-col gap-2 mt-auto">
+                    <div className="flex items-center gap-2 w-full">
+                      {exam.is_online ? (
+                        <>
+                          {!exam.is_published && (
+                            <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 font-bold transition-colors cursor-pointer">
+                              {publishing === exam.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />} Publish
+                            </button>
+                          )}
+                          <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold transition-colors border border-slate-300">
+                            <Eye className="w-3.5 h-3.5" /> Questions
+                          </Link>
+                        </>
+                      ) : (
+                        <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex-1 flex justify-center items-center gap-2 py-2 bg-amber-500/15 text-amber-900 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/25 transition-colors">
+                          <Trophy className="w-4 h-4 text-amber-600" /> Enter Results & Merit
+                        </Link>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 w-full">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(exam)}
+                        className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 text-indigo-600" /> Edit Exam
+                      </button>
+                      <Link
+                        href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
+                        className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Result SMS
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+            {filteredExams.length === 0 && <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 shadow-xs">No exams match your filters.</div>}
+          </div>
+        </>
+      )}
 
       {/* Analytics Section */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xs">
-        <h3 className="text-lg font-extrabold text-slate-900 mb-1">Exam Analytics</h3>
-        <p className="text-xs text-slate-500 font-medium">Performance summary and publication status</p>
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><p className="text-xs text-slate-500 font-medium">Total Exams</p><p className="text-2xl font-extrabold text-slate-900 mt-1">{exams.length}</p></div>
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><p className="text-xs text-slate-500 font-medium">Published</p><p className="text-2xl font-extrabold text-emerald-600 mt-1">{exams.filter(e=>e.is_published).length}</p></div>
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200"><p className="text-xs text-slate-500 font-medium">Online Exams</p><p className="text-2xl font-extrabold text-blue-600 mt-1">{exams.filter(e=>e.is_online).length}</p></div>
+        <h3 className="text-lg font-extrabold text-slate-900 mb-1">Exam Analytics & Notifications</h3>
+        <p className="text-xs text-slate-500 font-medium">Performance summary, publication status, and active notices</p>
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <p className="text-xs text-slate-500 font-medium">Total Exams</p>
+            <p className="text-2xl font-extrabold text-slate-900 mt-1">{exams.length}</p>
+          </div>
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <p className="text-xs text-slate-500 font-medium">Published Results</p>
+            <p className="text-2xl font-extrabold text-emerald-600 mt-1">{exams.filter(isExamPublished).length}</p>
+          </div>
+          <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+            <p className="text-xs text-slate-500 font-medium">Online Exams</p>
+            <p className="text-2xl font-extrabold text-blue-600 mt-1">{exams.filter(e => e.is_online).length}</p>
+          </div>
+          <div
+            onClick={() => setStatusFilter("notices")}
+            className="bg-amber-50 hover:bg-amber-100 p-4 rounded-xl border border-amber-200 cursor-pointer transition-all shadow-2xs"
+            title="Click to view all notices"
+          >
+            <p className="text-xs text-amber-800 font-bold flex items-center gap-1">
+              <Bell className="w-3.5 h-3.5 text-amber-600 fill-amber-600" /> Result & Routine Notices
+            </p>
+            <p className="text-2xl font-extrabold text-amber-900 mt-1">{resultNoticesCount}</p>
+          </div>
         </div>
       </div>
+
+      {/* Delete Notice Confirmation Modal */}
+      {deleteConfirmNotice && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">Delete Notice (নোটিশ ডিলিট করবেন?)</h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  Are you sure you want to delete <strong className="text-slate-800 font-bold">&quot;{deleteConfirmNotice.title}&quot;</strong>?
+                </p>
+                <div className="mt-2 p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-[11px] text-rose-800 font-medium">
+                  ⚠️ এই নোটিশটি মুছে ফেললে তা স্টুডেন্ট পোর্টাল, পাবলিক নোটিশ বোর্ড এবং ওয়েবসাইটের স্লাইডার থেকে সম্পূর্ণ মুছে যাবে।
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmNotice(null)}
+                disabled={deletingNoticeId === deleteConfirmNotice.id}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                বাতিল (Cancel)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleDeleteNotice(deleteConfirmNotice.id)}
+                disabled={deletingNoticeId === deleteConfirmNotice.id}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-md shadow-rose-600/20 disabled:opacity-50 cursor-pointer"
+              >
+                {deletingNoticeId === deleteConfirmNotice.id ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> মোছা হচ্ছে...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" /> নোটিশ মুছে ফেলুন
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Notice Full Details Modal */}
+      {selectedNoticeForView && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-3xl w-full max-w-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between p-5 border-b border-slate-200 bg-slate-50 shrink-0">
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  "p-2.5 rounded-xl border mt-0.5",
+                  isResultNotice(selectedNoticeForView)
+                    ? "bg-amber-100 text-amber-800 border-amber-200"
+                    : "bg-purple-100 text-purple-800 border-purple-200"
+                )}>
+                  {isResultNotice(selectedNoticeForView) ? <Trophy className="w-5 h-5 text-amber-700" /> : <FileText className="w-5 h-5 text-purple-700" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900 leading-snug">
+                    {selectedNoticeForView.title}
+                  </h3>
+                  <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                    <span className="text-xs text-slate-500 font-semibold flex items-center gap-1">
+                      <CalendarDays className="w-3.5 h-3.5 text-slate-400" />
+                      {formatDate(selectedNoticeForView.notice_date || selectedNoticeForView.created_at)}
+                    </span>
+                    {selectedNoticeForView.priority === "high" && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
+                        জরুরি নোটিশ
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedNoticeForView(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 text-sm text-slate-800 font-normal leading-relaxed whitespace-pre-line select-text">
+                {selectedNoticeForView.content}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  const toDel = selectedNoticeForView
+                  setSelectedNoticeForView(null)
+                  setDeleteConfirmNotice(toDel)
+                }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>এই নোটিশটি মুছুন (Delete Notice)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedNoticeForView(null)}
+                className="px-5 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              >
+                বন্ধ করুন (Close)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Exam Confirmation Modal */}
       {deleteConfirmExam && (
