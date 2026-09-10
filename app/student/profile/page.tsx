@@ -14,6 +14,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { getExamMarksConfig } from "@/app/student/batch/[id]/page"
 import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
+import AdmissionSlipTrigger from "@/components/id-card/AdmissionSlipTrigger"
 
 export default function StudentProfilePage() {
   const [loading, setLoading] = useState(true)
@@ -518,7 +519,7 @@ export default function StudentProfilePage() {
               </div>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 shrink-0 flex-wrap">
             <StudentIdCardTrigger
               student={{
                 ...studentData,
@@ -534,6 +535,22 @@ export default function StudentProfilePage() {
               batchName={enrollments[0]?.batch?.name}
               buttonVariant="banner"
               buttonText="🪪 ডিজিটাল আইডি কার্ড"
+            />
+            <AdmissionSlipTrigger
+              student={{
+                ...studentData,
+                id: studentData?.id || profile?.id,
+                student_id: profile?.user_id || studentData?.student_id,
+                name: profile?.name || studentData?.name,
+                phone: profile?.phone || studentData?.phone,
+                guardian_name: studentData?.guardian_name,
+                guardian_phone: studentData?.guardian_phone,
+              }}
+              batch={enrollments[0]?.batch}
+              enrollment={enrollments[0]}
+              due={dues[0]}
+              buttonVariant="banner"
+              buttonText="🧾 ভর্তি ও মানি রসিদ"
             />
             <div className="hidden sm:block bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/15 text-center">
               <p className="text-xs text-indigo-300">MedhaShiree ID</p>
@@ -801,8 +818,8 @@ export default function StudentProfilePage() {
                           )
                         })()}
 
-                        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100">
-                          <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                        <div className="flex items-center justify-between text-xs pt-1 border-t border-gray-100 flex-wrap gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                             <StudentIdCardTrigger
                               student={{
                                 ...studentData,
@@ -819,6 +836,22 @@ export default function StudentProfilePage() {
                               rollNo={enr.roll_no ?? studentData?.roll_no ?? studentData?.batch_roll}
                               buttonVariant="badge"
                               buttonText="🪪 আইডি কার্ড"
+                            />
+                            <AdmissionSlipTrigger
+                              student={{
+                                ...studentData,
+                                id: studentData?.id || profile?.id,
+                                student_id: profile?.user_id || studentData?.student_id,
+                                name: profile?.name || studentData?.name,
+                                phone: profile?.phone || studentData?.phone,
+                                guardian_name: studentData?.guardian_name,
+                                guardian_phone: studentData?.guardian_phone,
+                              }}
+                              batch={b}
+                              enrollment={enr}
+                              due={dues.find((d: any) => d.batch_id === enr.batch_id)}
+                              buttonVariant="badge"
+                              buttonText="🧾 মানি রসিদ"
                             />
                           </div>
                           <span className="text-indigo-600 font-semibold group-hover:translate-x-0.5 transition-transform flex items-center">

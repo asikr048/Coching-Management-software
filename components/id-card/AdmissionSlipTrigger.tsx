@@ -20,8 +20,8 @@ interface Props {
   enrollment?: any
   payment?: any
   due?: any
-  variant?: "primary" | "badge" | "outline" | "icon" | "button"
-  buttonVariant?: "primary" | "badge" | "outline" | "icon" | "button"
+  variant?: "primary" | "badge" | "outline" | "icon" | "button" | "banner"
+  buttonVariant?: "primary" | "badge" | "outline" | "icon" | "button" | "banner"
   className?: string
   label?: string
   buttonText?: string
@@ -119,6 +119,15 @@ export default function AdmissionSlipTrigger({
           className={`inline-flex items-center gap-1 px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer ${className}`}
         >
           <FileText className="w-3.5 h-3.5 text-amber-600" />
+          <span>{activeText}</span>
+        </button>
+      ) : activeVariant === "banner" ? (
+        <button
+          type="button"
+          onClick={() => setIsOpen(true)}
+          className={`inline-flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white border border-white/30 backdrop-blur-md rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer ${className}`}
+        >
+          <FileText className="w-3.5 h-3.5 text-amber-300" />
           <span>{activeText}</span>
         </button>
       ) : activeVariant === "outline" ? (

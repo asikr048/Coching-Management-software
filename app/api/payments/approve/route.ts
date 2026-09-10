@@ -150,93 +150,97 @@ export async function POST(req: NextRequest) {
         sub.notes?.toLowerCase().includes("enrollment in") ||
         !sub.fee_due_id
 
-      // 1. Always ensure active enrollment for batch
-      const { data: existingEnr } = await admin
-        .from("enrollments")
-        .select("id, status")
-        .eq("student_id", sub.student_id)
-        .eq("batch_id", sub.batch_id)
-        .maybeSingle()
+      // 1. Always ensure active enrollment and sequential batch roll (1, 2, 3...)
+      let nextRoll = 1
+      try {
+        // Find existing roll if student already has one assigned
+        const { data: stRoll } = await admin
+          .from("students")
+          .select("roll_no, batch_roll")
+          .eq("id", sub.student_id)
+          .maybeSingle()
 
-      if (existingEnr) {
-        if (existingEnr.status !== "active") {
-          await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
-        }
-        // Calculate sequential batch roll starting from 1, 2, 3...
-        let nextRoll = 1
-        try {
-          const { data: maxEnr } = await admin
+        if (stRoll?.roll_no || stRoll?.batch_roll) {
+          nextRoll = Number(stRoll.roll_no || stRoll.batch_roll)
+        } else {
+          // Calculate max roll for this batch
+          const { data: enrs } = await admin
             .from("enrollments")
-            .select("roll_no")
+            .select("*")
             .eq("batch_id", sub.batch_id)
-            .order("roll_no", { ascending: false })
-            .limit(1)
-          if (maxEnr && maxEnr.length > 0 && maxEnr[0].roll_no != null && Number(maxEnr[0].roll_no) > 0) {
-            nextRoll = Number(maxEnr[0].roll_no) + 1
-          } else {
-            const { count } = await admin
-              .from("enrollments")
-              .select("id", { count: "exact", head: true })
-              .eq("batch_id", sub.batch_id)
-            nextRoll = (count || 0) + 1
+
+          let maxRoll = 0
+          if (enrs && enrs.length > 0) {
+            enrs.forEach((e: any) => {
+              const r = Number(e.roll_no || e.batch_roll)
+              if (!isNaN(r) && r > maxRoll) maxRoll = r
+            })
+            if (maxRoll === 0) maxRoll = enrs.length
           }
-        } catch {}
+          nextRoll = maxRoll > 0 ? maxRoll + 1 : 1
+        }
+      } catch {
+        nextRoll = 1
+      }
 
-        const enrPayload: Record<string, any> = {
-          student_id: sub.student_id,
-          batch_id: sub.batch_id,
-          status: "active",
+      const enrPayload: Record<string, any> = {
+        student_id: sub.student_id,
+        batch_id: sub.batch_id,
+        status: "active",
+        roll_no: nextRoll,
+      }
+      if (sub.branch_id) {
+        enrPayload.branch_id = sub.branch_id
+      }
+
+      let { error: enrErr } = await admin.from("enrollments").upsert(
+        enrPayload,
+        { onConflict: "student_id,batch_id" }
+      )
+
+      // Sync roll number and active status to students table
+      await admin
+        .from("students")
+        .update({
           roll_no: nextRoll,
-        }
-        if (sub.branch_id) {
-          enrPayload.branch_id = sub.branch_id
-        }
+          batch_roll: nextRoll,
+          is_active: true,
+          ...(sub.branch_id ? { branch_id: sub.branch_id } : {})
+        })
+        .eq("id", sub.student_id)
 
-        let { error: enrErr } = await admin.from("enrollments").upsert(
+      // If schema cache lacks roll_no or branch_id column on enrollments, retry gracefully
+      if (enrErr && (
+        enrErr.message?.includes("roll_no") ||
+        enrErr.message?.includes("branch_id") || 
+        enrErr.message?.includes("schema cache") || 
+        (enrErr as any).code === "PGRST204"
+      )) {
+        if (enrErr.message?.includes("roll_no")) delete enrPayload.roll_no
+        if (enrErr.message?.includes("branch_id")) delete enrPayload.branch_id
+        const retryRes = await admin.from("enrollments").upsert(
           enrPayload,
           { onConflict: "student_id,batch_id" }
         )
+        enrErr = retryRes.error
+      }
 
-        // Sync roll number to students table
-        await admin
-          .from("students")
-          .update({ roll_no: nextRoll, batch_roll: nextRoll })
-          .eq("id", sub.student_id)
-
-        // If schema cache lacks branch_id column on enrollments, retry gracefully without branch_id
-        if (enrErr && (
-          enrErr.message?.includes("branch_id") || 
-          enrErr.message?.includes("schema cache") || 
-          (enrErr as any).code === "PGRST204"
+      if (enrErr && !enrErr.message?.includes("duplicate")) {
+        console.warn("Enrollment upsert note, trying fallback:", enrErr.message)
+        const fallbackRes = await admin.from("enrollments").insert(enrPayload)
+        if (fallbackRes.error && (
+          fallbackRes.error.message?.includes("roll_no") ||
+          fallbackRes.error.message?.includes("branch_id") || 
+          fallbackRes.error.message?.includes("schema cache") || 
+          (fallbackRes.error as any).code === "PGRST204"
         )) {
+          delete enrPayload.roll_no
           delete enrPayload.branch_id
-          const retryRes = await admin.from("enrollments").upsert(
-            enrPayload,
-            { onConflict: "student_id,batch_id" }
-          )
-          enrErr = retryRes.error
-        }
-
-        if (enrErr && !enrErr.message?.includes("duplicate")) {
-          console.warn("Enrollment upsert note, trying fallback:", enrErr.message)
-          const fallbackRes = await admin.from("enrollments").insert(enrPayload)
-          if (fallbackRes.error && (
-            fallbackRes.error.message?.includes("branch_id") || 
-            fallbackRes.error.message?.includes("schema cache") || 
-            (fallbackRes.error as any).code === "PGRST204"
-          )) {
-            delete enrPayload.branch_id
-            await admin.from("enrollments").insert(enrPayload)
-          }
-        }
-
-        // Also ensure student is linked to branch if not already linked
-        if (sub.branch_id && sub.student_id) {
-          await admin
-            .from("students")
-            .update({ branch_id: sub.branch_id })
-            .eq("id", sub.student_id)
-            .is("branch_id", null)
+          await admin.from("enrollments").insert({
+            student_id: sub.student_id,
+            batch_id: sub.batch_id,
+            status: "active"
+          })
         }
       }
 
@@ -255,7 +259,7 @@ export async function POST(req: NextRequest) {
           batchMonthlyFee = Number(bData.monthly_fee) || 0
           batchAdmissionFee = Number(bData.admission_fee) || 0
           batchTotalFee = batchMonthlyFee + batchAdmissionFee
-          if (isEnrollment && (!existingEnr || existingEnr.status !== "active")) {
+          if (isEnrollment) {
             await admin.from("batches").update({ current_seats: (bData.current_seats || 0) + 1 }).eq("id", sub.batch_id)
 
             // Fill selected branch seat if multi-branch child batch exists

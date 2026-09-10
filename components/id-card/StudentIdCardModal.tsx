@@ -132,6 +132,10 @@ export default function StudentIdCardModal({ isOpen, onClose, cardData, student,
                   <span className="text-slate-500 font-semibold text-[11px]">ব্যাচ (Batch):</span>
                   <span className="font-black text-indigo-900 text-right truncate max-w-[150px]">{activeCardData.batch_name}</span>
                 </div>
+                <div className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-200">
+                  <span className="text-slate-500 font-semibold text-[11px]">ব্যাচ রোল (Batch Roll):</span>
+                  <span className="font-mono font-black text-rose-600 text-xs">#{rollStr}</span>
+                </div>
                 {activeCardData.subject && (
                   <div className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-200">
                     <span className="text-slate-500 font-semibold text-[11px]">বিষয় (Subject):</span>

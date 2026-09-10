@@ -312,6 +312,10 @@ export function getStudentIdCardHtml(card: StudentIdCardData): string {
             <span class="id-lbl">ব্যাচ (Batch):</span>
             <span class="id-val" style="color: #4338ca; font-weight: 800;">${card.batch_name}</span>
           </div>
+          <div class="id-row">
+            <span class="id-lbl">ব্যাচ রোল (Batch Roll):</span>
+            <span class="id-val" style="color: #dc2626; font-weight: 900; font-family: monospace;">#${rollStr}</span>
+          </div>
           ${card.subject ? `
           <div class="id-row">
             <span class="id-lbl">বিষয় (Subject):</span>
@@ -614,6 +618,7 @@ export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardD
             <div class="student-id-badge">ID: ${idCardData.student_id}</div>
             <div class="id-details">
               <div class="id-row"><span class="id-lbl">ব্যাচ:</span><span class="id-val" style="color: #4338ca; font-weight: 800;">${idCardData.batch_name}</span></div>
+              <div class="id-row"><span class="id-lbl">ব্যাচ রোল:</span><span class="id-val" style="color: #dc2626; font-weight: 900; font-family: monospace;">#${rollStr}</span></div>
               ${idCardData.subject ? `<div class="id-row"><span class="id-lbl">বিষয়:</span><span class="id-val">${idCardData.subject}</span></div>` : ''}
               ${idCardData.student_phone ? `<div class="id-row"><span class="id-lbl">ফোন:</span><span class="id-val">${idCardData.student_phone}</span></div>` : ''}
               ${idCardData.guardian_phone ? `<div class="id-row"><span class="id-lbl">অভিভাবক:</span><span class="id-val">${idCardData.guardian_phone}</span></div>` : ''}
