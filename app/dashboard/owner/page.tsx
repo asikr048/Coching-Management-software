@@ -30,14 +30,14 @@ export default async function OwnerDashboard() {
   return (
     <div className="space-y-6">
       {/* Top Banner Greeting */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#1e1b4b] via-indigo-950 to-slate-900 p-6 rounded-3xl border border-indigo-900/60 shadow-lg relative overflow-hidden text-white">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-[#1e1b4b] via-indigo-950 to-slate-900 p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-indigo-900/60 shadow-lg relative overflow-hidden text-white">
         <div className="relative z-10">
           <div className="flex items-center gap-2 mb-1">
             <span className="inline-flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
               <Sparkles className="w-3 h-3 text-amber-400" /> Executive Overview
             </span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+          <h2 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">
             Owner Dashboard (সার্বিক ড্যাশবোর্ড)
           </h2>
           <p className="text-slate-300 text-xs sm:text-sm mt-1">
@@ -48,7 +48,7 @@ export default async function OwnerDashboard() {
         <div className="flex items-center gap-3 relative z-10 flex-shrink-0">
           <Link
             href="/dashboard/owner/students/new"
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-extrabold rounded-xl text-sm transition-all shadow-md shadow-amber-500/25 hover:scale-[1.02]"
+            className="w-full sm:w-auto justify-center flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-extrabold rounded-xl text-sm transition-all shadow-md shadow-amber-500/25 hover:scale-[1.02]"
           >
             <Plus className="w-4 h-4" />
             <span>New Student (নতুন ভর্তি)</span>
@@ -57,7 +57,7 @@ export default async function OwnerDashboard() {
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-4">
         <StatsCard title="Total Students" value={totalStudents} subtitle={`${activeStudents} active`} icon={Users} color="indigo" href="/dashboard/owner/students" />
         <StatsCard title="Active Batches" value={activeBatches.length} subtitle="Running classes" icon={BookOpen} color="blue" href="/dashboard/owner/batches" />
         <StatsCard title="Monthly Revenue" value={formatCurrency(monthlyRevenue)} subtitle="This month" icon={CreditCard} color="emerald" href="/dashboard/owner/analytics" />
@@ -73,13 +73,13 @@ export default async function OwnerDashboard() {
       </div>
 
       {/* Batch Occupancy Monitor */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="font-bold text-slate-900 text-base">Batch Occupancy (ব্যাচ আসন সংখ্যা)</h3>
-            <p className="text-xs text-slate-500">Current enrollment capacity per active batch</p>
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-6 shadow-sm">
+        <div className="flex items-center justify-between mb-4 gap-2">
+          <div className="min-w-0">
+            <h3 className="font-bold text-slate-900 text-sm sm:text-base truncate">Batch Occupancy (ব্যাচ আসন সংখ্যা)</h3>
+            <p className="text-xs text-slate-500 truncate">Current enrollment capacity per active batch</p>
           </div>
-          <Link href="/dashboard/owner/batches" className="text-xs font-bold text-amber-700 hover:text-amber-800">
+          <Link href="/dashboard/owner/batches" className="text-xs font-bold text-amber-700 hover:text-amber-800 shrink-0">
             View All Batches →
           </Link>
         </div>
@@ -88,10 +88,10 @@ export default async function OwnerDashboard() {
           {activeBatches.slice(0, 6).map(batch => {
             const pct = Math.round((batch.current_seats / Math.max(batch.max_seats, 1)) * 100)
             return (
-              <div key={batch.id} className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80">
-                <div className="flex justify-between text-xs sm:text-sm mb-1.5">
-                  <span className="font-bold text-slate-900">{batch.name}</span>
-                  <span className="text-amber-800 font-mono font-bold">
+              <div key={batch.id} className="bg-slate-50 p-3 sm:p-3.5 rounded-xl border border-slate-200/80">
+                <div className="flex justify-between text-xs sm:text-sm mb-1.5 gap-2">
+                  <span className="font-bold text-slate-900 truncate">{batch.name}</span>
+                  <span className="text-amber-800 font-mono font-bold shrink-0">
                     {batch.current_seats} / {batch.max_seats} ({pct}%)
                   </span>
                 </div>
@@ -121,9 +121,9 @@ export default async function OwnerDashboard() {
       <FeeDueAlert />
 
       {/* Quick Actions Grid */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-6 shadow-sm">
-        <h3 className="font-bold text-slate-900 text-base mb-4">Quick Operations (দ্রুত অপশন)</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3.5">
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-6 shadow-sm">
+        <h3 className="font-bold text-slate-900 text-sm sm:text-base mb-4">Quick Operations (দ্রুত অপশন)</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
           {[
             { href: "/dashboard/owner/students/new", label: "Add Student", icon: "👨‍🎓", bg: "from-indigo-600 to-indigo-800", hover: "hover:border-indigo-400" },
             { href: "/dashboard/owner/branches", label: "Branches", icon: "🏛️", bg: "from-amber-600 to-amber-800", hover: "hover:border-amber-400" },
@@ -137,10 +137,10 @@ export default async function OwnerDashboard() {
             <Link
               key={action.href}
               href={action.href}
-              className={`p-4 text-center rounded-2xl bg-gradient-to-br ${action.bg} text-white font-bold text-xs sm:text-sm shadow-md transition-all hover:scale-[1.02] flex flex-col items-center justify-center gap-2 border border-white/10`}
+              className={`p-3 sm:p-4 text-center rounded-2xl bg-gradient-to-br ${action.bg} text-white font-bold text-xs sm:text-sm shadow-md transition-all hover:scale-[1.02] flex flex-col items-center justify-center gap-1.5 sm:gap-2 border border-white/10`}
             >
-              <span className="text-2xl drop-shadow-sm">{action.icon}</span>
-              <span className="truncate">{action.label}</span>
+              <span className="text-xl sm:text-2xl drop-shadow-sm">{action.icon}</span>
+              <span className="truncate w-full">{action.label}</span>
             </Link>
           ))}
         </div>

@@ -620,7 +620,10 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 1. TOP UTILITY BAR (Exact Match to Asian School / Institutional Reference) */}
       {/* ========================================================================= */}
-      <div className="bg-[#1e293b] text-white text-xs py-2 px-4 sm:px-8 border-b border-gray-700/50">
+      {/* ========================================================================= */}
+      {/* 1. TOP UTILITY BAR (Exact Match to Asian School / Institutional Reference) */}
+      {/* ========================================================================= */}
+      <div className="bg-[#1e293b] text-white text-xs py-2 px-3 sm:px-8 border-b border-gray-700/50">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2">
           {/* Contact Details Left */}
           <div className="flex items-center flex-wrap gap-4 sm:gap-6 text-gray-200">
@@ -681,11 +684,11 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 2. INSTITUTIONAL BRANDING HEADER & INTERACTIVE BRANCH SELECTOR */}
       {/* ========================================================================= */}
-      <header className="bg-white border-b border-gray-200 py-3.5 sm:py-5 px-4 sm:px-8 shadow-xs sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+      <header className="bg-white border-b border-gray-200 py-3 sm:py-5 px-3 sm:px-8 shadow-xs sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           {/* Logo & Typography */}
-          <Link href="/" className="flex items-center gap-3 sm:gap-4 group min-w-0">
-            <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 border-indigo-700 p-0.5 shadow-md flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden">
+          <Link href="/" className="flex items-center gap-2 sm:gap-4 group min-w-0">
+            <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-full border-2 border-indigo-700 p-0.5 shadow-md flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden">
               <img
                 src="/logo.jpg"
                 alt="MedhaShiree Logo"
@@ -694,34 +697,34 @@ export default function HomePage() {
             </div>
 
             <div className="min-w-0">
-              <h1 className="text-xl sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight leading-tight group-hover:text-indigo-700 transition-colors">
+              <h1 className="text-lg sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight leading-tight group-hover:text-indigo-700 transition-colors truncate">
                 MedhaShiree
               </h1>
-              <p className="text-xs sm:text-sm font-semibold text-gray-600 mt-0.5 truncate">
+              <p className="text-[11px] sm:text-sm font-semibold text-gray-600 mt-0.5 truncate">
                 {currentBranch ? currentBranch.name : "প্রধান ক্যাম্পাস ও সকল শাখা"} , {displayAddress}
               </p>
             </div>
           </Link>
 
           {/* Interactive Branch Dropdown & Quick Login */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             {branches.length > 0 && (
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setBranchDropdownOpen(!branchDropdownOpen)}
-                  className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-indigo-50 to-amber-50/50 hover:from-indigo-100 hover:to-amber-100/70 border border-indigo-200 rounded-xl text-xs sm:text-sm font-bold text-indigo-950 transition-all shadow-xs"
+                  className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-gradient-to-r from-indigo-50 to-amber-50/50 hover:from-indigo-100 hover:to-amber-100/70 border border-indigo-200 rounded-xl text-xs sm:text-sm font-bold text-indigo-950 transition-all shadow-xs"
                 >
                   <Landmark className="w-4 h-4 text-indigo-700 flex-shrink-0" />
-                  <span className="truncate max-w-[110px] sm:max-w-[170px]">
-                    {selectedBranchId === "all" ? "সকল শাখা (All Branches)" : (currentBranch?.name || "শাখা নির্বাচন")}
+                  <span className="truncate max-w-[75px] xs:max-w-[110px] sm:max-w-[170px]">
+                    {selectedBranchId === "all" ? "সকল শাখা" : (currentBranch?.name || "শাখা")}
                   </span>
                   <ChevronDown className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
                 </button>
 
                 {branchDropdownOpen && (
                   <div
-                    className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden py-1"
+                    className="absolute right-0 top-full mt-1.5 w-64 max-w-[90vw] bg-white border border-gray-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden py-1"
                     onMouseLeave={() => setBranchDropdownOpen(false)}
                   >
                     <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
@@ -782,7 +785,7 @@ export default function HomePage() {
             {/* Online Result Quick Link */}
             <Link
               href="/online-result"
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 rounded-xl text-xs sm:text-sm font-extrabold shadow-xs transition-all flex-shrink-0 cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 rounded-xl text-xs sm:text-sm font-extrabold shadow-xs transition-all flex-shrink-0 cursor-pointer"
             >
               <Trophy className="w-4 h-4 text-amber-500" />
               <span className="hidden sm:inline">অনলাইন রেজাল্ট</span>
@@ -792,7 +795,7 @@ export default function HomePage() {
             {/* Student/Staff Login Portal Link */}
             <Link
               href={currentUser ? `/dashboard/${userRole || "owner"}` : "/login"}
-              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all flex-shrink-0 cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all flex-shrink-0 cursor-pointer"
             >
               <User className="w-4 h-4" />
               <span>{currentUser ? "ড্যাশবোর্ড" : "লগইন"}</span>
@@ -805,7 +808,7 @@ export default function HomePage() {
       {/* 3. ROYAL INSTITUTIONAL NAVIGATION BAR (Gold Highlight Border) */}
       {/* ========================================================================= */}
       <nav className="bg-[#4c1d95] text-white shadow-md border-b-2 border-amber-400 relative z-30 overflow-x-auto scrollbar-none">
-        <div className="max-w-7xl mx-auto px-4 sm:px-8 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-3 sm:px-8 flex items-center justify-between">
           <div className="flex items-center space-x-1 sm:space-x-2 py-1 text-xs sm:text-sm font-semibold whitespace-nowrap">
             <Link href="/" className="px-3 py-2.5 rounded-lg bg-white/10 text-amber-300 font-bold">
               মূল পাতা (Home)
@@ -861,7 +864,7 @@ export default function HomePage() {
       {/* ========================================================================= */}
       {/* 4. HERO SECTION: IMAGE SLIDER (65%) + NOTICE BOOK (35%) (Stacks on Mobile) */}
       {/* ========================================================================= */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-8 py-5 sm:py-8">
+      <section className="max-w-7xl mx-auto px-3 sm:px-8 py-4 sm:py-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch">
           {/* Left: 65% Image Slider (8 columns on lg) */}
           <div className="lg:col-span-8 flex flex-col justify-between">

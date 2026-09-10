@@ -40,23 +40,23 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
   const anyBranchPendingDeletion = visibleBranches.some(b => b.is_pending_deletion)
 
   return (
-    <header className="bg-white border-b border-slate-200/90 px-4 sm:px-6 py-3 flex items-center justify-between shadow-xs z-20 flex-shrink-0 text-slate-800">
-      <div className="flex items-center gap-3">
+    <header className="bg-white border-b border-slate-200/90 px-2.5 sm:px-4 md:px-6 py-2.5 sm:py-3 flex items-center justify-between shadow-xs z-20 flex-shrink-0 text-slate-800">
+      <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
         {/* Mobile Hamburger Button */}
         {onMenuToggle && (
           <button
             type="button"
             onClick={onMenuToggle}
-            className="md:hidden p-2 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+            className="md:hidden p-1.5 sm:p-2 -ml-1 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
             aria-label="Open navigation menu"
           >
             <Menu className="w-5 h-5" />
           </button>
         )}
 
-        <div>
+        <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="text-base sm:text-lg font-black text-[#1e1b4b] tracking-tight truncate">
+            <h1 className="text-sm sm:text-lg font-black text-[#1e1b4b] tracking-tight truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">
               {roleLabel[user.role] || user.role} Panel
             </h1>
             <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs">
@@ -75,7 +75,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-4">
+      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
         {/* Branch Selector Dropdown */}
         {branches.length > 0 && (
           <div className="relative">
@@ -83,7 +83,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
               type="button"
               onClick={() => setBranchMenuOpen(!branchMenuOpen)}
               className={cn(
-                "flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-bold transition-all shadow-2xs",
+                "flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-bold transition-all shadow-2xs",
                 isCurrentPendingDeletion
                   ? "border-red-400 bg-red-50 text-red-900 hover:bg-red-100 ring-2 ring-red-400/30 animate-pulse"
                   : anyBranchPendingDeletion && selectedBranchId === "all"
@@ -97,7 +97,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
               ) : (
                 <Building2 className="w-4 h-4 text-indigo-700 flex-shrink-0" />
               )}
-              <span className="truncate max-w-[120px] sm:max-w-[190px]">
+              <span className="truncate max-w-[80px] xs:max-w-[120px] sm:max-w-[190px]">
                 {selectedBranchId === "all"
                   ? "All Branches (সকল শাখা)"
                   : (currentBranch?.name || "Select Branch")}
@@ -112,7 +112,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
 
             {branchMenuOpen && (
               <div
-                className="absolute right-0 top-full mt-1.5 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden py-1 text-slate-800"
+                className="absolute right-0 top-full mt-1.5 w-72 max-w-[90vw] bg-white border border-slate-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden py-1 text-slate-800"
                 onMouseLeave={() => setBranchMenuOpen(false)}
               >
                 <div className="px-3.5 py-2.5 border-b border-slate-100 bg-slate-50 text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
@@ -184,19 +184,19 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
         )}
 
         <button
-          className="relative p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+          className="relative p-1.5 sm:p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
           aria-label="Notifications"
         >
-          <Bell className="w-5 h-5 text-slate-600" />
+          <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full animate-pulse shadow-xs shadow-amber-400"></span>
         </button>
 
         <div className="relative">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="flex items-center gap-2 p-1.5 sm:p-2 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 bg-slate-50"
+            className="flex items-center gap-1 sm:gap-2 p-1 sm:p-1.5 md:p-2 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200 bg-slate-50"
           >
-            <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-amber-600 rounded-full flex items-center justify-center text-white shadow-xs font-bold text-xs">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 bg-gradient-to-br from-amber-500 to-amber-600 rounded-full flex items-center justify-center text-white shadow-xs font-bold text-xs">
               {user.name ? user.name.charAt(0).toUpperCase() : <User className="w-4 h-4" />}
             </div>
             <div className="text-left hidden md:block">
@@ -205,11 +205,11 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
               </p>
               <p className="text-[11px] text-amber-700 font-semibold">{roleLabel[user.role] || user.role}</p>
             </div>
-            <ChevronDown className="w-4 h-4 text-slate-500" />
+            <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500" />
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden text-slate-800">
+            <div className="absolute right-0 top-full mt-1.5 w-56 max-w-[90vw] bg-white border border-slate-200 rounded-2xl shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100 overflow-hidden text-slate-800">
               <div className="p-3.5 border-b border-slate-100 bg-slate-50">
                 <p className="font-bold text-sm text-slate-900 truncate">{user.name}</p>
                 <p className="text-xs text-slate-500 truncate">{user.email}</p>

@@ -1050,10 +1050,10 @@ export default function StudentsClient({
   return (
     <div className="space-y-4">
       {/* Toolbar */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl">
-        <div className="flex flex-col lg:flex-row gap-4 justify-between items-stretch lg:items-center">
-          <div className="flex flex-wrap gap-3 flex-1">
-            <div className="flex-1 min-w-[200px] relative">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 sm:p-5 shadow-xl">
+        <div className="flex flex-col lg:flex-row gap-3 sm:gap-4 justify-between items-stretch lg:items-center">
+          <div className="flex flex-wrap gap-2.5 sm:gap-3 flex-1">
+            <div className="w-full sm:flex-1 min-w-0 sm:min-w-[200px] relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input 
                 value={query} 
@@ -1065,7 +1065,7 @@ export default function StudentsClient({
             <select 
               value={batchFilter} 
               onChange={e => setBatchFilter(e.target.value)}
-              className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-[150px] shadow-2xs">
+              className="w-full sm:w-auto px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-0 sm:min-w-[150px] shadow-2xs">
               <option value="" className="bg-white text-slate-900">All Batches</option>
               {localBatches.map(b => (
                 <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>
@@ -1074,7 +1074,7 @@ export default function StudentsClient({
             <select 
               value={sortOption} 
               onChange={e => setSortOption(e.target.value as SortOption)}
-              className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-[200px] shadow-2xs font-medium">
+              className="w-full sm:w-auto px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-0 sm:min-w-[180px] shadow-2xs font-medium">
               <option value="default" className="bg-white text-slate-900">Batch & Roll No (১, ২, ৩...)</option>
               <option value="roll_asc" className="bg-white text-slate-900">Roll No (Lowest: 1, 2, 3...)</option>
               <option value="roll_desc" className="bg-white text-slate-900">Roll No (Highest first)</option>
@@ -1085,12 +1085,12 @@ export default function StudentsClient({
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 w-full lg:w-auto">
             <button 
               type="button"
               onClick={() => fetchStudentsClient()}
               disabled={loadingFresh}
-              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border text-sm font-semibold transition-all bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900 shadow-2xs cursor-pointer disabled:opacity-50"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border text-sm font-semibold transition-all bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900 shadow-2xs cursor-pointer disabled:opacity-50"
               title="Refresh student list from database"
             >
               <RefreshCw className={`w-4 h-4 text-amber-600 ${loadingFresh ? "animate-spin" : ""}`} />
@@ -1100,7 +1100,7 @@ export default function StudentsClient({
             {/* Deletion Queue Security Badge / Button */}
             <button 
               onClick={() => setQueueModal(true)}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shadow-md bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900 shadow-xs cursor-pointer"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shadow-md bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900 shadow-xs cursor-pointer"
             >
               <ShieldAlert className={`w-4 h-4 ${totalActiveQueue > 0 ? "text-amber-400" : "text-slate-500"}`} />
               <span>Deletion Queue</span>
@@ -1117,25 +1117,25 @@ export default function StudentsClient({
 
         {/* Bulk Actions Bar */}
         {selectedIds.size > 0 && (
-          <div className="mt-4 p-3.5 bg-amber-500/10 rounded-xl flex flex-wrap items-center justify-between gap-3 border border-amber-500/25 transition-all">
+          <div className="mt-4 p-3.5 bg-amber-500/10 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-amber-500/25 transition-all">
             <div className="flex items-center gap-2">
               <span className="bg-amber-500 text-slate-950 text-xs font-extrabold px-2.5 py-1 rounded-md shadow-xs">
                 {selectedIds.size}
               </span>
               <span className="text-sm font-bold text-amber-300">students selected</span>
             </div>
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
               {/* Send SMS -> directly navigates to Bulk SMS Gateway with all selected contacts */}
               <button 
                 onClick={() => handleSendSms()} 
-                className="flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-sm font-bold rounded-lg transition-all shadow-sm"
+                className="flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-sm font-bold rounded-lg transition-all shadow-sm flex-1 sm:flex-initial justify-center"
               >
                 <MessageSquare className="w-4 h-4" /> Send SMS
               </button>
 
               <button 
                 onClick={handleDownloadCSV} 
-                className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800 text-slate-200 hover:text-white text-sm font-medium rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors shadow-sm"
+                className="flex items-center gap-2 px-3.5 py-1.5 bg-slate-800 text-slate-200 hover:text-white text-sm font-medium rounded-lg border border-slate-700 hover:bg-slate-700 transition-colors shadow-sm flex-1 sm:flex-initial justify-center"
               >
                 <Download className="w-4 h-4" /> Download CSV
               </button>
@@ -1143,7 +1143,7 @@ export default function StudentsClient({
               {/* Protected 2-Person & 24h Timelock Deletion Request */}
               <button 
                 onClick={openRequestModalForSelected} 
-                className="flex items-center gap-2 px-3.5 py-1.5 bg-red-500/15 text-red-300 text-sm font-semibold rounded-lg border border-red-500/30 hover:bg-red-500/25 transition-colors shadow-sm"
+                className="flex items-center gap-2 px-3.5 py-1.5 bg-red-500/15 text-red-300 text-sm font-semibold rounded-lg border border-red-500/30 hover:bg-red-500/25 transition-colors shadow-sm w-full sm:w-auto justify-center"
                 title="Requests deletion requiring 2 person sign-off and 24-hour timelock delay"
               >
                 <ShieldAlert className="w-4 h-4 text-red-400" /> Request Deletion (2 Approvals)

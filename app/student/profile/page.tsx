@@ -487,20 +487,20 @@ export default function StudentProfilePage() {
 
   return (
     <>
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-6 sm:space-y-8">
       {/* Profile Banner */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl">
+      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-900 via-indigo-800 to-violet-900 rounded-3xl p-4 sm:p-8 text-white shadow-xl">
         <div className="absolute -right-10 -bottom-10 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute top-0 right-1/4 w-48 h-48 bg-violet-400/10 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-5">
-            <div className="w-20 h-20 bg-gradient-to-br from-indigo-400 to-violet-400 rounded-2xl flex items-center justify-center text-3xl font-extrabold text-white shadow-lg border-2 border-white/20">
+        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 sm:gap-6">
+          <div className="flex flex-col xs:flex-row items-start xs:items-center gap-3.5 sm:gap-5 min-w-0">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-indigo-400 to-violet-400 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl font-extrabold text-white shadow-lg border-2 border-white/20 shrink-0">
               {profile?.name ? profile.name.charAt(0).toUpperCase() : "S"}
             </div>
-            <div className="space-y-1">
+            <div className="space-y-1 min-w-0">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="text-2xl sm:text-3xl font-bold">{profile?.name || "Student"}</h1>
+                <h1 className="text-xl sm:text-3xl font-bold truncate">{profile?.name || "Student"}</h1>
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-xs font-semibold rounded-full">
                   <ShieldCheck className="w-3.5 h-3.5" /> Active Student
                 </span>
@@ -509,17 +509,17 @@ export default function StudentProfilePage() {
                 <span className="font-mono bg-white/10 px-2.5 py-0.5 rounded-lg border border-white/10 font-bold tracking-wider text-white">
                   {profile?.user_id || "N/A"}
                 </span>
-                <button onClick={copyId} className="p-1 hover:bg-white/10 rounded transition-colors" title="Copy Student ID">
+                <button onClick={copyId} className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer" title="Copy Student ID">
                   {copied ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-indigo-200" />}
                 </button>
               </div>
               <div className="flex items-center gap-4 text-xs sm:text-sm text-indigo-200/80 pt-1 flex-wrap">
-                {profile?.email && <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> {profile.email}</span>}
-                {profile?.phone && <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {profile.phone}</span>}
+                {profile?.email && <span className="flex items-center gap-1.5 truncate max-w-[240px]"><Mail className="w-3.5 h-3.5 shrink-0" /> {profile.email}</span>}
+                {profile?.phone && <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5 shrink-0" /> {profile.phone}</span>}
               </div>
             </div>
           </div>
-          <div className="flex flex-col sm:flex-row items-center gap-2.5 shrink-0 flex-wrap">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap w-full sm:w-auto">
             <StudentIdCardTrigger
               student={{
                 ...studentData,
@@ -561,7 +561,7 @@ export default function StudentProfilePage() {
       </div>
 
       {/* Analytics Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4">
         <a href="#my-batches" className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200 shadow-sm space-y-1 hover:border-indigo-300 hover:shadow-md hover:bg-indigo-50/20 transition-all group cursor-pointer block">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-[11px] font-semibold uppercase tracking-wider">Batches</span>
@@ -1148,36 +1148,36 @@ export default function StudentProfilePage() {
 
     {/* Attendance Modal */}
     {activeModal === 'attendance' && (
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between p-6 border-b border-gray-100">
-            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500" /> Attendance Overview</h2>
-            <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4" onClick={() => setActiveModal(null)}>
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100">
+            <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" /> Attendance Overview</h2>
+            <button onClick={() => setActiveModal(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
           </div>
-          <div className="p-6 overflow-y-auto">
-            <div className="grid grid-cols-3 gap-3 mb-6">
+          <div className="p-4 sm:p-6 overflow-y-auto">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-4 sm:mb-6">
               {[
                 { label: 'Present', count: attendance.filter(a => a.status === 'present').length, color: 'bg-emerald-100 text-emerald-700' },
                 { label: 'Absent', count: attendance.filter(a => a.status === 'absent').length, color: 'bg-rose-100 text-rose-700' },
                 { label: 'Late', count: attendance.filter(a => a.status === 'late').length, color: 'bg-amber-100 text-amber-700' },
               ].map(s => (
-                <div key={s.label} className={`rounded-2xl p-4 text-center ${s.color}`}>
-                  <p className="text-2xl font-extrabold">{s.count}</p>
-                  <p className="text-xs font-semibold mt-1">{s.label}</p>
+                <div key={s.label} className={`rounded-2xl p-3 sm:p-4 text-center ${s.color}`}>
+                  <p className="text-xl sm:text-2xl font-extrabold">{s.count}</p>
+                  <p className="text-[11px] sm:text-xs font-semibold mt-1">{s.label}</p>
                 </div>
               ))}
             </div>
             {attendance.length > 0 ? (
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {attendance.slice(0, 30).map((a: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 text-sm">
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 text-xs sm:text-sm">
                     <span className="text-gray-600">{formatDate(a.date)}</span>
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${a.status === 'present' ? 'bg-emerald-100 text-emerald-700' : a.status === 'absent' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'}`}>{a.status}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-center text-gray-400 py-8">No attendance records yet.</p>
+              <p className="text-center text-gray-400 py-8 text-sm">No attendance records yet.</p>
             )}
           </div>
         </div>
@@ -1186,20 +1186,20 @@ export default function StudentProfilePage() {
 
     {/* Dues Modal */}
     {activeModal === 'dues' && (
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between p-6 border-b border-gray-100">
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4" onClick={() => setActiveModal(null)}>
+        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100">
             <div>
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-500" /> Fee Dues & Due History
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" /> Fee Dues & Due History
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
                 {activeDues.length} active due{activeDues.length === 1 ? '' : 's'} · {settledDues.length} settled in history
               </p>
             </div>
-            <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
+            <button onClick={() => setActiveModal(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
           </div>
-          <div className="p-6 overflow-y-auto space-y-4">
+          <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
             {/* Active Dues */}
             {activeDues.length > 0 && (
               <div className="space-y-2.5">
@@ -1272,21 +1272,21 @@ export default function StudentProfilePage() {
 
     {/* Exam Results & Schedule Modal */}
     {activeModal === 'exams' && (
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4" onClick={() => setActiveModal(null)}>
         <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100">
             <div>
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <GraduationCap className="w-5 h-5 text-violet-500" /> Exam Schedule & Results
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                <GraduationCap className="w-5 h-5 text-violet-500 shrink-0" /> Exam Schedule & Results
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
                 Upcoming scheduled tests and your recorded results displayed side-by-side
               </p>
             </div>
-            <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
+            <button onClick={() => setActiveModal(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
           </div>
 
-          <div className="p-6 overflow-y-auto space-y-4">
+          <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
             {(() => {
               const recordedExamIds = new Set(examResults.map((r: any) => r.exam_id).filter(Boolean))
               
@@ -1554,21 +1554,21 @@ export default function StudentProfilePage() {
 
     {/* Materials Modal */}
     {activeModal === 'materials' && (
-      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setActiveModal(null)}>
+      <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4" onClick={() => setActiveModal(null)}>
         <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-          <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-100">
             <div>
-              <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                <Package className="w-5 h-5 text-teal-500" /> Batch Study Materials
+              <h2 className="text-base sm:text-lg font-bold text-gray-900 flex items-center gap-2">
+                <Package className="w-5 h-5 text-teal-500 shrink-0" /> Batch Study Materials
               </h2>
               <p className="text-xs text-gray-500 mt-0.5">
                 Classroom lecture sheets, books, and handouts for your enrolled batches
               </p>
             </div>
-            <button onClick={() => setActiveModal(null)} className="p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
+            <button onClick={() => setActiveModal(null)} className="p-1.5 sm:p-2 hover:bg-gray-100 rounded-xl transition-colors cursor-pointer"><X className="w-5 h-5 text-gray-500" /></button>
           </div>
 
-          <div className="p-6 overflow-y-auto space-y-4">
+          <div className="p-4 sm:p-6 overflow-y-auto space-y-4">
             {/* Quick Summary Bar */}
             <div className="grid grid-cols-2 gap-3">
               <div className="p-3.5 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between">
@@ -1758,22 +1758,22 @@ export default function StudentProfilePage() {
 
     {/* Pay Due Modal */}
     {payingDue && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/50 backdrop-blur-sm">
         <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white">
+          <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-4 sm:p-6 text-white">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold">Pay Due</h2>
-                <p className="text-indigo-200 text-sm mt-0.5">{payingDue.due_month ? new Date(payingDue.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Fee Payment'}</p>
+                <h2 className="text-lg sm:text-xl font-bold">Pay Due</h2>
+                <p className="text-indigo-200 text-xs sm:text-sm mt-0.5">{payingDue.due_month ? new Date(payingDue.due_month + '-01').toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'Fee Payment'}</p>
               </div>
-              <button onClick={() => setPayingDue(null)} className="p-2 hover:bg-white/20 rounded-xl transition-colors"><X className="h-5 w-5" /></button>
+              <button onClick={() => setPayingDue(null)} className="p-1.5 sm:p-2 hover:bg-white/20 rounded-xl transition-colors cursor-pointer"><X className="h-5 w-5" /></button>
             </div>
-            <div className="mt-4 bg-white/10 rounded-2xl p-4 border border-white/20">
+            <div className="mt-3 sm:mt-4 bg-white/10 rounded-2xl p-3 sm:p-4 border border-white/20">
               <p className="text-xs text-indigo-200 uppercase tracking-wider font-semibold">Amount to Pay</p>
-              <p className="text-3xl font-extrabold mt-1">{formatCurrency(payingDue.due_amount - (payingDue.paid_amount || 0))}</p>
+              <p className="text-2xl sm:text-3xl font-extrabold mt-1">{formatCurrency(payingDue.due_amount - (payingDue.paid_amount || 0))}</p>
             </div>
           </div>
-          <div className="p-6 space-y-4">
+          <div className="p-4 sm:p-6 space-y-4">
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Payment Method</label>
               <div className="grid grid-cols-4 gap-2">

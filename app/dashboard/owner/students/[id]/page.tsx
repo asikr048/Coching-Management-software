@@ -74,15 +74,15 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white backdrop-blur-md p-6 rounded-2xl border border-slate-200 shadow-xl">
-        <div className="flex items-center gap-4">
-          <div className="w-16 h-16 bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-amber-500/10 shrink-0">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white backdrop-blur-md p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-xl">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="w-14 h-14 sm:w-16 sm:h-16 bg-amber-500/20 text-amber-500 border border-amber-500/30 rounded-2xl flex items-center justify-center font-black text-xl sm:text-2xl shadow-lg shadow-amber-500/10 shrink-0">
             {student.name.charAt(0)}
           </div>
-          <div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight">{student.name}</h2>
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight truncate">{student.name}</h2>
             <p className="text-sm text-amber-600 font-mono font-bold">{student.student_id}</p>
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 sm:gap-2 mt-1.5 flex-wrap">
               <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${student.is_active ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>{student.is_active ? "Active" : "Inactive"}</span>
               {(student.roll_no != null || student.batch_roll != null) && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 font-mono">
@@ -94,7 +94,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2.5 shrink-0 self-start sm:self-center flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 self-stretch sm:self-center flex-wrap">
           <StudentIdCardTrigger
             student={{
               ...student,
@@ -114,46 +114,46 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
             buttonVariant="outline"
             buttonText="🧾 Admission & ID Slip"
           />
-          <Link href={`/dashboard/owner/students/${id}/edit`} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all">
+          <Link href={`/dashboard/owner/students/${id}/edit`} className="flex-1 sm:flex-initial text-center px-4 sm:px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all">
             Edit Student
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 text-center shadow-xl">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-4">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 text-center shadow-xl">
           <p className="text-xs text-slate-500 font-medium">Total Paid</p>
-          <p className="text-xl font-black text-emerald-600 mt-1">{formatCurrency(totalPaid)}</p>
+          <p className="text-lg sm:text-xl font-black text-emerald-600 mt-1">{formatCurrency(totalPaid)}</p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 text-center shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 text-center shadow-xl">
           <p className="text-xs text-slate-500 font-medium">Outstanding Due</p>
-          <p className={`text-xl font-black mt-1 ${totalOutstandingDue > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+          <p className={`text-lg sm:text-xl font-black mt-1 ${totalOutstandingDue > 0 ? "text-rose-600" : "text-emerald-600"}`}>
             {formatCurrency(totalOutstandingDue)}
           </p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 text-center shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 text-center shadow-xl">
           <p className="text-xs text-slate-500 font-medium">Attendance</p>
-          <p className="text-xl font-black text-amber-600 mt-1">{attendancePct}%</p>
+          <p className="text-lg sm:text-xl font-black text-amber-600 mt-1">{attendancePct}%</p>
           <p className="text-xs text-slate-500 mt-0.5">{presentDays}/{totalDays} days</p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 text-center shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 text-center shadow-xl">
           <p className="text-xs text-slate-500 font-medium">Active Batches</p>
-          <p className="text-xl font-black text-blue-600 mt-1">{(enrollments.data || []).filter(e => e.status === "active").length}</p>
+          <p className="text-lg sm:text-xl font-black text-blue-600 mt-1">{(enrollments.data || []).filter(e => e.status === "active").length}</p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 text-center shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 text-center shadow-xl">
           <p className="text-xs text-slate-500 font-medium">Exams Taken</p>
-          <p className="text-xl font-black text-purple-600 mt-1">{results.data?.length || 0}</p>
+          <p className="text-lg sm:text-xl font-black text-purple-600 mt-1">{results.data?.length || 0}</p>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 text-center shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3 sm:p-4 text-center shadow-xl">
           <p className="text-xs text-slate-500 font-medium">Materials Received</p>
-          <p className="text-xl font-black text-teal-600 mt-1">{issuesList.length}</p>
+          <p className="text-lg sm:text-xl font-black text-teal-600 mt-1">{issuesList.length}</p>
           <p className="text-xs text-slate-500 mt-0.5">{issuesList.length === 1 ? "1 item" : `${issuesList.length} items`}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
         <div className="space-y-6">
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-6 shadow-xl">
             <h3 className="font-black text-slate-900 text-base mb-4">Personal Details</h3>
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-2.5 text-slate-600"><User className="w-4 h-4 text-amber-600" /> Gender: <span className="font-semibold text-slate-900">{student.gender || "-"}</span></div>
@@ -179,13 +179,13 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
           />
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-6 shadow-xl">
           <h3 className="font-black text-slate-900 text-base mb-4">Enrolled Batches</h3>
           <div className="space-y-2.5">
             {(enrollments.data || []).map(e => {
               const roll = e.roll_no ?? student.roll_no ?? student.batch_roll
               return (
-                <div key={e.id} className="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                <div key={e.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
                   <div className="flex items-center gap-3">
                     {roll != null && (
                       <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
@@ -197,7 +197,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                       <p className="text-xs text-slate-500">{e.batch?.subject || ""}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap sm:justify-end">
                     <StudentIdCardTrigger
                       student={student}
                       batchName={e.batch?.name}
@@ -225,7 +225,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       </div>
 
       {/* Fee Dues & Due Balance History */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-6 shadow-xl overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-500" /> Fee Dues & Due History
@@ -286,7 +286,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       </div>
 
       {/* Payment History */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-6 shadow-xl overflow-hidden">
         <h3 className="font-black text-slate-900 text-base mb-4 flex items-center gap-2">
           <CreditCard className="w-4 h-4 text-amber-500" /> Payment History
         </h3>
@@ -337,7 +337,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
       </div>
 
       {/* Study Materials & Handouts Distributed */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-6 shadow-xl overflow-hidden">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
             <Package className="w-4 h-4 text-teal-600" /> Study Materials Distributed & Received

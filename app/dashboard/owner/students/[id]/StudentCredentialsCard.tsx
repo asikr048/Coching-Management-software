@@ -78,17 +78,17 @@ export default function StudentCredentialsCard({
 
   return (
     <>
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xl p-6 relative overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xl p-4 sm:p-6 relative overflow-hidden">
         {/* Subtle background decoration */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none" />
 
-        <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shadow-xs">
+        <div className="flex flex-col xs:flex-row xs:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shadow-xs flex-shrink-0">
               <KeyRound className="w-5 h-5" />
             </div>
-            <div>
-              <h3 className="font-black text-slate-900 text-base">Login Credentials (লগইন তথ্য)</h3>
+            <div className="min-w-0">
+              <h3 className="font-black text-slate-900 text-base truncate">Login Credentials (লগইন তথ্য)</h3>
               <p className="text-xs text-slate-500 font-medium">Student Portal Access Credentials</p>
             </div>
           </div>
@@ -98,7 +98,7 @@ export default function StudentCredentialsCard({
               setNewPasswordInput("")
               setIsModalOpen(true)
             }}
-            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs self-start xs:self-auto shrink-0"
           >
             <RefreshCw className="w-3.5 h-3.5 text-amber-600" />
             <span>{password ? "Change Password" : "Set Password"}</span>

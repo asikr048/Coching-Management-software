@@ -234,17 +234,19 @@ function LoginFormContent() {
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiree</span></h1>
       </div>
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-          <p className="text-gray-500 text-sm mt-1">Sign in to your MedhaShiree portal</p>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">Welcome back</h2>
+          <p className="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">Sign in to your MedhaShiree portal</p>
         </div>
         <Link
           href="/signup"
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-semibold hover:bg-indigo-100 transition-colors"
+          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs sm:text-sm font-semibold hover:bg-indigo-100 transition-colors shrink-0"
         >
-          <UserPlus className="w-4 h-4" /> Sign Up
+          <UserPlus className="w-4 h-4 shrink-0" />
+          <span className="hidden xs:inline">Sign Up</span>
+          <span className="xs:hidden">Join</span>
         </Link>
       </div>
 
@@ -256,14 +258,14 @@ function LoginFormContent() {
             setLoginTab("student")
             setError("")
           }}
-          className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer min-w-0 ${
             loginTab === "student"
               ? "bg-white text-indigo-700 shadow-xs border border-indigo-100 font-extrabold"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
           }`}
         >
-          <GraduationCap className="w-4 h-4 text-indigo-600" />
-          <span>Student (শিক্ষার্থী)</span>
+          <GraduationCap className="w-4 h-4 shrink-0 text-indigo-600" />
+          <span className="truncate">Student <span className="hidden xs:inline">(শিক্ষার্থী)</span></span>
         </button>
 
         <button
@@ -272,14 +274,14 @@ function LoginFormContent() {
             setLoginTab("staff")
             setError("")
           }}
-          className={`flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+          className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer min-w-0 ${
             loginTab === "staff"
               ? "bg-white text-amber-900 shadow-xs border border-amber-200 font-extrabold"
               : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
           }`}
         >
-          <Lock className="w-4 h-4 text-amber-600" />
-          <span>Staff / Admin (ম্যানেজমেন্ট)</span>
+          <Lock className="w-4 h-4 shrink-0 text-amber-600" />
+          <span className="truncate">Staff / Admin <span className="hidden xs:inline">(ম্যানেজমেন্ট)</span></span>
         </button>
       </div>
 
@@ -442,7 +444,7 @@ export default function LoginPage() {
       </div>
 
       {/* RIGHT — Auth Form */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 p-6 sm:p-8 lg:p-12">
+      <div className="flex-1 flex items-center justify-center bg-slate-50 p-4 sm:p-8 lg:p-12">
         <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>}>
           <LoginFormContent />
         </Suspense>
