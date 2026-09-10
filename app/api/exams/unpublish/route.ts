@@ -46,6 +46,37 @@ function parseExistingPubDays(exam: any): string[] {
   return pubDays
 }
 
+async function safeUpdateExam(admin: any, examId: string, payload: { result_note: string; is_published?: boolean }) {
+  const safeData: any = {
+    result_note: payload.result_note,
+  }
+  if (typeof payload.is_published === "boolean") {
+    safeData.is_published = payload.is_published
+  }
+
+  const { data, error } = await admin
+    .from("exams")
+    .update(safeData)
+    .eq("id", examId)
+    .select("*, branch:branches(id, name), batch:batches(id, name)")
+    .single()
+
+  if (error) {
+    // If updating is_published causes any issue, fallback to updating only result_note
+    const { data: d2, error: e2 } = await admin
+      .from("exams")
+      .update({ result_note: payload.result_note })
+      .eq("id", examId)
+      .select("*, branch:branches(id, name), batch:batches(id, name)")
+      .single()
+
+    if (e2) throw e2
+    return d2
+  }
+
+  return data
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
@@ -129,27 +160,15 @@ export async function POST(req: NextRequest) {
       const isWeeklyPub = exam.is_weekly_published === true || updatedNote.includes("[IS_WEEKLY_PUBLISHED:true]")
       const hasLiveCards = newPubDays.length > 0 || isWeeklyPub
 
-      const updatePayload: any = {
-        published_days: newPubDays,
-        result_note: updatedNote,
-      }
-
       if (!hasLiveCards) {
-        updatePayload.is_public_result = false
-        updatePayload.is_published = false
         updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
         updatedNote = `${updatedNote} [PUBLIC_RESULT:false]`.trim()
-        updatePayload.result_note = updatedNote
       }
 
-      const { data: updated, error: uErr } = await admin
-        .from("exams")
-        .update(updatePayload)
-        .eq("id", exam_id)
-        .select()
-        .single()
-
-      if (uErr) throw uErr
+      const updated = await safeUpdateExam(admin, exam_id, {
+        result_note: updatedNote,
+        is_published: hasLiveCards,
+      })
 
       const dayObj = ALL_WEEK_DAYS.find((d) => d.id === canonicalTarget)
       const label = dayObj ? dayObj.bn : day_key
@@ -171,21 +190,10 @@ export async function POST(req: NextRequest) {
       updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [PUBLISHED_DAYS:${newPubDays.join(",")}] [PUBLIC_RESULT:true]`.trim()
 
-      const updatePayload: any = {
-        published_days: newPubDays,
-        is_public_result: true,
-        is_published: true,
+      const updated = await safeUpdateExam(admin, exam_id, {
         result_note: updatedNote,
-      }
-
-      const { data: updated, error: uErr } = await admin
-        .from("exams")
-        .update(updatePayload)
-        .eq("id", exam_id)
-        .select()
-        .single()
-
-      if (uErr) throw uErr
+        is_published: true,
+      })
 
       const dayObj = ALL_WEEK_DAYS.find((d) => d.id === canonicalTarget)
       const label = dayObj ? dayObj.bn : day_key
@@ -209,21 +217,10 @@ export async function POST(req: NextRequest) {
       updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [PUBLIC_RESULT:${hasLive}]`.trim()
 
-      const updatePayload: any = {
-        is_weekly_published: targetWeeklyPub,
-        is_public_result: hasLive,
-        is_published: hasLive,
+      const updated = await safeUpdateExam(admin, exam_id, {
         result_note: updatedNote,
-      }
-
-      const { data: updated, error: uErr } = await admin
-        .from("exams")
-        .update(updatePayload)
-        .eq("id", exam_id)
-        .select()
-        .single()
-
-      if (uErr) throw uErr
+        is_published: hasLive,
+      })
 
       return NextResponse.json({
         success: true,
@@ -241,22 +238,10 @@ export async function POST(req: NextRequest) {
     cleanNote = cleanNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
     cleanNote = `${cleanNote} [PUBLIC_RESULT:false] [IS_WEEKLY_PUBLISHED:false] [PUBLISHED_DAYS:]`.trim()
 
-    const unpublishPayload: any = {
-      is_public_result: false,
-      is_published: false,
-      is_weekly_published: false,
-      published_days: [],
+    const updated = await safeUpdateExam(admin, exam_id, {
       result_note: cleanNote,
-    }
-
-    const { data: updated, error: unpubErr } = await admin
-      .from("exams")
-      .update(unpublishPayload)
-      .eq("id", exam_id)
-      .select()
-      .single()
-
-    if (unpubErr) throw unpubErr
+      is_published: false,
+    })
 
     // Optionally delete published notices from notice board
     if (delete_notices) {
