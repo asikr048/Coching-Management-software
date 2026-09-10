@@ -168,7 +168,7 @@ export default function NewStudentForm({
     }
   }
 
-  // Auto-calculate next batch roll (highest + 1, starting 1, 2, 3...) when batch changes
+  // Auto-calculate next batch roll (strictly previous maximum + 1, starting 1, 2, 3...) when batch changes
   useEffect(() => {
     if (!form.batch_id) {
       setBatchRoll("")
@@ -177,7 +177,26 @@ export default function NewStudentForm({
     let isCancelled = false
     async function loadNextRoll() {
       try {
-        // 1. Call server API to get accurate next roll and auto-resequence duplicates if needed
+        // 1. Immediately pre-calculate from local enrollmentsList so it is instantly after previous maximum
+        const currentBat = allBatches.find(b => b.id === form.batch_id)
+        const matchingLocal = enrollmentsList.filter(e => 
+          e.batch_id === form.batch_id || 
+          (currentBat && (
+            e.batch_id === (currentBat as any).origin_batch_id || 
+            (e.batch?.name && e.batch.name.trim().toLowerCase() === currentBat.name.trim().toLowerCase())
+          ))
+        )
+        let localMax = 0
+        matchingLocal.forEach(e => {
+          const r = Number(e.roll_no ?? e.student?.roll_no ?? e.student?.batch_roll)
+          if (!isNaN(r) && r > localMax) localMax = r
+        })
+        const prevMax = Math.max(localMax, matchingLocal.length)
+        if (!isCancelled) {
+          setBatchRoll(String(prevMax > 0 ? prevMax + 1 : 1))
+        }
+
+        // 2. Call server API to verify database sequence, resequence duplicates if any, and get exact next roll
         const res = await fetch(`/api/batches/next-roll?batch_id=${encodeURIComponent(form.batch_id)}&auto_fix=true`)
         if (res.ok) {
           const data = await res.json()
@@ -205,7 +224,7 @@ export default function NewStudentForm({
           }
         }
 
-        // Fallback: Query enrollments directly (strictly without non-existent batch_roll column)
+        // 3. Fallback: Query enrollments directly and inspect both enrollments and student tables
         const { data: enrs, error: enrErr } = await supabase
           .from("enrollments")
           .select("id, roll_no, student_id")
@@ -213,19 +232,24 @@ export default function NewStudentForm({
 
         let maxRoll = 0
         if (!enrErr && enrs && enrs.length > 0) {
+          const sIds = enrs.map((e: any) => e.student_id).filter(Boolean)
+          const { data: stus } = await supabase.from("students").select("id, roll_no, batch_roll").in("id", sIds)
+          const sMap = new Map((stus || []).map((s: any) => [s.id, s]))
+
           enrs.forEach((e: any) => {
-            const r = Number(e.roll_no)
+            const s = sMap.get(e.student_id)
+            const r = Number(e.roll_no || s?.roll_no || s?.batch_roll)
             if (!isNaN(r) && r > maxRoll) maxRoll = r
           })
-          if (maxRoll === 0) {
-            maxRoll = enrs.length
+          if (maxRoll === 0 || enrs.length > maxRoll) {
+            maxRoll = Math.max(maxRoll, enrs.length)
           }
         }
 
         if (isCancelled) return
         setBatchRoll(String(maxRoll > 0 ? maxRoll + 1 : 1))
       } catch {
-        if (!isCancelled) setBatchRoll("1")
+        if (!isCancelled && !batchRoll) setBatchRoll("1")
       }
     }
     loadNextRoll()
@@ -1637,15 +1661,30 @@ export default function NewStudentForm({
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
-                <label className={labelCls}>Batch Roll (রোল নং) *</label>
-                <input
-                  type="number"
-                  value={batchRoll}
-                  onChange={e => setBatchRoll(e.target.value)}
-                  className={`${ic} font-mono font-bold text-amber-950 bg-amber-50/70 border-amber-300`}
-                  placeholder="e.g. 1"
-                  min="1"
-                />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className={labelCls}>Batch Roll (রোল নং) *</label>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5 text-amber-700" />
+                    ফিক্সড (Fixed)
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    readOnly
+                    tabIndex={-1}
+                    value={batchRoll ? `রোল #${batchRoll}` : "হিসাব করা হচ্ছে..."}
+                    className={`${ic} font-mono font-black text-amber-950 bg-amber-100/60 border-amber-300 cursor-not-allowed select-none`}
+                    title="ব্যাচের পরবর্তী ক্রমিক রোল নম্বর (স্বয়ংক্রিয় নির্ধারিত ও অপরিবর্তনীয়)"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded">
+                    <Sparkles className="w-3 h-3 text-amber-700" />
+                    <span>Auto #{batchRoll || 1}</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  পূর্ববর্তী সর্বোচ্চ রোলের পরবর্তী নম্বরটি স্বয়ংক্রিয়ভাবে নির্ধারিত।
+                </p>
               </div>
               <div><label className={labelCls}>Paid Amount (৳) *</label><input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${ic} font-bold text-slate-900`} placeholder="0" min="0" /></div>
               <div><label className={labelCls}>Remaining Due</label><div className={`px-3.5 py-2.5 rounded-xl text-sm font-black text-center ${due > 0 ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{formatCurrency(due)}</div></div>
