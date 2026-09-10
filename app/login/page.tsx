@@ -193,6 +193,16 @@ function LoginFormContent() {
         return
       }
 
+      // If user selected Staff / Admin tab, verify they actually have a staff role
+      if (loginTab === "staff") {
+        if (!role) {
+          await supabase.auth.signOut()
+          setError("Access denied. This account does not have staff or admin privileges.")
+          setLoading(false)
+          return
+        }
+      }
+
       // Check if user logged in using a Student ID (e.g. MS-00001, 00001) or explicit Student Portal tab
       const isStudentIdInput = !rawInput.includes("@") || /^MS-/i.test(rawInput)
 

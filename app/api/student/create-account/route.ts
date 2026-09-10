@@ -13,7 +13,24 @@ export async function POST(req: NextRequest) {
     }
 
     const admin = createAdminClient()
-    const targetEmail = email || `${studentId.toLowerCase()}@medhashiree.local`
+    const cleanEmail = (email || "").trim().toLowerCase()
+
+    if (cleanEmail) {
+      const { data: staffMatch } = await admin
+        .from("staff")
+        .select("id, role, name")
+        .ilike("email", cleanEmail)
+        .maybeSingle()
+
+      if (staffMatch) {
+        return NextResponse.json(
+          { error: `The email "${cleanEmail}" is already used by a staff member (${staffMatch.role}). Student accounts cannot use admin/staff emails. Please leave email blank to log in via Student ID, or use the student's personal email.` },
+          { status: 400 }
+        )
+      }
+    }
+
+    const targetEmail = cleanEmail || `${studentId.toLowerCase()}@medhashiree.local`
 
     // Create user using Supabase Admin Auth without affecting current admin session
     const { data: userData, error: createError } = await admin.auth.admin.createUser({

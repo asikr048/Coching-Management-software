@@ -59,10 +59,21 @@ export async function POST(req: NextRequest) {
         // Continue if listUsers fails
       }
     } else {
-      // Input is a User ID (e.g. MS-10001, 10001, ms-10001)
+      // Input is a User ID / Student ID (e.g. MS-10001, 10001, ms-10001)
       const cleanId = raw.toUpperCase().startsWith("MS-")
         ? raw.toUpperCase()
         : `MS-${raw.toUpperCase()}`
+
+      // Fetch all staff emails to guarantee a Student ID NEVER resolves to a staff/admin email
+      const { data: staffList } = await admin
+        .from("staff")
+        .select("email")
+      const staffEmails = new Set(
+        staffList?.map((s) => s.email?.toLowerCase()).filter(Boolean) || []
+      )
+
+      // Fallback synthetic email (unique to this student)
+      const synthetic = `${cleanId.toLowerCase()}@medhashiree.local`
 
       // Check user_profiles
       const { data: profile } = await admin
@@ -72,7 +83,7 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .maybeSingle()
 
-      if (profile?.email) {
+      if (profile?.email && !staffEmails.has(profile.email.toLowerCase())) {
         candidates.push(profile.email.toLowerCase())
       }
 
@@ -84,12 +95,22 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .maybeSingle()
 
-      if (student?.email && !candidates.includes(student.email.toLowerCase())) {
+      if (
+        student?.email &&
+        !staffEmails.has(student.email.toLowerCase()) &&
+        !candidates.includes(student.email.toLowerCase())
+      ) {
         candidates.push(student.email.toLowerCase())
       }
 
-      // Fallback synthetic email
-      const synthetic = `${cleanId.toLowerCase()}@medhashiree.local`
+      // If student was mistakenly given a staff email in the database, sanitize it to synthetic
+      if (student?.email && staffEmails.has(student.email.toLowerCase())) {
+        try {
+          await admin.from("students").update({ email: synthetic }).eq("student_id", cleanId)
+          await admin.from("user_profiles").update({ email: synthetic }).eq("user_id", cleanId)
+        } catch {}
+      }
+
       if (!candidates.includes(synthetic)) {
         candidates.push(synthetic)
       }

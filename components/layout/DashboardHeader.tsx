@@ -1,9 +1,8 @@
 "use client"
 import { useState } from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Bell, LogOut, User, ChevronDown, Menu, Landmark, Building2, Check, Sparkles, ShieldAlert, GraduationCap } from "lucide-react"
+import { Bell, LogOut, User, ChevronDown, Menu, Landmark, Building2, Check, Sparkles, ShieldAlert } from "lucide-react"
 import type { Staff } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
 import { cn } from "@/lib/utils"
@@ -218,14 +217,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
                   {roleLabel[user.role] || user.role}
                 </span>
               </div>
-              <div className="p-1.5 space-y-1">
-                <Link
-                  href="/student/profile"
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-xl font-medium transition-colors"
-                  onClick={() => setMenuOpen(false)}
-                >
-                  <GraduationCap className="w-4 h-4" /> Student Portal (শিক্ষার্থী ভিউ)
-                </Link>
+              <div className="p-1.5">
                 <button
                   onClick={handleLogout}
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl font-medium transition-colors"
