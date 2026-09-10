@@ -17,6 +17,8 @@ interface StudentRow {
   id: string
   name: string
   student_id: string
+  roll_no?: number | null
+  batch_roll?: number | null
   phone?: string | null
   guardian_phone?: string | null
   guardian_name?: string | null
@@ -73,6 +75,8 @@ interface LedgerItem {
   student: StudentRow
   batch: BatchRow
   enrollment: any
+  rollNo: number
+  allBatchRolls?: Array<{ batchId: string; batchName: string; roll: number }>
   isMonthly: boolean
   expectedAmount: number
   paidAmount: number
@@ -247,16 +251,43 @@ export default function AccountantClient({
   }, [dues, selectedMonth])
 
   // Build Comprehensive Ledger Items for ALL Enrolled Students across ALL Batches
+  // Build Comprehensive Ledger Items for ALL Enrolled Students across ALL Batches
   const allLedgerItems = useMemo(() => {
     const items: LedgerItem[] = []
 
+    // Pre-calculate batchwise sequential order for fallback roll numbers
+    const batchCounterMap = new Map<string, number>()
+
     for (const st of students) {
       const activeEnrollments = (st.enrollments || []).filter((e) => e.status === "active" && e.batch)
+
+      // Gather all batch rolls for this student across their active enrollments
+      const allBatchRolls = activeEnrollments.map((enr, idx) => {
+        const b = enr.batch
+        const bId = b?.id || enr.batch_id || "default"
+        const count = (batchCounterMap.get(bId) || 0) + 1
+        batchCounterMap.set(bId, count)
+        const roll = (enr.roll_no != null && Number(enr.roll_no) > 0)
+          ? Number(enr.roll_no)
+          : (st.roll_no != null && Number(st.roll_no) > 0 && activeEnrollments.length === 1)
+            ? Number(st.roll_no)
+            : (st.batch_roll != null && Number(st.batch_roll) > 0 && activeEnrollments.length === 1)
+              ? Number(st.batch_roll)
+              : count
+        return {
+          batchId: b?.id || enr.batch_id,
+          batchName: b?.name || "Batch",
+          roll,
+        }
+      })
 
       for (const enr of activeEnrollments) {
         const batch: BatchRow = enr.batch
         const rowKey = `${st.id}_${batch.id}`
         const isMonthly = batch.fee_type === "monthly" || (Number(batch.monthly_fee) || 0) > 0
+
+        const thisBatchRollObj = allBatchRolls.find((br) => br.batchId === batch.id)
+        const rollNo = thisBatchRollObj ? thisBatchRollObj.roll : ((enr.roll_no != null && Number(enr.roll_no) > 0) ? Number(enr.roll_no) : 1)
 
         let expectedAmount = 0
         let paidAmount = 0
@@ -336,6 +367,8 @@ export default function AccountantClient({
           student: st,
           batch,
           enrollment: enr,
+          rollNo,
+          allBatchRolls,
           isMonthly,
           expectedAmount,
           paidAmount,
@@ -377,14 +410,53 @@ export default function AccountantClient({
         return false
       }
 
-      // 5. Search Query (name, student_id, phone, guardian_phone)
+      // 5. Search Query (name, student_id, roll_no, phone, guardian_phone)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim()
+        const bnToEnMap: Record<string, string> = { "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9" }
+        const qNormalized = q.replace(/[০-৯]/g, (d) => bnToEnMap[d] || d)
+        const qClean = qNormalized.replace(/^(roll|r|#|রোল|\s)+/i, "").trim()
+        const qNum = parseInt(qClean, 10)
+        const isNumericQuery = !isNaN(qNum) && qNum > 0
+
         const nameMatch = item.student.name?.toLowerCase().includes(q)
-        const rollMatch = item.student.student_id?.toLowerCase().includes(q)
+        const idMatch = item.student.student_id?.toLowerCase().includes(q)
         const phoneMatch = item.student.phone?.includes(q)
         const gPhoneMatch = item.student.guardian_phone?.includes(q)
-        if (!nameMatch && !rollMatch && !phoneMatch && !gPhoneMatch) return false
+
+        // Match current batch roll
+        const rStr = String(item.rollNo)
+        let rollMatch = (isNumericQuery && item.rollNo === qNum) ||
+          rStr === q || rStr === qClean || rStr === qNormalized ||
+          `roll ${rStr}`.includes(qNormalized) || `roll #${rStr}`.includes(qNormalized) ||
+          `r${rStr}` === qNormalized || `রোল ${rStr}`.includes(q)
+
+        // Match any batch roll across all enrolled batches of this student
+        if (!rollMatch && item.allBatchRolls) {
+          rollMatch = item.allBatchRolls.some((br) => {
+            const brNum = Number(br.roll)
+            const brStr = String(br.roll)
+            if (isNumericQuery && brNum === qNum) return true
+            if (brStr === q || brStr === qClean || brStr === qNormalized) return true
+            if (`roll ${brStr}`.includes(qNormalized) || `roll #${brStr}`.includes(qNormalized) || `r${brStr}` === qNormalized || `রোল ${brStr}`.includes(q)) return true
+            return false
+          })
+        }
+
+        if (!rollMatch && item.student.enrollments) {
+          rollMatch = item.student.enrollments.some((e: any) => {
+            const eRoll = e.roll_no ?? item.student.roll_no
+            if (eRoll == null) return false
+            const eRollNum = Number(eRoll)
+            const eRollStr = String(eRoll)
+            if (isNumericQuery && eRollNum === qNum) return true
+            if (eRollStr === q || eRollStr === qClean || eRollStr === qNormalized) return true
+            if (`roll ${eRollStr}`.includes(qNormalized) || `roll #${eRollStr}`.includes(qNormalized) || `r${eRollStr}` === qNormalized || `রোল ${eRollStr}`.includes(q)) return true
+            return false
+          })
+        }
+
+        if (!nameMatch && !idMatch && !phoneMatch && !gPhoneMatch && !rollMatch) return false
       }
 
       return true
@@ -1348,6 +1420,7 @@ export default function AccountantClient({
                     />
                   </th>
                   <th className="px-4 py-3.5">Student Details</th>
+                  <th className="px-3.5 py-3.5">Roll No</th>
                   <th className="px-4 py-3.5">Batch & Billing Type</th>
                   <th className="px-4 py-3.5">Standard Fee</th>
                   <th className="px-4 py-3.5">Status</th>
@@ -1359,7 +1432,7 @@ export default function AccountantClient({
               <tbody className="divide-y divide-slate-100">
                 {filteredLedgerItems.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-slate-400">
+                    <td colSpan={9} className="text-center py-12 text-slate-400">
                       <Users className="w-8 h-8 mx-auto mb-2 text-slate-300" />
                       <p className="font-semibold text-slate-600">No student enrollments match your criteria</p>
                       <p className="text-xs text-slate-400 mt-0.5">Try choosing another batch or adjusting filters</p>
@@ -1406,6 +1479,31 @@ export default function AccountantClient({
                                 )}
                               </p>
                             </div>
+                          </div>
+                        </td>
+
+                        {/* Roll No Column */}
+                        <td className="px-3.5 py-3.5 whitespace-nowrap">
+                          <div className="flex flex-col gap-1">
+                            <span className="inline-flex items-center gap-1 font-mono bg-amber-100/90 px-2.5 py-1 rounded-lg text-xs font-black text-amber-950 border border-amber-300 shadow-2xs w-fit">
+                              <span className="text-[10px] text-amber-700 font-sans font-bold">রোল</span> #{item.rollNo}
+                            </span>
+                            {item.allBatchRolls && item.allBatchRolls.length > 1 && (
+                              <div className="flex flex-wrap gap-1 mt-0.5 max-w-[150px]">
+                                {item.allBatchRolls.map((br, idx) => {
+                                  if (br.batchId === item.batch.id) return null
+                                  return (
+                                    <span
+                                      key={idx}
+                                      className="text-[10px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200"
+                                      title={`${br.batchName}: Roll #${br.roll}`}
+                                    >
+                                      #{br.roll} ({br.batchName})
+                                    </span>
+                                  )
+                                })}
+                              </div>
+                            )}
                           </div>
                         </td>
 

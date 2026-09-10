@@ -91,11 +91,36 @@ export default async function StudentsPage() {
     if (s.student_id) rawStudentMap.set(String(s.student_id), s)
   })
 
+  // Sort enrollments deterministically by created_at or id to calculate stable fallback roll numbers
+  const sortedRawEnrollments = [...rawEnrollments].sort((a, b) => {
+    const tA = a.created_at ? new Date(a.created_at).getTime() : 0
+    const tB = b.created_at ? new Date(b.created_at).getTime() : 0
+    if (tA !== tB) return tA - tB
+    return String(a.id || "").localeCompare(String(b.id || ""))
+  })
+
+  const batchCounters = new Map<string, number>()
+  const enrFallbackRollMap = new Map<string, number>()
+  sortedRawEnrollments.forEach((e: any) => {
+    const bId = e.batch_id || "default"
+    const nextSeq = (batchCounters.get(bId) || 0) + 1
+    batchCounters.set(bId, nextSeq)
+    enrFallbackRollMap.set(e.id, nextSeq)
+  })
+
   const enrollmentsByStudent = new Map<string, any[]>()
-  rawEnrollments.forEach((e: any) => {
+  sortedRawEnrollments.forEach((e: any) => {
     if (!e.student_id) return
     const sObj = rawStudentMap.get(String(e.student_id))
-    const roll = e.roll_no ?? sObj?.roll_no ?? sObj?.batch_roll ?? null
+    const fallbackSeq = enrFallbackRollMap.get(e.id) || 1
+    const roll = (e.roll_no != null && Number(e.roll_no) > 0)
+      ? Number(e.roll_no)
+      : ((sObj?.roll_no != null && Number(sObj.roll_no) > 0)
+          ? Number(sObj.roll_no)
+          : ((sObj?.batch_roll != null && Number(sObj.batch_roll) > 0)
+              ? Number(sObj.batch_roll)
+              : fallbackSeq))
+
     const item = {
       ...e,
       roll_no: roll,
@@ -126,11 +151,26 @@ export default async function StudentsPage() {
     const firstRoll = uniqueEnrs.find((e: any) => e.roll_no != null)?.roll_no
     return {
       ...s,
-      roll_no: firstRoll ?? s.roll_no ?? s.batch_roll ?? null,
-      batch_roll: firstRoll ?? s.batch_roll ?? s.roll_no ?? null,
+      roll_no: firstRoll ?? s.roll_no ?? s.batch_roll ?? (uniqueEnrs.length > 0 ? 1 : null),
+      batch_roll: firstRoll ?? s.batch_roll ?? s.roll_no ?? (uniqueEnrs.length > 0 ? 1 : null),
       enrollments: uniqueEnrs
     }
   })
+
+  // Auto-heal any enrollments missing roll_no in database in background
+  const nullRolls = rawEnrollments.filter(e => e.roll_no == null || Number(e.roll_no) <= 0)
+  if (nullRolls.length > 0) {
+    (async () => {
+      try {
+        for (const e of nullRolls) {
+          const r = enrFallbackRollMap.get(e.id)
+          if (r) {
+            await admin.from("enrollments").update({ roll_no: r }).eq("id", e.id)
+          }
+        }
+      } catch {}
+    })()
+  }
 
   const { data: staff } = user
     ? await admin.from("staff").select("id, name, email, role").eq("auth_user_id", user.id).maybeSingle()

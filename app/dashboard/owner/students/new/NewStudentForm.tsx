@@ -487,15 +487,44 @@ export default function NewStudentForm({
   }, [contextBranchId, effectiveBranches])
 
   function resetForm() {
-    setForm({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
+    setForm({ 
+      name: "", 
+      phone: "", 
+      email: "", 
+      gender: "male", 
+      date_of_birth: "", 
+      guardian_name: "", 
+      guardian_phone: "", 
+      guardian_relation: "Parent", 
+      address: "", 
+      school_college: "", 
+      class_level: "", 
+      referred_by_code: "", 
+      batch_id: "", 
+      password: "", 
+      confirmPassword: "" 
+    })
     setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
     setSelectedStudent(null)
     setEnrolledBatchIds([])
     setSearchQuery("")
     setPaidAmount("")
+    setBatchRoll("")
+    setMode("new")
     const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10)
     setDueDate(d.toISOString().split("T")[0])
     setReceipt(null)
+  }
+
+  function handleStartNewEnrollment() {
+    resetForm()
+    setMode("new")
+    setActiveTab("enroll")
+    setReceipt(null)
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+    toast.success("নতুন ভর্তির ফর্ম প্রস্তুত! (Clean form ready for new enrollment)")
   }
 
   const filtered = useMemo(() => {
@@ -1354,12 +1383,19 @@ export default function NewStudentForm({
       <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/90 shadow-2xs mb-5">
         <button
           type="button"
-          onClick={() => setActiveTab("enroll")}
+          onClick={() => {
+            if (activeTab === "enroll") {
+              handleStartNewEnrollment()
+            } else {
+              setActiveTab("enroll")
+            }
+          }}
           className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
             activeTab === "enroll"
               ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
               : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
           }`}
+          title="নতুন শিক্ষার্থী ভর্তি ফর্ম"
         >
           <UserPlus className="w-4 h-4 text-amber-500" />
           <span>➕ Enroll Student (নতুন শিক্ষার্থী ভর্তি)</span>
@@ -1387,43 +1423,55 @@ export default function NewStudentForm({
         <div className="space-y-5">
           <form onSubmit={handleSubmit} className="space-y-5">
         {/* Mode selector */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-4 flex items-center gap-3">
-          <select value={mode} onChange={e => { setMode(e.target.value as "new"|"existing"); setSelectedStudent(null); setSearchQuery(""); setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" }) }}
-            className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 hover:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none cursor-pointer">
-            <option value="new">➕ New Student (নতুন শিক্ষার্থী)</option>
-            <option value="existing">🔍 Existing Student (পূর্বের শিক্ষার্থী)</option>
-          </select>
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+            <select value={mode} onChange={e => { setMode(e.target.value as "new"|"existing"); setSelectedStudent(null); setSearchQuery(""); setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" }) }}
+              className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 hover:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none cursor-pointer">
+              <option value="new">➕ New Student (নতুন শিক্ষার্থী)</option>
+              <option value="existing">🔍 Existing Student (পূর্বের শিক্ষার্থী)</option>
+            </select>
 
-          {mode === "existing" && !selectedStudent && (
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search name, ID, phone..."
-                className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 bg-white shadow-2xs" autoFocus />
-              {filtered.length > 0 && (
-                <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl max-h-52 overflow-y-auto divide-y divide-slate-100">
-                  {filtered.map(s => (
-                    <button type="button" key={s.id} onClick={() => { handleSelectStudent(s); setSearchQuery("") }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-amber-50/50 text-sm transition-colors cursor-pointer">
-                      <span className="font-bold text-slate-900">{s.name}</span>
-                      <span className="text-xs text-amber-600 font-mono font-bold ml-2">{s.student_id}</span>
-                      {s.phone && <span className="text-xs text-slate-500 ml-2">• {s.phone}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {mode === "existing" && selectedStudent && (
-            <div className="flex-1 flex items-center justify-between px-3.5 py-2 bg-amber-50 rounded-xl border border-amber-200">
-              <div>
-                <span className="text-sm font-bold text-slate-900">{selectedStudent.name}</span>
-                <span className="text-xs text-amber-700 font-mono font-bold ml-2">{selectedStudent.student_id}</span>
-                {selectedStudent.phone && <span className="text-xs text-slate-500 ml-2">• {selectedStudent.phone}</span>}
+            {mode === "existing" && !selectedStudent && (
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search name, ID, phone..."
+                  className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 bg-white shadow-2xs" autoFocus />
+                {filtered.length > 0 && (
+                  <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl max-h-52 overflow-y-auto divide-y divide-slate-100">
+                    {filtered.map(s => (
+                      <button type="button" key={s.id} onClick={() => { handleSelectStudent(s); setSearchQuery("") }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-amber-50/50 text-sm transition-colors cursor-pointer">
+                        <span className="font-bold text-slate-900">{s.name}</span>
+                        <span className="text-xs text-amber-600 font-mono font-bold ml-2">{s.student_id}</span>
+                        {s.phone && <span className="text-xs text-slate-500 ml-2">• {s.phone}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <button type="button" onClick={() => handleSelectStudent(null)} className="text-rose-600 hover:text-rose-700 text-sm font-bold ml-2 transition-colors cursor-pointer">✕</button>
-            </div>
-          )}
+            )}
+
+            {mode === "existing" && selectedStudent && (
+              <div className="flex-1 flex items-center justify-between px-3.5 py-2 bg-amber-50 rounded-xl border border-amber-200">
+                <div>
+                  <span className="text-sm font-bold text-slate-900">{selectedStudent.name}</span>
+                  <span className="text-xs text-amber-700 font-mono font-bold ml-2">{selectedStudent.student_id}</span>
+                  {selectedStudent.phone && <span className="text-xs text-slate-500 ml-2">• {selectedStudent.phone}</span>}
+                </div>
+                <button type="button" onClick={() => handleSelectStudent(null)} className="text-rose-600 hover:text-rose-700 text-sm font-bold ml-2 transition-colors cursor-pointer">✕</button>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleStartNewEnrollment}
+            className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-2xs shrink-0"
+            title="ফর্ম সম্পূর্ণ পরিষ্কার করে নতুন ভর্তি শুরু করুন"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+            <span>Clean Form (নতুন পরিষ্কার ফর্ম)</span>
+          </button>
         </div>
 
         {/* Existing student — missing info prompt */}
@@ -1927,6 +1975,15 @@ export default function NewStudentForm({
               </div>
               <button
                 type="button"
+                onClick={handleStartNewEnrollment}
+                className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                title="নতুন শিক্ষার্থী ভর্তি ফর্ম খুলুন"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>New Enrollment (নতুন ভর্তি)</span>
+              </button>
+              <button
+                type="button"
                 onClick={fetchHistory}
                 disabled={historyLoading}
                 className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
@@ -2156,10 +2213,20 @@ export default function NewStudentForm({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
           <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[94vh] flex flex-col">
             {/* Header */}
-            <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-indigo-600 p-5 text-white text-center relative">
+            <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-indigo-600 p-5 text-white text-center relative shrink-0">
               <button 
                 type="button" 
-                onClick={() => setReceipt(null)} 
+                onClick={handleStartNewEnrollment}
+                className="absolute top-4 left-4 bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="নতুন পরিষ্কার ভর্তি ফর্ম খুলুন (Start New Enrollment)"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">New Enrollment</span>
+                <span className="sm:hidden">New</span>
+              </button>
+              <button 
+                type="button" 
+                onClick={() => { resetForm(); setReceipt(null); }} 
                 className="absolute top-4 right-4 text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                 title="Close"
               >
@@ -2197,7 +2264,7 @@ export default function NewStudentForm({
             </div>
 
             {/* Scrollable Content */}
-            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50">
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50 min-h-0">
               {modalTab === "receipt" ? (
                 /* Printable preview slip */
                 <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-white space-y-3 shadow-xs">
@@ -2322,53 +2389,65 @@ export default function NewStudentForm({
                   </div>
                 </div>
               )}
+            </div>
 
-              {/* Action Buttons Toolbar */}
-              <div className="space-y-2 pt-1">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => handlePrint()}
-                    className="py-2.5 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-md shadow-amber-500/20 transition-all cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5" /> 
-                    <span>প্রিন্ট রসিদ</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePrintIdCard()}
-                    className="py-2.5 px-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
-                  >
-                    <span>🪪 প্রিন্ট আইডি কার্ড</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handlePrintBoth()}
-                    className="col-span-2 sm:col-span-1 py-2.5 px-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
-                    title="Print both Admission Memo and Student ID Card in one document"
-                  >
-                    <span>📑 উভয়ই প্রিন্ট করুন</span>
-                  </button>
-                </div>
+            {/* Sticky Action Footer - Always visible at bottom */}
+            <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200 shrink-0 space-y-2.5 shadow-lg">
+              {/* Primary Action Button: New Enrollment */}
+              <button
+                type="button"
+                onClick={handleStartNewEnrollment}
+                className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-black text-sm shadow-md shadow-emerald-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>➕ New Enrollment (নতুন পরিষ্কার ফর্ম)</span>
+              </button>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => modalTab === "idcard" ? handleDownloadIdCard() : handleSavePDF()}
-                    className="py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl font-bold flex items-center justify-center gap-2 text-xs transition-all cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>{modalTab === "idcard" ? "আইডি কার্ড PDF" : "রসিদ PDF সেভ"}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { resetForm(); setReceipt(null); }}
-                    className="py-2.5 border border-slate-300 text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> 
-                    <span>পরবর্তী শিক্ষার্থী ভর্তি</span>
-                  </button>
-                </div>
+              {/* Print buttons */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrint()}
+                  className="py-2.5 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-all cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> 
+                  <span>প্রিন্ট রসিদ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintIdCard()}
+                  className="py-2.5 px-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-all cursor-pointer"
+                >
+                  <span>🪪 প্রিন্ট আইডি কার্ড</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintBoth()}
+                  className="py-2.5 px-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-all cursor-pointer"
+                  title="Print both Admission Memo and Student ID Card in one document"
+                >
+                  <span>📑 উভয়ই প্রিন্ট</span>
+                </button>
+              </div>
+
+              {/* PDF and Close actions */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => modalTab === "idcard" ? handleDownloadIdCard() : handleSavePDF()}
+                  className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-semibold flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{modalTab === "idcard" ? "আইডি কার্ড PDF" : "রসিদ PDF সেভ"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { resetForm(); setReceipt(null); }}
+                  className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>বন্ধ করুন (Close)</span>
+                </button>
               </div>
             </div>
           </div>
