@@ -6,7 +6,7 @@ import {
   BookOpen, Users, User, Clock, Calendar, CalendarDays, MapPin, Star,
   ArrowRight, Phone, Mail, ChevronRight, ChevronLeft, CheckCircle, TrendingUp,
   Shield, Bell, MessageSquare, Send, Loader2, Megaphone, ExternalLink,
-  Landmark, Award, Check, ChevronDown, Sparkles, Share2, Eye, FileText, Trophy, Trash2
+  Landmark, Award, Check, ChevronDown, Sparkles, Share2, Eye, FileText, Trophy
 } from "lucide-react"
 import Link from "next/link"
 import type { Branch } from "@/lib/supabase/types"
@@ -139,7 +139,6 @@ export default function HomePage() {
   const [fbRating, setFbRating] = useState(5)
   const [fbSubmitting, setFbSubmitting] = useState(false)
   const [fbDone, setFbDone] = useState(false)
-  const [deletingResultCardId, setDeletingResultCardId] = useState<string | null>(null)
 
   // Active Branch computation
   const currentBranch = selectedBranchId === "all"
@@ -587,105 +586,6 @@ export default function HomePage() {
 
     return cards
   }, [publicExams, selectedBranchId])
-
-  async function handleDeleteHomepageResultCard(card: any) {
-    const isStaffUser = Boolean(userRole && ["owner", "branch_director", "super_manager", "manager", "admin", "super_admin", "branch_admin", "teacher"].includes(userRole))
-    if (!isStaffUser && !currentUser) {
-      const wantLogin = confirm("ফলাফল মুছতে হলে কোচিং এডমিন বা স্টাফ হিসেবে লগইন থাকা আবশ্যক। আপনি কি এখনই লগইন করতে চান?")
-      if (wantLogin) {
-        window.location.href = `/login?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`
-      }
-      return
-    }
-
-    const typeDesc =
-      card.badgeType === "weekly"
-        ? "সাপ্তাহিক সামগ্রিক মূল্যায়ন ফলাফলটি"
-        : card.badgeType === "daily"
-        ? `"${card.title}" দৈনিক পরীক্ষার ফলাফলটি`
-        : `"${card.title}" পরীক্ষার ফলাফলটি`
-
-    if (
-      !confirm(
-        `আপনি কি নিশ্চিত যে ${typeDesc} হোমপেজ ও অনলাইন পোর্টাল থেকে মুছে ফেলতে চান?\n\n(নোট: পরীক্ষার মূল প্রশ্ন ও নম্বর ডাটাবেজে সংরক্ষিত থাকবে, শুধুমাত্র পাবলিক নোটিফিকেশনটি মুছে যাবে)`
-      )
-    ) {
-      return
-    }
-
-    setDeletingResultCardId(card.id)
-    try {
-      let payload: any = { exam_id: card.examId }
-      if (card.badgeType === "daily" && card.dayKey) {
-        payload.action = "delete_day"
-        payload.day_key = card.dayKey
-      } else if (card.badgeType === "weekly") {
-        payload.action = "toggle_weekly_total"
-        payload.is_weekly_published = false
-      } else {
-        payload.action = "unpublish"
-        payload.delete_notices = true
-      }
-
-      const res = await fetch("/api/exams/unpublish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || "মুছে ফেলতে ব্যর্থ হয়েছে")
-
-      // Update publicExams state immediately
-      setPublicExams((prev) =>
-        prev.map((e) => {
-          if (e.id === card.examId) {
-            let note = (e as any).result_note || ""
-            if (card.badgeType === "daily" && card.dayKey) {
-              const prevDays: string[] = Array.isArray(e.published_days)
-                ? e.published_days
-                : typeof e.published_days === "string"
-                ? e.published_days.split(",")
-                : []
-              const updatedDays = prevDays.filter(
-                (d: any) => String(d).toLowerCase().trim() !== card.dayKey?.toLowerCase().trim()
-              )
-              note = note.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
-              note = `${note} [PUBLISHED_DAYS:${updatedDays.join(",")}]`.trim()
-              return {
-                ...e,
-                published_days: updatedDays,
-                result_note: note,
-              }
-            } else if (card.badgeType === "weekly") {
-              note = note.replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "").trim()
-              note = `${note} [IS_WEEKLY_PUBLISHED:false]`.trim()
-              return {
-                ...e,
-                is_weekly_published: false,
-                result_note: note,
-              }
-            } else {
-              note = note.replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "").trim()
-              note = `${note} [PUBLIC_RESULT:false]`.trim()
-              return {
-                ...e,
-                is_public_result: false,
-                is_published: false,
-                result_note: note,
-              }
-            }
-          }
-          return e
-        })
-      )
-
-      alert(`✓ ${typeDesc} সফলভাবে মুছে ফেলা হয়েছে!`)
-    } catch (err: any) {
-      alert(err.message || "মুছে ফেলতে সমস্যা হয়েছে")
-    } finally {
-      setDeletingResultCardId(null)
-    }
-  }
 
   async function handleFeedbackSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -1330,32 +1230,12 @@ export default function HomePage() {
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          {card.branchName && (
-                            <span className="text-[10px] font-semibold text-gray-500 flex items-center gap-1">
-                              <Landmark className="w-3 h-3 text-indigo-500" />
-                              {card.branchName}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            disabled={deletingResultCardId === card.id}
-                            onClick={(e) => {
-                              e.preventDefault()
-                              e.stopPropagation()
-                              handleDeleteHomepageResultCard(card)
-                            }}
-                            className="px-2 py-0.5 text-red-600 hover:text-white hover:bg-red-600 bg-red-50 border border-red-200 rounded-lg transition-all text-xs font-bold flex items-center gap-1 cursor-pointer active:scale-95 shadow-2xs"
-                            title="হোমপেজ ও পোর্টাল থেকে এই ফলাফল কার্ডটি মুছে ফেলুন"
-                          >
-                            {deletingResultCardId === card.id ? (
-                              <div className="w-3 h-3 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                            <span>{deletingResultCardId === card.id ? "মুছছে..." : "মুছুন"}</span>
-                          </button>
-                        </div>
+                        {card.branchName && (
+                          <span className="text-[10px] font-semibold text-gray-500 flex items-center gap-1">
+                            <Landmark className="w-3 h-3 text-indigo-500" />
+                            {card.branchName}
+                          </span>
+                        )}
                       </div>
 
                       <div>

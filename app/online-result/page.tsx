@@ -23,7 +23,6 @@ import {
   CalendarDays,
   User,
   GraduationCap,
-  Trash2,
   LayoutDashboard,
 } from "lucide-react"
 
@@ -270,7 +269,6 @@ export default function OnlineResultPortalPage() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [isStaff, setIsStaff] = useState(false)
   const [staffRole, setStaffRole] = useState<string>("")
-  const [deletingCardId, setDeletingCardId] = useState<string | null>(null)
   
   // Filters: default to "all" so published weekly and daily exams are immediately visible
   const [activeTab, setActiveTab] = useState<"all" | "everyday" | "weekly">("all")
@@ -562,104 +560,6 @@ export default function OnlineResultPortalPage() {
     }
     return items
   }, [exams])
-
-  async function handleAdminDeleteCard(card: ResultCardItem) {
-    if (!isStaff && !currentUser) {
-      const wantLogin = confirm("ফলাফল মুছতে হলে কোচিং এডমিন বা স্টাফ হিসেবে লগইন থাকা আবশ্যক। আপনি কি এখনই লগইন করতে চান?")
-      if (wantLogin) {
-        window.location.href = `/login?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`
-      }
-      return
-    }
-
-    const typeDesc =
-      card.type === "weekly"
-        ? "সাপ্তাহিক সামগ্রিক মূল্যায়ন ফলাফলটি"
-        : card.type === "daily"
-        ? `"${card.title}" দৈনিক পরীক্ষার ফলাফলটি`
-        : `"${card.title}" পরীক্ষার ফলাফলটি`
-
-    if (
-      !confirm(
-        `আপনি কি নিশ্চিত যে ${typeDesc} অনলাইন রেজাল্ট পোর্টাল ও হোমপেজ থেকে মুছে ফেলতে চান?\n\n(নোট: পরীক্ষার মূল প্রশ্ন ও নম্বর ডাটাবেজে সংরক্ষিত থাকবে, শুধুমাত্র পাবলিক পোর্টাল ও নোটিশবোর্ড থেকে এই নোটিফিকেশনটি মুছে যাবে)`
-      )
-    ) {
-      return
-    }
-
-    setDeletingCardId(card.id)
-    try {
-      let payload: any = { exam_id: card.parentExam.id }
-      if (card.type === "daily" && card.dayKey) {
-        payload.action = "delete_day"
-        payload.day_key = card.dayKey
-      } else if (card.type === "weekly") {
-        payload.action = "toggle_weekly_total"
-        payload.is_weekly_published = false
-      } else {
-        payload.action = "unpublish"
-        payload.delete_notices = true
-      }
-
-      const res = await fetch("/api/exams/unpublish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || "মুছে ফেলতে ব্যর্থ হয়েছে")
-
-      // Update local exams state immediately so card vanishes
-      setExams((prev) =>
-        prev.map((e) => {
-          if (e.id === card.parentExam.id) {
-            let note = (e as any).result_note || ""
-            if (card.type === "daily" && card.dayKey) {
-              const prevDays: string[] = Array.isArray(e.published_days)
-                ? e.published_days
-                : typeof e.published_days === "string"
-                ? e.published_days.split(",")
-                : []
-              const updatedDays = prevDays.filter(
-                (d: any) => String(d).toLowerCase().trim() !== card.dayKey?.toLowerCase().trim()
-              )
-              note = note.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
-              note = `${note} [PUBLISHED_DAYS:${updatedDays.join(",")}]`.trim()
-              return {
-                ...e,
-                published_days: updatedDays,
-                result_note: note,
-              }
-            } else if (card.type === "weekly") {
-              note = note.replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "").trim()
-              note = `${note} [IS_WEEKLY_PUBLISHED:false]`.trim()
-              return {
-                ...e,
-                is_weekly_published: false,
-                result_note: note,
-              }
-            } else {
-              note = note.replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "").trim()
-              note = `${note} [PUBLIC_RESULT:false]`.trim()
-              return {
-                ...e,
-                is_public_result: false,
-                is_published: false,
-                result_note: note,
-              }
-            }
-          }
-          return e
-        })
-      )
-
-      alert(`✓ ${typeDesc} পোর্টাল ও হোমপেজ থেকে সফলভাবে মুছে ফেলা হয়েছে!`)
-    } catch (err: any) {
-      alert(err.message || "মুছে ফেলতে সমস্যা হয়েছে")
-    } finally {
-      setDeletingCardId(null)
-    }
-  }
 
   // Filter cards by active tab, branch, and search
   const filteredCards = useMemo(() => {
@@ -1173,31 +1073,12 @@ export default function OnlineResultPortalPage() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2">
-                        {card.branchName && (
-                          <span className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
-                            <Landmark className="w-3 h-3 text-slate-400" />
-                            {card.branchName}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          disabled={deletingCardId === card.id}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleAdminDeleteCard(card)
-                          }}
-                          className="px-2.5 py-1 text-red-600 hover:text-white hover:bg-red-600 bg-red-50/80 rounded-lg transition-all border border-red-200 cursor-pointer text-xs font-bold flex items-center gap-1.5 shadow-2xs active:scale-95"
-                          title="এই ফলাফল কার্ডটি অনলাইন পোর্টাল ও হোমপেজ থেকে মুছে ফেলুন"
-                        >
-                          {deletingCardId === card.id ? (
-                            <div className="w-3.5 h-3.5 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            <Trash2 className="w-3.5 h-3.5" />
-                          )}
-                          <span>{deletingCardId === card.id ? "মুছছে..." : "মুছুন"}</span>
-                        </button>
-                      </div>
+                      {card.branchName && (
+                        <span className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
+                          <Landmark className="w-3 h-3 text-slate-400" />
+                          {card.branchName}
+                        </span>
+                      )}
                     </div>
 
                     <div>
