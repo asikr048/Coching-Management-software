@@ -77,24 +77,45 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // d. Unlink direct payments that reference this batch
+    // d. Unlink or clean payments referencing this batch
     try {
-      await admin
+      const { error: payErr } = await admin
         .from("payments")
         .update({ batch_id: null })
         .eq("batch_id", cleanId)
+      if (payErr) {
+        console.warn("Could not nullify batch_id in payments, deleting test payments:", payErr)
+        await admin.from("payments").delete().eq("batch_id", cleanId)
+      }
     } catch (e) {
-      console.warn("Could not unlink direct payments by batch_id:", e)
+      console.warn("Could not handle payments:", e)
     }
 
-    // e. Unlink payment_submissions
+    // e. Delete payment_submissions associated with this batch
     try {
-      await admin
-        .from("payment_submissions")
-        .update({ batch_id: null })
+      // First clean submissions pointing to this batch's fee_dues
+      const { data: batchDues } = await admin
+        .from("fee_dues")
+        .select("id")
         .eq("batch_id", cleanId)
+      const dueIds = (batchDues || []).map(d => d.id)
+      if (dueIds.length > 0) {
+        await admin
+          .from("payment_submissions")
+          .delete()
+          .in("fee_due_id", dueIds)
+      }
+
+      // Delete payment_submissions directly referencing this batch
+      const { error: psErr } = await admin
+        .from("payment_submissions")
+        .delete()
+        .eq("batch_id", cleanId)
+      if (psErr) {
+        console.error("Error deleting payment_submissions for batch:", psErr)
+      }
     } catch (e) {
-      console.warn("Could not unlink payment_submissions:", e)
+      console.warn("Could not delete payment_submissions:", e)
     }
 
     // f. Materials: nullify batch_id and filter out from batch_ids array
