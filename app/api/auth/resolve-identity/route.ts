@@ -59,23 +59,12 @@ export async function POST(req: NextRequest) {
         // Continue if listUsers fails
       }
     } else {
-      // Input is a User ID / Student ID (e.g. MS-10001, 10001, ms-10001)
+      // Input is a User ID (e.g. MS-00001, 10001, ms-10001)
       const cleanId = raw.toUpperCase().startsWith("MS-")
         ? raw.toUpperCase()
         : `MS-${raw.toUpperCase()}`
 
-      // Fetch all staff emails to guarantee a Student ID NEVER resolves to a staff/admin email
-      const { data: staffList } = await admin
-        .from("staff")
-        .select("email")
-      const staffEmails = new Set(
-        staffList?.map((s) => s.email?.toLowerCase()).filter(Boolean) || []
-      )
-
-      // Fallback synthetic email (unique to this student)
-      const synthetic = `${cleanId.toLowerCase()}@medhashiree.local`
-
-      // Check user_profiles
+      // Check user_profiles (holds user_id like MS-00001 for admin/owner and users)
       const { data: profile } = await admin
         .from("user_profiles")
         .select("email")
@@ -83,8 +72,22 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .maybeSingle()
 
-      if (profile?.email && !staffEmails.has(profile.email.toLowerCase())) {
+      if (profile?.email) {
         candidates.push(profile.email.toLowerCase())
+      }
+
+      // If cleanId is MS-00001 (Admin / Owner ID), prioritize owner's email
+      if (cleanId === "MS-00001") {
+        const { data: ownerStaff } = await admin
+          .from("staff")
+          .select("email")
+          .eq("role", "owner")
+          .limit(1)
+          .maybeSingle()
+
+        if (ownerStaff?.email && !candidates.includes(ownerStaff.email.toLowerCase())) {
+          candidates.unshift(ownerStaff.email.toLowerCase())
+        }
       }
 
       // Check students table
@@ -95,22 +98,12 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .maybeSingle()
 
-      if (
-        student?.email &&
-        !staffEmails.has(student.email.toLowerCase()) &&
-        !candidates.includes(student.email.toLowerCase())
-      ) {
+      if (student?.email && !candidates.includes(student.email.toLowerCase())) {
         candidates.push(student.email.toLowerCase())
       }
 
-      // If student was mistakenly given a staff email in the database, sanitize it to synthetic
-      if (student?.email && staffEmails.has(student.email.toLowerCase())) {
-        try {
-          await admin.from("students").update({ email: synthetic }).eq("student_id", cleanId)
-          await admin.from("user_profiles").update({ email: synthetic }).eq("user_id", cleanId)
-        } catch {}
-      }
-
+      // Fallback synthetic email
+      const synthetic = `${cleanId.toLowerCase()}@medhashiree.local`
       if (!candidates.includes(synthetic)) {
         candidates.push(synthetic)
       }

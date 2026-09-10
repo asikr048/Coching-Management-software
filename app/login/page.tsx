@@ -61,7 +61,7 @@ function LoginFormContent() {
         const resolveRes = await fetch("/api/auth/resolve-identity", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ identifier: rawInput }),
+          body: JSON.stringify({ identifier: rawInput, portal: loginTab }),
         })
         if (resolveRes.ok) {
           const resolveData = await resolveRes.json()
@@ -193,36 +193,32 @@ function LoginFormContent() {
         return
       }
 
-      // If user selected Staff / Admin tab, verify they actually have a staff role
-      if (loginTab === "staff") {
-        if (!role) {
-          await supabase.auth.signOut()
-          setError("Access denied. This account does not have staff or admin privileges.")
-          setLoading(false)
-          return
+      // If authenticated user is Staff / Admin / Owner:
+      if (role) {
+        if (role === "owner" || role === "branch_director" || role === "super_manager" || role === "manager") {
+          window.location.href = "/dashboard/owner"
+        } else if (role === "receptionist") {
+          window.location.href = "/dashboard/reception"
+        } else if (role === "teacher") {
+          window.location.href = "/dashboard/teacher"
+        } else if (role === "accountant") {
+          window.location.href = "/dashboard/accountant"
+        } else {
+          window.location.href = "/dashboard/owner"
         }
-      }
-
-      // Check if user logged in using a Student ID (e.g. MS-00001, 00001) or explicit Student Portal tab
-      const isStudentIdInput = !rawInput.includes("@") || /^MS-/i.test(rawInput)
-
-      if (loginTab === "student" || isStudentIdInput) {
-        // Direct to Student Portal immediately
-        window.location.href = "/student/profile"
         return
       }
 
-      if (role === "owner" || role === "branch_director" || role === "super_manager" || role === "manager") {
-        window.location.href = "/dashboard/owner"
-      } else if (role === "receptionist") {
-        window.location.href = "/dashboard/reception"
-      } else if (role === "teacher") {
-        window.location.href = "/dashboard/teacher"
-      } else if (role === "accountant") {
-        window.location.href = "/dashboard/accountant"
-      } else {
-        window.location.href = "/student/profile"
+      // If user selected Staff / Admin tab, but account is not a staff member:
+      if (loginTab === "staff") {
+        await supabase.auth.signOut()
+        setError("Access denied. This account does not have staff or admin privileges.")
+        setLoading(false)
+        return
       }
+
+      // Non-staff accounts go to Student Portal
+      window.location.href = "/student/profile"
     } catch (err: unknown) {
       console.error("Login error:", err)
       setError(err instanceof Error ? err.message : "Login failed. Please try again.")
