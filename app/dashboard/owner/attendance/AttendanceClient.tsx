@@ -169,51 +169,20 @@ export default function AttendanceClient({
     async function fetchSheetData() {
       setLoadingStudents(true)
       try {
-        // 1. Fetch active enrollments with roll numbers
-        const { data: enrollments, error: enrollErr } = await supabase
-          .from("enrollments")
-          .select("roll_no, enrollment_date, created_at, student:students(id, name, student_id, roll_no, batch_roll, phone, guardian_phone)")
-          .eq("batch_id", selectedBatchId)
-          .eq("status", "active")
-          .order("roll_no", { ascending: true, nullsFirst: false })
-
-        if (enrollErr) throw enrollErr
-
-        // 2. Fetch existing attendance for this batch on the selected date
-        const { data: existingRecords, error: attErr } = await supabase
-          .from("attendance")
-          .select("student_id, status, note")
-          .eq("batch_id", selectedBatchId)
-          .eq("date", attendanceDate)
-
-        if (attErr) throw attErr
-
+        const res = await fetch(`/api/attendance/batch-data?batch_id=${selectedBatchId}&date=${attendanceDate}`)
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || "Failed to load sheet data")
+        }
+        const data = await res.json()
         if (!isMounted) return
 
-        // 3. Normalize sequential roll numbers strictly starting from 1 to rest
-        const mappedStudents: any[] = (enrollments || [])
-          .map((e: any, idx: number) => {
-            if (!e.student) return null
-            const resolvedRoll =
-              e.roll_no != null && Number(e.roll_no) > 0
-                ? Number(e.roll_no)
-                : e.student.roll_no || e.student.batch_roll || idx + 1
-            return {
-              ...e.student,
-              roll_no: resolvedRoll,
-              batch_roll: resolvedRoll,
-              enrollment_date: e.enrollment_date,
-            }
-          })
-          .filter(Boolean)
-
-        // Sort strictly by roll number ascending (1, 2, 3...)
-        mappedStudents.sort((a, b) => (a.roll_no || 9999) - (b.roll_no || 9999))
+        const mappedStudents = data.students || []
         setStudents(mappedStudents)
 
-        // 4. Map existing attendance or default to "present"
+        // Existing date attendance
         const existingMap: Record<string, { status: string; note: string }> = {}
-        for (const rec of existingRecords || []) {
+        for (const rec of data.dateAttendance || []) {
           existingMap[rec.student_id] = {
             status: rec.status,
             note: rec.note || "",
@@ -240,7 +209,7 @@ export default function AttendanceClient({
     return () => {
       isMounted = false
     }
-  }, [selectedBatchId, attendanceDate, supabase])
+  }, [selectedBatchId, attendanceDate])
 
   // Quick Action Handlers
   const handleMarkAll = (status: "present" | "absent") => {
@@ -287,14 +256,18 @@ export default function AttendanceClient({
         status: attendanceMap[s.id]?.status || "present",
         note: attendanceMap[s.id]?.note || null,
         entry_method: "manual" as const,
-        checked_in_at: new Date().toISOString(),
       }))
 
-      const { error } = await supabase
-        .from("attendance")
-        .upsert(recordsToUpsert, { onConflict: "student_id,batch_id,date" })
+      const res = await fetch("/api/attendance/batch-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: recordsToUpsert }),
+      })
 
-      if (error) throw error
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || "Failed to save attendance")
+      }
 
       toast.success(`Attendance successfully saved for ${recordsToUpsert.length} students!`)
 
@@ -349,60 +322,16 @@ export default function AttendanceClient({
     async function fetchResultData() {
       setLoadingResult(true)
       try {
-        // 1. Fetch batch enrolled students with roll numbers
-        const { data: enrollments, error: enrollErr } = await supabase
-          .from("enrollments")
-          .select("roll_no, enrollment_date, created_at, student:students(id, name, student_id, roll_no, batch_roll, phone)")
-          .eq("batch_id", resultBatchId)
-          .eq("status", "active")
-          .order("roll_no", { ascending: true, nullsFirst: false })
-
-        if (enrollErr) throw enrollErr
-
-        // 2. Fetch all attendance records for this batch
-        let query = supabase
-          .from("attendance")
-          .select("id, student_id, batch_id, date, status, note")
-          .eq("batch_id", resultBatchId)
-
-        if (resultDateFilter === "this_month") {
-          const now = new Date()
-          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]
-          query = query.gte("date", firstDay)
-        } else if (resultDateFilter === "last_month") {
-          const now = new Date()
-          const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0]
-          const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0]
-          query = query.gte("date", firstDay).lte("date", lastDay)
+        const res = await fetch(`/api/attendance/batch-data?batch_id=${resultBatchId}&filter=${resultDateFilter}`)
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || "Failed to load result data")
         }
-
-        const { data: attRecords, error: attErr } = await query
-
-        if (attErr) throw attErr
-
+        const data = await res.json()
         if (!isMounted) return
 
-        // Normalize students strictly ordered by Batch Roll 1..N
-        const resolvedStudents: any[] = (enrollments || [])
-          .map((e: any, idx: number) => {
-            if (!e.student) return null
-            const roll =
-              e.roll_no != null && Number(e.roll_no) > 0
-                ? Number(e.roll_no)
-                : e.student.roll_no || e.student.batch_roll || idx + 1
-            return {
-              ...e.student,
-              roll_no: roll,
-              batch_roll: roll,
-              enrollment_date: e.enrollment_date,
-            }
-          })
-          .filter(Boolean)
-
-        resolvedStudents.sort((a, b) => (a.roll_no || 9999) - (b.roll_no || 9999))
-
-        setBatchEnrolledStudents(resolvedStudents)
-        setBatchAttendanceData(attRecords || [])
+        setBatchEnrolledStudents(data.students || [])
+        setBatchAttendanceData(data.attendance || [])
       } catch (err: any) {
         console.error("Error loading batch attendance result:", err)
         toast.error("Failed to calculate attendance result")
@@ -415,7 +344,7 @@ export default function AttendanceClient({
     return () => {
       isMounted = false
     }
-  }, [resultBatchId, resultDateFilter, supabase])
+  }, [resultBatchId, resultDateFilter])
 
   // Batch Result Calculation Engine
   const {

@@ -54,41 +54,17 @@ export default function ReceptionAttendancePage() {
     async function load() {
       setLoading(true)
       try {
-        const { data: enrollments } = await supabase
-          .from("enrollments")
-          .select("roll_no, enrollment_date, created_at, student:students(id, name, student_id, roll_no, batch_roll, phone)")
-          .eq("batch_id", selectedBatch)
-          .eq("status", "active")
-          .order("roll_no", { ascending: true, nullsFirst: false })
-
-        // Deduplicate and resolve sequential roll numbers starting strictly from 1 to rest
-        const rawStuds: any[] = (enrollments || [])
-          .map((e: any, idx: number) => {
-            if (!e.student) return null
-            const assignedRoll =
-              e.roll_no != null && Number(e.roll_no) > 0
-                ? Number(e.roll_no)
-                : e.student.roll_no || e.student.batch_roll || idx + 1
-            return {
-              ...e.student,
-              roll_no: assignedRoll,
-              batch_roll: assignedRoll,
-              enrollment_date: e.enrollment_date,
-            }
-          })
-          .filter(Boolean)
-
-        rawStuds.sort((a, b) => (a.roll_no || 9999) - (b.roll_no || 9999))
+        const res = await fetch(`/api/attendance/batch-data?batch_id=${selectedBatch}&date=${attendanceDate}`)
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || "Failed to load students")
+        }
+        const data = await res.json()
+        const rawStuds = data.students || []
         setStudents(rawStuds)
 
-        const { data: existing } = await supabase
-          .from("attendance")
-          .select("student_id, status, note")
-          .eq("batch_id", selectedBatch)
-          .eq("date", attendanceDate)
-
         const map: Record<string, { status: string; note: string }> = {}
-        for (const a of existing || []) {
+        for (const a of data.dateAttendance || []) {
           map[a.student_id] = { status: a.status, note: a.note || "" }
         }
         for (const s of rawStuds) {
@@ -102,7 +78,7 @@ export default function ReceptionAttendancePage() {
       }
     }
     load()
-  }, [selectedBatch, attendanceDate, supabase])
+  }, [selectedBatch, attendanceDate])
 
   // Bulk Actions
   const handleMarkAll = (status: "present" | "absent") => {
@@ -128,12 +104,16 @@ export default function ReceptionAttendancePage() {
         status: attendanceMap[s.id]?.status || "present",
         note: attendanceMap[s.id]?.note || null,
         entry_method: "manual" as const,
-        checked_in_at: new Date().toISOString(),
       }))
-      const { error } = await supabase
-        .from("attendance")
-        .upsert(items, { onConflict: "student_id,batch_id,date" })
-      if (error) throw error
+      const res = await fetch("/api/attendance/batch-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ records: items }),
+      })
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || "Failed to save attendance")
+      }
       toast.success("Attendance saved successfully!")
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to save attendance")
@@ -169,49 +149,14 @@ export default function ReceptionAttendancePage() {
     async function fetchResult() {
       setLoadingResult(true)
       try {
-        const { data: enrollments } = await supabase
-          .from("enrollments")
-          .select("roll_no, student:students(id, name, student_id, roll_no, batch_roll)")
-          .eq("batch_id", resultBatchId)
-          .eq("status", "active")
-          .order("roll_no", { ascending: true, nullsFirst: false })
-
-        let query = supabase
-          .from("attendance")
-          .select("id, student_id, batch_id, date, status, note")
-          .eq("batch_id", resultBatchId)
-
-        if (resultDateFilter === "this_month") {
-          const now = new Date()
-          const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0]
-          query = query.gte("date", firstDay)
-        } else if (resultDateFilter === "last_month") {
-          const now = new Date()
-          const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split("T")[0]
-          const lastDay = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split("T")[0]
-          query = query.gte("date", firstDay).lte("date", lastDay)
+        const res = await fetch(`/api/attendance/batch-data?batch_id=${resultBatchId}&filter=${resultDateFilter}`)
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}))
+          throw new Error(errData.error || "Failed to load result data")
         }
-
-        const { data: attRecords } = await query
-
-        const resolvedStudents: any[] = (enrollments || [])
-          .map((e: any, idx: number) => {
-            if (!e.student) return null
-            const roll =
-              e.roll_no != null && Number(e.roll_no) > 0
-                ? Number(e.roll_no)
-                : e.student.roll_no || e.student.batch_roll || idx + 1
-            return {
-              ...e.student,
-              roll_no: roll,
-              batch_roll: roll,
-            }
-          })
-          .filter(Boolean)
-
-        resolvedStudents.sort((a, b) => (a.roll_no || 9999) - (b.roll_no || 9999))
-        setBatchEnrolledStudents(resolvedStudents)
-        setBatchAttendanceData(attRecords || [])
+        const data = await res.json()
+        setBatchEnrolledStudents(data.students || [])
+        setBatchAttendanceData(data.attendance || [])
       } catch (err) {
         console.error(err)
       } finally {
@@ -219,7 +164,7 @@ export default function ReceptionAttendancePage() {
       }
     }
     fetchResult()
-  }, [resultBatchId, resultDateFilter, supabase])
+  }, [resultBatchId, resultDateFilter])
 
   // Batch Result Calculation
   const { totalClassSessions, batchResults, avgAttendanceRate } = useMemo(() => {
