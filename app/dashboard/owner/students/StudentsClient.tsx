@@ -83,8 +83,70 @@ export default function StudentsClient({
 
   // Local student state (allows immediate removal when deletion is executed)
   const [localStudents, setLocalStudents] = useState(students)
+  const [localBatches, setLocalBatches] = useState(batches)
+  const [loadingFresh, setLoadingFresh] = useState(false)
+
+  const fetchStudentsClient = async () => {
+    setLoadingFresh(true)
+    try {
+      const [stRes, enrRes, bRes, dueRes] = await Promise.all([
+        supabase.from("students").select("*").order("created_at", { ascending: false }),
+        supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id"),
+        supabase.from("batches").select("id, name, branch_id, is_active"),
+        supabase.from("fee_dues").select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status")
+      ])
+
+      const rawSt = stRes.data || []
+      const rawEnr = enrRes.data || []
+      const rawBat = bRes.data || []
+
+      if (rawBat.length > 0) {
+        setLocalBatches(rawBat)
+      }
+
+      if (rawSt.length > 0) {
+        const batchMap = new Map<string, any>()
+        rawBat.forEach((b: any) => batchMap.set(b.id, b))
+
+        const enrollmentsByStudent = new Map<string, any[]>()
+        rawEnr.forEach((e: any) => {
+          if (!e.student_id) return
+          const item = {
+            ...e,
+            batch: batchMap.get(e.batch_id) || { name: "Enrolled Batch" }
+          }
+          const list = enrollmentsByStudent.get(e.student_id) || []
+          list.push(item)
+          enrollmentsByStudent.set(e.student_id, list)
+        })
+
+        const mapped = rawSt.map((s: any) => {
+          const sEnrs = enrollmentsByStudent.get(s.id) || []
+          const firstRoll = sEnrs.find(e => e.roll_no != null)?.roll_no
+          return {
+            ...s,
+            roll_no: s.roll_no ?? s.batch_roll ?? firstRoll ?? null,
+            batch_roll: s.batch_roll ?? s.roll_no ?? firstRoll ?? null,
+            enrollments: sEnrs
+          }
+        })
+        setLocalStudents(mapped)
+      }
+      if (dueRes.data && dueRes.data.length > 0) {
+        setLocalDueData(dueRes.data as any)
+      }
+    } catch (e) {
+      console.warn("Could not fetch students client-side:", e)
+    } finally {
+      setLoadingFresh(false)
+    }
+  }
+
   useEffect(() => {
     setLocalStudents(students)
+    if (!students || students.length === 0) {
+      fetchStudentsClient()
+    }
   }, [students])
 
   // Filters & selection
@@ -286,7 +348,10 @@ export default function StudentsClient({
         matchRoll
       
       const matchB = !batchFilter || (s.enrollments?.some(e => e.batch_id === batchFilter))
-      const matchBranch = selectedBranchId === "all" || !s.branch_id || s.branch_id === selectedBranchId
+      const matchBranch = selectedBranchId === "all" || 
+        !s.branch_id || 
+        s.branch_id === selectedBranchId || 
+        (s.enrollments as any[])?.some(e => !e.branch_id || e.branch_id === selectedBranchId)
       
       return matchQ && matchB && matchBranch
     })
@@ -954,7 +1019,7 @@ export default function StudentsClient({
               onChange={e => setBatchFilter(e.target.value)}
               className="px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-[150px] shadow-2xs">
               <option value="" className="bg-white text-slate-900">All Batches</option>
-              {batches.map(b => (
+              {localBatches.map(b => (
                 <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>
               ))}
             </select>
@@ -972,21 +1037,34 @@ export default function StudentsClient({
             </select>
           </div>
 
-          {/* Deletion Queue Security Badge / Button */}
-          <button 
-            onClick={() => setQueueModal(true)}
-            className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shadow-md bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900 shadow-xs"
-          >
-            <ShieldAlert className={`w-4 h-4 ${totalActiveQueue > 0 ? "text-amber-400" : "text-slate-500"}`} />
-            <span>Deletion Queue</span>
-            {totalActiveQueue > 0 ? (
-              <span className={`px-2 py-0.5 rounded-full text-xs font-bold text-slate-950 ${readyRequests.length > 0 ? "bg-red-500 animate-pulse text-white" : "bg-amber-400"}`}>
-                {totalActiveQueue}
-              </span>
-            ) : (
-              <span className="text-xs text-slate-500 font-normal">0 active</span>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button 
+              type="button"
+              onClick={() => fetchStudentsClient()}
+              disabled={loadingFresh}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border text-sm font-semibold transition-all bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900 shadow-2xs cursor-pointer disabled:opacity-50"
+              title="Refresh student list from database"
+            >
+              <RefreshCw className={`w-4 h-4 text-amber-600 ${loadingFresh ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+
+            {/* Deletion Queue Security Badge / Button */}
+            <button 
+              onClick={() => setQueueModal(true)}
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border text-sm font-semibold transition-all shadow-md bg-white hover:bg-slate-50 border-slate-200 text-slate-700 hover:text-slate-900 shadow-xs cursor-pointer"
+            >
+              <ShieldAlert className={`w-4 h-4 ${totalActiveQueue > 0 ? "text-amber-400" : "text-slate-500"}`} />
+              <span>Deletion Queue</span>
+              {totalActiveQueue > 0 ? (
+                <span className={`px-2 py-0.5 rounded-full text-xs font-bold text-slate-950 ${readyRequests.length > 0 ? "bg-red-500 animate-pulse text-white" : "bg-amber-400"}`}>
+                  {totalActiveQueue}
+                </span>
+              ) : (
+                <span className="text-xs text-slate-500 font-normal">0 active</span>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Bulk Actions Bar */}

@@ -10,42 +10,98 @@ export default async function StudentsPage() {
   const supabase = await createClient()
   const admin = createAdminClient()
 
-  // Query with admin client to bypass any RLS policy restrictions for owner dashboard
-  const [studentsRes, batchesRes, feeDuesRes, examResultsRes, userRes] = await Promise.all([
-    admin
-      .from("students")
-      .select("*, enrollments(batch_id, status, roll_no, batch:batches(name))")
-      .order("created_at", { ascending: false }),
-    admin
-      .from("batches")
-      .select("id, name")
-      .eq("is_active", true),
-    admin
-      .from("fee_dues")
-      .select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status, batch:batches(id, name)")
-      .order("due_date", { ascending: true }),
-    admin
-      .from("exam_results")
-      .select("student_id, obtained_marks, exams(total_marks)"),
+  // 1. Fetch students from admin, fallback to session client
+  let rawStudents: any[] = []
+  try {
+    const { data, error } = await admin.from("students").select("*").order("created_at", { ascending: false })
+    if (!error && data && data.length > 0) {
+      rawStudents = data
+    } else {
+      const { data: fb } = await supabase.from("students").select("*").order("created_at", { ascending: false })
+      if (fb) rawStudents = fb
+    }
+  } catch {
+    try {
+      const { data: fb } = await supabase.from("students").select("*").order("created_at", { ascending: false })
+      if (fb) rawStudents = fb
+    } catch {}
+  }
+
+  // 2. Fetch enrollments & batches reliably
+  let rawEnrollments: any[] = []
+  try {
+    const { data: enrData } = await admin.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
+    if (enrData && enrData.length > 0) {
+      rawEnrollments = enrData
+    } else {
+      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
+      if (fbEnr) rawEnrollments = fbEnr
+    }
+  } catch {
+    try {
+      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
+      if (fbEnr) rawEnrollments = fbEnr
+    } catch {}
+  }
+
+  let batches: any[] = []
+  try {
+    const { data: bData } = await admin.from("batches").select("id, name, branch_id, is_active")
+    if (bData && bData.length > 0) {
+      batches = bData
+    } else {
+      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, is_active")
+      if (fbB) batches = fbB
+    }
+  } catch {
+    try {
+      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, is_active")
+      if (fbB) batches = fbB
+    } catch {}
+  }
+
+  // 3. Fetch dues, exam results, user/staff
+  const [feeDuesRes, examResultsRes, userRes] = await Promise.all([
+    admin.from("fee_dues").select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status").order("due_date", { ascending: true }),
+    admin.from("exam_results").select("student_id, obtained_marks, exams(total_marks)"),
     supabase.auth.getUser()
   ])
 
-  let students = studentsRes.data || []
-  if (students.length === 0) {
-    // Fallback to supabase session client if admin returned empty
-    const { data: fallbackStudents } = await supabase
-      .from("students")
-      .select("*, enrollments(batch_id, status, roll_no, batch:batches(name))")
-      .order("created_at", { ascending: false })
-    if (fallbackStudents && fallbackStudents.length > 0) {
-      students = fallbackStudents
-    }
+  let feeDues = feeDuesRes.data || []
+  if (feeDues.length === 0) {
+    const { data: fbDues } = await supabase.from("fee_dues").select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status")
+    if (fbDues) feeDues = fbDues
   }
 
-  const batches = batchesRes.data || []
-  const feeDues = feeDuesRes.data || []
-  const examResults = examResultsRes.data || []
+  let examResults = examResultsRes.data || []
   const user = userRes.data?.user
+
+  // 4. Stitch enrollments + batch names to students
+  const batchMap = new Map<string, any>()
+  batches.forEach((b: any) => batchMap.set(b.id, b))
+
+  const enrollmentsByStudent = new Map<string, any[]>()
+  rawEnrollments.forEach((e: any) => {
+    if (!e.student_id) return
+    const item = {
+      ...e,
+      batch: batchMap.get(e.batch_id) || { name: "Enrolled Batch" }
+    }
+    const list = enrollmentsByStudent.get(e.student_id) || []
+    list.push(item)
+    enrollmentsByStudent.set(e.student_id, list)
+  })
+
+  const students = rawStudents.map((s: any) => {
+    const sEnrs = enrollmentsByStudent.get(s.id) || []
+    const firstRoll = sEnrs.find(e => e.roll_no != null)?.roll_no
+    return {
+      ...s,
+      roll_no: s.roll_no ?? s.batch_roll ?? firstRoll ?? null,
+      batch_roll: s.batch_roll ?? s.roll_no ?? firstRoll ?? null,
+      enrollments: sEnrs
+    }
+  })
 
   const { data: staff } = user
     ? await admin.from("staff").select("id, name, email, role").eq("auth_user_id", user.id).maybeSingle()
@@ -74,7 +130,7 @@ export default async function StudentsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Students</h2>
-          <p className="text-sm text-gray-500 mt-1">{students?.length || 0} total students</p>
+          <p className="text-sm text-gray-500 mt-1">{students.length} total students</p>
         </div>
         <div className="flex gap-3">
           <Link href="/dashboard/owner/students/new" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200">
@@ -83,8 +139,8 @@ export default async function StudentsPage() {
         </div>
       </div>
       <StudentsClient 
-        students={students || []} 
-        batches={batches || []}
+        students={students} 
+        batches={batches}
         dueData={(feeDues as any) || []}
         examData={examResults as any || []}
         currentStaff={currentStaff}

@@ -9,23 +9,87 @@ export default async function ReceptionStudentsPage() {
   const supabase = await createClient()
   const admin = createAdminClient()
 
-  const [studentsRes, batchesRes] = await Promise.all([
-    admin.from("students").select("*, enrollments(batch_id, status, roll_no, batch:batches(name))").order("created_at", { ascending: false }),
-    admin.from("batches").select("id, name").eq("is_active", true)
-  ])
-
-  let students = studentsRes.data || []
-  if (students.length === 0) {
-    const { data: fallbackStudents } = await supabase.from("students").select("*, enrollments(batch_id, status, roll_no, batch:batches(name))").order("created_at", { ascending: false })
-    if (fallbackStudents && fallbackStudents.length > 0) {
-      students = fallbackStudents
+  // 1. Fetch students from admin, fallback to session client
+  let rawStudents: any[] = []
+  try {
+    const { data, error } = await admin.from("students").select("*").order("created_at", { ascending: false })
+    if (!error && data && data.length > 0) {
+      rawStudents = data
+    } else {
+      const { data: fb } = await supabase.from("students").select("*").order("created_at", { ascending: false })
+      if (fb) rawStudents = fb
     }
+  } catch {
+    try {
+      const { data: fb } = await supabase.from("students").select("*").order("created_at", { ascending: false })
+      if (fb) rawStudents = fb
+    } catch {}
   }
+
+  // 2. Fetch enrollments & batches reliably
+  let rawEnrollments: any[] = []
+  try {
+    const { data: enrData } = await admin.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
+    if (enrData && enrData.length > 0) {
+      rawEnrollments = enrData
+    } else {
+      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
+      if (fbEnr) rawEnrollments = fbEnr
+    }
+  } catch {
+    try {
+      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, branch_id")
+      if (fbEnr) rawEnrollments = fbEnr
+    } catch {}
+  }
+
+  let batches: any[] = []
+  try {
+    const { data: bData } = await admin.from("batches").select("id, name, branch_id, is_active")
+    if (bData && bData.length > 0) {
+      batches = bData
+    } else {
+      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, is_active")
+      if (fbB) batches = fbB
+    }
+  } catch {
+    try {
+      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, is_active")
+      if (fbB) batches = fbB
+    } catch {}
+  }
+
+  // 3. Stitch enrollments + batch names to students
+  const batchMap = new Map<string, any>()
+  batches.forEach((b: any) => batchMap.set(b.id, b))
+
+  const enrollmentsByStudent = new Map<string, any[]>()
+  rawEnrollments.forEach((e: any) => {
+    if (!e.student_id) return
+    const item = {
+      ...e,
+      batch: batchMap.get(e.batch_id) || { name: "Enrolled Batch" }
+    }
+    const list = enrollmentsByStudent.get(e.student_id) || []
+    list.push(item)
+    enrollmentsByStudent.set(e.student_id, list)
+  })
+
+  const students = rawStudents.map((s: any) => {
+    const sEnrs = enrollmentsByStudent.get(s.id) || []
+    const firstRoll = sEnrs.find(e => e.roll_no != null)?.roll_no
+    return {
+      ...s,
+      roll_no: s.roll_no ?? s.batch_roll ?? firstRoll ?? null,
+      batch_roll: s.batch_roll ?? s.roll_no ?? firstRoll ?? null,
+      enrollments: sEnrs
+    }
+  })
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-black text-slate-900 tracking-tight">Students</h2><p className="text-sm text-slate-500 mt-1">{students?.length || 0} total students</p></div>
-      <StudentsClient students={students || []} batches={batchesRes.data || []} />
+      <div><h2 className="text-2xl font-black text-slate-900 tracking-tight">Students</h2><p className="text-sm text-slate-500 mt-1">{students.length} total students</p></div>
+      <StudentsClient students={students} batches={batches} />
     </div>
   )
 }
