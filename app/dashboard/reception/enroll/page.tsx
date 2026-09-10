@@ -69,12 +69,16 @@ export default async function ReceptionEnrollPage() {
     } catch {}
   }
 
-  const studentMap = new Map((studentsRes.data || []).map((s: any) => [s.id, s]))
+  const studentMap = new Map<string, any>()
+  ;(studentsRes.data || []).forEach((s: any) => {
+    if (s.id) studentMap.set(String(s.id), s)
+    if (s.student_id) studentMap.set(String(s.student_id), s)
+  })
   const batchMap = new Map((batchesData || []).map((b: any) => [b.id, b]))
 
   const enrichedEnrollments = rawEnrollments.map((e: any) => {
-    const student = studentMap.get(e.student_id) || {}
-    const batch = batchMap.get(e.batch_id) || {}
+    const student = (e.student_id ? studentMap.get(String(e.student_id)) : null) || {}
+    const batch = (e.batch_id ? batchMap.get(String(e.batch_id)) : null) || {}
     return {
       ...e,
       roll_no: e.roll_no || (student as any).roll_no || (student as any).batch_roll || null,

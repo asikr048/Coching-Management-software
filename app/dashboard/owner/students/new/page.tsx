@@ -99,12 +99,16 @@ export default async function NewStudentPage() {
   }
 
   // 4. Enrich Enrollments with Student and Batch metadata
-  const studentMap = new Map((studentsList || []).map((s: any) => [s.id, s]))
+  const studentMap = new Map<string, any>()
+  ;(studentsList || []).forEach((s: any) => {
+    if (s.id) studentMap.set(String(s.id), s)
+    if (s.student_id) studentMap.set(String(s.student_id), s)
+  })
   const batchMap = new Map((batchesData || []).map((b: any) => [b.id, b]))
 
   const enrichedEnrollments = rawEnrollments.map((e: any) => {
-    const student = studentMap.get(e.student_id) || {}
-    const batch = batchMap.get(e.batch_id) || {}
+    const student = (e.student_id ? studentMap.get(String(e.student_id)) : null) || {}
+    const batch = (e.batch_id ? batchMap.get(String(e.batch_id)) : null) || {}
     return {
       ...e,
       roll_no: e.roll_no || student.roll_no || student.batch_roll || null,

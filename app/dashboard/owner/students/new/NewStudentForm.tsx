@@ -177,8 +177,9 @@ export default function NewStudentForm({
     let isCancelled = false
     async function loadNextRoll() {
       try {
-        // 1. Immediately pre-calculate from local enrollmentsList so it is instantly after previous maximum
+        // 1. Immediately pre-calculate from local enrollmentsList and batch metadata
         const currentBat = allBatches.find(b => b.id === form.batch_id)
+        const currentSeats = Number(currentBat?.current_seats || 0)
         const matchingLocal = enrollmentsList.filter(e => 
           e.batch_id === form.batch_id || 
           (currentBat && (
@@ -191,7 +192,7 @@ export default function NewStudentForm({
           const r = Number(e.roll_no ?? e.student?.roll_no ?? e.student?.batch_roll)
           if (!isNaN(r) && r > localMax) localMax = r
         })
-        const prevMax = Math.max(localMax, matchingLocal.length)
+        const prevMax = Math.max(localMax, matchingLocal.length, currentSeats)
         if (!isCancelled) {
           setBatchRoll(String(prevMax > 0 ? prevMax + 1 : 1))
         }
@@ -201,7 +202,8 @@ export default function NewStudentForm({
         if (res.ok) {
           const data = await res.json()
           if (!isCancelled && data && typeof data.next_roll === "number") {
-            setBatchRoll(String(data.next_roll))
+            const guaranteedNext = Math.max(data.next_roll, prevMax > 0 ? prevMax + 1 : 1)
+            setBatchRoll(String(guaranteedNext))
 
             // If existing enrollments were re-sequenced, live-sync the local enrollments list
             if (data.resequenced && Array.isArray(data.updated_enrollments) && data.updated_enrollments.length > 0) {
@@ -232,24 +234,45 @@ export default function NewStudentForm({
 
         let maxRoll = 0
         if (!enrErr && enrs && enrs.length > 0) {
+          const isUUID = (val: any) => typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim())
           const sIds = enrs.map((e: any) => e.student_id).filter(Boolean)
-          const { data: stus } = await supabase.from("students").select("id, roll_no, batch_roll").in("id", sIds)
-          const sMap = new Map((stus || []).map((s: any) => [s.id, s]))
+          const uuidIds = sIds.filter(isUUID)
+          const codeIds = sIds.filter((x: any) => !isUUID(x))
+          const sMap = new Map<string, any>()
+
+          if (uuidIds.length > 0) {
+            const { data: stus } = await supabase.from("students").select("id, student_id, roll_no, batch_roll").in("id", uuidIds)
+            stus?.forEach((s: any) => {
+              if (s.id) sMap.set(String(s.id), s)
+              if (s.student_id) sMap.set(String(s.student_id), s)
+            })
+          }
+          if (codeIds.length > 0) {
+            const { data: stus } = await supabase.from("students").select("id, student_id, roll_no, batch_roll").in("student_id", codeIds)
+            stus?.forEach((s: any) => {
+              if (s.id) sMap.set(String(s.id), s)
+              if (s.student_id) sMap.set(String(s.student_id), s)
+            })
+          }
 
           enrs.forEach((e: any) => {
-            const s = sMap.get(e.student_id)
+            const s = sMap.get(String(e.student_id))
             const r = Number(e.roll_no || s?.roll_no || s?.batch_roll)
             if (!isNaN(r) && r > maxRoll) maxRoll = r
           })
-          if (maxRoll === 0 || enrs.length > maxRoll) {
-            maxRoll = Math.max(maxRoll, enrs.length)
-          }
+          maxRoll = Math.max(maxRoll, enrs.length, currentSeats)
+        } else {
+          maxRoll = Math.max(maxRoll, currentSeats)
         }
 
         if (isCancelled) return
         setBatchRoll(String(maxRoll > 0 ? maxRoll + 1 : 1))
       } catch {
-        if (!isCancelled && !batchRoll) setBatchRoll("1")
+        if (!isCancelled && !batchRoll) {
+          const currentBat = allBatches.find(b => b.id === form.batch_id)
+          const seats = Number(currentBat?.current_seats || 0)
+          setBatchRoll(String(seats > 0 ? seats + 1 : 1))
+        }
       }
     }
     loadNextRoll()
@@ -316,12 +339,16 @@ export default function NewStudentForm({
       ])
 
       const combinedStudents = (freshStRes.data && freshStRes.data.length > 0) ? freshStRes.data : students
-      const studentMap = new Map((combinedStudents || []).map((s: any) => [s.id, s]))
+      const studentMap = new Map<string, any>()
+      ;(combinedStudents || []).forEach((s: any) => {
+        if (s.id) studentMap.set(String(s.id), s)
+        if (s.student_id) studentMap.set(String(s.student_id), s)
+      })
       const batchMap = new Map((allBatches || []).map((b: any) => [b.id, b]))
 
       const enriched = rawEnrs.map((e: any) => {
-        const student = e.student || studentMap.get(e.student_id) || {}
-        const batch = e.batch || batchMap.get(e.batch_id) || {}
+        const student = (e.student_id ? studentMap.get(String(e.student_id)) : null) || e.student || {}
+        const batch = (e.batch_id ? batchMap.get(String(e.batch_id)) : null) || e.batch || {}
         return {
           ...e,
           roll_no: e.roll_no || (student as any).roll_no || (student as any).batch_roll || null,
@@ -526,10 +553,18 @@ export default function NewStudentForm({
   }, [selectedStudent])
 
   function getEnrollmentReceiptData(enr: any): EnrollmentReceipt {
-    const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+    const student = (enr.student && enr.student.name)
+      ? enr.student
+      : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
     const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
-    const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
-    const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+    const matchingPayment = paymentsList.find(p => 
+      (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+      (p.batch_id === enr.batch_id || !p.batch_id)
+    )
+    const matchingDue = duesList.find(d => 
+      (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+      (d.batch_id === enr.batch_id || !d.batch_id)
+    )
 
     const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
     const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
@@ -583,7 +618,9 @@ export default function NewStudentForm({
 
   const filteredEnrollments = useMemo(() => {
     return enrollmentsList.filter((enr: any) => {
-      const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+      const student = (enr.student && enr.student.name)
+        ? enr.student
+        : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
       const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
       const brId = enr.branch_id || b.branch_id
 
@@ -604,8 +641,14 @@ export default function NewStudentForm({
       }
 
       if (historyStatusFilter !== "all") {
-        const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
-        const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+        const matchingPayment = paymentsList.find(p => 
+          (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+          (p.batch_id === enr.batch_id || !p.batch_id)
+        )
+        const matchingDue = duesList.find(d => 
+          (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+          (d.batch_id === enr.batch_id || !d.batch_id)
+        )
         const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
         const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
         const isPaidFull = totalFee > 0 ? (paidAmt >= totalFee) : true
@@ -625,9 +668,18 @@ export default function NewStudentForm({
     let paidCount = 0
 
     enrollmentsList.forEach((enr: any) => {
+      const student = (enr.student && enr.student.name)
+        ? enr.student
+        : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
       const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
-      const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
-      const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+      const matchingPayment = paymentsList.find(p => 
+        (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+        (p.batch_id === enr.batch_id || !p.batch_id)
+      )
+      const matchingDue = duesList.find(d => 
+        (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+        (d.batch_id === enr.batch_id || !d.batch_id)
+      )
       const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
       const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
       const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
@@ -1083,7 +1135,9 @@ export default function NewStudentForm({
   }
 
   function getHistoryIdCardData(enr: any): StudentIdCardData {
-    const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+    const student = (enr.student && enr.student.name)
+      ? enr.student
+      : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
     const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
     const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
     const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
@@ -1748,10 +1802,18 @@ export default function NewStudentForm({
 
             <div className="divide-y divide-slate-100">
               {enrollmentsList.slice(0, 5).map((enr: any) => {
-                const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+                const student = (enr.student && enr.student.name)
+                  ? enr.student
+                  : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
                 const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
-                const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
-                const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+                const matchingPayment = paymentsList.find(p => 
+                  (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+                  (p.batch_id === enr.batch_id || !p.batch_id)
+                )
+                const matchingDue = duesList.find(d => 
+                  (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+                  (d.batch_id === enr.batch_id || !d.batch_id)
+                )
                 const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
                 const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
                 const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
@@ -1761,9 +1823,9 @@ export default function NewStudentForm({
                   <div key={enr.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-bold text-sm text-slate-900">{student.name || "Student"}</span>
+                        <span className="font-bold text-sm text-slate-900">{student.name || (enr.student_id && !enr.student_id.includes("-") ? "Student" : enr.student_id) || "Student"}</span>
                         <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                          {student.student_id || "N/A"}
+                          {student.student_id || enr.student_id || "N/A"}
                         </span>
                         {roll != null && (
                           <span className="text-xs font-mono font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
@@ -1942,11 +2004,19 @@ export default function NewStudentForm({
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {filteredEnrollments.map((enr: any) => {
-                      const student = enr.student || students.find(s => s.id === enr.student_id) || {}
+                      const student = (enr.student && enr.student.name)
+                        ? enr.student
+                        : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
                       const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
                       const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
-                      const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
-                      const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
+                      const matchingPayment = paymentsList.find(p => 
+                        (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+                        (p.batch_id === enr.batch_id || !p.batch_id)
+                      )
+                      const matchingDue = duesList.find(d => 
+                        (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+                        (d.batch_id === enr.batch_id || !d.batch_id)
+                      )
                       const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
                       const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
                       const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
@@ -1965,10 +2035,10 @@ export default function NewStudentForm({
                             )}
                           </td>
                           <td className="px-4 py-3.5">
-                            <div className="font-bold text-slate-900 text-sm">{student.name || "Student"}</div>
+                            <div className="font-bold text-slate-900 text-sm">{student.name || (enr.student_id && !enr.student_id.includes("-") ? "Student" : enr.student_id) || "Student"}</div>
                             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                               <span className="font-mono text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
-                                {student.student_id || "N/A"}
+                                {student.student_id || enr.student_id || "N/A"}
                               </span>
                               {student.phone && <span className="text-[11px] text-slate-500 font-medium">📞 {student.phone}</span>}
                             </div>

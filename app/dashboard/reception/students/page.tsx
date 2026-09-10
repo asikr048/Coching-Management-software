@@ -69,31 +69,48 @@ export default async function ReceptionStudentsPage() {
   batches.forEach((b: any) => batchMap.set(b.id, b))
 
   const rawStudentMap = new Map<string, any>()
-  rawStudents.forEach((s: any) => rawStudentMap.set(s.id, s))
+  rawStudents.forEach((s: any) => {
+    if (s.id) rawStudentMap.set(String(s.id), s)
+    if (s.student_id) rawStudentMap.set(String(s.student_id), s)
+  })
 
   const enrollmentsByStudent = new Map<string, any[]>()
   rawEnrollments.forEach((e: any) => {
     if (!e.student_id) return
-    const sObj = rawStudentMap.get(e.student_id)
+    const sObj = rawStudentMap.get(String(e.student_id))
     const roll = e.roll_no ?? sObj?.roll_no ?? sObj?.batch_roll ?? null
     const item = {
       ...e,
       roll_no: roll,
       batch: batchMap.get(e.batch_id) || { name: "Enrolled Batch" }
     }
-    const list = enrollmentsByStudent.get(e.student_id) || []
+    const sKey = String(e.student_id)
+    const list = enrollmentsByStudent.get(sKey) || []
     list.push(item)
-    enrollmentsByStudent.set(e.student_id, list)
+    enrollmentsByStudent.set(sKey, list)
+    if (sObj?.id && String(sObj.id) !== sKey) {
+      const uList = enrollmentsByStudent.get(String(sObj.id)) || []
+      uList.push(item)
+      enrollmentsByStudent.set(String(sObj.id), uList)
+    }
+    if (sObj?.student_id && String(sObj.student_id) !== sKey) {
+      const cList = enrollmentsByStudent.get(String(sObj.student_id)) || []
+      cList.push(item)
+      enrollmentsByStudent.set(String(sObj.student_id), cList)
+    }
   })
 
   const students = rawStudents.map((s: any) => {
-    const sEnrs = enrollmentsByStudent.get(s.id) || []
-    const firstRoll = sEnrs.find(e => e.roll_no != null)?.roll_no
+    const sEnrs = (enrollmentsByStudent.get(String(s.id)) || []).concat(
+      s.student_id && s.student_id !== s.id ? (enrollmentsByStudent.get(String(s.student_id)) || []) : []
+    )
+    const uniqueEnrs = Array.from(new Map(sEnrs.map((item: any) => [item.id, item])).values())
+    const firstRoll = uniqueEnrs.find((e: any) => e.roll_no != null)?.roll_no
     return {
       ...s,
       roll_no: firstRoll ?? s.roll_no ?? s.batch_roll ?? null,
       batch_roll: firstRoll ?? s.batch_roll ?? s.roll_no ?? null,
-      enrollments: sEnrs
+      enrollments: uniqueEnrs
     }
   })
 
