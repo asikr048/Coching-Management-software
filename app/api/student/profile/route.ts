@@ -307,7 +307,7 @@ export async function GET(req: NextRequest) {
       studentDbIdArray.length > 0
         ? admin
             .from("exam_submissions")
-            .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, show_all_results, result_note)")
+            .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, result_note)")
             .in("student_id", studentDbIdArray)
             .eq("is_submitted", true)
             .order("submitted_at", { ascending: false })

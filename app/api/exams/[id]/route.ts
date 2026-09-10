@@ -145,6 +145,8 @@ export async function PATCH(
     if (error) {
       console.warn("Exam update first attempt failed:", error.message)
       // Prune newer columns if Postgres rejected them
+      if ("show_all_results" in payload) delete payload.show_all_results
+      if ("show_results_immediately" in payload) delete payload.show_results_immediately
       if ("is_paused" in payload) delete payload.is_paused
       if ("is_public_result" in payload) delete payload.is_public_result
       if ("exam_schedule_type" in payload) delete payload.exam_schedule_type
@@ -152,16 +154,49 @@ export async function PATCH(
       if ("schedule_notice_id" in payload) delete payload.schedule_notice_id
       if ("published_days" in payload) delete payload.published_days
       if ("is_weekly_published" in payload) delete payload.is_weekly_published
+      if ("duration_minutes" in payload) delete payload.duration_minutes
+      if ("batch_ids" in payload) delete payload.batch_ids
+      if ("branch_id" in payload) delete payload.branch_id
 
-      const { data: fbExam, error: fbErr } = await admin
+      let { data: fbExam, error: fbErr } = await admin
         .from("exams")
         .update(payload)
         .eq("id", examId)
         .select("*")
         .maybeSingle()
 
-      if (fbErr) throw fbErr
-      updatedExam = fbExam
+      if (fbErr) {
+        console.warn("Exam update second attempt failed:", fbErr.message)
+        const coreBaseColumns = [
+          "title",
+          "subject",
+          "exam_type",
+          "total_marks",
+          "pass_marks",
+          "exam_date",
+          "batch_id",
+          "is_published",
+          "is_online",
+          "result_note"
+        ]
+        const corePayload: Record<string, any> = {}
+        for (const k of coreBaseColumns) {
+          if (k in payload) {
+            corePayload[k] = payload[k]
+          }
+        }
+        const { data: coreExam, error: coreErr } = await admin
+          .from("exams")
+          .update(corePayload)
+          .eq("id", examId)
+          .select("*")
+          .maybeSingle()
+
+        if (coreErr) throw coreErr
+        fbExam = coreExam
+      }
+
+      updatedExam = { ...fbExam, ...body }
     }
 
     return NextResponse.json({ success: true, exam: updatedExam })

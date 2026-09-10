@@ -513,7 +513,7 @@ export default function StudentBatchDetailPage() {
           try {
             const { data: examData } = await supabase
               .from('exam_results')
-              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, batch_ids, subject, is_online, show_all_results, result_note, duration_minutes, exam_schedule_type, recurring_days, is_paused, is_public_result)')
+              .select('*, exam:exams(id, title, exam_date, total_marks, pass_marks, batch_id, batch_ids, subject, is_online, result_note, duration_minutes, exam_schedule_type, recurring_days, is_paused, is_public_result)')
               .eq('student_id', studentId)
 
             if (examData && examData.length > 0) {

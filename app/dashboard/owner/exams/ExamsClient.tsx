@@ -853,14 +853,51 @@ export default function ExamsClient({
             .single()
 
           if (sbErr) {
-            const { batch_ids: _b, branch_id: _br, exam_schedule_type: _st, recurring_days: _rd, ...fb } = updatePayload
-            const { data: fbData, error: fbErr } = await supabase
+            const { 
+              batch_ids: _b, 
+              branch_id: _br, 
+              exam_schedule_type: _st, 
+              recurring_days: _rd, 
+              show_all_results: _sar,
+              show_results_immediately: _sri,
+              is_paused: _ip,
+              is_public_result: _ipr,
+              is_weekly_published: _iwp,
+              published_days: _pd,
+              schedule_notice_id: _sn,
+              duration_minutes: _dm,
+              time_limit_minutes: _tlm,
+              ...fb 
+            } = updatePayload
+            let { data: fbData, error: fbErr } = await supabase
               .from("exams")
               .update(fb)
               .eq("id", editingExam.id)
               .select("*, batch:batches(name)")
-              .single()
-            if (fbErr) throw fbErr
+              .maybeSingle()
+
+            if (fbErr) {
+              const coreBase = {
+                title: fb.title,
+                exam_type: fb.exam_type,
+                subject: fb.subject,
+                total_marks: fb.total_marks,
+                pass_marks: fb.pass_marks,
+                exam_date: fb.exam_date,
+                batch_id: fb.batch_id,
+                is_published: fb.is_published,
+                is_online: fb.is_online,
+                result_note: fb.result_note,
+              }
+              const { data: cData, error: cErr } = await supabase
+                .from("exams")
+                .update(coreBase)
+                .eq("id", editingExam.id)
+                .select("*")
+                .maybeSingle()
+              if (cErr) throw cErr
+              fbData = cData
+            }
             updatedData = { ...fbData, ...updatePayload }
           } else {
             updatedData = sbUpdated
@@ -946,6 +983,8 @@ export default function ExamsClient({
           batch_ids: _b, 
           branch_id: _br, 
           show_all_results: _omitted, 
+          show_results_immediately: _sri,
+          duration_minutes: _dm,
           exam_schedule_type: _st, 
           recurring_days: _rd, 
           is_paused: _ip, 

@@ -382,7 +382,7 @@ export async function PATCH(
     // 1. Fetch current exam to get result_note
     const { data: currentExam } = await admin
       .from("exams")
-      .select("result_note, show_all_results")
+      .select("result_note")
       .eq("id", examId)
       .maybeSingle()
 
