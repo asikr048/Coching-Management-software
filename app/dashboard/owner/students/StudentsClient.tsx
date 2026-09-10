@@ -90,10 +90,15 @@ export default function StudentsClient({
     setLoadingFresh(true)
     try {
       let rawEnr: any[] = []
-      const { data: enrData, error: enrErr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id")
-      if (!enrErr && enrData) {
-        rawEnr = enrData
-      } else {
+      try {
+        const { data: enrData, error: enrErr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id, roll_no, batch_roll")
+        if (!enrErr && enrData) {
+          rawEnr = enrData
+        } else {
+          const { data: rawAll } = await supabase.from("enrollments").select("*")
+          if (rawAll) rawEnr = rawAll
+        }
+      } catch {
         const { data: rawAll } = await supabase.from("enrollments").select("*")
         if (rawAll) rawEnr = rawAll
       }
@@ -115,11 +120,17 @@ export default function StudentsClient({
         const batchMap = new Map<string, any>()
         rawBat.forEach((b: any) => batchMap.set(b.id, b))
 
+        const rawStudentMap = new Map<string, any>()
+        rawSt.forEach((s: any) => rawStudentMap.set(s.id, s))
+
         const enrollmentsByStudent = new Map<string, any[]>()
         rawEnr.forEach((e: any) => {
           if (!e.student_id) return
+          const sObj = rawStudentMap.get(e.student_id)
+          const roll = e.roll_no ?? e.batch_roll ?? sObj?.roll_no ?? sObj?.batch_roll ?? null
           const item = {
             ...e,
+            roll_no: roll,
             batch: batchMap.get(e.batch_id) || { name: "Enrolled Batch" }
           }
           const list = enrollmentsByStudent.get(e.student_id) || []
@@ -132,8 +143,8 @@ export default function StudentsClient({
           const firstRoll = sEnrs.find(e => e.roll_no != null)?.roll_no
           return {
             ...s,
-            roll_no: s.roll_no ?? s.batch_roll ?? firstRoll ?? null,
-            batch_roll: s.batch_roll ?? s.roll_no ?? firstRoll ?? null,
+            roll_no: firstRoll ?? s.roll_no ?? s.batch_roll ?? null,
+            batch_roll: firstRoll ?? s.batch_roll ?? s.roll_no ?? null,
             enrollments: sEnrs
           }
         })
@@ -323,8 +334,10 @@ export default function StudentsClient({
 
   const filteredAndSorted = useMemo(() => {
     const q = query.toLowerCase().trim()
-    // Extract pure numeric roll if user typed a number (e.g. "1" or "01" or "#1" or "roll 1" or "r1")
-    const qClean = q.replace(/^(roll|r|#|রোল|\s)+/i, "").trim()
+    const bnToEnMap: Record<string, string> = { "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9" }
+    const qNormalized = q.replace(/[০-৯]/g, d => bnToEnMap[d] || d)
+    // Extract pure numeric roll if user typed a number (e.g. "1" or "01" or "#1" or "roll 1" or "r1" or "রোল ১")
+    const qClean = qNormalized.replace(/^(roll|r|#|রোল|\s)+/i, "").trim()
     const qNum = parseInt(qClean, 10)
     const isNumericQuery = !isNaN(qNum) && qNum > 0
 
@@ -337,13 +350,13 @@ export default function StudentsClient({
         const eRollNum = Number(e.roll_no)
         const eRollStr = String(e.roll_no)
         if (isNumericQuery && eRollNum === qNum) return true
-        if (eRollStr === q || eRollStr === qClean) return true
-        if (`roll ${eRollStr}`.includes(q) || `roll #${eRollStr}`.includes(q) || `r${eRollStr}` === q || `রোল ${eRollStr}`.includes(q)) return true
+        if (eRollStr === q || eRollStr === qClean || eRollStr === qNormalized) return true
+        if (`roll ${eRollStr}`.includes(qNormalized) || `roll #${eRollStr}`.includes(qNormalized) || `r${eRollStr}` === qNormalized || `রোল ${eRollStr}`.includes(q)) return true
         return false
       })
 
       const matchRoll = (isNumericQuery && (Number(s.roll_no) === qNum || Number(s.batch_roll) === qNum)) ||
-        (rollStr !== "" && (rollStr === q || rollStr === qClean || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q || `রোল ${rollStr}`.includes(q))) ||
+        (rollStr !== "" && (rollStr === q || rollStr === qClean || rollStr === qNormalized || `roll ${rollStr}`.includes(qNormalized) || `roll #${rollStr}`.includes(qNormalized) || `r${rollStr}` === qNormalized || `রোল ${rollStr}`.includes(q))) ||
         hasEnrRoll
 
       const matchQ = !q || 
@@ -1143,7 +1156,10 @@ export default function StudentsClient({
                 <tr><td colSpan={11} className="text-center py-12 text-slate-500">No students found</td></tr>
               ) : (
                 filteredAndSorted.map((student, idx) => {
-                  const activeEnrollments = student.enrollments?.filter(e => e.status === "active") || []
+                  const activeEnrollments = student.enrollments && student.enrollments.length > 0
+                    ? student.enrollments.filter(e => !e.status || e.status === "active" || e.status === "enrolled")
+                    : []
+                  const effectiveEnrollments = activeEnrollments.length > 0 ? activeEnrollments : (student.enrollments || [])
                   const isSelected = selectedIds.has(student.id)
                   
                   return (
@@ -1178,7 +1194,7 @@ export default function StudentsClient({
                         {batchFilter ? (
                           (() => {
                             const enr = student.enrollments?.find(e => e.batch_id === batchFilter)
-                            const r = enr?.roll_no ?? student.roll_no ?? student.batch_roll
+                            const r = enr?.roll_no ?? (effectiveEnrollments.length === 1 ? student.roll_no : null) ?? student.roll_no ?? student.batch_roll
                             return r != null ? (
                               <span className="inline-flex items-center gap-1 font-mono bg-amber-100/90 px-2.5 py-1 rounded-lg text-xs font-black text-amber-950 border border-amber-300 shadow-2xs">
                                 <span className="text-[10px] text-amber-700 font-sans font-bold">রোল</span> #{r}
@@ -1188,9 +1204,9 @@ export default function StudentsClient({
                             )
                           })()
                         ) : (
-                          activeEnrollments.length > 0 ? (
-                            <div className="flex flex-wrap gap-1.5 max-w-[140px]">
-                              {activeEnrollments.map((e, i) => {
+                          effectiveEnrollments.length > 0 ? (
+                            <div className="flex flex-wrap gap-1.5 max-w-[150px]">
+                              {effectiveEnrollments.map((e, i) => {
                                 const r = e.roll_no ?? student.roll_no ?? student.batch_roll
                                 return r != null ? (
                                   <span key={i} className="inline-flex items-center gap-1 font-mono bg-amber-100/90 px-2 py-0.5 rounded-lg text-xs font-black text-amber-950 border border-amber-300 shadow-2xs" title={`${e.batch?.name || 'Batch'}: Roll #${r}`}>
@@ -1198,14 +1214,14 @@ export default function StudentsClient({
                                   </span>
                                 ) : null
                               })}
-                              {!activeEnrollments.some(e => (e.roll_no ?? student.roll_no ?? student.batch_roll) != null) && (
+                              {!effectiveEnrollments.some(e => (e.roll_no ?? student.roll_no ?? student.batch_roll) != null) && (
                                 <span className="text-slate-400 text-xs">-</span>
                               )}
                             </div>
                           ) : (
-                            student.roll_no != null ? (
+                            (student.roll_no != null || student.batch_roll != null) ? (
                               <span className="inline-flex items-center gap-1 font-mono bg-amber-100/90 px-2.5 py-1 rounded-lg text-xs font-black text-amber-950 border border-amber-300 shadow-2xs">
-                                <span className="text-[10px] text-amber-700 font-sans font-bold">রোল</span> #{student.roll_no}
+                                <span className="text-[10px] text-amber-700 font-sans font-bold">রোল</span> #{student.roll_no || student.batch_roll}
                               </span>
                             ) : (
                               <span className="text-slate-400 text-xs">-</span>
@@ -1214,9 +1230,9 @@ export default function StudentsClient({
                         )}
                       </td>
                       <td className="px-4 py-4 text-sm">
-                        {activeEnrollments.length > 0 ? (
+                        {effectiveEnrollments.length > 0 ? (
                           <div className="flex flex-col gap-1">
-                            {activeEnrollments.map((e, i) => {
+                            {effectiveEnrollments.map((e, i) => {
                               const roll = e.roll_no ?? student.roll_no ?? student.batch_roll
                               return (
                                 <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-900 border border-amber-500/30 w-max shadow-2xs">

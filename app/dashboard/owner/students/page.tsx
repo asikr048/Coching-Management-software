@@ -30,11 +30,11 @@ export default async function StudentsPage() {
   // 2. Fetch enrollments & batches reliably
   let rawEnrollments: any[] = []
   try {
-    const { data: enrData, error: enrErr } = await admin.from("enrollments").select("id, student_id, batch_id, status, branch_id")
+    const { data: enrData, error: enrErr } = await admin.from("enrollments").select("id, student_id, batch_id, status, branch_id, roll_no, batch_roll")
     if (!enrErr && enrData && enrData.length > 0) {
       rawEnrollments = enrData
     } else {
-      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id")
+      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id, roll_no, batch_roll")
       if (fbEnr && fbEnr.length > 0) {
         rawEnrollments = fbEnr
       } else {
@@ -85,11 +85,17 @@ export default async function StudentsPage() {
   const batchMap = new Map<string, any>()
   batches.forEach((b: any) => batchMap.set(b.id, b))
 
+  const rawStudentMap = new Map<string, any>()
+  rawStudents.forEach((s: any) => rawStudentMap.set(s.id, s))
+
   const enrollmentsByStudent = new Map<string, any[]>()
   rawEnrollments.forEach((e: any) => {
     if (!e.student_id) return
+    const sObj = rawStudentMap.get(e.student_id)
+    const roll = e.roll_no ?? e.batch_roll ?? sObj?.roll_no ?? sObj?.batch_roll ?? null
     const item = {
       ...e,
+      roll_no: roll,
       batch: batchMap.get(e.batch_id) || { name: "Enrolled Batch" }
     }
     const list = enrollmentsByStudent.get(e.student_id) || []
@@ -102,8 +108,8 @@ export default async function StudentsPage() {
     const firstRoll = sEnrs.find(e => e.roll_no != null)?.roll_no
     return {
       ...s,
-      roll_no: s.roll_no ?? s.batch_roll ?? firstRoll ?? null,
-      batch_roll: s.batch_roll ?? s.roll_no ?? firstRoll ?? null,
+      roll_no: firstRoll ?? s.roll_no ?? s.batch_roll ?? null,
+      batch_roll: firstRoll ?? s.batch_roll ?? s.roll_no ?? null,
       enrollments: sEnrs
     }
   })

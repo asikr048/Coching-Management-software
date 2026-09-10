@@ -123,31 +123,49 @@ export default function NewStudentForm({
     async function loadNextRoll() {
       try {
         let maxRoll = 0
+        const rollsInBatch = new Set<number>()
+
+        // 1. Query enrollments strictly for this batch
         const { data: enrs, error: enrErr } = await supabase
           .from("enrollments")
-          .select("*")
+          .select("id, roll_no, batch_roll, student_id")
           .eq("batch_id", form.batch_id)
 
         if (!enrErr && enrs && enrs.length > 0) {
           enrs.forEach((e: any) => {
-            const r = Number((e as any).roll_no || (e as any).batch_roll)
-            if (!isNaN(r) && r > maxRoll) maxRoll = r
+            const r = Number(e.roll_no ?? e.batch_roll)
+            if (!isNaN(r) && r > 0) {
+              rollsInBatch.add(r)
+              if (r > maxRoll) maxRoll = r
+            }
           })
-          if (maxRoll === 0) maxRoll = enrs.length
-        }
-        if (maxRoll === 0) {
-          // Check students table
-          const { data: stList } = await supabase
-            .from("students")
-            .select("roll_no, batch_roll")
-          if (stList) {
-            stList.forEach((s: any) => {
-              const r = Number(s.roll_no || s.batch_roll)
-              if (!isNaN(r) && r > maxRoll) maxRoll = r
-            })
+
+          // If some enrollments don't have roll_no on enrollment record,
+          // check ONLY students who belong to this batch
+          const sIds = enrs.map((e: any) => e.student_id).filter(Boolean)
+          if (sIds.length > 0 && rollsInBatch.size < enrs.length) {
+            const { data: batchStudents } = await supabase
+              .from("students")
+              .select("id, roll_no, batch_roll")
+              .in("id", sIds)
+            if (batchStudents) {
+              batchStudents.forEach((s: any) => {
+                const r = Number(s.roll_no ?? s.batch_roll)
+                if (!isNaN(r) && r > 0) {
+                  rollsInBatch.add(r)
+                  if (r > maxRoll) maxRoll = r
+                }
+              })
+            }
+          }
+
+          if (maxRoll === 0) {
+            maxRoll = enrs.length
           }
         }
+
         if (isCancelled) return
+        // Sequential roll starting from 1, then 2, 3, 4... strictly for this batch
         setBatchRoll(String(maxRoll > 0 ? maxRoll + 1 : 1))
       } catch {
         if (!isCancelled) setBatchRoll("1")
@@ -642,8 +660,27 @@ export default function NewStudentForm({
         return
       }
 
-      // Ensure batch roll number starts from 1, 2, 3... sequentially
-      let finalRoll = batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0 ? parseInt(batchRoll, 10) : 1
+      // Ensure batch roll number starts from 1, 2, 3... sequentially for this batch
+      let finalRoll = batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0 ? parseInt(batchRoll, 10) : null
+      if (!finalRoll) {
+        try {
+          const { data: bEnrs } = await supabase
+            .from("enrollments")
+            .select("roll_no, batch_roll")
+            .eq("batch_id", form.batch_id)
+          let mRoll = 0
+          if (bEnrs && bEnrs.length > 0) {
+            bEnrs.forEach((e: any) => {
+              const r = Number(e.roll_no ?? e.batch_roll)
+              if (!isNaN(r) && r > mRoll) mRoll = r
+            })
+            if (mRoll === 0) mRoll = bEnrs.length
+          }
+          finalRoll = mRoll > 0 ? mRoll + 1 : 1
+        } catch {
+          finalRoll = 1
+        }
+      }
 
       // Add enrollment with adaptive column support
       const enrollPayload: Record<string, any> = {

@@ -153,20 +153,21 @@ export async function POST(req: NextRequest) {
       // 1. Always ensure active enrollment and sequential batch roll (1, 2, 3...)
       let nextRoll = 1
       try {
-        // Find existing roll if student already has one assigned
-        const { data: stRoll } = await admin
-          .from("students")
-          .select("roll_no, batch_roll")
-          .eq("id", sub.student_id)
+        // First check if student already has an enrollment with roll_no for THIS specific batch
+        const { data: thisEnr } = await admin
+          .from("enrollments")
+          .select("id, roll_no, batch_roll")
+          .eq("student_id", sub.student_id)
+          .eq("batch_id", sub.batch_id)
           .maybeSingle()
 
-        if (stRoll?.roll_no || stRoll?.batch_roll) {
-          nextRoll = Number(stRoll.roll_no || stRoll.batch_roll)
+        if (thisEnr && (thisEnr.roll_no || thisEnr.batch_roll)) {
+          nextRoll = Number(thisEnr.roll_no || thisEnr.batch_roll)
         } else {
-          // Calculate max roll for this batch
+          // Calculate max roll strictly for this batch
           const { data: enrs } = await admin
             .from("enrollments")
-            .select("*")
+            .select("id, roll_no, batch_roll, student_id")
             .eq("batch_id", sub.batch_id)
 
           let maxRoll = 0
@@ -175,9 +176,18 @@ export async function POST(req: NextRequest) {
               const r = Number(e.roll_no || e.batch_roll)
               if (!isNaN(r) && r > maxRoll) maxRoll = r
             })
-            if (maxRoll === 0) maxRoll = enrs.length
+            if (maxRoll === 0) {
+              const sIds = enrs.map((e: any) => e.student_id).filter(Boolean)
+              if (sIds.length > 0) {
+                const { data: bStudents } = await admin.from("students").select("id, roll_no, batch_roll").in("id", sIds)
+                bStudents?.forEach((s: any) => {
+                  const r = Number(s.roll_no || s.batch_roll)
+                  if (!isNaN(r) && r > maxRoll) maxRoll = r
+                })
+              }
+            }
           }
-          nextRoll = maxRoll > 0 ? maxRoll + 1 : 1
+          nextRoll = maxRoll > 0 ? maxRoll + 1 : (enrs && enrs.length > 0 ? enrs.length + 1 : 1)
         }
       } catch {
         nextRoll = 1

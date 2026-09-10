@@ -46,6 +46,8 @@ import {
   Award,
   ChevronRight,
 } from 'lucide-react'
+import StudentIdCardTrigger from '@/components/id-card/StudentIdCardTrigger'
+import AdmissionSlipTrigger from '@/components/id-card/AdmissionSlipTrigger'
 
 export const ALL_WEEK_DAYS = [
   { id: "saturday", bn: "শনিবার", en: "Saturday" },
@@ -1105,6 +1107,24 @@ export default function StudentBatchDetailPage() {
                     <span>Batch Roll: #{enrollment?.roll_no ?? student?.roll_no ?? student?.batch_roll}</span>
                   </div>
                 )}
+                {student && (
+                  <>
+                    <StudentIdCardTrigger
+                      student={student}
+                      batchName={batch.name}
+                      rollNo={enrollment?.roll_no ?? student?.roll_no ?? student?.batch_roll}
+                      buttonVariant="badge"
+                      buttonText="🪪 ID Card"
+                    />
+                    <AdmissionSlipTrigger
+                      student={student}
+                      batch={batch}
+                      enrollment={enrollment}
+                      buttonVariant="badge"
+                      buttonText="🧾 Admission Slip"
+                    />
+                  </>
+                )}
               </div>
               <h1 className="text-3xl md:text-4xl font-bold mb-2">{batch.name}</h1>
               <div className="flex items-center gap-2 text-indigo-100 mt-2">
@@ -1287,6 +1307,16 @@ export default function StudentBatchDetailPage() {
                 <h4 className="text-md font-semibold text-slate-800 mb-4">Enrollment Details</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                   <div className="grid grid-cols-3 gap-4">
+                    <div className="text-sm text-slate-500 font-medium">Batch Roll</div>
+                    <div className="col-span-2">
+                      <span className="font-mono font-black text-amber-950 bg-amber-100 px-2.5 py-1 rounded-lg text-xs border border-amber-300 inline-block shadow-2xs">
+                        রোল #{(enrollment?.roll_no != null || student?.roll_no != null || student?.batch_roll != null)
+                          ? (enrollment?.roll_no ?? student?.roll_no ?? student?.batch_roll)
+                          : "1"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
                     <div className="text-sm text-slate-500 font-medium">Enrollment Date</div>
                     <div className="col-span-2 text-sm font-medium text-slate-900">{formatDate(enrollment.enrollment_date)}</div>
                   </div>
@@ -1302,6 +1332,27 @@ export default function StudentBatchDetailPage() {
                       </span>
                     </div>
                   </div>
+                  {student && (
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-sm text-slate-500 font-medium">Slips & Cards</div>
+                      <div className="col-span-2 flex items-center gap-2 flex-wrap">
+                        <StudentIdCardTrigger
+                          student={student}
+                          batchName={batch.name}
+                          rollNo={enrollment?.roll_no ?? student?.roll_no ?? student?.batch_roll}
+                          buttonVariant="outline"
+                          buttonText="🪪 ID Card"
+                        />
+                        <AdmissionSlipTrigger
+                          student={student}
+                          batch={batch}
+                          enrollment={enrollment}
+                          buttonVariant="outline"
+                          buttonText="🧾 Slip"
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

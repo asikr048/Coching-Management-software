@@ -52,7 +52,7 @@ export default async function ReceptionEnrollPage() {
   try {
     const { data: enr1, error: err1 } = await supabase
       .from("enrollments")
-      .select("id, created_at, status, batch_id, student_id, branch_id")
+      .select("id, created_at, status, batch_id, student_id, branch_id, roll_no, batch_roll")
       .order("created_at", { ascending: false })
       .limit(200)
 
@@ -77,7 +77,7 @@ export default async function ReceptionEnrollPage() {
     const batch = batchMap.get(e.batch_id) || {}
     return {
       ...e,
-      roll_no: e.roll_no || (student as any).roll_no || (student as any).batch_roll || null,
+      roll_no: e.roll_no || (e as any).batch_roll || (student as any).roll_no || (student as any).batch_roll || null,
       student,
       batch
     }
