@@ -21,6 +21,87 @@ interface Slide {
   branch_id?: string | null
 }
 
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+function getExamDaysList(ex: any) {
+  const note = ex.result_note || ""
+  let recDays: any[] = []
+  if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
+    recDays = ex.recurring_days
+  } else if (note.includes("[RECURRING_DAYS:")) {
+    try {
+      const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+      if (match && match[1]) recDays = JSON.parse(match[1])
+    } catch {}
+  } else if (note.includes("[WEEKLY_SCHEDULE:")) {
+    try {
+      const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+      if (match && match[1]) recDays = JSON.parse(match[1])
+    } catch {}
+  }
+
+  // Parse published days
+  let pubDays: string[] = []
+  if (Array.isArray(ex.published_days)) {
+    pubDays = ex.published_days.map((d: any) => String(d).toLowerCase().trim())
+  } else if (typeof ex.published_days === "string" && ex.published_days.trim()) {
+    try {
+      const parsed = JSON.parse(ex.published_days)
+      if (Array.isArray(parsed)) pubDays = parsed.map((d: any) => String(d).toLowerCase().trim())
+      else pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+    } catch {
+      pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+    }
+  }
+  if (note.includes("[PUBLISHED_DAYS:")) {
+    try {
+      const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+      if (match && match[1]) {
+        const fromNote = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+        pubDays = Array.from(new Set([...pubDays, ...fromNote]))
+      }
+    } catch {}
+  }
+
+  const dayMap: Record<string, any> = {}
+  for (const item of recDays) {
+    const isObj = typeof item === "object" && item !== null
+    const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
+    const lowerKey = String(rawKey).toLowerCase().trim()
+    const matched = ALL_WEEK_DAYS.find((d) => d.id === lowerKey || d.bn === rawKey || d.en.toLowerCase() === lowerKey)
+    const canonicalKey = matched ? matched.id : lowerKey
+    dayMap[canonicalKey] = {
+      key: canonicalKey,
+      day_bn: matched?.bn || (isObj ? item.day_bn : rawKey),
+      subject: isObj && item.subject ? item.subject : ex.subject || "",
+      total_marks: isObj && item.total_marks ? Number(item.total_marks) : 50,
+      pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : 20,
+    }
+  }
+
+  return ALL_WEEK_DAYS.map((w) => {
+    const conf = dayMap[w.id]
+    const isPub = pubDays.some((p) => p === w.id || p === w.bn.toLowerCase() || p === w.en.toLowerCase())
+    return {
+      id: w.id,
+      day_bn: w.bn,
+      day_en: w.en,
+      subject: conf?.subject || ex.subject || "",
+      total_marks: conf?.total_marks || 50,
+      pass_marks: conf?.pass_marks || 20,
+      is_published: isPub,
+    }
+  })
+}
+
 interface SliderClientProps {
   slides: Slide[]
   initialSettings?: Record<string, string>
@@ -392,9 +473,11 @@ export default function SliderClient({
       setExams(prev => prev.map(e => {
         if (e.id === examId) {
           const currentDays = Array.isArray(e.published_days) ? e.published_days : []
+          const filtered = currentDays.filter((d: any) => String(d).toLowerCase() !== dayKey.toLowerCase())
           return {
             ...e,
-            published_days: currentDays.filter((d: any) => String(d).toLowerCase() !== dayKey.toLowerCase()),
+            published_days: filtered,
+            is_public_result: filtered.length > 0 || e.is_weekly_published,
           }
         }
         return e
@@ -403,6 +486,73 @@ export default function SliderClient({
       toast.success(data.message || `${dayLabel} results removed from online portal!`)
     } catch (err: any) {
       toast.error(err.message || "Failed to remove day")
+    }
+  }
+
+  async function handlePublishSpecificDay(examId: string, dayKey: string, dayLabel: string) {
+    try {
+      const res = await fetch("/api/exams/unpublish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exam_id: examId,
+          action: "publish_day",
+          day_key: dayKey,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to publish day notification")
+
+      setExams(prev => prev.map(e => {
+        if (e.id === examId) {
+          const currentDays = Array.isArray(e.published_days) ? e.published_days.map((d: any) => String(d).toLowerCase()) : []
+          const newDays = Array.from(new Set([...currentDays, dayKey.toLowerCase()]))
+          return {
+            ...e,
+            published_days: newDays,
+            is_public_result: true,
+            is_published: true,
+          }
+        }
+        return e
+      }))
+
+      toast.success(data.message || `${dayLabel} results published to online portal!`)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to publish day")
+    }
+  }
+
+  async function handleToggleWeeklyTotal(examId: string, isWeeklyPub: boolean) {
+    try {
+      const res = await fetch("/api/exams/unpublish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exam_id: examId,
+          action: "toggle_weekly_total",
+          is_weekly_published: isWeeklyPub,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to update weekly aggregate")
+
+      setExams(prev => prev.map(e => {
+        if (e.id === examId) {
+          return {
+            ...e,
+            is_weekly_published: isWeeklyPub,
+            is_public_result: isWeeklyPub || (Array.isArray(e.published_days) && e.published_days.length > 0),
+          }
+        }
+        return e
+      }))
+
+      toast.success(data.message || "Weekly aggregate status updated!")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update weekly aggregate")
     }
   }
 
@@ -1121,16 +1271,14 @@ export default function SliderClient({
                   (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
                   Boolean(ex.title?.includes("সাপ্তাহিক"))
 
+                const daysList = isWeekly ? getExamDaysList(ex) : []
+                const publishedDaysCount = daysList.filter(d => d.is_published).length
+
                 const isLive =
                   ex.is_public_result === true ||
                   ex.is_published === true ||
                   ex.is_weekly_published === true ||
-                  (Array.isArray(ex.published_days) && ex.published_days.length > 0)
-
-                const rawDays: any[] = Array.isArray(ex.recurring_days) ? ex.recurring_days : []
-                const publishedDaysList: string[] = Array.isArray(ex.published_days)
-                  ? ex.published_days.map((d: any) => String(d).toLowerCase())
-                  : []
+                  publishedDaysCount > 0
 
                 const isUnpublishing = unpublishingExamId === ex.id
 
@@ -1138,29 +1286,29 @@ export default function SliderClient({
                   <div
                     key={ex.id}
                     className={`bg-white rounded-2xl border p-5 shadow-sm transition-all flex flex-col justify-between ${
-                      isLive ? "border-amber-200/90 hover:border-amber-400 hover:shadow-md" : "border-slate-200 opacity-75"
+                      isLive ? "border-amber-300/90 hover:border-amber-400 hover:shadow-md" : "border-slate-200 opacity-80"
                     }`}
                   >
-                    <div>
+                    <div className="space-y-4">
                       {/* Top Header with Badges */}
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap mb-1.5">
                             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold ${
                               isLive
                                 ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                                 : "bg-slate-100 text-slate-600 border border-slate-200"
                             }`}>
-                              {isLive ? "● Live on Online Portal" : "○ Draft / Unpublished"}
+                              {isLive ? "● লাইভ (Live on Online Portal)" : "○ ড্রাফট / আনপাবলিশড"}
                             </span>
 
                             {isWeekly ? (
                               <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded font-bold">
-                                📅 Weekly 7-Day Model Test
+                                📅 সাপ্তাহিক ৭-দিনের মডেল টেস্ট
                               </span>
                             ) : (
                               <span className="text-[10px] bg-sky-50 text-sky-700 border border-sky-200 px-2 py-0.5 rounded font-bold">
-                                📝 Standard Exam
+                                📝 সাধারণ পরীক্ষা
                               </span>
                             )}
 
@@ -1181,22 +1329,23 @@ export default function SliderClient({
                           )}
                         </div>
 
-                        {/* Top Direct Action Link */}
+                        {/* Direct View Link */}
                         {isLive && (
                           <a
                             href={`/online-result?exam_id=${ex.id}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-xl transition-colors border border-amber-200 shrink-0"
-                            title="View Public Result Page"
+                            className="p-2 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-xl transition-colors border border-amber-200 shrink-0 flex items-center gap-1 text-xs font-bold"
+                            title="পাবলিক রেজাল্ট পেজ দেখুন"
                           >
-                            <ExternalLink className="w-4 h-4" />
+                            <span>পোর্টাল</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
                           </a>
                         )}
                       </div>
 
-                      {/* Marks / Stats Pill */}
-                      <div className="grid grid-cols-3 gap-2 py-2 px-3 bg-slate-50 rounded-xl mb-3 text-center border border-slate-100 text-xs">
+                      {/* Marks / Routine Stats */}
+                      <div className="grid grid-cols-3 gap-2 py-2 px-3 bg-slate-50 rounded-xl text-center border border-slate-100 text-xs">
                         <div>
                           <p className="font-extrabold text-slate-900">{ex.total_marks || 100}</p>
                           <p className="text-[10px] text-slate-500">মোট পূর্ণমান</p>
@@ -1213,53 +1362,111 @@ export default function SliderClient({
                         </div>
                       </div>
 
-                      {/* Day-Wise Published Breakdown (for Weekly Exams) */}
-                      {isWeekly && rawDays.length > 0 && (
-                        <div className="mb-4 bg-purple-50/50 p-3 rounded-xl border border-purple-100 space-y-2">
-                          <div className="flex items-center justify-between text-[11px] font-bold text-purple-900">
-                            <span>সাপ্তাহিক দিনসমূহের রেজাল্ট নোটিফিকেশন:</span>
-                            <span className="text-[10px] text-purple-700 font-medium">
-                              (নির্দিষ্ট দিনের নোটিফিকেশন মুছতে <span className="text-red-600 font-bold">✕</span> চাপুন)
+                      {/* For Weekly Exams: 1. Weekly Aggregate Card Control */}
+                      {isWeekly && (
+                        <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200/80 space-y-2">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-bold text-xs text-purple-950">
+                                ১. সাপ্তাহিক সামগ্রিক মূল্যায়ন (৩৫০ নম্বর কার্ড):
+                              </span>
+                              <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                ex.is_weekly_published
+                                  ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                  : "bg-slate-200 text-slate-700"
+                              }`}>
+                                {ex.is_weekly_published ? "প্রকাশিত (Live)" : "লুকানো (Hidden)"}
+                              </span>
+                            </div>
+
+                            {ex.is_weekly_published ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleWeeklyTotal(ex.id, false)}
+                                className="px-2.5 py-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                                title="অনলাইন পোর্টাল থেকে সামগ্রিক সাপ্তাহিক কার্ড মুছে ফেলুন"
+                              >
+                                <X className="w-3 h-3 text-red-600" />
+                                <span>কার্ডটি মুছুন (Hide)</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleWeeklyTotal(ex.id, true)}
+                                className="px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1"
+                              >
+                                <Plus className="w-3 h-3 text-emerald-600" />
+                                <span>প্রকাশ করুন (Show)</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* For Weekly Exams: 2. Individual 7 Days Management */}
+                      {isWeekly && (
+                        <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                          <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                            <span>২. সাপ্তাহিক ৭ দিনের পৃথক নোটিফিকেশন ও রেজাল্ট:</span>
+                            <span className="text-[10px] text-slate-500 font-normal">
+                              ({publishedDaysCount}/7 দিন লাইভ)
                             </span>
                           </div>
 
-                          <div className="flex flex-wrap gap-1.5">
-                            {rawDays.map((d: any, i: number) => {
-                              const isObj = typeof d === "object" && d !== null
-                              const dKey = isObj ? (d.day || d.day_bn || `day_${i}`) : String(d)
-                              const dLabel = isObj ? (d.day_bn || d.day || `দিন ${i + 1}`) : String(d)
-                              const isDayPublished = publishedDaysList.includes(String(dKey).toLowerCase()) || publishedDaysList.includes(String(dLabel).toLowerCase())
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {daysList.map((d) => (
+                              <div
+                                key={d.id}
+                                className={`p-2 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                                  d.is_published
+                                    ? "bg-white border-amber-300 shadow-2xs"
+                                    : "bg-slate-100/80 border-slate-200 opacity-70"
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-xs text-slate-900">{d.day_bn}</span>
+                                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                                      d.is_published ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"
+                                    }`}>
+                                      {d.is_published ? "Live" : "Draft"}
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 truncate">
+                                    {d.subject || "সাধারণ"} • {d.total_marks} marks
+                                  </p>
+                                </div>
 
-                              return (
-                                <span
-                                  key={i}
-                                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${
-                                    isDayPublished
-                                      ? "bg-white text-purple-900 border-purple-300 shadow-2xs"
-                                      : "bg-slate-100 text-slate-600 border-slate-200"
-                                  }`}
-                                >
-                                  <span>{dLabel}</span>
-                                  {isDayPublished && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteSpecificDay(ex.id, dKey, dLabel)}
-                                      className="w-4 h-4 rounded-full bg-red-100 hover:bg-red-200 text-red-600 flex items-center justify-center font-black text-[10px] cursor-pointer transition-colors"
-                                      title={`${dLabel} এর রেজাল্ট নোটিফিকেশন মুছে ফেলুন`}
-                                    >
-                                      ✕
-                                    </button>
-                                  )}
-                                </span>
-                              )
-                            })}
+                                {d.is_published ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteSpecificDay(ex.id, d.id, d.day_bn)}
+                                    className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-lg text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1 shrink-0"
+                                    title={`${d.day_bn} এর নোটিফিকেশন ও রেজাল্ট মুছুন`}
+                                  >
+                                    <Trash2 className="w-3 h-3 text-red-600" />
+                                    <span>মুছুন</span>
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handlePublishSpecificDay(ex.id, d.id, d.day_bn)}
+                                    className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold cursor-pointer transition-colors flex items-center gap-1 shrink-0"
+                                    title={`${d.day_bn} এর নোটিফিকেশন ও রেজাল্ট অনলাইনে প্রকাশ করুন`}
+                                  >
+                                    <Plus className="w-3 h-3 text-emerald-600" />
+                                    <span>প্রকাশ</span>
+                                  </button>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       )}
                     </div>
 
                     {/* Bottom Action Buttons */}
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
+                    <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between flex-wrap gap-2 text-xs">
                       <div className="flex items-center gap-2">
                         {isLive ? (
                           <button
@@ -1267,10 +1474,10 @@ export default function SliderClient({
                             onClick={() => handleUnpublishExam(ex.id, ex.title)}
                             disabled={isUnpublishing}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold rounded-xl transition-all shadow-2xs cursor-pointer hover:scale-[1.02] disabled:opacity-50"
-                            title="অনলাইন পোর্টাল ও হোমপেজ থেকে এই পরীক্ষার নোটিফিকেশন ও রেজাল্ট মুছে ফেলুন"
+                            title="অনলাইন পোর্টাল ও হোমপেজ থেকে এই পরীক্ষার সকল নোটিফিকেশন ও রেজাল্ট মুছে ফেলুন"
                           >
                             <EyeOff className="w-3.5 h-3.5" />
-                            <span>{isUnpublishing ? "মুছে ফেলা হচ্ছে..." : "রেজাল্ট পোর্টাল থেকে মুছে ফেলুন (Unpublish)"}</span>
+                            <span>{isUnpublishing ? "মুছে ফেলা হচ্ছে..." : "সকল নোটিফিকেশন ও রেজাল্ট মুছুন (Unpublish All)"}</span>
                           </button>
                         ) : (
                           <button
@@ -1288,10 +1495,11 @@ export default function SliderClient({
                         <button
                           type="button"
                           onClick={() => handleDeleteExamPermanently(ex.id, ex.title)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200 cursor-pointer"
+                          className="flex items-center gap-1 px-2.5 py-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors border border-slate-200 cursor-pointer font-semibold text-xs"
                           title="ডাটাবেজ থেকে সম্পূর্ণ পরীক্ষা ও এর সকল ফলাফল মুছুন"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5 text-red-500" />
+                          <span>ডাটাবেজ ডিলিট</span>
                         </button>
                       </div>
                     </div>

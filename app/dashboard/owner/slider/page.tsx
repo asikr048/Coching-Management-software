@@ -1,10 +1,95 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import SliderClient from "./SliderClient"
 
 export const dynamic = "force-dynamic"
 
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+function normalizeSliderExam(ex: any) {
+  const note = ex.result_note || ""
+  let recDays: any[] = []
+  if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
+    recDays = ex.recurring_days
+  } else if (note.includes("[RECURRING_DAYS:")) {
+    try {
+      const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+      if (match && match[1]) recDays = JSON.parse(match[1])
+    } catch {}
+  }
+
+  const isWeekly =
+    ex.exam_schedule_type === "weekly" ||
+    recDays.length > 0 ||
+    Boolean(ex.title?.includes("সাপ্তাহিক"))
+
+  const isExplicitlyUnpublished =
+    ex.is_public_result === false ||
+    ex.is_published === false ||
+    note.includes("[PUBLIC_RESULT:false]")
+
+  let isWeeklyPub = false
+  if (!isExplicitlyUnpublished) {
+    if (ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")) {
+      isWeeklyPub = true
+    } else if (isWeekly && (ex.is_public_result === true || ex.is_published === true)) {
+      isWeeklyPub = true
+    }
+  }
+
+  let pubDays: string[] = []
+  if (!isExplicitlyUnpublished) {
+    if (Array.isArray(ex.published_days)) {
+      pubDays = ex.published_days.map((d: any) => String(d).toLowerCase())
+    } else if (typeof ex.published_days === "string" && ex.published_days.trim()) {
+      try {
+        const parsed = JSON.parse(ex.published_days)
+        if (Array.isArray(parsed)) pubDays = parsed.map((d: any) => String(d).toLowerCase())
+        else pubDays = ex.published_days.split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
+      } catch {
+        pubDays = ex.published_days.split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
+      }
+    }
+    if (pubDays.length === 0 && note.includes("[PUBLISHED_DAYS:")) {
+      try {
+        const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+        if (match && match[1]) {
+          pubDays = match[1].split(",").map((d: string) => d.trim().toLowerCase()).filter(Boolean)
+        }
+      } catch {}
+    }
+  }
+
+  const isPubResult =
+    !isExplicitlyUnpublished &&
+    (ex.is_public_result === true ||
+      note.includes("[PUBLIC_RESULT:true]") ||
+      isWeeklyPub ||
+      pubDays.length > 0 ||
+      ex.is_published === true)
+
+  return {
+    ...ex,
+    is_public_result: isPubResult,
+    is_weekly_published: isWeeklyPub,
+    published_days: pubDays,
+    recurring_days: recDays,
+    exam_schedule_type: isWeekly ? "weekly" : (ex.exam_schedule_type || "everyday"),
+    is_published: isPubResult,
+  }
+}
+
 export default async function SliderPage() {
   const supabase = await createClient()
+  const admin = createAdminClient()
   const [
     { data: slides },
     { data: settings },
@@ -20,9 +105,9 @@ export default async function SliderPage() {
     supabase.from("blogs").select("*").order("created_at", { ascending: false }),
     supabase.from("achievements").select("*").order("sort_order", { ascending: true }),
     supabase.from("notices").select("*").order("created_at", { ascending: false }),
-    supabase.from("branches").select("*").order("name", { ascending: true }),
+    admin.from("branches").select("*").order("name", { ascending: true }),
     supabase.from("feedback").select("*").order("created_at", { ascending: false }),
-    supabase.from("exams").select("*, branch:branches(id, name), batch:batches(id, name)").order("created_at", { ascending: false }),
+    admin.from("exams").select("*, branch:branches(id, name), batch:batches(id, name)").order("created_at", { ascending: false }),
   ])
 
   const settingsMap = (settings || []).reduce((acc: Record<string, string>, item: any) => {
@@ -158,7 +243,7 @@ export default async function SliderPage() {
         initialAchievements={achList}
         initialNotices={noticeList}
         initialFeedback={feedback || []}
-        initialExams={exams || []}
+        initialExams={(exams || []).map(normalizeSliderExam)}
         branches={branches || []}
       />
     </div>

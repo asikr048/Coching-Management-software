@@ -2,6 +2,50 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+function getCanonicalDayId(raw: string): string {
+  const low = String(raw).toLowerCase().trim()
+  const matched = ALL_WEEK_DAYS.find((d) => d.id === low || d.bn === raw || d.en.toLowerCase() === low)
+  return matched ? matched.id : low
+}
+
+function parseExistingPubDays(exam: any): string[] {
+  let pubDays: string[] = []
+  const raw = exam.published_days
+  if (Array.isArray(raw)) {
+    pubDays = raw.map((d: any) => getCanonicalDayId(d))
+  } else if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw)
+      if (Array.isArray(parsed)) pubDays = parsed.map((d: any) => getCanonicalDayId(d))
+      else pubDays = raw.split(",").map((s: string) => getCanonicalDayId(s)).filter(Boolean)
+    } catch {
+      pubDays = raw.split(",").map((s: string) => getCanonicalDayId(s)).filter(Boolean)
+    }
+  }
+
+  const note = exam.result_note || ""
+  if (note.includes("[PUBLISHED_DAYS:")) {
+    try {
+      const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+      if (match && match[1]) {
+        const fromNote = match[1].split(",").map((s: string) => getCanonicalDayId(s)).filter(Boolean)
+        pubDays = Array.from(new Set([...pubDays, ...fromNote]))
+      }
+    } catch {}
+  }
+  return pubDays
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createClient()
@@ -13,8 +57,9 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       exam_id,
-      action = "unpublish", // "unpublish" | "delete_day" | "delete_exam"
+      action = "unpublish", // "unpublish" | "delete_day" | "publish_day" | "toggle_weekly_total" | "delete_exam"
       day_key,
+      is_weekly_published,
       delete_notices = true,
     } = body
 
@@ -69,26 +114,27 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === "delete_day" && day_key) {
-      // Remove specific day from published_days
-      let pubDays: string[] = []
-      if (Array.isArray(exam.published_days)) {
-        pubDays = exam.published_days.map((d: any) => String(d).toLowerCase())
-      }
-      const targetLower = String(day_key).toLowerCase()
-      const newPubDays = pubDays.filter((d) => d !== targetLower)
+      const canonicalTarget = getCanonicalDayId(day_key)
+      const currentPubDays = parseExistingPubDays(exam)
+      const newPubDays = currentPubDays.filter((d) => d !== canonicalTarget)
 
       let updatedNote = exam.result_note || ""
       updatedNote = updatedNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
       if (newPubDays.length > 0) {
         updatedNote = `${updatedNote} [PUBLISHED_DAYS:${newPubDays.join(",")}]`.trim()
+      } else {
+        updatedNote = `${updatedNote} [PUBLISHED_DAYS:]`.trim()
       }
+
+      const isWeeklyPub = exam.is_weekly_published === true || updatedNote.includes("[IS_WEEKLY_PUBLISHED:true]")
+      const hasLiveCards = newPubDays.length > 0 || isWeeklyPub
 
       const updatePayload: any = {
         published_days: newPubDays,
         result_note: updatedNote,
       }
 
-      if (newPubDays.length === 0 && !exam.is_weekly_published) {
+      if (!hasLiveCards) {
         updatePayload.is_public_result = false
         updatePayload.is_published = false
         updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
@@ -105,10 +151,86 @@ export async function POST(req: NextRequest) {
 
       if (uErr) throw uErr
 
+      const dayObj = ALL_WEEK_DAYS.find((d) => d.id === canonicalTarget)
+      const label = dayObj ? dayObj.bn : day_key
+
       return NextResponse.json({
         success: true,
         exam: updated,
-        message: `${day_key} দিনের ফলাফল নোটিফিকেশন সফলভাবে মুছে ফেলা হয়েছে!`,
+        message: `${label} দিনের ফলাফল নোটিফিকেশন সফলভাবে মুছে ফেলা হয়েছে!`,
+      })
+    }
+
+    if (action === "publish_day" && day_key) {
+      const canonicalTarget = getCanonicalDayId(day_key)
+      const currentPubDays = parseExistingPubDays(exam)
+      const newPubDays = Array.from(new Set([...currentPubDays, canonicalTarget]))
+
+      let updatedNote = exam.result_note || ""
+      updatedNote = updatedNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
+      updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
+      updatedNote = `${updatedNote} [PUBLISHED_DAYS:${newPubDays.join(",")}] [PUBLIC_RESULT:true]`.trim()
+
+      const updatePayload: any = {
+        published_days: newPubDays,
+        is_public_result: true,
+        is_published: true,
+        result_note: updatedNote,
+      }
+
+      const { data: updated, error: uErr } = await admin
+        .from("exams")
+        .update(updatePayload)
+        .eq("id", exam_id)
+        .select()
+        .single()
+
+      if (uErr) throw uErr
+
+      const dayObj = ALL_WEEK_DAYS.find((d) => d.id === canonicalTarget)
+      const label = dayObj ? dayObj.bn : day_key
+
+      return NextResponse.json({
+        success: true,
+        exam: updated,
+        message: `${label} দিনের ফলাফল নোটিফিকেশন সফলভাবে প্রকাশ করা হয়েছে!`,
+      })
+    }
+
+    if (action === "toggle_weekly_total") {
+      const targetWeeklyPub = Boolean(is_weekly_published)
+      const currentPubDays = parseExistingPubDays(exam)
+
+      let updatedNote = exam.result_note || ""
+      updatedNote = updatedNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
+      updatedNote = `${updatedNote} [IS_WEEKLY_PUBLISHED:${targetWeeklyPub}]`.trim()
+
+      const hasLive = targetWeeklyPub || currentPubDays.length > 0
+      updatedNote = updatedNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
+      updatedNote = `${updatedNote} [PUBLIC_RESULT:${hasLive}]`.trim()
+
+      const updatePayload: any = {
+        is_weekly_published: targetWeeklyPub,
+        is_public_result: hasLive,
+        is_published: hasLive,
+        result_note: updatedNote,
+      }
+
+      const { data: updated, error: uErr } = await admin
+        .from("exams")
+        .update(updatePayload)
+        .eq("id", exam_id)
+        .select()
+        .single()
+
+      if (uErr) throw uErr
+
+      return NextResponse.json({
+        success: true,
+        exam: updated,
+        message: targetWeeklyPub
+          ? "সাপ্তাহিক সামগ্রিক ফলাফল কার্ড সফলভাবে প্রকাশ করা হয়েছে!"
+          : "সাপ্তাহিক সামগ্রিক ফলাফল কার্ড সফলভাবে মুছে ফেলা / হাইড করা হয়েছে!",
       })
     }
 
@@ -117,7 +239,7 @@ export async function POST(req: NextRequest) {
     cleanNote = cleanNote.replace(/\[PUBLIC_RESULT:(true|false)\]/g, "").trim()
     cleanNote = cleanNote.replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "").trim()
     cleanNote = cleanNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
-    cleanNote = `${cleanNote} [PUBLIC_RESULT:false] [IS_WEEKLY_PUBLISHED:false]`.trim()
+    cleanNote = `${cleanNote} [PUBLIC_RESULT:false] [IS_WEEKLY_PUBLISHED:false] [PUBLISHED_DAYS:]`.trim()
 
     const unpublishPayload: any = {
       is_public_result: false,

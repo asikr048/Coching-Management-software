@@ -22,7 +22,8 @@ import {
   Eye,
   CalendarDays,
   User,
-  GraduationCap
+  GraduationCap,
+  Trash2
 } from "lucide-react"
 
 const ALL_WEEK_DAYS = [
@@ -265,6 +266,8 @@ export default function OnlineResultPortalPage() {
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   
+  const [isStaff, setIsStaff] = useState(false)
+  
   // Filters: default to "all" so published weekly and daily exams are immediately visible
   const [activeTab, setActiveTab] = useState<"all" | "everyday" | "weekly">("all")
   const [selectedBranch, setSelectedBranch] = useState<string>("all")
@@ -276,6 +279,22 @@ export default function OnlineResultPortalPage() {
   const [examResults, setExamResults] = useState<StudentRank[]>([])
   const [loadingResults, setLoadingResults] = useState(false)
   const [studentSearchInModal, setStudentSearchInModal] = useState("")
+
+  useEffect(() => {
+    async function checkAuthRole() {
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+          if (profile?.role === "owner" || profile?.role === "super_admin" || profile?.role === "branch_admin") {
+            setIsStaff(true)
+          }
+        }
+      } catch {}
+    }
+    checkAuthRole()
+  }, [])
 
   useEffect(() => {
     async function loadData() {
@@ -307,7 +326,7 @@ export default function OnlineResultPortalPage() {
           }
         }
         const urlParams = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null
-        const targetExamId = urlParams?.get("exam_id") || urlParams?.get("id") || "639d346a-bb1f-4b71-8715-b845872cc859"
+        const targetExamId = urlParams?.get("exam_id") || urlParams?.get("id")
         const targetDay = urlParams?.get("day")
         const targetTab = urlParams?.get("tab")
 
@@ -443,23 +462,25 @@ export default function OnlineResultPortalPage() {
         }
 
         // 1. WEEKLY CONSOLIDATED EXAM CARD (350 marks):
-        // Any published weekly exam in the portal ALWAYS shows its weekly aggregate result card
-        items.push({
-          id: `${ex.id}-weekly`,
-          parentExam: ex,
-          type: "weekly",
-          title: ex.title,
-          subTitle: "সাপ্তাহিক সামগ্রিক মূল্যায়ন ও সকল দিনের সম্মিলিত ফলাফল",
-          subject: ex.subject,
-          batchName: ex.batch?.name || "All Enrolled Batches",
-          branchName: ex.branch?.name,
-          branchId: ex.branch?.id,
-          routineText: "প্রতি সাপ্তাহিক দিন (শনিবার হতে শুক্রবার)",
-          totalMarks,
-          passMarks,
-          dayKey: null,
-          dayConfig: null,
-        })
+        // Only show if is_weekly_published is true
+        if (ex.is_weekly_published === true) {
+          items.push({
+            id: `${ex.id}-weekly`,
+            parentExam: ex,
+            type: "weekly",
+            title: ex.title,
+            subTitle: "সাপ্তাহিক সামগ্রিক মূল্যায়ন ও সকল দিনের সম্মিলিত ফলাফল",
+            subject: ex.subject,
+            batchName: ex.batch?.name || "All Enrolled Batches",
+            branchName: ex.branch?.name,
+            branchId: ex.branch?.id,
+            routineText: "প্রতি সাপ্তাহিক দিন (শনিবার হতে শুক্রবার)",
+            totalMarks,
+            passMarks,
+            dayKey: null,
+            dayConfig: null,
+          })
+        }
 
         // 2. FOR EACH PUBLISHED DAY: Add a Daily Exam card
         for (const dayConf of days) {
@@ -494,6 +515,62 @@ export default function OnlineResultPortalPage() {
     }
     return items
   }, [exams])
+
+  async function handleAdminDeleteCard(card: ResultCardItem) {
+    if (!confirm(`Are you sure you want to remove this notification / result for "${card.title}" from the public portal?`)) {
+      return
+    }
+
+    try {
+      let payload: any = { exam_id: card.parentExam.id }
+      if (card.type === "daily" && card.dayKey) {
+        payload.action = "delete_day"
+        payload.day_key = card.dayKey
+      } else if (card.type === "weekly") {
+        payload.action = "toggle_weekly_total"
+        payload.is_weekly_published = false
+      } else {
+        payload.action = "unpublish"
+      }
+
+      const res = await fetch("/api/exams/unpublish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) throw new Error(data.error || "Failed to remove card")
+
+      // Update local exams state immediately
+      setExams((prev) =>
+        prev.map((e) => {
+          if (e.id === card.parentExam.id) {
+            if (card.type === "daily" && card.dayKey) {
+              const prevDays = Array.isArray(e.published_days) ? e.published_days : []
+              return {
+                ...e,
+                published_days: prevDays.filter((d: any) => String(d).toLowerCase() !== card.dayKey?.toLowerCase()),
+              }
+            } else if (card.type === "weekly") {
+              return {
+                ...e,
+                is_weekly_published: false,
+              }
+            } else {
+              return {
+                ...e,
+                is_public_result: false,
+                is_published: false,
+              }
+            }
+          }
+          return e
+        })
+      )
+    } catch (err: any) {
+      alert(err.message || "Failed to remove notification")
+    }
+  }
 
   // Filter cards by active tab, branch, and search
   const filteredCards = useMemo(() => {
@@ -981,12 +1058,28 @@ export default function OnlineResultPortalPage() {
                           </span>
                         )}
                       </div>
-                      {card.branchName && (
-                        <span className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
-                          <Landmark className="w-3 h-3 text-slate-400" />
-                          {card.branchName}
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {card.branchName && (
+                          <span className="text-[10px] font-semibold text-slate-500 flex items-center gap-1">
+                            <Landmark className="w-3 h-3 text-slate-400" />
+                            {card.branchName}
+                          </span>
+                        )}
+                        {isStaff && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleAdminDeleteCard(card)
+                            }}
+                            className="p-1 px-2 text-red-600 hover:bg-red-50 bg-red-50/50 rounded-lg transition-colors border border-red-200 cursor-pointer text-[10px] font-bold flex items-center gap-1 shadow-2xs"
+                            title="এডমিন: এই নোটিফিকেশন / ফলাফল কার্ডটি মুছে ফেলুন"
+                          >
+                            <Trash2 className="w-3 h-3 text-red-600" />
+                            <span>মুছুন</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div>
