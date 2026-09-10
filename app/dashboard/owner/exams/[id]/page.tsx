@@ -452,10 +452,10 @@ export default function ExamResultsPage() {
           }
 
           if (targetBatches.length > 0) {
-            // Direct query of enrollments (no nested PostgREST join that can fail)
+            // Direct query of enrollments with select("*") - safe against missing columns
             const { data: enrollments } = await supabase
               .from("enrollments")
-              .select("id, student_id, batch_id, status, roll_no, batch_roll, enrollment_date, created_at")
+              .select("*")
               .in("batch_id", targetBatches)
 
             const activeEnrs = (enrollments || []).filter(
@@ -467,7 +467,7 @@ export default function ExamResultsPage() {
             if (sIds.length > 0) {
               const { data: sData } = await supabase
                 .from("students")
-                .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone")
+                .select("*")
                 .in("id", sIds)
 
               const sMap = new Map<string, any>()
@@ -497,23 +497,28 @@ export default function ExamResultsPage() {
             }
           }
 
-          // Fallback if no enrolled students found: load students from branch or globally
+          // Fallback if no enrolled students found: match by Class 9 / class_level or load all students
           if (resolvedStudents.length === 0) {
-            let sQuery = supabase
-              .from("students")
-              .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id")
-            if (ex?.branch_id) {
-              sQuery = sQuery.eq("branch_id", ex.branch_id)
+            const { data: allStData } = await supabase.from("students").select("*")
+            const allSt = allStData || []
+
+            const bName = (ex?.batch?.name || ex?.title || "").toLowerCase()
+            const is9 = bName.includes("9") || bName.includes("nine") || bName.includes("class 9")
+            let matchingSt = is9
+              ? allSt.filter((s: any) => {
+                  const cl = String(s.class_level || "").toLowerCase()
+                  return cl.includes("9") || cl.includes("nine") || cl.includes("ix")
+                })
+              : []
+
+            if (matchingSt.length === 0 && ex?.branch_id) {
+              matchingSt = allSt.filter((s: any) => !s.branch_id || s.branch_id === ex.branch_id)
             }
-            let { data: allStudents } = await sQuery
-            if (!allStudents || allStudents.length === 0) {
-              const { data: globalSt } = await supabase
-                .from("students")
-                .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id")
-              allStudents = globalSt
+            if (matchingSt.length === 0) {
+              matchingSt = allSt
             }
 
-            resolvedStudents = (allStudents || []).map((s: any, idx: number) => ({
+            resolvedStudents = matchingSt.map((s: any, idx: number) => ({
               ...s,
               roll_no: s.roll_no || s.batch_roll || idx + 1,
               batch_roll: s.roll_no || s.batch_roll || idx + 1,

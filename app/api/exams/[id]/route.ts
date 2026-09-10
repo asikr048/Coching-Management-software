@@ -14,166 +14,201 @@ export async function GET(
     }
 
     const admin = createAdminClient()
-    const { data: exam, error } = await admin
-      .from("exams")
-      .select("*, batch:batches(name, branch_id), branch:branches(name)")
-      .eq("id", examId)
-      .single()
+    const supabase = await createClient()
 
-    if (error || !exam) {
+    // 1. Fetch exam details with batch and branch
+    let exam: any = null
+    const { data: exData } = await admin
+      .from("exams")
+      .select("*, batch:batches(*), branch:branches(*)")
+      .eq("id", examId)
+      .maybeSingle()
+
+    if (exData) {
+      exam = exData
+    } else {
+      const { data: fbEx } = await supabase
+        .from("exams")
+        .select("*, batch:batches(*), branch:branches(*)")
+        .eq("id", examId)
+        .maybeSingle()
+      exam = fbEx
+    }
+
+    if (!exam) {
       return NextResponse.json({ error: "Exam not found" }, { status: 404 })
     }
 
     const { searchParams } = new URL(req.url)
     const requestedBatch = searchParams.get("batch_id")
 
-    // 1. Resolve target batch IDs
-    let targetBatchIds: string[] = []
-    if (requestedBatch && requestedBatch !== "all" && requestedBatch !== "auto") {
-      targetBatchIds = [requestedBatch]
-    } else if (requestedBatch === "all") {
-      targetBatchIds = [] // load all students without batch filtering
+    // 2. Fetch all batches (using select("*") - completely safe against missing columns)
+    let allBatches: any[] = []
+    const { data: bList } = await admin.from("batches").select("*").order("name", { ascending: true })
+    if (bList && bList.length > 0) {
+      allBatches = bList
     } else {
-      if (Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0) {
-        for (const b of exam.batch_ids) {
-          if (b && typeof b === "string" && !targetBatchIds.includes(b)) {
-            targetBatchIds.push(b)
-          }
+      const { data: sessionB } = await supabase.from("batches").select("*").order("name", { ascending: true })
+      if (sessionB) allBatches = sessionB
+    }
+
+    // 3. Fetch all raw students (using select("*") - completely safe against missing columns)
+    let rawStudents: any[] = []
+    const { data: stList } = await admin.from("students").select("*").order("created_at", { ascending: false })
+    if (stList && stList.length > 0) {
+      rawStudents = stList
+    } else {
+      const { data: sessionSt } = await supabase.from("students").select("*").order("created_at", { ascending: false })
+      if (sessionSt) rawStudents = sessionSt
+    }
+
+    // 4. Fetch all raw enrollments (using select("*") - completely safe against missing columns)
+    let rawEnrollments: any[] = []
+    const { data: enrList } = await admin.from("enrollments").select("*")
+    if (enrList && enrList.length > 0) {
+      rawEnrollments = enrList
+    } else {
+      const { data: sessionEnr } = await supabase.from("enrollments").select("*")
+      if (sessionEnr) rawEnrollments = sessionEnr
+    }
+
+    // 5. Fetch existing exam results for this exam
+    let existingResults: any[] = []
+    const { data: resList } = await admin.from("exam_results").select("*").eq("exam_id", examId)
+    if (resList) existingResults = resList
+
+    // 6. Map enrollments by student
+    const enrollmentsByStudent = new Map<string, any[]>()
+    rawEnrollments.forEach((e) => {
+      if (!e.student_id) return
+      const list = enrollmentsByStudent.get(e.student_id) || []
+      list.push(e)
+      enrollmentsByStudent.set(e.student_id, list)
+    })
+
+    const existingGradedIds = new Set(existingResults.map((r) => r.student_id).filter(Boolean))
+
+    // 7. Determine which students should be returned based on requestedBatch
+    let selectedStudents: any[] = []
+
+    if (requestedBatch === "all") {
+      // User explicitly asked for ALL students!
+      selectedStudents = rawStudents
+    } else if (requestedBatch && requestedBatch !== "auto") {
+      // User selected a specific batch UUID
+      selectedStudents = rawStudents.filter((s) => {
+        if (existingGradedIds.has(s.id)) return true
+        const sEnrs = enrollmentsByStudent.get(s.id) || []
+        return sEnrs.some((e) => e.batch_id === requestedBatch)
+      })
+      // If none found by enrollment, check if batch has a class_level or name matching student class_level
+      if (selectedStudents.length === 0) {
+        const targetB = allBatches.find((b) => b.id === requestedBatch)
+        if (targetB) {
+          const bName = (targetB.name || "").toLowerCase()
+          const bClass = (targetB.class_level || "").toLowerCase()
+          selectedStudents = rawStudents.filter((s) => {
+            const sc = (s.class_level || "").toLowerCase()
+            return (bName && sc.includes(bName)) || (bClass && sc.includes(bClass))
+          })
         }
       }
-      if (exam.batch_id && typeof exam.batch_id === "string" && !targetBatchIds.includes(exam.batch_id)) {
-        targetBatchIds.push(exam.batch_id)
+    } else {
+      // Default / Auto: load students for the exam's batch(es)
+      const targetBatchIds = new Set<string>()
+      if (exam.batch_id) targetBatchIds.add(exam.batch_id)
+      if (Array.isArray(exam.batch_ids)) {
+        exam.batch_ids.forEach((b: any) => {
+          if (b && typeof b === "string") targetBatchIds.add(b)
+        })
       }
-    }
 
-    // 2. Fetch existing results for this exam
-    const { data: existingResults } = await admin
-      .from("exam_results")
-      .select("id, exam_id, student_id, obtained_marks, grade, day_marks, created_at")
-      .eq("exam_id", examId)
-
-    const existingResultStudentIds = (existingResults || []).map((r: any) => r.student_id).filter(Boolean)
-
-    // 3. Resolve enrollments and enrolled students
-    let enrollments: any[] = []
-    if (targetBatchIds.length > 0) {
-      const { data: enrData } = await admin
-        .from("enrollments")
-        .select("id, student_id, batch_id, status, roll_no, batch_roll, enrollment_date, created_at")
-        .in("batch_id", targetBatchIds)
-
-      if (enrData && enrData.length > 0) {
-        enrollments = enrData
-      }
-    }
-
-    const activeEnrs = enrollments.filter(
-      (e: any) => !e.status || e.status === "active" || e.status === "approved" || e.status === "enrolled"
-    )
-    const targetEnrs = activeEnrs.length > 0 ? activeEnrs : enrollments
-    const enrolledStudentIds = Array.from(new Set(targetEnrs.map((e: any) => e.student_id).filter(Boolean)))
-
-    // Combine student IDs from enrollments and any already graded in exam_results
-    const allTargetStudentIds = Array.from(new Set([...enrolledStudentIds, ...existingResultStudentIds]))
-
-    let resolvedStudents: any[] = []
-    const enrMap = new Map<string, any>()
-    targetEnrs.forEach((e: any) => enrMap.set(e.student_id, e))
-
-    if (allTargetStudentIds.length > 0) {
-      const { data: stData } = await admin
-        .from("students")
-        .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id, is_active")
-        .in("id", allTargetStudentIds)
-
-      const sMap = new Map<string, any>()
-      ;(stData || []).forEach((s: any) => sMap.set(s.id, s))
-
-      resolvedStudents = allTargetStudentIds
-        .map((sid, idx) => {
-          const s = sMap.get(sid)
-          if (!s) return null
-          const e = enrMap.get(sid)
-          const rawRoll =
-            e?.roll_no != null && Number(e.roll_no) > 0
-              ? Number(e.roll_no)
-              : e?.batch_roll != null && Number(e.batch_roll) > 0
-              ? Number(e.batch_roll)
-              : s.roll_no != null && Number(s.roll_no) > 0
-              ? Number(s.roll_no)
-              : s.batch_roll != null && Number(s.batch_roll) > 0
-              ? Number(s.batch_roll)
-              : idx + 1
-
-          return {
-            id: s.id,
-            student_id: s.student_id || `ID-${s.id.slice(0, 5)}`,
-            name: s.name || "Student",
-            roll_no: Number(rawRoll),
-            batch_roll: Number(rawRoll),
-            phone: s.phone || "",
-            guardian_phone: s.guardian_phone || "",
-            branch_id: s.branch_id || exam.branch_id || null,
-            is_active: s.is_active !== false,
+      // Also add any batch with identical name (e.g. another batch named "Class 9")
+      const examBatchName = (exam.batch?.name || "").trim().toLowerCase()
+      if (examBatchName) {
+        allBatches.forEach((b) => {
+          if ((b.name || "").trim().toLowerCase() === examBatchName) {
+            targetBatchIds.add(b.id)
           }
         })
-        .filter(Boolean)
-    }
-
-    // 4. Fallback if no students enrolled in target batch: load students from branch or globally
-    if (resolvedStudents.length === 0) {
-      let sQuery = admin
-        .from("students")
-        .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id, is_active")
-      if (exam.branch_id) {
-        sQuery = sQuery.eq("branch_id", exam.branch_id)
-      }
-      let { data: branchStudents } = await sQuery
-      let studentsList = branchStudents || []
-      if (studentsList.length === 0) {
-        const { data: globalStudents } = await admin
-          .from("students")
-          .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id, is_active")
-        studentsList = globalStudents || []
       }
 
-      resolvedStudents = studentsList.map((s: any, idx: number) => {
-        const rawRoll =
-          s.roll_no != null && Number(s.roll_no) > 0
-            ? Number(s.roll_no)
-            : s.batch_roll != null && Number(s.batch_roll) > 0
-            ? Number(s.batch_roll)
-            : idx + 1
-        return {
-          id: s.id,
-          student_id: s.student_id || `ID-${s.id.slice(0, 5)}`,
-          name: s.name || "Student",
-          roll_no: Number(rawRoll),
-          batch_roll: Number(rawRoll),
-          phone: s.phone || "",
-          guardian_phone: s.guardian_phone || "",
-          branch_id: s.branch_id,
-          is_active: s.is_active !== false,
-        }
+      // Strategy A: Match by enrollment in target batch(es)
+      selectedStudents = rawStudents.filter((s) => {
+        if (existingGradedIds.has(s.id)) return true
+        const sEnrs = enrollmentsByStudent.get(s.id) || []
+        return sEnrs.some((e) => targetBatchIds.has(e.batch_id))
       })
+
+      // Strategy B: If no enrolled students found in batch, match by class_level
+      // (e.g. exam is for "Class 9" or batch is "Class 9", and student has class_level "Class 9" or "9")
+      if (selectedStudents.length === 0) {
+        const batchName = (exam.batch?.name || exam.title || "").toLowerCase()
+        const isClass9 = batchName.includes("9") || batchName.includes("nine") || batchName.includes("class 9")
+        if (isClass9) {
+          const class9Students = rawStudents.filter((s) => {
+            const cl = String(s.class_level || "").toLowerCase()
+            return cl.includes("9") || cl.includes("nine") || cl.includes("ix")
+          })
+          if (class9Students.length > 0) {
+            selectedStudents = class9Students
+          }
+        }
+      }
+
+      // Strategy C: Check branch students if exam has a branch_id
+      if (selectedStudents.length === 0 && exam.branch_id) {
+        const branchStudents = rawStudents.filter((s) => !s.branch_id || s.branch_id === exam.branch_id)
+        if (branchStudents.length > 0) {
+          selectedStudents = branchStudents
+        }
+      }
+
+      // Strategy D: Fallback to ALL students if still 0!
+      if (selectedStudents.length === 0) {
+        selectedStudents = rawStudents
+      }
     }
+
+    // 8. Map students with clean, normalized fields and sequential roll numbers
+    const resolvedStudents = selectedStudents.map((s, idx) => {
+      const sEnrs = enrollmentsByStudent.get(s.id) || []
+      const matchingEnr = sEnrs.find((e) => exam.batch_id && e.batch_id === exam.batch_id) || sEnrs[0]
+      const rawRoll =
+        matchingEnr?.roll_no != null && Number(matchingEnr.roll_no) > 0
+          ? Number(matchingEnr.roll_no)
+          : matchingEnr?.batch_roll != null && Number(matchingEnr.batch_roll) > 0
+          ? Number(matchingEnr.batch_roll)
+          : s.roll_no != null && Number(s.roll_no) > 0
+          ? Number(s.roll_no)
+          : s.batch_roll != null && Number(s.batch_roll) > 0
+          ? Number(s.batch_roll)
+          : idx + 1
+
+      return {
+        id: s.id,
+        student_id: s.student_id || `ID-${s.id.slice(0, 5)}`,
+        name: s.name || "Student",
+        roll_no: Number(rawRoll),
+        batch_roll: Number(rawRoll),
+        phone: s.phone || "",
+        guardian_phone: s.guardian_phone || "",
+        branch_id: s.branch_id || exam.branch_id || null,
+        class_level: s.class_level || "",
+        is_active: s.is_active !== false,
+      }
+    })
 
     // Sort ascending by roll_no
-    resolvedStudents.sort((a: any, b: any) => (a.roll_no || 9999) - (b.roll_no || 9999))
-
-    // 5. Fetch available batches for easy switching in the exam UI
-    let batchQuery = admin.from("batches").select("id, name, branch_id").order("name", { ascending: true })
-    if (exam.branch_id) {
-      batchQuery = batchQuery.eq("branch_id", exam.branch_id)
-    }
-    const { data: batches } = await batchQuery
+    resolvedStudents.sort((a, b) => (a.roll_no || 9999) - (b.roll_no || 9999))
 
     return NextResponse.json({
       success: true,
       exam,
       students: resolvedStudents,
-      batches: batches || [],
-      existing_results: existingResults || [],
+      batches: allBatches,
+      existing_results: existingResults,
+      total_students_count: rawStudents.length,
     })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 })
