@@ -48,7 +48,7 @@ function getExamDaysList(ex: any) {
     } catch {}
   }
 
-  // Parse published days
+  // Parse published days strictly from ex.published_days if array, otherwise note
   let pubDays: string[] = []
   if (Array.isArray(ex.published_days)) {
     pubDays = ex.published_days.map((d: any) => String(d).toLowerCase().trim())
@@ -60,13 +60,11 @@ function getExamDaysList(ex: any) {
     } catch {
       pubDays = ex.published_days.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
     }
-  }
-  if (note.includes("[PUBLISHED_DAYS:")) {
+  } else if (note.includes("[PUBLISHED_DAYS:")) {
     try {
       const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
       if (match && match[1]) {
-        const fromNote = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
-        pubDays = Array.from(new Set([...pubDays, ...fromNote]))
+        pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
       }
     } catch {}
   }
@@ -474,9 +472,15 @@ export default function SliderClient({
         if (e.id === examId) {
           const currentDays = Array.isArray(e.published_days) ? e.published_days : []
           const filtered = currentDays.filter((d: any) => String(d).toLowerCase() !== dayKey.toLowerCase())
+          let updatedNote = e.result_note || ""
+          updatedNote = updatedNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
+          if (filtered.length > 0) updatedNote = `${updatedNote} [PUBLISHED_DAYS:${filtered.join(",")}]`.trim()
+          else updatedNote = `${updatedNote} [PUBLISHED_DAYS:]`.trim()
+
           return {
             ...e,
             published_days: filtered,
+            result_note: updatedNote,
             is_public_result: filtered.length > 0 || e.is_weekly_published,
           }
         }
@@ -506,11 +510,16 @@ export default function SliderClient({
 
       setExams(prev => prev.map(e => {
         if (e.id === examId) {
-          const currentDays = Array.isArray(e.published_days) ? e.published_days.map((d: any) => String(d).toLowerCase()) : []
+          const currentDays = Array.isArray(e.published_days) ? e.published_days : []
           const newDays = Array.from(new Set([...currentDays, dayKey.toLowerCase()]))
+          let updatedNote = e.result_note || ""
+          updatedNote = updatedNote.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
+          updatedNote = `${updatedNote} [PUBLISHED_DAYS:${newDays.join(",")}]`.trim()
+
           return {
             ...e,
             published_days: newDays,
+            result_note: updatedNote,
             is_public_result: true,
             is_published: true,
           }

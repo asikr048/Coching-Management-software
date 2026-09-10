@@ -12,6 +12,82 @@ import Link from "next/link"
 import type { Branch } from "@/lib/supabase/types"
 import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
 
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+function parseWeeklyDaysForExam(exam: any) {
+  if (!exam) return []
+  const dayMap: Record<string, any> = {}
+
+  if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+    for (const item of exam.recurring_days) {
+      const isObj = typeof item === "object" && item !== null
+      const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
+      const dayKey = String(rawKey).toLowerCase().trim()
+      const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+      const canonicalKey = matched?.id || dayKey
+      dayMap[canonicalKey] = {
+        key: canonicalKey,
+        day_bn: matched?.bn || (isObj ? item.day_bn : rawKey),
+        day_en: matched?.en || (isObj ? item.day_en : rawKey),
+        exam_name: isObj && item.exam_name ? item.exam_name : `${matched?.bn || rawKey}ের পরীক্ষা`,
+        subject: isObj && item.subject ? item.subject : exam.subject || "",
+        total_marks: isObj && item.total_marks ? Number(item.total_marks) : 50,
+        pass_marks: isObj && item.pass_marks ? Number(item.pass_marks) : 20,
+      }
+    }
+  }
+
+  const note = exam.result_note || ""
+  if (note.includes("[WEEKLY_SCHEDULE:")) {
+    try {
+      const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+      if (match && match[1]) {
+        const parsed = JSON.parse(match[1])
+        if (Array.isArray(parsed)) {
+          for (const item of parsed) {
+            const rawKey = item.day || item.day_bn || item.day_en || ""
+            const dayKey = String(rawKey).toLowerCase().trim()
+            const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+            const canonicalKey = matched?.id || dayKey
+            if (!dayMap[canonicalKey]) {
+              dayMap[canonicalKey] = {
+                key: canonicalKey,
+                day_bn: matched?.bn || item.day_bn || item.day,
+                day_en: matched?.en || item.day_en || item.day,
+                exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+                subject: item.subject || exam.subject || "",
+                total_marks: Number(item.total_marks) || 50,
+                pass_marks: Number(item.pass_marks) || 20,
+              }
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return ALL_WEEK_DAYS.map((w) => {
+    if (dayMap[w.id]) return dayMap[w.id]
+    return {
+      key: w.id,
+      day_bn: w.bn,
+      day_en: w.en,
+      exam_name: `${w.bn}ের পরীক্ষা`,
+      subject: exam.subject || "",
+      total_marks: 50,
+      pass_marks: 20,
+    }
+  })
+}
+
 export default function HomePage() {
   const [branches, setBranches] = useState<Branch[]>([])
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
@@ -359,7 +435,7 @@ export default function HomePage() {
       examId: string
       title: string
       badgeText: string
-      badgeType: "weekly" | "one_time"
+      badgeType: "weekly" | "daily" | "one_time"
       subject?: string
       branchName?: string
       batchName?: string
@@ -382,39 +458,101 @@ export default function HomePage() {
         ex.is_weekly_published === true ||
         Boolean(ex.title?.includes("সাপ্তাহিক"))
 
-      let totalMarks = ex.total_marks || 50
-      let passMarks = ex.pass_marks || 20
+      if (!isWeekly) {
+        cards.push({
+          id: ex.id,
+          examId: ex.id,
+          title: ex.title,
+          badgeText: "পরীক্ষার রেজাল্ট",
+          badgeType: "one_time",
+          subject: ex.subject,
+          branchName: ex.branch?.name,
+          batchName: ex.batch?.name,
+          routineText: ex.exam_date 
+            ? new Date(ex.exam_date).toLocaleDateString("en-GB") 
+            : "চলমান",
+          totalMarks: ex.total_marks || 100,
+          passMarks: ex.pass_marks || 40,
+          link: `/online-result?exam_id=${ex.id}`,
+          buttonText: "ফলাফল ও সম্পূর্ণ মেরিট লিস্ট দেখুন",
+        })
+      } else {
+        const days = parseWeeklyDaysForExam(ex)
+        const totalMarks = days.reduce((acc, d) => acc + (d.total_marks || 0), 0) || (ex.total_marks || 350)
+        const passMarks = days.reduce((acc, d) => acc + (d.pass_marks || 0), 0) || (ex.pass_marks || 140)
 
-      if (isWeekly && Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
-        const sumTotal = ex.recurring_days.reduce((acc: number, d: any) => {
-          const m = typeof d === "object" && d !== null ? Number(d.total_marks) : 0
-          return acc + (m || 0)
-        }, 0)
-        const sumPass = ex.recurring_days.reduce((acc: number, d: any) => {
-          const p = typeof d === "object" && d !== null ? Number(d.pass_marks) : 0
-          return acc + (p || 0)
-        }, 0)
-        if (sumTotal > 0) totalMarks = sumTotal
-        if (sumPass > 0) passMarks = sumPass
+        // Parse published days
+        let pubDays: string[] = []
+        const rawPubDays = ex.published_days
+        if (Array.isArray(rawPubDays)) {
+          pubDays = rawPubDays.map((d: any) => String(d).toLowerCase().trim())
+        } else if (typeof rawPubDays === "string" && rawPubDays.trim()) {
+          try {
+            const parsed = JSON.parse(rawPubDays)
+            if (Array.isArray(parsed)) pubDays = parsed.map((d: any) => String(d).toLowerCase().trim())
+            else pubDays = rawPubDays.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          } catch {
+            pubDays = rawPubDays.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+          }
+        }
+        if (pubDays.length === 0 && ex.result_note?.includes("[PUBLISHED_DAYS:")) {
+          try {
+            const match = ex.result_note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+            if (match && match[1]) {
+              pubDays = match[1].split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean)
+            }
+          } catch {}
+        }
+
+        // 1. Weekly Consolidated Card (if is_weekly_published === true)
+        if (ex.is_weekly_published === true) {
+          cards.push({
+            id: `${ex.id}-weekly`,
+            examId: ex.id,
+            title: ex.title,
+            badgeText: "সাপ্তাহিক রেজাল্ট (৭ দিন)",
+            badgeType: "weekly",
+            subject: ex.subject,
+            branchName: ex.branch?.name,
+            batchName: ex.batch?.name,
+            routineText: "প্রতি সাপ্তাহিক দিন (শনিবার হতে শুক্রবার)",
+            totalMarks,
+            passMarks,
+            link: `/online-result?exam_id=${ex.id}`,
+            buttonText: "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন",
+          })
+        }
+
+        // 2. Individual Published Daily Cards (e.g. Thursday, Saturday, etc.)
+        for (const dayConf of days) {
+          const isDayPub = pubDays.some((p) => {
+            const pLower = String(p).toLowerCase().trim()
+            return (
+              pLower === dayConf.key?.toLowerCase() ||
+              pLower === dayConf.day_bn?.toLowerCase() ||
+              (dayConf.day_en && pLower === dayConf.day_en.toLowerCase())
+            )
+          })
+
+          if (isDayPub) {
+            cards.push({
+              id: `${ex.id}-day-${dayConf.key}`,
+              examId: ex.id,
+              title: `${ex.title} - ${dayConf.day_bn}`,
+              badgeText: `দৈনিক পরীক্ষা (${dayConf.day_bn})`,
+              badgeType: "daily",
+              subject: dayConf.subject || ex.subject,
+              branchName: ex.branch?.name,
+              batchName: ex.batch?.name,
+              routineText: `${dayConf.day_bn}ের পরীক্ষা`,
+              totalMarks: dayConf.total_marks || 50,
+              passMarks: dayConf.pass_marks || 20,
+              link: `/online-result?exam_id=${ex.id}&day=${dayConf.key}`,
+              buttonText: `${dayConf.day_bn}ের মেধা তালিকা দেখুন`,
+            })
+          }
+        }
       }
-
-      cards.push({
-        id: ex.id,
-        examId: ex.id,
-        title: ex.title,
-        badgeText: isWeekly ? "সাপ্তাহিক রেজাল্ট" : "পরীক্ষার রেজাল্ট",
-        badgeType: isWeekly ? "weekly" : "one_time",
-        subject: ex.subject,
-        branchName: ex.branch?.name,
-        batchName: ex.batch?.name,
-        routineText: ex.exam_date 
-          ? new Date(ex.exam_date).toLocaleDateString("en-GB") 
-          : (isWeekly ? "সাপ্তাহিক মূল্যায়ন" : "চলমান"),
-        totalMarks: totalMarks,
-        passMarks: passMarks,
-        link: `/online-result?exam_id=${ex.id}`,
-        buttonText: "ফলাফল ও সম্পূর্ণ মেরিট লিস্ট দেখুন",
-      })
     }
 
     return cards
