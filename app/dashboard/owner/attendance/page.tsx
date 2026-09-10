@@ -2,6 +2,9 @@ import { createClient } from "@/lib/supabase/server"
 import AttendanceClient from "./AttendanceClient"
 import { format, subDays } from "date-fns"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 export default async function AttendancePage() {
   const supabase = await createClient()
   const today = format(new Date(), "yyyy-MM-dd")
@@ -10,14 +13,15 @@ export default async function AttendancePage() {
   // Fetch today's attendance
   const { data: todayAttendance } = await supabase
     .from("attendance")
-    .select("*, student:students(name), batch:batches(name)")
+    .select("*, student:students(id, name, student_id, roll_no, batch_roll), batch:batches(id, name, subject)")
     .eq("date", today)
 
   // Fetch all batches
   const { data: batches } = await supabase
     .from("batches")
-    .select("id, name, current_seats, is_active")
+    .select("id, name, branch_id, classroom, subject, current_seats, max_seats, is_active")
     .eq("is_active", true)
+    .order("name")
 
   // Fetch last 7 days attendance
   const { data: recentAttendance } = await supabase

@@ -1068,7 +1068,7 @@ export default function StudentBatchDetailPage() {
     )
   }
 
-  const presentCount = attendance.filter(a => a.status === 'present').length
+  const presentCount = attendance.filter(a => a.status === 'present' || a.status === 'late').length
   const attendancePercentage = attendance.length > 0 
     ? Math.round((presentCount / attendance.length) * 100) 
     : 0

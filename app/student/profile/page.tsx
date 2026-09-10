@@ -438,8 +438,8 @@ export default function StudentProfilePage() {
 
   // Analytics
   const totalClasses = attendance.length
-  const presentClasses = attendance.filter(a => a.status === "present").length
-  const attendanceRate = totalClasses > 0 ? Math.round((presentClasses / totalClasses) * 100) : 100
+  const presentClasses = attendance.filter(a => a.status === "present" || a.status === "late").length
+  const attendanceRate = totalClasses > 0 ? Math.round((presentClasses / totalClasses) * 100) : 0
   const activeDues = dues.filter((d: any) => d.status !== "paid" && d.status !== "waived" && (Number(d.due_amount || 0) - Number(d.paid_amount || 0)) > 0)
   const settledDues = dues.filter((d: any) => d.status === "paid" || d.status === "waived" || (Number(d.due_amount || 0) - Number(d.paid_amount || 0)) <= 0)
   const totalPendingDue = activeDues.reduce((acc: number, d: any) => acc + Math.max(0, Number(d.due_amount || 0) - Number(d.paid_amount || 0)), 0)
