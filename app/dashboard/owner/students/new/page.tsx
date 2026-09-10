@@ -33,22 +33,20 @@ export default async function NewStudentPage() {
     } catch {}
   }
 
-  // 1. Fetch Students
+  // 1. Fetch Students (all students to map history reliably)
   let studentsList: any[] = []
   try {
     const { data: stData, error: stErr } = await admin
       .from("students")
-      .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll")
-      .eq("is_active", true)
+      .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll, is_active")
       .order("name")
 
-    if (!stErr && stData) {
+    if (!stErr && stData && stData.length > 0) {
       studentsList = stData
     } else {
       const { data: fallbackStudents } = await supabase
         .from("students")
-        .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll")
-        .eq("is_active", true)
+        .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll, is_active")
         .order("name")
       if (fallbackStudents) studentsList = fallbackStudents
     }
@@ -57,7 +55,6 @@ export default async function NewStudentPage() {
       const { data: fallbackStudents } = await supabase
         .from("students")
         .select("*")
-        .eq("is_active", true)
         .order("name")
       if (fallbackStudents) studentsList = fallbackStudents
     } catch {}

@@ -757,3 +757,244 @@ export async function downloadStudentIdCardPDF(data: StudentIdCardData) {
     console.error("Failed to generate PDF:", e)
   }
 }
+
+export interface AdmissionSlipData {
+  receipt_number: string
+  student_name: string
+  student_id: string
+  password?: string
+  student_phone?: string
+  student_email?: string
+  guardian_name?: string
+  guardian_phone?: string
+  batch_name: string
+  batch_roll?: number | string | null
+  branch_name?: string
+  blood_group?: string
+  photo_url?: string
+  subject?: string
+  date: string
+  total_fee: number
+  paid_amount: number
+  due_amount: number
+  due_date?: string
+  payment_method: string
+  qr_data?: string
+}
+
+export function printAdmissionSlip(target: AdmissionSlipData) {
+  const rollStr = target.batch_roll != null && String(target.batch_roll).trim() !== "" ? String(target.batch_roll) : "01"
+  const qrData = target.qr_data || `Student ID: ${target.student_id} | Name: ${target.student_name} | Batch: ${target.batch_name} | Roll: #${rollStr} | Fee: ${target.total_fee} | Paid: ${target.paid_amount}`
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrData)}`
+
+  const win = window.open("", "_blank", "width=650,height=800")
+  if (!win) return
+  win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Admission Memo - ${target.student_id}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 25px; max-width: 520px; margin: 0 auto; color: #1e293b; background: #fff; }
+    .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 15px; position: relative; }
+    .header h1 { margin: 0; font-size: 22px; color: #4338ca; text-transform: uppercase; letter-spacing: 1px; }
+    .header p { margin: 3px 0; font-size: 12px; color: #64748b; }
+    .badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 3px 10px; border-radius: 9999px; font-weight: bold; font-size: 11px; margin-top: 5px; }
+    .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #4f46e5; margin: 14px 0 6px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 3px; }
+    .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+    .label { color: #64748b; }
+    .value { font-weight: 600; color: #0f172a; text-align: right; }
+    .summary-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 10px; }
+    .total-row { display: flex; justify-content: space-between; font-size: 15px; font-weight: bold; padding: 6px 0; }
+    .due-text { color: #dc2626; }
+    .paid-text { color: #16a34a; }
+    .cred-box { background: #eef2ff; border: 1.5px solid #c7d2fe; border-radius: 8px; padding: 8px 12px; margin: 12px 0; }
+    .qr-container { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px dashed #cbd5e1; margin-top: 12px; }
+    .footer { text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+    @media print { body { padding: 10px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>MedhaShiree Coaching</h1>
+    <p>Enrollment & Fee Confirmation Slip (ভর্তি ও মানি রসিদ)</p>
+    <span class="badge">Official Admission Copy</span>
+  </div>
+  
+  <div class="section-title">Student Information (শিক্ষার্থীর তথ্য)</div>
+  <div class="row"><span class="label">Student ID:</span><span class="value">${target.student_id}</span></div>
+  <div class="row"><span class="label">Full Name:</span><span class="value">${target.student_name}</span></div>
+  <div class="row"><span class="label">Batch Roll No:</span><span class="value" style="color: #dc2626; font-weight: 800;">#${rollStr}</span></div>
+  ${target.student_phone ? `<div class="row"><span class="label">Phone:</span><span class="value">${target.student_phone}</span></div>` : ''}
+  ${target.guardian_name ? `<div class="row"><span class="label">Guardian:</span><span class="value">${target.guardian_name}</span></div>` : ''}
+  ${target.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${target.guardian_phone}</span></div>` : ''}
+  ${target.branch_name ? `<div class="row"><span class="label">Branch:</span><span class="value">${target.branch_name}</span></div>` : ''}
+
+  ${target.password ? `
+  <div class="cred-box">
+    <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Student Portal Login ID:</span><span class="value">${target.student_id}</span></div>
+    <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Account Password:</span><span class="value font-mono" style="color: #4338ca;">${target.password}</span></div>
+  </div>
+  ` : ''}
+
+  <div class="section-title">Enrolled Program (ভর্তিকৃত ব্যাচ)</div>
+  <div class="row"><span class="label">Batch Name:</span><span class="value">${target.batch_name}</span></div>
+  <div class="row"><span class="label">Subject/Class:</span><span class="value">${target.subject || "General"}</span></div>
+  <div class="row"><span class="label">Enrollment Date:</span><span class="value">${target.date}</span></div>
+
+  <div class="section-title">Payment Breakdown (ফি বিবরণ)</div>
+  <div class="summary-box">
+    <div class="row"><span class="label">Total Fee:</span><span class="value">৳${(target.total_fee || 0).toLocaleString("en-BD")}</span></div>
+    <div class="row"><span class="label">Paid Amount:</span><span class="value paid-text">৳${(target.paid_amount || 0).toLocaleString("en-BD")}</span></div>
+    <div class="total-row"><span class="label">Due Amount:</span><span class="value ${target.due_amount > 0 ? 'due-text' : 'paid-text'}">৳${(target.due_amount || 0).toLocaleString("en-BD")}</span></div>
+    ${target.due_date ? `<div class="row"><span class="label">Due Date:</span><span class="value due-text">${target.due_date}</span></div>` : ''}
+    <div class="row" style="margin-top: 5px; font-size: 11px; color: #64748b;"><span class="label">Receipt Ref:</span><span>${target.receipt_number}</span></div>
+  </div>
+
+  <div class="qr-container">
+    <div>
+      <p style="margin: 0; font-size: 11px; font-weight: bold; color: #334155;">Verification QR Code</p>
+      <p style="margin: 3px 0 0; font-size: 10px; color: #64748b;">Scan to verify student admission status</p>
+    </div>
+    <img src="${qrUrl}" width="80" height="80" alt="Student QR Code" style="border-radius: 6px; border: 1px solid #cbd5e1;" />
+  </div>
+
+  <div class="footer">
+    <p>Please keep this document safe for institutional records.</p>
+    <p>MedhaShiree Coaching • Empowering Modern Education</p>
+  </div>
+</body>
+</html>`)
+  win.document.close()
+  win.focus()
+  setTimeout(() => { win.print() }, 350)
+}
+
+export async function downloadAdmissionSlipPDF(target: AdmissionSlipData) {
+  try {
+    const { jsPDF } = await import("jspdf")
+    const doc = new jsPDF({ unit: "mm", format: [105, 148] }) // A6 size receipt
+    const rollStr = target.batch_roll != null && String(target.batch_roll).trim() !== "" ? String(target.batch_roll) : "01"
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(14)
+    doc.setTextColor(67, 56, 202)
+    doc.text("MedhaShiree Coaching", 52.5, 12, { align: "center" })
+
+    doc.setFontSize(8)
+    doc.setTextColor(100, 116, 139)
+    doc.setFont("helvetica", "normal")
+    doc.text("Admission & Fee Confirmation Slip", 52.5, 17, { align: "center" })
+
+    doc.setDrawColor(203, 213, 225)
+    doc.line(10, 20, 95, 20)
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(9)
+    doc.setTextColor(15, 23, 42)
+    doc.text("Student Information", 10, 26)
+
+    doc.setFontSize(7.5)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(71, 85, 105)
+
+    doc.text("Student ID:", 10, 31)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(67, 56, 202)
+    doc.text(target.student_id, 95, 31, { align: "right" })
+
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(71, 85, 105)
+    doc.text("Full Name:", 10, 36)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(15, 23, 42)
+    doc.text(target.student_name, 95, 36, { align: "right" })
+
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(71, 85, 105)
+    doc.text("Batch Roll No:", 10, 41)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(220, 38, 38)
+    doc.text(`#${rollStr}`, 95, 41, { align: "right" })
+
+    let y = 46
+    if (target.student_phone) {
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+      doc.text("Phone:", 10, y)
+      doc.setTextColor(15, 23, 42)
+      doc.text(target.student_phone, 95, y, { align: "right" })
+      y += 5
+    }
+
+    doc.line(10, y, 95, y)
+    y += 5
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(9)
+    doc.setTextColor(15, 23, 42)
+    doc.text("Enrolled Program", 10, y)
+    y += 5
+
+    doc.setFontSize(7.5)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(71, 85, 105)
+    doc.text("Batch Name:", 10, y)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(15, 23, 42)
+    doc.text(target.batch_name, 95, y, { align: "right" })
+    y += 5
+
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(71, 85, 105)
+    doc.text("Date:", 10, y)
+    doc.text(target.date, 95, y, { align: "right" })
+    y += 5
+
+    doc.line(10, y, 95, y)
+    y += 5
+
+    doc.setFont("helvetica", "bold")
+    doc.setFontSize(9)
+    doc.setTextColor(15, 23, 42)
+    doc.text("Fee Details", 10, y)
+    y += 5
+
+    doc.setFontSize(7.5)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(71, 85, 105)
+    doc.text("Total Payable:", 10, y)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(15, 23, 42)
+    doc.text(`Tk ${(target.total_fee || 0).toLocaleString("en-BD")}`, 95, y, { align: "right" })
+    y += 5
+
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(71, 85, 105)
+    doc.text("Paid Amount:", 10, y)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(22, 163, 74)
+    doc.text(`Tk ${(target.paid_amount || 0).toLocaleString("en-BD")}`, 95, y, { align: "right" })
+    y += 5
+
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(71, 85, 105)
+    doc.text("Remaining Due:", 10, y)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(target.due_amount > 0 ? 220 : 22, target.due_amount > 0 ? 38 : 163, target.due_amount > 0 ? 38 : 74)
+    doc.text(`Tk ${(target.due_amount || 0).toLocaleString("en-BD")}`, 95, y, { align: "right" })
+    y += 6
+
+    doc.setFillColor(241, 245, 249)
+    doc.roundedRect(10, y, 85, 9, 2, 2, "F")
+    doc.setFontSize(6.5)
+    doc.setFont("helvetica", "normal")
+    doc.setTextColor(100, 116, 139)
+    doc.text(`Receipt Reference: ${target.receipt_number}`, 52.5, y + 5.5, { align: "center" })
+
+    doc.save(`AdmissionSlip_${target.student_id}.pdf`)
+  } catch (e) {
+    console.error("Failed to generate PDF:", e)
+  }
+}

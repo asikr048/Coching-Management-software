@@ -5,6 +5,7 @@ import { formatDate, formatCurrency } from "@/lib/utils"
 import { User, Phone, Mail, MapPin, BookOpen, CreditCard, Calendar, Fingerprint, AlertCircle, CheckCircle, Package } from "lucide-react"
 import Link from "next/link"
 import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
+import AdmissionSlipTrigger from "@/components/id-card/AdmissionSlipTrigger"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -22,7 +23,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   if (!student) notFound()
 
   const [enrollments, payments, attendance, results, duesRes, issuesRes] = await Promise.all([
-    admin.from("enrollments").select("*, batch:batches(name, subject, monthly_fee)").eq("student_id", id),
+    admin.from("enrollments").select("*, batch:batches(name, subject, monthly_fee, admission_fee, class_level)").eq("student_id", id),
     admin.from("payments").select("*, batch:batches(name)").eq("student_id", id).order("paid_at", { ascending: false }).limit(20),
     admin.from("attendance").select("date, status, batch:batches(name)").eq("student_id", id).order("date", { ascending: false }).limit(20),
     admin.from("exam_results").select("*, exam:exams(title, total_marks, exam_date)").eq("student_id", id).order("created_at", { ascending: false }),
@@ -73,6 +74,15 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
             batchName={enrollments.data?.[0]?.batch?.name}
             buttonVariant="primary"
             buttonText="🪪 ID Card"
+          />
+          <AdmissionSlipTrigger
+            student={student}
+            batch={enrollments.data?.[0]?.batch}
+            enrollment={enrollments.data?.[0]}
+            payment={payments.data?.[0]}
+            due={duesList[0]}
+            buttonVariant="outline"
+            buttonText="🧾 Admission & ID Slip"
           />
           <Link href={`/dashboard/owner/students/${id}/edit`} className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all">
             Edit Student
@@ -147,13 +157,22 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                       <p className="text-xs text-slate-500">{e.batch?.subject || ""}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <StudentIdCardTrigger
                       student={student}
                       batchName={e.batch?.name}
                       rollNo={roll}
                       buttonVariant="badge"
                       buttonText="🪪 ID Card"
+                    />
+                    <AdmissionSlipTrigger
+                      student={student}
+                      batch={e.batch}
+                      enrollment={e}
+                      payment={payments.data?.find((p: any) => p.batch_id === e.batch_id || !p.batch_id)}
+                      due={duesList.find((d: any) => d.batch_id === e.batch_id || !d.batch_id)}
+                      buttonVariant="badge"
+                      buttonText="🧾 Admission Slip"
                     />
                     <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${e.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>{e.status}</span>
                   </div>
@@ -239,7 +258,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                 <th className="px-3 py-2.5">Batch</th>
                 <th className="px-3 py-2.5">Amount</th>
                 <th className="px-3 py-2.5">Method</th>
-                <th className="px-3 py-2.5 text-right">Date</th>
+                <th className="px-3 py-2.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -253,7 +272,18 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                       {p.payment_method}
                     </span>
                   </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-500 text-right">{formatDate(p.paid_at)}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="text-xs text-slate-500">{formatDate(p.paid_at)}</span>
+                      <AdmissionSlipTrigger
+                        student={student}
+                        batch={p.batch}
+                        payment={p}
+                        buttonVariant="badge"
+                        buttonText="🧾 Slip"
+                      />
+                    </div>
+                  </td>
                 </tr>
               ))}
               {(!payments.data || payments.data.length === 0) && (

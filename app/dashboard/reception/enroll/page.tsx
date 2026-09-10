@@ -31,8 +31,7 @@ export default async function ReceptionEnrollPage() {
   const [studentsRes, branchesRes, paymentsRes, duesRes] = await Promise.all([
     supabase
       .from("students")
-      .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll")
-      .eq("is_active", true)
+      .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll, is_active")
       .order("name"),
     supabase
       .from("branches")

@@ -1569,6 +1569,7 @@ export default function NewStudentForm({
                 const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
                 const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
                 const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+                const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
 
                 return (
                   <div key={enr.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -1578,6 +1579,11 @@ export default function NewStudentForm({
                         <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
                           {student.student_id || "N/A"}
                         </span>
+                        {roll != null && (
+                          <span className="text-xs font-mono font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                            রোল #{roll}
+                          </span>
+                        )}
                         <span className="text-xs font-semibold text-slate-600">• {b.name || "Batch"}</span>
                       </div>
                       <div className="flex items-center gap-2 text-[11px] text-slate-400">
@@ -1586,7 +1592,19 @@ export default function NewStudentForm({
                         {dueAmt > 0 && <span>• Due: <b className="text-rose-600">{formatCurrency(dueAmt)}</b></span>}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cardData = getHistoryIdCardData(enr)
+                          setHistoryIdCardStudent(cardData)
+                        }}
+                        className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="View & Print ID Card"
+                      >
+                        <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>ID Card</span>
+                      </button>
                       <button
                         type="button"
                         onClick={() => handlePrintFromHistory(enr)}
