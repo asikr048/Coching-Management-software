@@ -186,6 +186,11 @@ export default function ExamResultsPage() {
   const [tableSearchQuery, setTableSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "entered" | "pending" | "passed" | "failed">("all")
 
+  // Batch Selection & Students State
+  const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string }[]>([])
+  const [selectedBatchFilter, setSelectedBatchFilter] = useState<string>("auto")
+  const [switchingBatch, setSwitchingBatch] = useState(false)
+
   // Refs for keyboard navigation
   const searchInputRef = useRef<HTMLInputElement>(null)
   const quickMarkInputRef = useRef<HTMLInputElement>(null)
@@ -357,14 +362,48 @@ export default function ExamResultsPage() {
   useEffect(() => {
     async function load() {
       try {
-        const { data: ex, error: exErr } = await supabase
-          .from("exams")
-          .select("*, batch:batches(name)")
-          .eq("id", params.id)
-          .single()
+        let ex: any = null
+        let resolvedStudents: Student[] = []
+        let apiBatches: { id: string; name: string }[] = []
+        let apiResults: any[] = []
 
-        if (exErr) throw exErr
-        setExam(ex)
+        // 1. Primary: Fetch through server API (uses admin client, bypasses RLS, resolves multi-batch & roll numbers)
+        try {
+          const apiRes = await fetch(`/api/exams/${params.id}`)
+          if (apiRes.ok) {
+            const apiData = await apiRes.json()
+            if (apiData.exam) {
+              ex = apiData.exam
+              setExam(apiData.exam)
+            }
+            if (Array.isArray(apiData.students) && apiData.students.length > 0) {
+              resolvedStudents = apiData.students
+            }
+            if (Array.isArray(apiData.batches)) {
+              apiBatches = apiData.batches
+              setAvailableBatches(apiData.batches)
+            }
+            if (Array.isArray(apiData.existing_results)) {
+              apiResults = apiData.existing_results
+            }
+          }
+        } catch (apiErr) {
+          console.warn("API exam load failed, proceeding to client fallback:", apiErr)
+        }
+
+        // 2. Client fallback for exam data if API didn't load it
+        if (!ex) {
+          const { data: fbExam, error: exErr } = await supabase
+            .from("exams")
+            .select("*, batch:batches(name)")
+            .eq("id", params.id)
+            .single()
+
+          if (exErr) throw exErr
+          ex = fbExam
+          setExam(fbExam)
+        }
+
         const isPublic = ex?.show_all_results !== false && !ex?.result_note?.includes("[SHOW_ALL_RESULTS:false]")
         setShowAllResults(isPublic)
 
@@ -402,53 +441,107 @@ export default function ExamResultsPage() {
 
         setSelectedSessionDate(ex?.exam_date || new Date().toISOString().split("T")[0])
 
-        // Load Students
-        if (ex?.batch_id) {
-          const { data: enrollments } = await supabase
-            .from("enrollments")
-            .select("roll_no, enrollment_date, created_at, student:students(id, name, student_id, roll_no, batch_roll, phone, guardian_phone)")
-            .eq("batch_id", ex.batch_id)
-            .eq("status", "active")
-            .order("roll_no", { ascending: true, nullsFirst: false })
+        // 3. Fallback: Load Students via direct Supabase client if API returned 0
+        if (resolvedStudents.length === 0) {
+          const targetBatches: string[] = []
+          if (Array.isArray(ex?.batch_ids) && ex.batch_ids.length > 0) {
+            targetBatches.push(...ex.batch_ids)
+          }
+          if (ex?.batch_id && !targetBatches.includes(ex.batch_id)) {
+            targetBatches.push(ex.batch_id)
+          }
 
-          const fetchedStudents: Student[] = (enrollments || [])
-            .map((e: any, idx: number) => {
-              if (!e.student) return null
-              const rNo = e.roll_no != null && Number(e.roll_no) > 0 
-                ? Number(e.roll_no) 
-                : (e.student.roll_no || e.student.batch_roll || idx + 1)
-              return {
-                ...e.student,
-                roll_no: rNo,
-                batch_roll: rNo,
-              }
-            })
-            .filter(Boolean)
-            .sort((a: Student, b: Student) => (a.roll_no || 9999) - (b.roll_no || 9999))
+          if (targetBatches.length > 0) {
+            // Direct query of enrollments (no nested PostgREST join that can fail)
+            const { data: enrollments } = await supabase
+              .from("enrollments")
+              .select("id, student_id, batch_id, status, roll_no, batch_roll, enrollment_date, created_at")
+              .in("batch_id", targetBatches)
 
-          setStudents(fetchedStudents)
-        } else {
-          const { data: allStudents } = await supabase
-            .from("students")
-            .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone")
-            .eq("is_active", true)
-            .order("roll_no", { ascending: true, nullsFirst: false })
+            const activeEnrs = (enrollments || []).filter(
+              (e: any) => !e.status || e.status === "active" || e.status === "approved" || e.status === "enrolled"
+            )
+            const targetEnrs = activeEnrs.length > 0 ? activeEnrs : (enrollments || [])
+            const sIds = Array.from(new Set(targetEnrs.map((e: any) => e.student_id).filter(Boolean)))
 
-          const mappedStudents: Student[] = (allStudents || []).map((s: any, idx: number) => ({
-            ...s,
-            roll_no: s.roll_no || s.batch_roll || idx + 1,
-            batch_roll: s.roll_no || s.batch_roll || idx + 1,
-          }))
+            if (sIds.length > 0) {
+              const { data: sData } = await supabase
+                .from("students")
+                .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone")
+                .in("id", sIds)
 
-          mappedStudents.sort((a: Student, b: Student) => (a.roll_no || 9999) - (b.roll_no || 9999))
-          setStudents(mappedStudents)
+              const sMap = new Map<string, any>()
+              ;(sData || []).forEach((s: any) => sMap.set(s.id, s))
+
+              resolvedStudents = targetEnrs
+                .map((e: any, idx: number) => {
+                  const s = sMap.get(e.student_id)
+                  if (!s) return null
+                  const rNo =
+                    e.roll_no != null && Number(e.roll_no) > 0
+                      ? Number(e.roll_no)
+                      : e.batch_roll != null && Number(e.batch_roll) > 0
+                      ? Number(e.batch_roll)
+                      : s.roll_no != null && Number(s.roll_no) > 0
+                      ? Number(s.roll_no)
+                      : s.batch_roll != null && Number(s.batch_roll) > 0
+                      ? Number(s.batch_roll)
+                      : idx + 1
+                  return {
+                    ...s,
+                    roll_no: Number(rNo),
+                    batch_roll: Number(rNo),
+                  }
+                })
+                .filter(Boolean) as Student[]
+            }
+          }
+
+          // Fallback if no enrolled students found: load students from branch or globally
+          if (resolvedStudents.length === 0) {
+            let sQuery = supabase
+              .from("students")
+              .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id")
+            if (ex?.branch_id) {
+              sQuery = sQuery.eq("branch_id", ex.branch_id)
+            }
+            let { data: allStudents } = await sQuery
+            if (!allStudents || allStudents.length === 0) {
+              const { data: globalSt } = await supabase
+                .from("students")
+                .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id")
+              allStudents = globalSt
+            }
+
+            resolvedStudents = (allStudents || []).map((s: any, idx: number) => ({
+              ...s,
+              roll_no: s.roll_no || s.batch_roll || idx + 1,
+              batch_roll: s.roll_no || s.batch_roll || idx + 1,
+            }))
+          }
+
+          resolvedStudents.sort((a: Student, b: Student) => (a.roll_no || 9999) - (b.roll_no || 9999))
         }
 
-        // Load Existing Results
-        const { data: existing } = await supabase
-          .from("exam_results")
-          .select("*")
-          .eq("exam_id", params.id)
+        setStudents(resolvedStudents)
+
+        // If availableBatches is empty, fetch batches from supabase
+        if (apiBatches.length === 0) {
+          let bQuery = supabase.from("batches").select("id, name, branch_id").order("name", { ascending: true })
+          if (ex?.branch_id) bQuery = bQuery.eq("branch_id", ex.branch_id)
+          const { data: bData } = await bQuery
+          if (bData) setAvailableBatches(bData)
+        }
+
+        // 4. Load Existing Results
+        let existing = apiResults
+        if (existing.length === 0) {
+          const { data: existingData } = await supabase
+            .from("exam_results")
+            .select("*")
+            .eq("exam_id", params.id)
+          existing = existingData || []
+        }
 
         const map: Record<string, Result> = {}
         const dayMarks: Record<string, Record<string, DayMarkItem>> = {}
@@ -541,6 +634,34 @@ export default function ExamResultsPage() {
     }
     load()
   }, [params.id, supabase])
+
+  // Switch Target Batch or View All Students
+  async function handleSwitchBatch(batchId: string) {
+    setSelectedBatchFilter(batchId)
+    setSwitchingBatch(true)
+    try {
+      const url =
+        batchId === "all"
+          ? `/api/exams/${params.id}?batch_id=all`
+          : batchId === "auto"
+          ? `/api/exams/${params.id}`
+          : `/api/exams/${params.id}?batch_id=${batchId}`
+      const res = await fetch(url)
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data.students)) {
+          setStudents(data.students)
+          toast.success(`✓ ${data.students.length} জন শিক্ষার্থী লোড করা হয়েছে`)
+        }
+      } else {
+        toast.error("শিক্ষার্থী লোড করতে সমস্যা হয়েছে")
+      }
+    } catch {
+      toast.error("শিক্ষার্থী লোড করতে সমস্যা হয়েছে")
+    } finally {
+      setSwitchingBatch(false)
+    }
+  }
 
   // Initialize selectedTab once parsedWeeklyDays is available
   useEffect(() => {
@@ -1034,17 +1155,28 @@ export default function ExamResultsPage() {
     } else {
       const grade = getGrade(numMarks, exam.total_marks)
       try {
-        const { error } = await supabase.from("exam_results").upsert(
-          {
-            exam_id: exam.id,
+        const res = await fetch(`/api/exams/${exam.id}/results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             student_id: student.id,
             obtained_marks: numMarks,
             grade: grade,
-          },
-          { onConflict: "exam_id,student_id" }
-        )
+          }),
+        })
 
-        if (error) throw error
+        if (!res.ok) {
+          const { error } = await supabase.from("exam_results").upsert(
+            {
+              exam_id: exam.id,
+              student_id: student.id,
+              obtained_marks: numMarks,
+              grade: grade,
+            },
+            { onConflict: "exam_id,student_id" }
+          )
+          if (error) throw error
+        }
 
         setSavedResults((prev) => ({
           ...prev,
@@ -2254,6 +2386,76 @@ export default function ExamResultsPage() {
         </div>
       </div>
 
+      {/* TARGET BATCH INFO & BATCH SWITCHER TOOLBAR */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap text-xs font-semibold text-slate-700">
+          <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
+            <Users className="w-4 h-4" />
+          </span>
+          <span className="text-slate-500">টার্গেট ব্যাচ:</span>
+          <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-900 font-bold border border-slate-200 shadow-2xs">
+            {exam.batch?.name || "সকল ব্যাচ"}
+          </span>
+          <span className="text-slate-300 hidden sm:inline">•</span>
+          <span className="text-slate-600">
+            মোট লোডকৃত শিক্ষার্থী:{" "}
+            <span className={cn("font-black px-2 py-0.5 rounded-md text-xs", students.length > 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200")}>
+              {students.length} জন
+            </span>
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="text-xs text-slate-500 font-medium hidden sm:inline">ব্যাচ পরিবর্তন:</label>
+          <select
+            value={selectedBatchFilter}
+            onChange={(e) => handleSwitchBatch(e.target.value)}
+            disabled={switchingBatch}
+            className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-50 border border-slate-300 text-slate-800 hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer disabled:opacity-50"
+          >
+            <option value="auto">
+              {exam.batch?.name ? `নির্ধারিত ব্যাচ (${exam.batch.name})` : "পরীক্ষার ব্যাচ (ডিফল্ট)"}
+            </option>
+            <option value="all">🌐 সকল শিক্ষার্থী (All Students)</option>
+            {availableBatches.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.name}
+              </option>
+            ))}
+          </select>
+
+          {selectedBatchFilter !== "all" && (
+            <button
+              type="button"
+              onClick={() => handleSwitchBatch("all")}
+              disabled={switchingBatch}
+              className="px-3 py-1.5 text-xs font-bold rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
+            >
+              {switchingBatch ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+              সকল শিক্ষার্থী দেখুন
+            </button>
+          )}
+        </div>
+      </div>
+
+      {students.length === 0 && !fetching && (
+        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>এই ব্যাচে কোনো শিক্ষার্থী তালিকাভুক্ত নেই অথবা এখনও কোনো শিক্ষার্থী পাওয়া যায়নি।</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => handleSwitchBatch("all")}
+            disabled={switchingBatch}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0 shadow-xs"
+          >
+            {switchingBatch ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+            সকল শিক্ষার্থী লোড করুন (Load All Students)
+          </button>
+        </div>
+      )}
+
       {/* CONDITIONAL CONTENT: IF "WEEKLY AGGREGATE" IS SELECTED, SHOW TOPPERS & CONSOLIDATED TABLE */}
       {isWeeklyActive ? (
         <div className="space-y-6">
@@ -2616,8 +2818,18 @@ export default function ExamResultsPage() {
                 {isSearchDropdownOpen && (
                   <div className="absolute left-0 right-0 top-full mt-1.5 bg-white rounded-xl border border-slate-200 shadow-2xl max-h-64 overflow-y-auto z-50 divide-y divide-slate-100">
                     {filteredSearchStudents.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-500 font-medium">
-                        কোনো শিক্ষার্থী পাওয়া যায়নি
+                      <div className="p-4 text-center text-xs text-slate-500 font-medium space-y-2">
+                        <p>কোনো শিক্ষার্থী পাওয়া যায়নি</p>
+                        {selectedBatchFilter !== "all" && (
+                          <button
+                            type="button"
+                            onClick={() => handleSwitchBatch("all")}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold border border-indigo-200 transition cursor-pointer"
+                          >
+                            <Users className="w-3.5 h-3.5" />
+                            সকল শিক্ষার্থী থেকে খুঁজুন
+                          </button>
+                        )}
                       </div>
                     ) : (
                       filteredSearchStudents.map((s) => {
@@ -3015,7 +3227,28 @@ export default function ExamResultsPage() {
                   {tableStudents.length === 0 && (
                     <tr>
                       <td colSpan={7} className="text-center py-12 text-slate-500">
-                        কোনো শিক্ষার্থী পাওয়া যায়নি
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                            <Users className="w-6 h-6" />
+                          </div>
+                          <p className="font-bold text-slate-700 text-sm">কোনো শিক্ষার্থী পাওয়া যায়নি</p>
+                          <p className="text-xs text-slate-400">
+                            {tableSearchQuery
+                              ? "অনুসন্ধানের সাথে কোনো শিক্ষার্থীর তথ্য মিলছে না।"
+                              : "এই ব্যাচে কোনো শিক্ষার্থী তালিকাভুক্ত নেই অথবা এখনও কোনো শিক্ষার্থী লোড করা হয়নি।"}
+                          </p>
+                          {selectedBatchFilter !== "all" && !tableSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => handleSwitchBatch("all")}
+                              disabled={switchingBatch}
+                              className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition cursor-pointer shadow-xs disabled:opacity-50"
+                            >
+                              {switchingBatch ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Users className="w-3.5 h-3.5" />}
+                              সকল শিক্ষার্থী লোড করুন (Load All Students)
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   )}

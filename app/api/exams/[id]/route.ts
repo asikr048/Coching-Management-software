@@ -24,7 +24,157 @@ export async function GET(
       return NextResponse.json({ error: "Exam not found" }, { status: 404 })
     }
 
-    return NextResponse.json({ success: true, exam })
+    const { searchParams } = new URL(req.url)
+    const requestedBatch = searchParams.get("batch_id")
+
+    // 1. Resolve target batch IDs
+    let targetBatchIds: string[] = []
+    if (requestedBatch && requestedBatch !== "all" && requestedBatch !== "auto") {
+      targetBatchIds = [requestedBatch]
+    } else if (requestedBatch === "all") {
+      targetBatchIds = [] // load all students without batch filtering
+    } else {
+      if (Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0) {
+        for (const b of exam.batch_ids) {
+          if (b && typeof b === "string" && !targetBatchIds.includes(b)) {
+            targetBatchIds.push(b)
+          }
+        }
+      }
+      if (exam.batch_id && typeof exam.batch_id === "string" && !targetBatchIds.includes(exam.batch_id)) {
+        targetBatchIds.push(exam.batch_id)
+      }
+    }
+
+    // 2. Fetch existing results for this exam
+    const { data: existingResults } = await admin
+      .from("exam_results")
+      .select("id, exam_id, student_id, obtained_marks, grade, day_marks, created_at")
+      .eq("exam_id", examId)
+
+    const existingResultStudentIds = (existingResults || []).map((r: any) => r.student_id).filter(Boolean)
+
+    // 3. Resolve enrollments and enrolled students
+    let enrollments: any[] = []
+    if (targetBatchIds.length > 0) {
+      const { data: enrData } = await admin
+        .from("enrollments")
+        .select("id, student_id, batch_id, status, roll_no, batch_roll, enrollment_date, created_at")
+        .in("batch_id", targetBatchIds)
+
+      if (enrData && enrData.length > 0) {
+        enrollments = enrData
+      }
+    }
+
+    const activeEnrs = enrollments.filter(
+      (e: any) => !e.status || e.status === "active" || e.status === "approved" || e.status === "enrolled"
+    )
+    const targetEnrs = activeEnrs.length > 0 ? activeEnrs : enrollments
+    const enrolledStudentIds = Array.from(new Set(targetEnrs.map((e: any) => e.student_id).filter(Boolean)))
+
+    // Combine student IDs from enrollments and any already graded in exam_results
+    const allTargetStudentIds = Array.from(new Set([...enrolledStudentIds, ...existingResultStudentIds]))
+
+    let resolvedStudents: any[] = []
+    const enrMap = new Map<string, any>()
+    targetEnrs.forEach((e: any) => enrMap.set(e.student_id, e))
+
+    if (allTargetStudentIds.length > 0) {
+      const { data: stData } = await admin
+        .from("students")
+        .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id, is_active")
+        .in("id", allTargetStudentIds)
+
+      const sMap = new Map<string, any>()
+      ;(stData || []).forEach((s: any) => sMap.set(s.id, s))
+
+      resolvedStudents = allTargetStudentIds
+        .map((sid, idx) => {
+          const s = sMap.get(sid)
+          if (!s) return null
+          const e = enrMap.get(sid)
+          const rawRoll =
+            e?.roll_no != null && Number(e.roll_no) > 0
+              ? Number(e.roll_no)
+              : e?.batch_roll != null && Number(e.batch_roll) > 0
+              ? Number(e.batch_roll)
+              : s.roll_no != null && Number(s.roll_no) > 0
+              ? Number(s.roll_no)
+              : s.batch_roll != null && Number(s.batch_roll) > 0
+              ? Number(s.batch_roll)
+              : idx + 1
+
+          return {
+            id: s.id,
+            student_id: s.student_id || `ID-${s.id.slice(0, 5)}`,
+            name: s.name || "Student",
+            roll_no: Number(rawRoll),
+            batch_roll: Number(rawRoll),
+            phone: s.phone || "",
+            guardian_phone: s.guardian_phone || "",
+            branch_id: s.branch_id || exam.branch_id || null,
+            is_active: s.is_active !== false,
+          }
+        })
+        .filter(Boolean)
+    }
+
+    // 4. Fallback if no students enrolled in target batch: load students from branch or globally
+    if (resolvedStudents.length === 0) {
+      let sQuery = admin
+        .from("students")
+        .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id, is_active")
+      if (exam.branch_id) {
+        sQuery = sQuery.eq("branch_id", exam.branch_id)
+      }
+      let { data: branchStudents } = await sQuery
+      let studentsList = branchStudents || []
+      if (studentsList.length === 0) {
+        const { data: globalStudents } = await admin
+          .from("students")
+          .select("id, name, student_id, roll_no, batch_roll, phone, guardian_phone, branch_id, is_active")
+        studentsList = globalStudents || []
+      }
+
+      resolvedStudents = studentsList.map((s: any, idx: number) => {
+        const rawRoll =
+          s.roll_no != null && Number(s.roll_no) > 0
+            ? Number(s.roll_no)
+            : s.batch_roll != null && Number(s.batch_roll) > 0
+            ? Number(s.batch_roll)
+            : idx + 1
+        return {
+          id: s.id,
+          student_id: s.student_id || `ID-${s.id.slice(0, 5)}`,
+          name: s.name || "Student",
+          roll_no: Number(rawRoll),
+          batch_roll: Number(rawRoll),
+          phone: s.phone || "",
+          guardian_phone: s.guardian_phone || "",
+          branch_id: s.branch_id,
+          is_active: s.is_active !== false,
+        }
+      })
+    }
+
+    // Sort ascending by roll_no
+    resolvedStudents.sort((a: any, b: any) => (a.roll_no || 9999) - (b.roll_no || 9999))
+
+    // 5. Fetch available batches for easy switching in the exam UI
+    let batchQuery = admin.from("batches").select("id, name, branch_id").order("name", { ascending: true })
+    if (exam.branch_id) {
+      batchQuery = batchQuery.eq("branch_id", exam.branch_id)
+    }
+    const { data: batches } = await batchQuery
+
+    return NextResponse.json({
+      success: true,
+      exam,
+      students: resolvedStudents,
+      batches: batches || [],
+      existing_results: existingResults || [],
+    })
   } catch (err: any) {
     return NextResponse.json({ error: err?.message || "Internal server error" }, { status: 500 })
   }
