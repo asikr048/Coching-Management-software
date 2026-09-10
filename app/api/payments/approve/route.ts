@@ -261,7 +261,7 @@ export async function POST(req: NextRequest) {
       try {
         const { data: bData } = await admin
           .from("batches")
-          .select("id, name, monthly_fee, admission_fee, current_seats, origin_batch_id")
+          .select("id, name, monthly_fee, admission_fee, current_seats, max_seats, origin_batch_id")
           .eq("id", sub.batch_id)
           .maybeSingle()
 
@@ -270,7 +270,8 @@ export async function POST(req: NextRequest) {
           batchAdmissionFee = Number(bData.admission_fee) || 0
           batchTotalFee = batchMonthlyFee + batchAdmissionFee
           if (isEnrollment) {
-            await admin.from("batches").update({ current_seats: (bData.current_seats || 0) + 1 }).eq("id", sub.batch_id)
+            const safeSeats = bData.max_seats ? Math.min(bData.max_seats, (bData.current_seats || 0) + 1) : (bData.current_seats || 0) + 1
+            await admin.from("batches").update({ current_seats: safeSeats }).eq("id", sub.batch_id)
 
             // Fill selected branch seat if multi-branch child batch exists
             if (sub.branch_id) {

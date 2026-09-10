@@ -456,7 +456,7 @@ export default function NewStudentForm({
       (b.current_seats || 0) < b.max_seats &&
       b.status !== "admission_closed" &&
       b.status !== "finished"
-    ) || candidateList[0]
+    )
 
     setForm(f => ({ ...f, batch_id: openBatch ? openBatch.id : "" }))
     if (!openBatch) setPaidAmount("")
@@ -546,20 +546,20 @@ export default function NewStudentForm({
     return combined.length > 0 ? combined : allBatches
   }, [allBatches, selectedBranchId])
 
-  // Auto-select first available batch of active branch if none selected or if current batch is not in branch's batches
+  // Auto-select first available batch with open seats in active branch
   useEffect(() => {
     if (branchFilteredBatches.length > 0) {
       const currentBatchInList = branchFilteredBatches.find(b => b.id === form.batch_id)
-      if (!currentBatchInList) {
+      const isCurrentBatchFull = currentBatchInList ? (currentBatchInList.current_seats || 0) >= currentBatchInList.max_seats : false
+      if (!currentBatchInList || isCurrentBatchFull) {
         const firstOpen = branchFilteredBatches.find(b => 
           !enrolledBatchIds.includes(b.id) &&
           (b.current_seats || 0) < b.max_seats &&
           b.status !== "admission_closed" &&
           b.status !== "finished"
-        ) || branchFilteredBatches[0]
-        if (firstOpen) {
-          setForm(f => ({ ...f, batch_id: firstOpen.id }))
-        }
+        )
+        setForm(f => ({ ...f, batch_id: firstOpen ? firstOpen.id : "" }))
+        if (!firstOpen) setPaidAmount("")
       }
     }
   }, [branchFilteredBatches, form.batch_id, enrolledBatchIds])
@@ -731,9 +731,48 @@ export default function NewStudentForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.batch_id) { toast.error("Select a batch"); return }
+    if (!form.batch_id) { 
+      toast.error("অনুগ্রহ করে একটি আসন ফাঁকা থাকা ব্যাচ নির্বাচন করুন (Please select a batch with open seats)")
+      return 
+    }
     setLoading(true)
     try {
+      // 1. Strict Seat Capacity & Admission Status Verification
+      const { data: targetBatch, error: targetBatchErr } = await supabase
+        .from("batches")
+        .select("id, name, max_seats, current_seats, status")
+        .eq("id", form.batch_id)
+        .maybeSingle()
+
+      if (!targetBatch || targetBatchErr) {
+        toast.error("নির্বাচিত ব্যাচটি পাওয়া যায়নি (Selected batch not found)")
+        setLoading(false)
+        return
+      }
+
+      if (targetBatch.status === "admission_closed" || targetBatch.status === "finished") {
+        toast.error(`ব্যাচ "${targetBatch.name}"-এ ভর্তি বন্ধ রয়েছে (Admission is closed for this batch)`)
+        setLoading(false)
+        return
+      }
+
+      // Count actual active enrollments currently in database
+      const { count: liveActiveCount } = await supabase
+        .from("enrollments")
+        .select("id", { count: "exact", head: true })
+        .eq("batch_id", form.batch_id)
+        .eq("status", "active")
+
+      const occupiedSeats = Math.max(Number(targetBatch.current_seats) || 0, Number(liveActiveCount) || 0)
+
+      if (occupiedSeats >= targetBatch.max_seats) {
+        toast.error(`ব্যাচ "${targetBatch.name}"-এর আসন সংখ্যা পূর্ণ (${targetBatch.max_seats}/${targetBatch.max_seats})! অতিরিক্ত শিক্ষার্থী ভর্তি করা সম্ভব নয়। (Batch is full! Max seats: ${targetBatch.max_seats})`, {
+          duration: 6000
+        })
+        setLoading(false)
+        return
+      }
+
       let sid: string, dispId: string
       let studentName = ""
       let studentPhone = ""
@@ -948,28 +987,31 @@ export default function NewStudentForm({
         } catch {}
       }
 
-      // Update seats count
-      if (batch) {
-        await supabase.from("batches").update({ current_seats: (batch.current_seats || 0) + 1 }).eq("id", form.batch_id)
+      // Update seats count accurately (never exceed max_seats)
+      if (batch && targetBatch) {
+        const accurateSeats = Math.min(targetBatch.max_seats, (occupiedSeats + 1))
+        await supabase.from("batches").update({ current_seats: accurateSeats }).eq("id", form.batch_id)
         if (selectedBranchId) {
           try {
             const { data: childBatch } = await supabase
               .from("batches")
-              .select("id, current_seats")
+              .select("id, current_seats, max_seats")
               .eq("origin_batch_id", form.batch_id)
               .eq("branch_id", selectedBranchId)
               .maybeSingle()
             if (childBatch) {
-              await supabase.from("batches").update({ current_seats: (childBatch.current_seats || 0) + 1 }).eq("id", childBatch.id)
+              const childLimit = childBatch.max_seats || targetBatch.max_seats
+              await supabase.from("batches").update({ current_seats: Math.min(childLimit, (childBatch.current_seats || 0) + 1) }).eq("id", childBatch.id)
             }
             if ((batch as any).origin_batch_id) {
               const { data: parentBatch } = await supabase
                 .from("batches")
-                .select("id, current_seats")
+                .select("id, current_seats, max_seats")
                 .eq("id", (batch as any).origin_batch_id)
                 .maybeSingle()
               if (parentBatch) {
-                await supabase.from("batches").update({ current_seats: (parentBatch.current_seats || 0) + 1 }).eq("id", parentBatch.id)
+                const parentLimit = parentBatch.max_seats || targetBatch.max_seats
+                await supabase.from("batches").update({ current_seats: Math.min(parentLimit, (parentBatch.current_seats || 0) + 1) }).eq("id", parentBatch.id)
               }
             }
           } catch {}
@@ -1621,30 +1663,50 @@ export default function NewStudentForm({
             </span>
           </div>
 
+          {/* All Batches Full Warning Banner */}
+          {branchFilteredBatches.length > 0 && branchFilteredBatches.every(b => (b.current_seats || 0) >= b.max_seats || b.status === "admission_closed" || b.status === "finished") && (
+            <div className="mb-3.5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2.5 text-rose-800 text-xs font-bold shadow-2xs animate-in fade-in duration-200">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>এই শাখার সকল ব্যাচের আসন পূর্ণ অথবা ভর্তি বন্ধ রয়েছে। নতুন শিক্ষার্থী ভর্তি করতে অনুগ্রহ করে নতুন ব্যাচ তৈরি করুন অথবা আসন সংখ্যা বাড়ান। (All batches in this branch are full)</span>
+            </div>
+          )}
+
           {/* Dropdown Selector for Fast Batch Selection */}
           <div className="mb-3.5">
             <select
               value={form.batch_id}
               onChange={e => {
                 const nextId = e.target.value
+                const selectedB = allBatches.find(b => b.id === nextId)
+                if (selectedB && (selectedB.current_seats || 0) >= selectedB.max_seats) {
+                  toast.error(`ব্যাচ "${selectedB.name}" এর সকল আসন পূর্ণ (${selectedB.current_seats}/${selectedB.max_seats})!`)
+                  return
+                }
                 setForm(f => ({ ...f, batch_id: nextId }))
                 if (!nextId) setPaidAmount("")
-                const selectedB = allBatches.find(b => b.id === nextId)
                 if (selectedB?.branch_id && selectedB.branch_id !== selectedBranchId) {
                   setSelectedBranchId(selectedB.branch_id)
                 }
               }}
               className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white border border-slate-300 focus:border-amber-500 rounded-xl text-sm font-bold text-slate-900 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
             >
-              <option value="" disabled>-- Select from available batches ({branchFilteredBatches.length} available) --</option>
+              <option value="">-- Select from available batches ({branchFilteredBatches.filter(b => (b.current_seats || 0) < b.max_seats && b.status !== "admission_closed" && b.status !== "finished").length} open) --</option>
               {branchFilteredBatches.map(b => {
                 const isEnrolled = enrolledBatchIds.includes(b.id)
-                const full = b.current_seats >= b.max_seats
+                const full = (b.current_seats || 0) >= b.max_seats
                 const isClosed = b.status === "admission_closed"
                 const isFinished = b.status === "finished"
                 const brName = effectiveBranches.find(br => br.id === b.branch_id)?.name
                 const seatInfo = b.max_seats ? ` [${b.current_seats || 0}/${b.max_seats} seats]` : ""
-                const statusText = isEnrolled ? " (Already Enrolled)" : isClosed ? " (Closed)" : isFinished ? " (Finished)" : full ? " (Full)" : ""
+                const statusText = isEnrolled 
+                  ? " (Already Enrolled)" 
+                  : isClosed 
+                  ? " (Closed)" 
+                  : isFinished 
+                  ? " (Finished)" 
+                  : full 
+                  ? " 🔴 (আসন পূর্ণ / FULL)" 
+                  : ""
                 return (
                   <option key={b.id} value={b.id} disabled={full || isEnrolled || isClosed || isFinished}>
                     {b.name} ({b.class_level || "All"}){brName ? ` • ${brName}` : ""}{seatInfo} — {formatCurrency(b.monthly_fee + (b.admission_fee || 0))}{statusText}
@@ -1670,7 +1732,7 @@ export default function NewStudentForm({
               {branchFilteredBatches.map(b => {
                 const isEnrolled = enrolledBatchIds.includes(b.id)
                 const sel = form.batch_id === b.id
-                const full = b.current_seats >= b.max_seats
+                const full = (b.current_seats || 0) >= b.max_seats
                 const isClosed = b.status === "admission_closed"
                 const isFinished = b.status === "finished"
                 const disabled = full || isEnrolled || isClosed || isFinished
@@ -1682,6 +1744,10 @@ export default function NewStudentForm({
                     key={b.id}
                     disabled={disabled}
                     onClick={() => {
+                      if (full) {
+                        toast.error(`ব্যাচ "${b.name}" এর সকল আসন পূর্ণ (${b.current_seats}/${b.max_seats})! নতুন ভর্তি নেওয়া যাবে না।`)
+                        return
+                      }
                       if (disabled) return
                       update("batch_id", sel ? "" : b.id)
                       if (!sel) setPaidAmount("")
@@ -1699,7 +1765,7 @@ export default function NewStudentForm({
                         : isFinished
                         ? "border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed"
                         : full
-                        ? "border-slate-200 opacity-40 cursor-not-allowed"
+                        ? "border-rose-300 bg-rose-50/60 opacity-80 cursor-not-allowed"
                         : "border-slate-200 bg-slate-50/60 hover:border-amber-400 hover:bg-amber-50/40"
                     }`}>
                     {sel && <Check className="float-right w-4 h-4 text-amber-600" />}
@@ -1716,6 +1782,11 @@ export default function NewStudentForm({
                     {!isEnrolled && isFinished && (
                       <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
                         Finished
+                      </span>
+                    )}
+                    {!isEnrolled && !isClosed && !isFinished && full && (
+                      <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-300 shadow-2xs">
+                        🔴 Full ({b.current_seats}/{b.max_seats})
                       </span>
                     )}
                     <p className={`font-bold text-[13px] ${isEnrolled ? "text-emerald-700" : isClosed ? "text-amber-800" : "text-slate-900"}`}>{b.name}</p>
