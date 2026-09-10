@@ -15,6 +15,7 @@ import { checkFinancialAccess } from "@/lib/financial-access"
 import { StudentIdCardData, printStudentIdCard, printAdmissionAndIdCard, downloadStudentIdCardPDF } from "@/lib/id-card-generator"
 import StudentIdCardModal from "@/components/id-card/StudentIdCardModal"
 import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
+import { useBranch } from "@/components/providers/BranchContext"
 
 interface Batch { 
   id: string
@@ -84,6 +85,14 @@ export default function NewStudentForm({
 }) {
   const router = useRouter()
   const supabase = createClient()
+  const { selectedBranchId: contextBranchId, currentBranch, branches: contextBranches } = useBranch()
+
+  const effectiveBranches = useMemo(() => {
+    if (branches && branches.length > 0) return branches
+    if (contextBranches && contextBranches.length > 0) return contextBranches
+    return []
+  }, [branches, contextBranches])
+
   const [loading, setLoading] = useState(false)
   const [financialAccess, setFinancialAccess] = useState<boolean | null>(null)
 
@@ -96,14 +105,36 @@ export default function NewStudentForm({
   const [duesList, setDuesList] = useState<any[]>(initialDues || [])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historySearchQuery, setHistorySearchQuery] = useState("")
-  const [historyBranchFilter, setHistoryBranchFilter] = useState("all")
+  const [historyBranchFilter, setHistoryBranchFilter] = useState<string>(() => {
+    if (contextBranchId && contextBranchId !== "all") return contextBranchId
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("medhashiree_admin_branch_id")
+      if (saved && saved !== "all") return saved
+    }
+    const list = branches.length > 0 ? branches : (contextBranches || [])
+    const mainB = list.find(b => /main|প্রধান/i.test(b.name))
+    return mainB?.id || "all"
+  })
   const [historyBatchFilter, setHistoryBatchFilter] = useState("all")
   const [historyStatusFilter, setHistoryStatusFilter] = useState<"all" | "paid" | "due">("all")
 
   const [mode, setMode] = useState<"new" | "existing">("new")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStudent, setSelectedStudent] = useState<StudentOpt | null>(null)
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => branches[0]?.id || "")
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
+    if (contextBranchId && contextBranchId !== "all") {
+      return contextBranchId
+    }
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("medhashiree_admin_branch_id")
+      if (saved && saved !== "all") {
+        return saved
+      }
+    }
+    const list = branches.length > 0 ? branches : (contextBranches || [])
+    const mainB = list.find(b => /main|প্রধান/i.test(b.name))
+    return mainB?.id || list[0]?.id || ""
+  })
   const [form, setForm] = useState({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
   const [existingFix, setExistingFix] = useState({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
   const [batchRoll, setBatchRoll] = useState<string>("")
@@ -336,6 +367,7 @@ export default function NewStudentForm({
   function handleBranchChange(newBrId: string) {
     setSelectedBranchId(newBrId)
     const matches = allBatches.filter(b => 
+      !newBrId ||
       b.branch_id === newBrId ||
       (b as any).origin_branch_id === newBrId ||
       ((b as any).branch_seats && (b as any).branch_seats[newBrId] !== undefined) ||
@@ -350,7 +382,32 @@ export default function NewStudentForm({
     ) || candidateList[0]
 
     setForm(f => ({ ...f, batch_id: openBatch ? openBatch.id : "" }))
+    if (!openBatch) setPaidAmount("")
   }
+
+  const prevContextBranchIdRef = useRef<string | null>(null)
+
+  // Auto-sync with BranchContext (e.g. "Main Branch" active in the top bar)
+  useEffect(() => {
+    const list = effectiveBranches
+    if (contextBranchId && contextBranchId !== "all") {
+      if (prevContextBranchIdRef.current !== contextBranchId) {
+        prevContextBranchIdRef.current = contextBranchId
+        handleBranchChange(contextBranchId)
+        setHistoryBranchFilter(contextBranchId)
+      }
+    } else {
+      // If contextBranchId is "all", default to Main Branch on initial load if not set
+      if (!prevContextBranchIdRef.current) {
+        prevContextBranchIdRef.current = "all"
+        const mainB = list.find(b => /main|প্রধান/i.test(b.name)) || list[0]
+        if (mainB && !selectedBranchId) {
+          handleBranchChange(mainB.id)
+          setHistoryBranchFilter(mainB.id)
+        }
+      }
+    }
+  }, [contextBranchId, effectiveBranches])
 
   function resetForm() {
     setForm({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
@@ -383,17 +440,20 @@ export default function NewStudentForm({
     return combined.length > 0 ? combined : allBatches
   }, [allBatches, selectedBranchId])
 
-  // Auto-select first available batch if none selected so payment section appears immediately
+  // Auto-select first available batch of active branch if none selected or if current batch is not in branch's batches
   useEffect(() => {
-    if (!form.batch_id && branchFilteredBatches.length > 0) {
-      const firstOpen = branchFilteredBatches.find(b => 
-        !enrolledBatchIds.includes(b.id) &&
-        (b.current_seats || 0) < b.max_seats &&
-        b.status !== "admission_closed" &&
-        b.status !== "finished"
-      ) || branchFilteredBatches[0]
-      if (firstOpen) {
-        setForm(f => ({ ...f, batch_id: firstOpen.id }))
+    if (branchFilteredBatches.length > 0) {
+      const currentBatchInList = branchFilteredBatches.find(b => b.id === form.batch_id)
+      if (!currentBatchInList) {
+        const firstOpen = branchFilteredBatches.find(b => 
+          !enrolledBatchIds.includes(b.id) &&
+          (b.current_seats || 0) < b.max_seats &&
+          b.status !== "admission_closed" &&
+          b.status !== "finished"
+        ) || branchFilteredBatches[0]
+        if (firstOpen) {
+          setForm(f => ({ ...f, batch_id: firstOpen.id }))
+        }
       }
     }
   }, [branchFilteredBatches, form.batch_id, enrolledBatchIds])
@@ -960,7 +1020,7 @@ export default function NewStudentForm({
   function getHistoryIdCardData(enr: any): StudentIdCardData {
     const student = enr.student || students.find(s => s.id === enr.student_id) || {}
     const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
-    const branchObj = branches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+    const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
     const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
     return {
       student_id: student.student_id || "N/A",
@@ -1284,19 +1344,16 @@ export default function NewStudentForm({
                 <div><label className={labelCls}>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3">
-                {branches.length > 0 && (
+                {effectiveBranches.length > 0 && (
                   <div>
                     <label className={labelCls}>Branch / Campus</label>
                     <select
                       value={selectedBranchId}
-                      onChange={e => {
-                        setSelectedBranchId(e.target.value)
-                        setForm(f => ({ ...f, batch_id: "" }))
-                      }}
+                      onChange={e => handleBranchChange(e.target.value)}
                       className={ic}
                     >
                       <option value="">Default / All</option>
-                      {branches.map(b => (
+                      {effectiveBranches.map(b => (
                         <option key={b.id} value={b.id}>{b.name}</option>
                       ))}
                     </select>
@@ -1341,7 +1398,7 @@ export default function NewStudentForm({
         )}
 
         {/* Branch Selection */}
-        {branches.length > 0 && (
+        {effectiveBranches.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-4">
             <div className="flex items-center justify-between mb-2.5">
               <p className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
@@ -1356,7 +1413,7 @@ export default function NewStudentForm({
                 className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               >
                 <option value="">-- All Branches (সকল শাখা) --</option>
-                {branches.map(b => (
+                {effectiveBranches.map(b => (
                   <option key={b.id} value={b.id}>
                     🏛️ {b.name}
                   </option>
@@ -1364,7 +1421,7 @@ export default function NewStudentForm({
               </select>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {branches.map(b => {
+              {effectiveBranches.map(b => {
                 const isSel = selectedBranchId === b.id
                 return (
                   <button
@@ -1418,7 +1475,7 @@ export default function NewStudentForm({
                 const full = b.current_seats >= b.max_seats
                 const isClosed = b.status === "admission_closed"
                 const isFinished = b.status === "finished"
-                const brName = branches.find(br => br.id === b.branch_id)?.name
+                const brName = effectiveBranches.find(br => br.id === b.branch_id)?.name
                 const seatInfo = b.max_seats ? ` [${b.current_seats || 0}/${b.max_seats} seats]` : ""
                 const statusText = isEnrolled ? " (Already Enrolled)" : isClosed ? " (Closed)" : isFinished ? " (Finished)" : full ? " (Full)" : ""
                 return (
@@ -1450,7 +1507,7 @@ export default function NewStudentForm({
                 const isClosed = b.status === "admission_closed"
                 const isFinished = b.status === "finished"
                 const disabled = full || isEnrolled || isClosed || isFinished
-                const branchObj = branches.find(br => br.id === b.branch_id)
+                const branchObj = effectiveBranches.find(br => br.id === b.branch_id)
 
                 return (
                   <button
@@ -1734,7 +1791,7 @@ export default function NewStudentForm({
                 className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
               >
                 <option value="all">All Branches (সকল শাখা)</option>
-                {branches.map(br => (
+                {effectiveBranches.map(br => (
                   <option key={br.id} value={br.id}>{br.name}</option>
                 ))}
               </select>
@@ -1795,7 +1852,7 @@ export default function NewStudentForm({
                     {filteredEnrollments.map((enr: any) => {
                       const student = enr.student || students.find(s => s.id === enr.student_id) || {}
                       const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
-                      const branchObj = branches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+                      const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
                       const matchingPayment = paymentsList.find(p => p.student_id === enr.student_id && (p.batch_id === enr.batch_id || !p.batch_id))
                       const matchingDue = duesList.find(d => d.student_id === enr.student_id && (d.batch_id === enr.batch_id || !d.batch_id))
                       const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
