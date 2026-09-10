@@ -2,15 +2,11 @@
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { GraduationCap, Eye, EyeOff, Loader2, Lock, Users, TrendingUp, Star, ArrowRight, UserPlus, BookOpen, IdCard, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, Loader2, Lock, Users, TrendingUp, Star, ArrowRight, UserPlus, BookOpen, IdCard, AlertCircle } from "lucide-react"
 import Link from "next/link"
 
 function LoginFormContent() {
   const searchParams = useSearchParams()
-  const [loginTab, setLoginTab] = useState<"student" | "staff">(() => {
-    const roleParam = searchParams.get("role")
-    return roleParam === "staff" ? "staff" : "student"
-  })
   const [userId, setUserId] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
@@ -23,12 +19,6 @@ function LoginFormContent() {
   useEffect(() => {
     const emailParam = searchParams.get("email")
     const idParam = searchParams.get("id")
-    const roleParam = searchParams.get("role")
-    if (roleParam === "staff") {
-      setLoginTab("staff")
-    } else if (idParam || roleParam === "student") {
-      setLoginTab("student")
-    }
     if (emailParam) {
       setUserId(emailParam)
     } else if (idParam) {
@@ -43,7 +33,7 @@ function LoginFormContent() {
 
     const rawInput = userId.trim()
     if (!rawInput) {
-      setError(loginTab === "student" ? "Please enter your Student ID or Email" : "Please enter your Staff Email or User ID")
+      setError("Please enter your User ID or Email")
       setLoading(false)
       return
     }
@@ -61,7 +51,7 @@ function LoginFormContent() {
         const resolveRes = await fetch("/api/auth/resolve-identity", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ identifier: rawInput, portal: loginTab }),
+          body: JSON.stringify({ identifier: rawInput }),
         })
         if (resolveRes.ok) {
           const resolveData = await resolveRes.json()
@@ -209,14 +199,6 @@ function LoginFormContent() {
         return
       }
 
-      // If user selected Staff / Admin tab, but account is not a staff member:
-      if (loginTab === "staff") {
-        await supabase.auth.signOut()
-        setError("Access denied. This account does not have staff or admin privileges.")
-        setLoading(false)
-        return
-      }
-
       // Non-staff accounts go to Student Portal
       window.location.href = "/student/profile"
     } catch (err: unknown) {
@@ -250,41 +232,6 @@ function LoginFormContent() {
         </Link>
       </div>
 
-      {/* Role Selection Tabs */}
-      <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200/80 shadow-2xs">
-        <button
-          type="button"
-          onClick={() => {
-            setLoginTab("student")
-            setError("")
-          }}
-          className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer min-w-0 ${
-            loginTab === "student"
-              ? "bg-white text-indigo-700 shadow-xs border border-indigo-100 font-extrabold"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
-          }`}
-        >
-          <GraduationCap className="w-4 h-4 shrink-0 text-indigo-600" />
-          <span className="truncate">Student <span className="hidden xs:inline">(শিক্ষার্থী)</span></span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setLoginTab("staff")
-            setError("")
-          }}
-          className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 px-2 sm:px-3 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer min-w-0 ${
-            loginTab === "staff"
-              ? "bg-white text-amber-900 shadow-xs border border-amber-200 font-extrabold"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/50"
-          }`}
-        >
-          <Lock className="w-4 h-4 shrink-0 text-amber-600" />
-          <span className="truncate">Staff / Admin <span className="hidden xs:inline">(ম্যানেজমেন্ট)</span></span>
-        </button>
-      </div>
-
       {error && (
         <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start gap-2.5">
           <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-red-600" />
@@ -295,7 +242,7 @@ function LoginFormContent() {
       <form onSubmit={handleLogin} className="space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            {loginTab === "student" ? "Student ID or Registered Email" : "Staff Email or Admin ID"}
+            User ID or Email
           </label>
           <div className="relative">
             <IdCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -304,7 +251,7 @@ function LoginFormContent() {
               onChange={e => setUserId(e.target.value)}
               required
               className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-shadow focus:shadow-md"
-              placeholder={loginTab === "student" ? "e.g. MS-00001 or your@email.com" : "e.g. asikr048@gmail.com or admin ID"}
+              placeholder="MS-00001 or your@email.com"
             />
           </div>
         </div>
