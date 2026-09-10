@@ -72,6 +72,8 @@ export default function BatchesClient({
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingBatch, setEditingBatch] = useState<BatchData | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteTargetBatch, setDeleteTargetBatch] = useState<BatchData | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [loading, setLoading] = useState(false)
   const [filterStatus, setFilterStatus] = useState<string>("All")
   const supabase = createClient()
@@ -296,17 +298,31 @@ export default function BatchesClient({
     }
   }
 
-  async function handleDelete(batch: BatchData) {
-    if (!confirm(`Are you sure you want to delete batch "${batch.name}"? This cannot be undone.`)) return
-    setDeletingId(batch.id)
+  function handleDeleteClick(batch: BatchData) {
+    setDeleteTargetBatch(batch)
+  }
+
+  async function handleConfirmDelete(cascade: boolean = true) {
+    if (!deleteTargetBatch) return
+    setIsDeleting(true)
+    setDeletingId(deleteTargetBatch.id)
     try {
-      const { error } = await supabase.from("batches").delete().eq("id", batch.id)
-      if (error) throw error
-      setBatches(batches.filter(b => b.id !== batch.id))
-      toast.success(`Batch "${batch.name}" deleted`)
+      const res = await fetch("/api/batches/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: deleteTargetBatch.id, cascade })
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to delete batch.")
+      }
+      setBatches(prev => prev.filter(b => b.id !== deleteTargetBatch.id))
+      toast.success(data.message || `ব্যাচ "${deleteTargetBatch.name}" সফলভাবে ডিলিট করা হয়েছে।`)
+      setDeleteTargetBatch(null)
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete batch. Check if students are enrolled.")
+      toast.error(err instanceof Error ? err.message : "Failed to delete batch.")
     } finally {
+      setIsDeleting(false)
       setDeletingId(null)
     }
   }
@@ -640,8 +656,8 @@ export default function BatchesClient({
                   <button
                     type="button"
                     disabled={deletingId === batch.id}
-                    onClick={() => handleDelete(batch)}
-                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+                    onClick={() => handleDeleteClick(batch)}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                     title="Delete Batch"
                   >
                     {deletingId === batch.id ? <Loader2 className="w-4 h-4 animate-spin text-rose-600" /> : <Trash2 className="w-4 h-4" />}
@@ -1061,6 +1077,108 @@ export default function BatchesClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Batch Confirmation Modal */}
+      {deleteTargetBatch && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-rose-100 border border-rose-200 flex items-center justify-center text-rose-600 shrink-0">
+                  <Trash2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-slate-900 text-base">ব্যাচ ডিলিট নিশ্চিতকরণ (Delete Batch)</h3>
+                  <p className="text-xs text-slate-500 font-medium">ব্যাচ: <strong className="text-slate-800">{deleteTargetBatch.name}</strong></p>
+                </div>
+              </div>
+              <button
+                onClick={() => setDeleteTargetBatch(null)}
+                disabled={isDeleting}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {deleteTargetBatch.current_seats > 0 ? (
+              <div className="space-y-3.5">
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl space-y-1.5">
+                  <div className="flex items-center gap-2 text-rose-800 font-bold text-xs">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>এই ব্যাচে {deleteTargetBatch.current_seats} জন শিক্ষার্থী ভর্তি রয়েছে!</span>
+                  </div>
+                  <p className="text-[11px] text-rose-700 leading-relaxed">
+                    ব্যাচটি মুছে ফেললে এই ব্যাচের শিক্ষার্থীদের ভর্তি তালিকা ও বকেয়া রেকর্ড মুছে যাবে (তবে শিক্ষার্থীদের মূল অ্যাকাউন্ট ও অন্যান্য ব্যাচ অপরিবর্তিত থাকবে)।
+                  </p>
+                </div>
+
+                <p className="text-xs text-slate-600 font-medium">
+                  আপনি কি ব্যাচটি এবং এর সংশ্লিষ্ট রেকর্ড স্থায়ীভাবে মুছে ফেলতে চান, নাকি নতুন ভর্তি বন্ধ রাখতে চান?
+                </p>
+
+                <div className="space-y-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={() => handleConfirmDelete(true)}
+                    className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    <span>স্থায়ীভাবে ব্যাচ মুছে ফেলুন (Force Delete Batch)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={async () => {
+                      await handleStatusChange(deleteTargetBatch.id, "admission_closed")
+                      setDeleteTargetBatch(null)
+                    }}
+                    className="w-full py-2.5 px-4 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <span>ভর্তি বন্ধ রাখুন (Close Admission Instead)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={() => setDeleteTargetBatch(null)}
+                    className="w-full py-2 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    বাতিল (Cancel)
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs text-slate-600">
+                  আপনি কি নিশ্চিত যে আপনি ব্যাচ <strong>&quot;{deleteTargetBatch.name}&quot;</strong> স্থায়ীভাবে মুছে ফেলতে চান? এটি আর ফিরিয়ে আনা যাবে না।
+                </p>
+                <div className="flex items-center gap-2 justify-end pt-2">
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={() => setDeleteTargetBatch(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    বাতিল
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isDeleting}
+                    onClick={() => handleConfirmDelete(true)}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {isDeleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    <span>মুছে ফেলুন (Delete)</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
