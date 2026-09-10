@@ -143,8 +143,32 @@ export default function NewStudentForm({
   
   const [enrolledBatchIds, setEnrolledBatchIds] = useState<string[]>([])
   const [allBatches, setAllBatches] = useState<Batch[]>(batches || [])
+  const [resequencing, setResequencing] = useState(false)
 
-  // Auto-calculate next batch roll (1, 2, 3...) when batch changes
+  const handleResequenceBatchRolls = async (targetBatchId?: string) => {
+    const bId = targetBatchId || form.batch_id
+    try {
+      setResequencing(true)
+      const res = await fetch("/api/batches/next-roll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bId ? { batch_id: bId } : { resequence_all: true })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`রোল নম্বর ধারাবাহিক সিঙ্ক সম্পন্ন হয়েছে! (${data.total_fixed_enrollments ?? data.fixed_batches?.[0]?.students_resequenced ?? 0} updated)`)
+        router.refresh()
+      } else {
+        toast.error(data.error || "Failed to resequence rolls")
+      }
+    } catch {
+      toast.error("Network error while syncing rolls")
+    } finally {
+      setResequencing(false)
+    }
+  }
+
+  // Auto-calculate next batch roll (highest + 1, starting 1, 2, 3...) when batch changes
   useEffect(() => {
     if (!form.batch_id) {
       setBatchRoll("")
@@ -153,50 +177,52 @@ export default function NewStudentForm({
     let isCancelled = false
     async function loadNextRoll() {
       try {
-        let maxRoll = 0
-        const rollsInBatch = new Set<number>()
+        // 1. Call server API to get accurate next roll and auto-resequence duplicates if needed
+        const res = await fetch(`/api/batches/next-roll?batch_id=${encodeURIComponent(form.batch_id)}&auto_fix=true`)
+        if (res.ok) {
+          const data = await res.json()
+          if (!isCancelled && data && typeof data.next_roll === "number") {
+            setBatchRoll(String(data.next_roll))
 
-        // 1. Query enrollments strictly for this batch
+            // If existing enrollments were re-sequenced, live-sync the local enrollments list
+            if (data.resequenced && Array.isArray(data.updated_enrollments) && data.updated_enrollments.length > 0) {
+              const updateMap = new Map<string, number>(data.updated_enrollments.map((u: any) => [u.id, u.roll_no]))
+              setEnrollmentsList(prev =>
+                prev.map(enr => {
+                  if (updateMap.has(enr.id)) {
+                    const newRoll = updateMap.get(enr.id)
+                    return {
+                      ...enr,
+                      roll_no: newRoll,
+                      student: enr.student ? { ...enr.student, roll_no: newRoll, batch_roll: newRoll } : enr.student
+                    }
+                  }
+                  return enr
+                })
+              )
+            }
+            return
+          }
+        }
+
+        // Fallback: Query enrollments directly (strictly without non-existent batch_roll column)
         const { data: enrs, error: enrErr } = await supabase
           .from("enrollments")
-          .select("id, roll_no, batch_roll, student_id")
+          .select("id, roll_no, student_id")
           .eq("batch_id", form.batch_id)
 
+        let maxRoll = 0
         if (!enrErr && enrs && enrs.length > 0) {
           enrs.forEach((e: any) => {
-            const r = Number(e.roll_no ?? e.batch_roll)
-            if (!isNaN(r) && r > 0) {
-              rollsInBatch.add(r)
-              if (r > maxRoll) maxRoll = r
-            }
+            const r = Number(e.roll_no)
+            if (!isNaN(r) && r > maxRoll) maxRoll = r
           })
-
-          // If some enrollments don't have roll_no on enrollment record,
-          // check ONLY students who belong to this batch
-          const sIds = enrs.map((e: any) => e.student_id).filter(Boolean)
-          if (sIds.length > 0 && rollsInBatch.size < enrs.length) {
-            const { data: batchStudents } = await supabase
-              .from("students")
-              .select("id, roll_no, batch_roll")
-              .in("id", sIds)
-            if (batchStudents) {
-              batchStudents.forEach((s: any) => {
-                const r = Number(s.roll_no ?? s.batch_roll)
-                if (!isNaN(r) && r > 0) {
-                  rollsInBatch.add(r)
-                  if (r > maxRoll) maxRoll = r
-                }
-              })
-            }
-          }
-
           if (maxRoll === 0) {
             maxRoll = enrs.length
           }
         }
 
         if (isCancelled) return
-        // Sequential roll starting from 1, then 2, 3, 4... strictly for this batch
         setBatchRoll(String(maxRoll > 0 ? maxRoll + 1 : 1))
       } catch {
         if (!isCancelled) setBatchRoll("1")
@@ -204,7 +230,7 @@ export default function NewStudentForm({
     }
     loadNextRoll()
     return () => { isCancelled = true }
-  }, [form.batch_id])
+  }, [form.batch_id, supabase])
 
   useEffect(() => {
     if (initialEnrollments && initialEnrollments.length > 0) {
@@ -722,16 +748,30 @@ export default function NewStudentForm({
 
       // Ensure batch roll number starts from 1, 2, 3... sequentially for this batch
       let finalRoll = batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0 ? parseInt(batchRoll, 10) : null
+      try {
+        const res = await fetch(`/api/batches/next-roll?batch_id=${encodeURIComponent(form.batch_id)}&auto_fix=true`)
+        if (res.ok) {
+          const nrData = await res.json()
+          if (nrData && typeof nrData.next_roll === "number") {
+            const existingRolls = new Set<number>((nrData.updated_enrollments || []).map((u: any) => Number(u.roll_no)))
+            // If user left it empty or entered a duplicate roll already taken, auto-assign next_roll
+            if (!finalRoll || existingRolls.has(finalRoll)) {
+              finalRoll = nrData.next_roll
+            }
+          }
+        }
+      } catch {}
+
       if (!finalRoll) {
         try {
           const { data: bEnrs } = await supabase
             .from("enrollments")
-            .select("roll_no, batch_roll")
+            .select("id, roll_no")
             .eq("batch_id", form.batch_id)
           let mRoll = 0
           if (bEnrs && bEnrs.length > 0) {
             bEnrs.forEach((e: any) => {
-              const r = Number(e.roll_no ?? e.batch_roll)
+              const r = Number(e.roll_no)
               if (!isNaN(r) && r > mRoll) mRoll = r
             })
             if (mRoll === 0) mRoll = bEnrs.length
@@ -967,6 +1007,7 @@ export default function NewStudentForm({
         batch: batch || { id: form.batch_id, name: "Enrolled Batch", monthly_fee: 0, admission_fee: 0 },
       }
       setEnrollmentsList(prev => [newEnrItem, ...prev])
+      setBatchRoll(String((enrollPayload.roll_no || finalRoll || 1) + 1))
 
       if (paid > 0) {
         setPaymentsList(prev => [{
@@ -1645,13 +1686,25 @@ export default function NewStudentForm({
                   Last {Math.min(5, enrollmentsList.length)}
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab("history")}
-                className="text-xs font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer transition-colors"
-              >
-                View All History ({enrollmentsList.length}) <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleResequenceBatchRolls()}
+                  disabled={resequencing}
+                  className="text-xs font-bold text-slate-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50"
+                  title="ব্যাচের রোল নম্বর ১, ২, ৩... ক্রমানুসারে ধারাবাহিক করুন"
+                >
+                  <RefreshCw className={`w-3 h-3 text-amber-600 ${resequencing ? "animate-spin" : ""}`} />
+                  <span>{resequencing ? "Syncing..." : "Sync Rolls (রোল সিঙ্ক)"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("history")}
+                  className="text-xs font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  View All History ({enrollmentsList.length}) <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
             <div className="divide-y divide-slate-100">

@@ -156,24 +156,24 @@ export async function POST(req: NextRequest) {
         // First check if student already has an enrollment with roll_no for THIS specific batch
         const { data: thisEnr } = await admin
           .from("enrollments")
-          .select("id, roll_no, batch_roll")
+          .select("id, roll_no")
           .eq("student_id", sub.student_id)
           .eq("batch_id", sub.batch_id)
           .maybeSingle()
 
-        if (thisEnr && (thisEnr.roll_no || thisEnr.batch_roll)) {
-          nextRoll = Number(thisEnr.roll_no || thisEnr.batch_roll)
+        if (thisEnr && thisEnr.roll_no) {
+          nextRoll = Number(thisEnr.roll_no)
         } else {
           // Calculate max roll strictly for this batch
           const { data: enrs } = await admin
             .from("enrollments")
-            .select("id, roll_no, batch_roll, student_id")
+            .select("id, roll_no, student_id")
             .eq("batch_id", sub.batch_id)
 
           let maxRoll = 0
           if (enrs && enrs.length > 0) {
             enrs.forEach((e: any) => {
-              const r = Number(e.roll_no || e.batch_roll)
+              const r = Number(e.roll_no)
               if (!isNaN(r) && r > maxRoll) maxRoll = r
             })
             if (maxRoll === 0) {

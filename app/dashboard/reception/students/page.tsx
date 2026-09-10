@@ -29,11 +29,11 @@ export default async function ReceptionStudentsPage() {
   // 2. Fetch enrollments & batches reliably
   let rawEnrollments: any[] = []
   try {
-    const { data: enrData, error: enrErr } = await admin.from("enrollments").select("id, student_id, batch_id, status, branch_id, roll_no, batch_roll")
+    const { data: enrData, error: enrErr } = await admin.from("enrollments").select("id, student_id, batch_id, status, branch_id, roll_no")
     if (!enrErr && enrData && enrData.length > 0) {
       rawEnrollments = enrData
     } else {
-      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id, roll_no, batch_roll")
+      const { data: fbEnr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id, roll_no")
       if (fbEnr && fbEnr.length > 0) {
         rawEnrollments = fbEnr
       } else {
@@ -75,7 +75,7 @@ export default async function ReceptionStudentsPage() {
   rawEnrollments.forEach((e: any) => {
     if (!e.student_id) return
     const sObj = rawStudentMap.get(e.student_id)
-    const roll = e.roll_no ?? e.batch_roll ?? sObj?.roll_no ?? sObj?.batch_roll ?? null
+    const roll = e.roll_no ?? sObj?.roll_no ?? sObj?.batch_roll ?? null
     const item = {
       ...e,
       roll_no: roll,

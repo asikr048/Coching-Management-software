@@ -72,7 +72,7 @@ export default async function NewStudentPage() {
   try {
     const { data: enr1, error: err1 } = await admin
       .from("enrollments")
-      .select("id, created_at, status, batch_id, student_id, branch_id, roll_no, batch_roll")
+      .select("id, created_at, status, batch_id, student_id, branch_id, roll_no")
       .order("created_at", { ascending: false })
       .limit(200)
 
@@ -81,7 +81,7 @@ export default async function NewStudentPage() {
     } else {
       const { data: fbEnr } = await supabase
         .from("enrollments")
-        .select("id, created_at, status, batch_id, student_id, branch_id, roll_no, batch_roll")
+        .select("id, created_at, status, batch_id, student_id, branch_id, roll_no")
         .order("created_at", { ascending: false })
         .limit(200)
       if (fbEnr && fbEnr.length > 0) {
@@ -107,7 +107,7 @@ export default async function NewStudentPage() {
     const batch = batchMap.get(e.batch_id) || {}
     return {
       ...e,
-      roll_no: e.roll_no || (e as any).batch_roll || student.roll_no || student.batch_roll || null,
+      roll_no: e.roll_no || student.roll_no || student.batch_roll || null,
       student,
       batch
     }
