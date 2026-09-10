@@ -122,26 +122,34 @@ export default function NewStudentForm({
     let isCancelled = false
     async function loadNextRoll() {
       try {
-        const { data: enrs } = await supabase
+        let maxRoll = 0
+        const { data: enrs, error: enrErr } = await supabase
           .from("enrollments")
-          .select("roll_no")
+          .select("*")
           .eq("batch_id", form.batch_id)
-          .order("roll_no", { ascending: false })
-          .limit(1)
 
-        if (isCancelled) return
-        let nextRoll = 1
-        if (enrs && enrs.length > 0 && enrs[0].roll_no != null && Number(enrs[0].roll_no) > 0) {
-          nextRoll = Number(enrs[0].roll_no) + 1
-        } else {
-          const { count } = await supabase
-            .from("enrollments")
-            .select("id", { count: "exact", head: true })
-            .eq("batch_id", form.batch_id)
-          nextRoll = (count || 0) + 1
+        if (!enrErr && enrs && enrs.length > 0) {
+          enrs.forEach((e: any) => {
+            const r = Number((e as any).roll_no || (e as any).batch_roll)
+            if (!isNaN(r) && r > maxRoll) maxRoll = r
+          })
+          if (maxRoll === 0) maxRoll = enrs.length
         }
-        setBatchRoll(String(nextRoll))
-      } catch (err) {
+        if (maxRoll === 0) {
+          // Check students table
+          const { data: stList } = await supabase
+            .from("students")
+            .select("roll_no, batch_roll")
+          if (stList) {
+            stList.forEach((s: any) => {
+              const r = Number(s.roll_no || s.batch_roll)
+              if (!isNaN(r) && r > maxRoll) maxRoll = r
+            })
+          }
+        }
+        if (isCancelled) return
+        setBatchRoll(String(maxRoll > 0 ? maxRoll + 1 : 1))
+      } catch {
         if (!isCancelled) setBatchRoll("1")
       }
     }
@@ -597,6 +605,9 @@ export default function NewStudentForm({
         return
       }
 
+      // Ensure batch roll number starts from 1, 2, 3... sequentially
+      let finalRoll = batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0 ? parseInt(batchRoll, 10) : 1
+
       // Add enrollment with adaptive column support
       const enrollPayload: Record<string, any> = {
         student_id: sid,
@@ -606,43 +617,37 @@ export default function NewStudentForm({
       if (selectedBranchId || batch?.branch_id) {
         enrollPayload.branch_id = selectedBranchId || batch?.branch_id || null
       }
-
-      // Ensure batch roll number starts from 1, 2, 3... sequentially
-      let finalRoll = batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0 ? parseInt(batchRoll, 10) : null
-      if (finalRoll == null) {
-        try {
-          const { data: maxEnr } = await supabase
-            .from("enrollments")
-            .select("roll_no")
-            .eq("batch_id", form.batch_id)
-            .order("roll_no", { ascending: false })
-            .limit(1)
-          if (maxEnr && maxEnr.length > 0 && maxEnr[0].roll_no != null && Number(maxEnr[0].roll_no) > 0) {
-            finalRoll = Number(maxEnr[0].roll_no) + 1
-          } else {
-            const { count } = await supabase
-              .from("enrollments")
-              .select("id", { count: "exact", head: true })
-              .eq("batch_id", form.batch_id)
-            finalRoll = (count || 0) + 1
-          }
-        } catch {
-          finalRoll = 1
-        }
+      if (finalRoll != null) {
+        enrollPayload.roll_no = finalRoll
       }
-      enrollPayload.roll_no = finalRoll
 
       let { error: eErr } = await supabase.from("enrollments").insert(enrollPayload)
 
-      // Fallback if branch_id column doesn't exist in live Supabase enrollments schema cache
+      // Fallback if roll_no or branch_id column doesn't exist in live Supabase enrollments schema cache
       if (eErr && (
+        eErr.message?.includes("roll_no") ||
         eErr.message?.includes("branch_id") || 
         eErr.message?.includes("schema cache") || 
         (eErr as any).code === "PGRST204"
       )) {
-        delete enrollPayload.branch_id
+        if (eErr.message?.includes("roll_no")) {
+          delete enrollPayload.roll_no
+        }
+        if (eErr.message?.includes("branch_id")) {
+          delete enrollPayload.branch_id
+        }
         const retryRes = await supabase.from("enrollments").insert(enrollPayload)
         eErr = retryRes.error
+
+        // If schema cache still complains, insert minimal payload
+        if (eErr && (eErr.message?.includes("schema cache") || (eErr as any).code === "PGRST204")) {
+          const minimalRes = await supabase.from("enrollments").insert({
+            student_id: sid,
+            batch_id: form.batch_id,
+            status: "active"
+          })
+          eErr = minimalRes.error
+        }
       }
 
       if (eErr) {
@@ -654,12 +659,14 @@ export default function NewStudentForm({
         throw new Error(eErr.message)
       }
 
-      // Sync roll_no to student table as well
-      if (enrollPayload.roll_no != null) {
-        await supabase.from("students").update({
-          roll_no: enrollPayload.roll_no,
-          batch_roll: enrollPayload.roll_no
-        }).eq("id", sid)
+      // Sync roll_no and batch_roll to student table
+      if (finalRoll != null) {
+        try {
+          await supabase.from("students").update({
+            roll_no: finalRoll,
+            batch_roll: finalRoll
+          }).eq("id", sid)
+        } catch {}
       }
 
       // Update seats count

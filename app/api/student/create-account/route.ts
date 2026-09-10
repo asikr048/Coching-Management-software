@@ -29,11 +29,19 @@ export async function POST(req: NextRequest) {
 
     if (createError) {
       // If user already exists, update their password
-      if (createError.message.toLowerCase().includes("already registered") || createError.message.toLowerCase().includes("already exists")) {
+      const errLower = createError.message.toLowerCase()
+      if (errLower.includes("registered") || errLower.includes("exists") || errLower.includes("already")) {
         const { data: userList } = await admin.auth.admin.listUsers()
-        const existing = userList?.users?.find(u => u.email === targetEmail)
+        const existing = userList?.users?.find(u => u.email?.toLowerCase() === targetEmail.toLowerCase())
         if (existing) {
-          await admin.auth.admin.updateUserById(existing.id, { password: password })
+          await admin.auth.admin.updateUserById(existing.id, { 
+            password: password,
+            user_metadata: {
+              full_name: fullName,
+              user_id: studentId,
+              phone: phone || null,
+            }
+          })
           return NextResponse.json({ success: true, userId: existing.id, email: targetEmail })
         }
       }
