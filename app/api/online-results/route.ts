@@ -58,10 +58,8 @@ function normalizeExam(ex: any) {
 
   // Parse is_weekly_published
   let isWeeklyPub = false
-  if (!isExplicitlyUnpublished) {
+  if (!isExplicitlyUnpublished && !note.includes("[IS_WEEKLY_PUBLISHED:false]") && ex.is_weekly_published !== false) {
     if (ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")) {
-      isWeeklyPub = true
-    } else if (isWeekly && (ex.is_public_result === true || ex.is_published === true)) {
       isWeeklyPub = true
     }
   }

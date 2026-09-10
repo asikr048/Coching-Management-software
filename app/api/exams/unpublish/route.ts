@@ -283,6 +283,31 @@ export async function POST(req: NextRequest) {
         is_public_result: hasLive,
       })
 
+      // If hiding/deleting weekly card, also clean up weekly notices
+      if (!targetWeeklyPub && delete_notices) {
+        try {
+          const { data: allNotices } = await admin.from("notices").select("id, title, content")
+          if (allNotices && allNotices.length > 0) {
+            const exTitleClean = (exam.title || "").trim().toLowerCase()
+            const toDelete = allNotices
+              .filter((n: any) => {
+                const t = (n.title || "").toLowerCase()
+                const c = (n.content || "").toLowerCase()
+                const matchExam = exTitleClean && (t.includes(exTitleClean) || c.includes(exTitleClean))
+                const matchWeekly = t.includes("সাপ্তাহিক") || c.includes("সাপ্তাহিক") || t.includes("সামগ্রিক") || c.includes("সামগ্রিক")
+                const isDailyNotice = ALL_WEEK_DAYS.some((d) => t.includes(d.bn) || c.includes(d.bn))
+                return matchExam && matchWeekly && !isDailyNotice
+              })
+              .map((n: any) => n.id)
+            if (toDelete.length > 0) {
+              await admin.from("notices").delete().in("id", toDelete)
+            }
+          }
+        } catch (nErr) {
+          console.warn("Notice delete error on weekly unpublish:", nErr)
+        }
+      }
+
       return NextResponse.json({
         success: true,
         exam: updated,

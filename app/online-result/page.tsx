@@ -23,7 +23,8 @@ import {
   CalendarDays,
   User,
   GraduationCap,
-  Trash2
+  Trash2,
+  LayoutDashboard,
 } from "lucide-react"
 
 const ALL_WEEK_DAYS = [
@@ -266,7 +267,10 @@ export default function OnlineResultPortalPage() {
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([])
   const [loading, setLoading] = useState(true)
   
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [isStaff, setIsStaff] = useState(false)
+  const [staffRole, setStaffRole] = useState<string>("")
+  const [deletingCardId, setDeletingCardId] = useState<string | null>(null)
   
   // Filters: default to "all" so published weekly and daily exams are immediately visible
   const [activeTab, setActiveTab] = useState<"all" | "everyday" | "weekly">("all")
@@ -286,12 +290,46 @@ export default function OnlineResultPortalPage() {
         const supabase = createClient()
         const { data: { user } } = await supabase.auth.getUser()
         if (user) {
-          const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-          if (profile?.role === "owner" || profile?.role === "super_admin" || profile?.role === "branch_admin") {
+          setCurrentUser(user)
+          // 1. Check staff table
+          let { data: staff } = await supabase
+            .from("staff")
+            .select("id, role, name, email")
+            .eq("auth_user_id", user.id)
+            .maybeSingle()
+
+          if (!staff && user.email) {
+            const { data: staffByEmail } = await supabase
+              .from("staff")
+              .select("id, role, name, email")
+              .eq("email", user.email)
+              .maybeSingle()
+            if (staffByEmail) {
+              staff = staffByEmail
+              try {
+                await supabase.from("staff").update({ auth_user_id: user.id }).eq("id", staffByEmail.id)
+              } catch {}
+            }
+          }
+
+          let pRole = null
+          try {
+            const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+            if (profile?.role) pRole = profile.role
+          } catch {}
+
+          const finalRole = staff?.role || pRole || (user.user_metadata?.role)
+          if (finalRole && ["owner", "branch_director", "super_manager", "manager", "admin", "super_admin", "branch_admin", "teacher", "receptionist", "accountant", "course_teacher"].includes(finalRole)) {
             setIsStaff(true)
+            setStaffRole(finalRole)
+          } else if (staff) {
+            setIsStaff(true)
+            setStaffRole(staff.role || "staff")
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn("Auth role check error:", err)
+      }
     }
     checkAuthRole()
   }, [])
@@ -412,10 +450,16 @@ export default function OnlineResultPortalPage() {
     const items: ResultCardItem[] = []
 
     for (const ex of exams) {
+      const note = (ex as any).result_note || ""
+      const isExplicitlyUnpublished =
+        note.includes("[PUBLIC_RESULT:false]") ||
+        (ex.is_public_result === false && ex.is_published === false && !note.includes("[PUBLIC_RESULT:true]"))
+
+      if (isExplicitlyUnpublished) continue
+
       const isWeekly =
         ex.exam_schedule_type === "weekly" ||
         (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
-        ex.is_weekly_published === true ||
         Boolean(ex.title?.includes("সাপ্তাহিক"))
 
       if (!isWeekly) {
@@ -462,8 +506,11 @@ export default function OnlineResultPortalPage() {
         }
 
         // 1. WEEKLY CONSOLIDATED EXAM CARD (350 marks):
-        // Only show if is_weekly_published is true
-        if (ex.is_weekly_published === true) {
+        // Only show if is_weekly_published is true and not explicitly disabled
+        const isWeeklyExplicitlyFalse = note.includes("[IS_WEEKLY_PUBLISHED:false]") || ex.is_weekly_published === false
+        const isWeeklyPub = (ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")) && !isWeeklyExplicitlyFalse
+
+        if (isWeeklyPub) {
           items.push({
             id: `${ex.id}-weekly`,
             parentExam: ex,
@@ -517,10 +564,30 @@ export default function OnlineResultPortalPage() {
   }, [exams])
 
   async function handleAdminDeleteCard(card: ResultCardItem) {
-    if (!confirm(`Are you sure you want to remove this notification / result for "${card.title}" from the public portal?`)) {
+    if (!isStaff && !currentUser) {
+      const wantLogin = confirm("ফলাফল মুছতে হলে কোচিং এডমিন বা স্টাফ হিসেবে লগইন থাকা আবশ্যক। আপনি কি এখনই লগইন করতে চান?")
+      if (wantLogin) {
+        window.location.href = `/login?returnUrl=${encodeURIComponent(window.location.pathname + window.location.search)}`
+      }
       return
     }
 
+    const typeDesc =
+      card.type === "weekly"
+        ? "সাপ্তাহিক সামগ্রিক মূল্যায়ন ফলাফলটি"
+        : card.type === "daily"
+        ? `"${card.title}" দৈনিক পরীক্ষার ফলাফলটি`
+        : `"${card.title}" পরীক্ষার ফলাফলটি`
+
+    if (
+      !confirm(
+        `আপনি কি নিশ্চিত যে ${typeDesc} অনলাইন রেজাল্ট পোর্টাল ও হোমপেজ থেকে মুছে ফেলতে চান?\n\n(নোট: পরীক্ষার মূল প্রশ্ন ও নম্বর ডাটাবেজে সংরক্ষিত থাকবে, শুধুমাত্র পাবলিক পোর্টাল ও নোটিশবোর্ড থেকে এই নোটিফিকেশনটি মুছে যাবে)`
+      )
+    ) {
+      return
+    }
+
+    setDeletingCardId(card.id)
     try {
       let payload: any = { exam_id: card.parentExam.id }
       if (card.type === "daily" && card.dayKey) {
@@ -531,6 +598,7 @@ export default function OnlineResultPortalPage() {
         payload.is_weekly_published = false
       } else {
         payload.action = "unpublish"
+        payload.delete_notices = true
       }
 
       const res = await fetch("/api/exams/unpublish", {
@@ -539,36 +607,57 @@ export default function OnlineResultPortalPage() {
         body: JSON.stringify(payload),
       })
       const data = await res.json()
-      if (!res.ok || !data.success) throw new Error(data.error || "Failed to remove card")
+      if (!res.ok || !data.success) throw new Error(data.error || "মুছে ফেলতে ব্যর্থ হয়েছে")
 
-      // Update local exams state immediately
+      // Update local exams state immediately so card vanishes
       setExams((prev) =>
         prev.map((e) => {
           if (e.id === card.parentExam.id) {
+            let note = (e as any).result_note || ""
             if (card.type === "daily" && card.dayKey) {
-              const prevDays = Array.isArray(e.published_days) ? e.published_days : []
+              const prevDays: string[] = Array.isArray(e.published_days)
+                ? e.published_days
+                : typeof e.published_days === "string"
+                ? e.published_days.split(",")
+                : []
+              const updatedDays = prevDays.filter(
+                (d: any) => String(d).toLowerCase().trim() !== card.dayKey?.toLowerCase().trim()
+              )
+              note = note.replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "").trim()
+              note = `${note} [PUBLISHED_DAYS:${updatedDays.join(",")}]`.trim()
               return {
                 ...e,
-                published_days: prevDays.filter((d: any) => String(d).toLowerCase() !== card.dayKey?.toLowerCase()),
+                published_days: updatedDays,
+                result_note: note,
               }
             } else if (card.type === "weekly") {
+              note = note.replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "").trim()
+              note = `${note} [IS_WEEKLY_PUBLISHED:false]`.trim()
               return {
                 ...e,
                 is_weekly_published: false,
+                result_note: note,
               }
             } else {
+              note = note.replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "").trim()
+              note = `${note} [PUBLIC_RESULT:false]`.trim()
               return {
                 ...e,
                 is_public_result: false,
                 is_published: false,
+                result_note: note,
               }
             }
           }
           return e
         })
       )
+
+      alert(`✓ ${typeDesc} পোর্টাল ও হোমপেজ থেকে সফলভাবে মুছে ফেলা হয়েছে!`)
     } catch (err: any) {
-      alert(err.message || "Failed to remove notification")
+      alert(err.message || "মুছে ফেলতে সমস্যা হয়েছে")
+    } finally {
+      setDeletingCardId(null)
     }
   }
 
@@ -886,13 +975,39 @@ export default function OnlineResultPortalPage() {
           </div>
 
           <div className="flex items-center gap-3">
-            <Link
-              href="/login"
-              className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1"
-            >
-              <User className="w-3.5 h-3.5" />
-              <span>লগইন</span>
-            </Link>
+            {currentUser ? (
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/10 text-amber-300 text-xs font-bold border border-white/10">
+                  <User className="w-3 h-3 text-amber-400" />
+                  <span>
+                    {staffRole
+                      ? staffRole === "owner"
+                        ? "মালিক (Owner)"
+                        : staffRole === "teacher"
+                        ? "শিক্ষক"
+                        : staffRole === "super_admin" || staffRole === "admin"
+                        ? "এডমিন"
+                        : staffRole
+                      : "স্টাফ / এডমিন"}
+                  </span>
+                </span>
+                <Link
+                  href="/dashboard"
+                  className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5"
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  <span>ড্যাশবোর্ড</span>
+                </Link>
+              </div>
+            ) : (
+              <Link
+                href="/login?returnUrl=/online-result"
+                className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5"
+              >
+                <User className="w-3.5 h-3.5" />
+                <span>লগইন</span>
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -1065,20 +1180,23 @@ export default function OnlineResultPortalPage() {
                             {card.branchName}
                           </span>
                         )}
-                        {isStaff && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleAdminDeleteCard(card)
-                            }}
-                            className="p-1 px-2 text-red-600 hover:bg-red-50 bg-red-50/50 rounded-lg transition-colors border border-red-200 cursor-pointer text-[10px] font-bold flex items-center gap-1 shadow-2xs"
-                            title="এডমিন: এই নোটিফিকেশন / ফলাফল কার্ডটি মুছে ফেলুন"
-                          >
-                            <Trash2 className="w-3 h-3 text-red-600" />
-                            <span>মুছুন</span>
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          disabled={deletingCardId === card.id}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleAdminDeleteCard(card)
+                          }}
+                          className="px-2.5 py-1 text-red-600 hover:text-white hover:bg-red-600 bg-red-50/80 rounded-lg transition-all border border-red-200 cursor-pointer text-xs font-bold flex items-center gap-1.5 shadow-2xs active:scale-95"
+                          title="এই ফলাফল কার্ডটি অনলাইন পোর্টাল ও হোমপেজ থেকে মুছে ফেলুন"
+                        >
+                          {deletingCardId === card.id ? (
+                            <div className="w-3.5 h-3.5 border-2 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>{deletingCardId === card.id ? "মুছছে..." : "মুছুন"}</span>
+                        </button>
                       </div>
                     </div>
 
