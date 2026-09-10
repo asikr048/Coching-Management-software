@@ -34,6 +34,7 @@ import {
   Printer,
   ChevronRight,
   BookOpen,
+  Edit2,
 } from "lucide-react"
 import { getGrade, cn } from "@/lib/utils"
 
@@ -197,11 +198,16 @@ export default function ExamResultsPage() {
   const isWeeklyExam = useMemo(() => {
     if (!exam) return false
     if (exam.exam_schedule_type === "weekly") return true
+    if (exam.is_weekly === true || exam.is_weekly_published === true) return true
     if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) return true
-    if (exam.result_note?.includes("[WEEKLY_SCHEDULE:") || exam.result_note?.includes("[WEEKLY_DAYS:")) return true
-    if (exam.title?.includes("সাপ্তাহিক") || exam.title?.toLowerCase()?.includes("weekly")) return true
+    if (typeof exam.recurring_days === "string" && exam.recurring_days.trim().startsWith("[") && exam.recurring_days.trim().length > 2) return true
+    if (exam.result_note?.includes("[WEEKLY_SCHEDULE:") || exam.result_note?.includes("[WEEKLY_DAYS:") || exam.result_note?.includes("[STUDENT_DAY_MARKS:")) return true
+    const title = String(exam.title || "").toLowerCase()
+    const subject = String(exam.subject || "").toLowerCase()
+    if (title.includes("সাপ্তাহিক") || title.includes("weekly") || subject.includes("সাপ্তাহিক") || subject.includes("weekly")) return true
+    if (Number(exam.total_marks) === 350 && !exam.exam_date) return true
     return ALL_WEEK_DAYS.some(
-      (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
+      (d) => title.includes(d.bn) || title.includes(d.id) || subject.includes(d.bn) || subject.includes(d.id)
     )
   }, [exam])
 
@@ -212,9 +218,16 @@ export default function ExamResultsPage() {
     // Collect any customized day configurations from exam.recurring_days, result_note, or title
     const dayConfigMap: Record<string, ParsedWeeklyDay> = {}
 
-    // A. Check recurring_days column
-    if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
-      for (const item of exam.recurring_days) {
+    // A. Check recurring_days column (array or stringified JSON)
+    let recDays = exam.recurring_days
+    if (typeof recDays === "string") {
+      try {
+        recDays = JSON.parse(recDays)
+      } catch {}
+    }
+
+    if (Array.isArray(recDays) && recDays.length > 0) {
+      for (const item of recDays) {
         const isObj = typeof item === "object" && item !== null
         const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : item
         const dayKey = String(rawKey).toLowerCase()
@@ -265,13 +278,14 @@ export default function ExamResultsPage() {
       }
     }
 
-    // C. Extract days from exam.title
+    // C. Extract days from exam.title or exam.subject
+    const textToCheck = `${exam.title || ""} ${exam.subject || ""}`
     const foundDaysInTitle = ALL_WEEK_DAYS.filter(
-      (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
+      (d) => textToCheck.includes(d.bn) || textToCheck.toLowerCase().includes(d.id)
     )
     if (foundDaysInTitle.length > 0) {
       const subjectList = (exam.subject || "")
-        .split(",")
+        .split(/[,+;|/]/)
         .map((s: string) => s.trim())
         .filter(Boolean)
 
@@ -291,19 +305,30 @@ export default function ExamResultsPage() {
       })
     }
 
+    const examTotal = Number(exam.total_marks) || 350
+    const defaultDayTotal = examTotal > 0 ? Math.round(examTotal / 7) : 50
+    const examPass = Number(exam.pass_marks) || 140
+    const defaultDayPass = examPass > 0 ? Math.round(examPass / 7) : 20
+
+    const subjects = (exam.subject || "")
+      .split(/[,+;|/]/)
+      .map((s: string) => s.trim())
+      .filter(Boolean)
+
     // D. GUARANTEE ALL 7 DAYS: Always iterate through all 7 days of ALL_WEEK_DAYS (Saturday to Friday)
-    return ALL_WEEK_DAYS.map((w) => {
+    return ALL_WEEK_DAYS.map((w, idx) => {
       if (dayConfigMap[w.id]) {
         return dayConfigMap[w.id]
       }
+      const daySubject = subjects.length > idx ? subjects[idx] : (subjects.length === 1 && !subjects[0].includes("সাপ্তাহিক") ? subjects[0] : (exam.subject || ""))
       return {
         key: w.id,
         day_bn: w.bn,
         day_en: w.en,
-        exam_name: `${w.bn}ের পরীক্ষা`,
-        subject: exam.subject || "",
-        total_marks: 50,
-        pass_marks: 20,
+        exam_name: daySubject && !daySubject.includes("সাপ্তাহিক") ? `${daySubject} পরীক্ষা` : `${w.bn}ের পরীক্ষা`,
+        subject: daySubject,
+        total_marks: defaultDayTotal,
+        pass_marks: defaultDayPass,
       }
     })
   }, [exam, isWeeklyExam])
@@ -2010,6 +2035,16 @@ export default function ExamResultsPage() {
             className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer"
           >
             <MessageSquare className="w-4 h-4" /> Send SMS
+          </Link>
+
+          {/* 5.5. Edit Exam Button */}
+          <Link
+            href={`/dashboard/owner/exams?edit=${exam.id}`}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer shadow-2xs"
+            title="Edit Exam details, schedule, marks, and settings"
+          >
+            <Edit2 className="w-4 h-4 text-indigo-600" />
+            <span>Edit Exam (সম্পাদনা)</span>
           </Link>
 
           {/* 6. Delete Exam */}

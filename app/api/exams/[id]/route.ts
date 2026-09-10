@@ -82,7 +82,10 @@ export async function PATCH(
     const isWeekly =
       currentExam.exam_schedule_type === "weekly" ||
       (Array.isArray(currentExam.recurring_days) && currentExam.recurring_days.length > 0) ||
-      Boolean(currentExam.title?.includes("সাপ্তাহিক"))
+      Boolean(currentExam.title?.includes("সাপ্তাহিক")) ||
+      Boolean(currentExam.subject?.includes("সাপ্তাহিক")) ||
+      Boolean(currentExam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
+      (Number(currentExam.total_marks) === 350 && !currentExam.exam_date)
 
     if (typeof body.is_weekly_published === "boolean") {
       payload.is_weekly_published = body.is_weekly_published

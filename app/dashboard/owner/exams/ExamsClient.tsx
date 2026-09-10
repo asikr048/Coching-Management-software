@@ -1,5 +1,5 @@
 "use client"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { 
@@ -33,6 +33,9 @@ interface ExamRow {
   is_published: boolean
   is_online?: boolean
   time_limit_minutes?: number
+  duration_minutes?: number | null
+  show_results_immediately?: boolean
+  show_all_results?: boolean
   batch?: { name: string }
   batch_id?: string
   batch_ids?: string[] | null
@@ -96,6 +99,7 @@ export default function ExamsClient({
 }) {
   const [exams, setExams] = useState(initial)
   const [showModal, setShowModal] = useState(false)
+  const [editingExam, setEditingExam] = useState<ExamRow | null>(null)
   const [loading, setLoading] = useState(false)
   const [publishing, setPublishing] = useState<string | null>(null)
   const [deleteConfirmExam, setDeleteConfirmExam] = useState<ExamRow | null>(null)
@@ -130,6 +134,36 @@ export default function ExamsClient({
     result_note: ""
   })
   function update(f: string, v: any) { setForm(x => ({ ...x, [f]: v })) }
+
+  function resetForm() {
+    setEditingExam(null)
+    setExamMode("offline")
+    setQuestions([])
+    setWeeklySchedule(defaultWeeklySchedule())
+    setForm({ 
+      title: "", 
+      branch_id: selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || ""),
+      batch_id: "", 
+      batch_ids: [],
+      exam_schedule_type: "one_time",
+      recurring_days: [],
+      publish_to_notice: false,
+      exam_type: "written", 
+      subject: "", 
+      total_marks: "100", 
+      pass_marks: "33", 
+      exam_date: "", 
+      duration_minutes: "60",
+      show_results_immediately: true,
+      show_all_results: true,
+      result_note: ""
+    })
+  }
+
+  function handleOpenCreate() {
+    resetForm()
+    setShowModal(true)
+  }
 
   // Weekly Day-by-Day Schedule State
   const [weeklySchedule, setWeeklySchedule] = useState(defaultWeeklySchedule())
@@ -210,8 +244,15 @@ export default function ExamsClient({
       if (statusFilter === "published" && !ex.is_published) return false
       if (statusFilter === "draft" && ex.is_published) return false
       if (statusFilter === "online" && !ex.is_online) return false
-      if (statusFilter === "one_time" && (ex.exam_schedule_type === "weekly" || (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0))) return false
-      if (statusFilter === "weekly" && ex.exam_schedule_type !== "weekly" && (!Array.isArray(ex.recurring_days) || ex.recurring_days.length === 0)) return false
+      const isWeeklyEx =
+        ex.exam_schedule_type === "weekly" ||
+        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
+        Boolean(ex.title?.includes("সাপ্তাহিক")) ||
+        Boolean(ex.subject?.includes("সাপ্তাহিক")) ||
+        Boolean(ex.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
+        (Number(ex.total_marks) === 350 && !ex.exam_date)
+      if (statusFilter === "one_time" && isWeeklyEx) return false
+      if (statusFilter === "weekly" && !isWeeklyEx) return false
       return true
     })
   }, [exams, statusFilter, batchFilter, selectedBranchId])
@@ -321,6 +362,191 @@ export default function ExamsClient({
     }
   }
 
+  async function handleOpenEdit(exam: ExamRow) {
+    setEditingExam(exam)
+    const isOnline = Boolean(exam.is_online)
+    setExamMode(isOnline ? "online" : "offline")
+
+    const isWeekly =
+      exam.exam_schedule_type === "weekly" ||
+      (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+      Boolean(exam.title?.includes("সাপ্তাহিক")) ||
+      Boolean(exam.subject?.includes("সাপ্তাহিক")) ||
+      Boolean(exam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
+      (Number(exam.total_marks) === 350 && !exam.exam_date)
+
+    let targetBatchIds: string[] = []
+    if (Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0) {
+      targetBatchIds = exam.batch_ids
+    } else if (exam.batch_id) {
+      targetBatchIds = [exam.batch_id]
+    }
+
+    // Parse recurring_days if string
+    let recDays: any = exam.recurring_days
+    if (typeof recDays === "string") {
+      try {
+        recDays = JSON.parse(recDays)
+      } catch {}
+    }
+
+    const newSched = defaultWeeklySchedule()
+    const dayConfigs: Record<string, any> = {}
+
+    if (Array.isArray(recDays) && recDays.length > 0) {
+      for (const item of recDays) {
+        const isObj = typeof item === "object" && item !== null
+        const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
+        const dayKey = String(rawKey).toLowerCase()
+        const matched = WEEK_DAYS.find(w => w.id.toLowerCase() === dayKey || w.bn === rawKey)
+        if (matched) {
+          dayConfigs[matched.id] = {
+            selected: true,
+            exam_name: isObj && item.exam_name ? item.exam_name : `${matched.bn}ের পরীক্ষা`,
+            subject: isObj && item.subject ? item.subject : (exam.subject || ""),
+            total_marks: isObj && item.total_marks ? String(item.total_marks) : "50",
+            pass_marks: isObj && item.pass_marks ? String(item.pass_marks) : "20",
+          }
+        }
+      }
+    }
+
+    if (exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+      try {
+        const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+        if (match && match[1]) {
+          const parsed = JSON.parse(match[1])
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            for (const item of parsed) {
+              const rawKey = item.day || item.day_bn || item.day_en || ""
+              const dayKey = String(rawKey).toLowerCase()
+              const matched = WEEK_DAYS.find(w => w.id.toLowerCase() === dayKey || w.bn === rawKey)
+              if (matched && !dayConfigs[matched.id]) {
+                dayConfigs[matched.id] = {
+                  selected: true,
+                  exam_name: item.exam_name || `${matched.bn}ের পরীক্ষা`,
+                  subject: item.subject || exam.subject || "",
+                  total_marks: item.total_marks ? String(item.total_marks) : "50",
+                  pass_marks: item.pass_marks ? String(item.pass_marks) : "20",
+                }
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    if (isWeekly) {
+      const examTotal = Number(exam.total_marks) || 350
+      const defaultDayTotal = examTotal > 0 ? String(Math.round(examTotal / 7)) : "50"
+      const examPass = Number(exam.pass_marks) || 140
+      const defaultDayPass = examPass > 0 ? String(Math.round(examPass / 7)) : "20"
+      
+      const subjects = (exam.subject || "")
+        .split(/[,+;|/]/)
+        .map((s: string) => s.trim())
+        .filter(Boolean)
+
+      WEEK_DAYS.forEach((w, idx) => {
+        if (dayConfigs[w.id]) {
+          newSched[w.id as keyof typeof newSched] = dayConfigs[w.id]
+        } else {
+          const daySubject = subjects.length > idx ? subjects[idx] : (subjects.length === 1 && !subjects[0].includes("সাপ্তাহিক") ? subjects[0] : (exam.subject || ""))
+          newSched[w.id as keyof typeof newSched] = {
+            selected: true,
+            exam_name: daySubject && !daySubject.includes("সাপ্তাহিক") ? `${daySubject} পরীক্ষা` : `${w.bn}ের পরীক্ষা`,
+            subject: daySubject,
+            total_marks: defaultDayTotal,
+            pass_marks: defaultDayPass,
+          }
+        }
+      })
+    } else {
+      Object.keys(dayConfigs).forEach(k => {
+        if (newSched[k as keyof typeof newSched]) {
+          newSched[k as keyof typeof newSched] = dayConfigs[k]
+        }
+      })
+    }
+
+    setWeeklySchedule(newSched)
+
+    let cleanedNote = exam.result_note || ""
+    cleanedNote = cleanedNote
+      .replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "")
+      .replace(/\[WEEKLY_SCHEDULE:[^\]]*\]/g, "")
+      .replace(/\[WEEKLY_DAYS:[^\]]*\]/g, "")
+      .replace(/\[IS_PAUSED:(true|false)\]/g, "")
+      .replace(/\[PUBLIC_RESULT:(true|false)\]/g, "")
+      .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
+      .replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "")
+      .trim()
+
+    setForm({
+      title: exam.title || "",
+      branch_id: exam.branch_id || (selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || "")),
+      batch_id: exam.batch_id || targetBatchIds[0] || "",
+      batch_ids: targetBatchIds,
+      exam_schedule_type: isWeekly ? "weekly" : "one_time",
+      recurring_days: Array.isArray(recDays) ? recDays : [],
+      publish_to_notice: false,
+      exam_type: exam.exam_type || "written",
+      subject: exam.subject || "",
+      total_marks: String(exam.total_marks || "100"),
+      pass_marks: String(exam.pass_marks || "33"),
+      exam_date: exam.exam_date ? exam.exam_date.slice(0, 10) : "",
+      duration_minutes: String(exam.duration_minutes || exam.time_limit_minutes || "60"),
+      show_results_immediately: (exam as any).show_results_immediately ?? true,
+      show_all_results: (exam as any).show_all_results ?? true,
+      result_note: cleanedNote,
+    })
+
+    if (isOnline) {
+      try {
+        const { data: qData } = await supabase
+          .from("exam_questions")
+          .select("*")
+          .eq("exam_id", exam.id)
+          .order("sort_order", { ascending: true })
+
+        if (qData && qData.length > 0) {
+          setQuestions(qData.map(q => ({
+            id: q.id,
+            question_type: q.question_type as QuestionType,
+            question_text: q.question_text,
+            options: q.options || [],
+            correct_answer: q.correct_answer,
+            marks: q.marks,
+            hint_note: q.hint_note,
+            sort_order: q.sort_order,
+          })))
+        } else {
+          setQuestions([])
+        }
+      } catch {
+        setQuestions([])
+      }
+    } else {
+      setQuestions([])
+    }
+
+    setShowModal(true)
+  }
+
+  // Support ?edit=EXAM_ID in URL query params
+  useEffect(() => {
+    if (typeof window !== "undefined" && exams.length > 0) {
+      const urlParams = new URLSearchParams(window.location.search)
+      const editId = urlParams.get("edit")
+      if (editId) {
+        const found = exams.find(e => e.id === editId)
+        if (found) {
+          handleOpenEdit(found)
+        }
+      }
+    }
+  }, [exams])
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault()
     if (form.batch_ids.length === 0 && !form.batch_id) {
@@ -381,6 +607,107 @@ export default function ExamsClient({
         ? (form.subject.trim() || activeWeeklyDays.map(d => d.subject).filter(Boolean).join(", ") || "সাপ্তাহিক বিষয়সমূহ")
         : (form.subject || null)
 
+      // 1. UPDATE EXISTING EXAM
+      if (editingExam) {
+        const updatePayload: any = {
+          title: finalTitle,
+          branch_id: form.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null),
+          batch_id: selectedBatchIdToUse,
+          batch_ids: selectedBatchIdsToUse,
+          exam_schedule_type: form.exam_schedule_type,
+          recurring_days: form.exam_schedule_type === "weekly" ? activeWeeklyDays : [],
+          exam_type: form.exam_type,
+          subject: finalSubject,
+          total_marks: finalTotalMarks,
+          pass_marks: finalPassMarks,
+          exam_date: form.exam_schedule_type === "one_time" ? (form.exam_date || null) : null,
+          is_online: examMode === "online",
+          time_limit_minutes: examMode === "online" ? parseInt(form.duration_minutes) : null,
+          duration_minutes: examMode === "offline" ? parseInt(form.duration_minutes) : null,
+          show_results_immediately: form.show_results_immediately,
+          show_all_results: form.show_all_results,
+          result_note: (form.result_note ? form.result_note + " " : "") + 
+            `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
+            (form.exam_schedule_type === "weekly" 
+              ? ` [WEEKLY_SCHEDULE:${JSON.stringify(activeWeeklyDays)}] [WEEKLY_DAYS:${activeWeeklyDays.map(d => d.day).join(",")}]` 
+              : ""),
+        }
+
+        const res = await fetch(`/api/exams/${editingExam.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updatePayload),
+        })
+
+        let updatedData: any = null
+        if (res.ok) {
+          const resJson = await res.json()
+          updatedData = resJson.exam
+        } else {
+          const { data: sbUpdated, error: sbErr } = await supabase
+            .from("exams")
+            .update(updatePayload)
+            .eq("id", editingExam.id)
+            .select("*, batch:batches(name), branch:branches(id, name)")
+            .single()
+
+          if (sbErr) {
+            const { batch_ids: _b, branch_id: _br, exam_schedule_type: _st, recurring_days: _rd, ...fb } = updatePayload
+            const { data: fbData, error: fbErr } = await supabase
+              .from("exams")
+              .update(fb)
+              .eq("id", editingExam.id)
+              .select("*, batch:batches(name)")
+              .single()
+            if (fbErr) throw fbErr
+            updatedData = { ...fbData, ...updatePayload }
+          } else {
+            updatedData = sbUpdated
+          }
+        }
+
+        if (examMode === "online" && questions.length > 0) {
+          await supabase.from("exam_questions").delete().eq("exam_id", editingExam.id)
+          const qInserts = questions.map((q, i) => ({
+            exam_id: editingExam.id,
+            question_type: q.question_type,
+            question_text: q.question_text,
+            options: q.options || null,
+            correct_answer: q.correct_answer || null,
+            marks: q.marks,
+            hint_note: q.hint_note || null,
+            sort_order: i
+          }))
+          await supabase.from("exam_questions").insert(qInserts)
+        }
+
+        if (form.publish_to_notice) {
+          try {
+            await fetch(`/api/exams/${editingExam.id}/publish-notice`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ type: "schedule" }),
+            })
+          } catch {}
+        }
+
+        const matchedBatch = batches.find(b => b.id === selectedBatchIdToUse)
+        const finalUpdatedExam: ExamRow = {
+          ...editingExam,
+          ...updatePayload,
+          ...(updatedData || {}),
+          batch: matchedBatch ? { name: matchedBatch.name } : editingExam.batch,
+        }
+
+        setExams(prev => prev.map(ex => ex.id === editingExam.id ? finalUpdatedExam : ex))
+        toast.success(`✓ "${finalTitle}" updated successfully! (পরীক্ষা আপডেট সম্পন্ন হয়েছে)`)
+        setShowModal(false)
+        resetForm()
+        setLoading(false)
+        return
+      }
+
+      // 2. CREATE NEW EXAM
       const examData: any = {
         title: finalTitle, 
         branch_id: form.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null), 
@@ -480,26 +807,7 @@ export default function ExamsClient({
       )
       
       // Reset form
-      setQuestions([])
-      setForm({ 
-        title: "", 
-        branch_id: selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || ""),
-        batch_id: "", 
-        batch_ids: [],
-        exam_schedule_type: "one_time",
-        recurring_days: [],
-        publish_to_notice: false,
-        exam_type: "written", 
-        subject: "", 
-        total_marks: "100", 
-        pass_marks: "33", 
-        exam_date: "", 
-        duration_minutes: "60", 
-        show_results_immediately: true, 
-        show_all_results: true, 
-        result_note: "" 
-      })
-      setWeeklySchedule(defaultWeeklySchedule())
+      resetForm()
     } catch (err: any) { 
       toast.error(err.message || "Failed") 
     } finally { 
@@ -569,13 +877,7 @@ export default function ExamsClient({
         </div>
 
         <button 
-          onClick={() => {
-            setForm(prev => ({
-              ...prev,
-              branch_id: selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || "")
-            }))
-            setShowModal(true)
-          }} 
+          onClick={handleOpenCreate} 
           className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all cursor-pointer"
         >
           <Plus className="w-4 h-4" /> Create Exam
@@ -585,8 +887,31 @@ export default function ExamsClient({
       {/* Exam Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {filteredExams.map(exam => {
-          const isWeekly = exam.exam_schedule_type === "weekly" || (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0)
-          const recurringDaysList = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
+          const isWeekly =
+            exam.exam_schedule_type === "weekly" ||
+            (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+            Boolean(exam.title?.includes("সাপ্তাহিক")) ||
+            Boolean(exam.subject?.includes("সাপ্তাহিক")) ||
+            Boolean(exam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
+            (Number(exam.total_marks) === 350 && !exam.exam_date)
+
+          let recurringDaysList: any[] = []
+          if (Array.isArray(exam.recurring_days)) {
+            recurringDaysList = exam.recurring_days
+          } else if (typeof exam.recurring_days === "string") {
+            try {
+              recurringDaysList = JSON.parse(exam.recurring_days)
+            } catch {}
+          }
+          if (recurringDaysList.length === 0 && exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+            try {
+              const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+              if (match && match[1]) {
+                recurringDaysList = JSON.parse(match[1])
+              }
+            } catch {}
+          }
+
           const daysBengali = recurringDaysList.map((d: any) => {
             if (typeof d === "object" && d !== null) {
               return `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (${d.total_marks || ""} নম্বর)`
@@ -656,6 +981,15 @@ export default function ExamsClient({
                     <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", exam.is_published ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
                       {exam.is_published ? "Published" : "Draft"}
                     </span>
+                    {/* EDIT EXAM BUTTON */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEdit(exam)}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-indigo-200"
+                      title="Edit Exam (পরীক্ষা সম্পাদনা করুন)"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+                    </button>
                     {/* ONLY UPPER DELETE BUTTON */}
                     <button
                       type="button"
@@ -768,11 +1102,18 @@ export default function ExamsClient({
                   )}
                 </div>
                 <div className="flex items-center gap-2 w-full">
+                  <button
+                    type="button"
+                    onClick={() => handleOpenEdit(exam)}
+                    className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-indigo-600" /> Edit Exam
+                  </button>
                   <Link
                     href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-                    className="w-full flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
+                    className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
                   >
-                    <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Send Result SMS
+                    <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Result SMS
                   </Link>
                 </div>
               </div>
@@ -845,8 +1186,23 @@ export default function ExamsClient({
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full text-slate-900 max-w-4xl shadow-2xl my-8 flex flex-col max-h-[90vh] border border-slate-200/90">
             <div className="flex items-center justify-between p-5 border-b border-slate-200 shrink-0 bg-slate-50">
-              <h3 className="text-lg font-extrabold text-slate-900">Create New Exam</h3>
-              <button onClick={() => setShowModal(false)} className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"><X className="w-5 h-5" /></button>
+              <div>
+                <h3 className="text-lg font-extrabold text-slate-900">
+                  {editingExam ? "Edit Exam (পরীক্ষা সম্পাদনা)" : "Create New Exam"}
+                </h3>
+                {editingExam && (
+                  <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                    Updating &ldquo;{editingExam.title}&rdquo; — প্রয়োজনীয় তথ্য পরিবর্তন করে সংরক্ষণ করুন
+                  </p>
+                )}
+              </div>
+              <button 
+                type="button"
+                onClick={() => { setShowModal(false); resetForm(); }} 
+                className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-5">
@@ -1313,9 +1669,26 @@ export default function ExamsClient({
             </div>
             
             <div className="flex justify-end gap-3 p-5 border-t border-slate-200 bg-slate-50 rounded-b-3xl shrink-0">
-              <button type="button" onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-slate-700 text-slate-300 rounded-xl font-semibold hover:bg-slate-800 hover:text-white transition-colors">Cancel</button>
-              <button form="examForm" type="submit" disabled={loading || (examMode === "online" && questions.length === 0)} className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all">
-                {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</> : "Save Exam"}
+              <button 
+                type="button" 
+                onClick={() => { setShowModal(false); resetForm(); }} 
+                className="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                form="examForm" 
+                type="submit" 
+                disabled={loading || (examMode === "online" && questions.length === 0)} 
+                className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold disabled:opacity-50 flex items-center justify-center gap-2 shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all cursor-pointer"
+              >
+                {loading ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Saving...</>
+                ) : editingExam ? (
+                  <><Edit2 className="w-4 h-4" /> Update Exam (আপডেট করুন)</>
+                ) : (
+                  "Save Exam"
+                )}
               </button>
             </div>
           </div>

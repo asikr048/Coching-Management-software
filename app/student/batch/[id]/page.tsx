@@ -59,18 +59,68 @@ export const ALL_WEEK_DAYS = [
   { id: "friday", bn: "শুক্রবার", en: "Friday" },
 ]
 
+export function checkIsWeeklyExam(exam: any): boolean {
+  if (!exam) return false
+  if (exam.is_weekly === true || exam.is_weekly_published === true) return true
+  if (exam.exam_schedule_type === "weekly") return true
+
+  // Recurring days (array or stringified JSON)
+  if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) return true
+  if (typeof exam.recurring_days === "string" && exam.recurring_days.trim().startsWith("[") && exam.recurring_days.trim().length > 2) return true
+
+  // Result note indicators
+  const note = String(exam.result_note || "")
+  if (
+    note.includes("[WEEKLY_SCHEDULE:") ||
+    note.includes("[WEEKLY_DAYS:") ||
+    note.includes("[IS_WEEKLY_PUBLISHED:true]") ||
+    note.includes("[STUDENT_DAY_MARKS:")
+  ) {
+    return true
+  }
+
+  // Bengali or English weekly keywords in title or subject
+  const title = String(exam.title || "").toLowerCase()
+  const subject = String(exam.subject || "").toLowerCase()
+  if (
+    title.includes("সাপ্তাহিক") ||
+    title.includes("weekly") ||
+    subject.includes("সাপ্তাহিক") ||
+    subject.includes("weekly")
+  ) {
+    return true
+  }
+
+  // Specific 7-day pattern (e.g. 350 marks with no single exam date, or recurring multiples of 50/7)
+  const totalM = Number(exam.total_marks)
+  if ((totalM === 350 || (totalM % 50 === 0 && totalM >= 200)) && !exam.exam_date) {
+    return true
+  }
+
+  // Any weekday names in title or subject
+  if (ALL_WEEK_DAYS.some(d => title.includes(d.bn) || title.includes(d.id) || subject.includes(d.bn) || subject.includes(d.id))) {
+    return true
+  }
+
+  return false
+}
+
 export function parseWeeklyDays(exam: any): any[] {
   if (!exam) return []
-  const isWeekly =
-    exam.exam_schedule_type === "weekly" ||
-    (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
-    exam.is_weekly_published === true ||
-    Boolean(exam.title?.includes("সাপ্তাহিক"))
+  const isWeekly = checkIsWeeklyExam(exam)
 
   const dayConfigMap: Record<string, any> = {}
 
-  if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
-    for (const item of exam.recurring_days) {
+  // Parse recurring_days if it was serialized as JSON string
+  let recDays = exam.recurring_days
+  if (typeof recDays === "string") {
+    try {
+      recDays = JSON.parse(recDays)
+    } catch {}
+  }
+
+  if (Array.isArray(recDays) && recDays.length > 0) {
+    for (const item of recDays) {
       const isObj = typeof item === "object" && item !== null
       const rawKey = isObj ? (item.day || item.day_bn || item.day_en || "") : String(item)
       const dayKey = String(rawKey).toLowerCase()
@@ -119,8 +169,9 @@ export function parseWeeklyDays(exam: any): any[] {
     } catch {}
   }
 
+  const textToCheck = `${exam.title || ""} ${exam.subject || ""}`
   const foundDaysInTitle = ALL_WEEK_DAYS.filter(
-    (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
+    (d) => textToCheck.includes(d.bn) || textToCheck.toLowerCase().includes(d.id)
   )
   if (foundDaysInTitle.length > 0) {
     const subjectList = (exam.subject || "")
@@ -145,18 +196,29 @@ export function parseWeeklyDays(exam: any): any[] {
   }
 
   if (isWeekly) {
-    return ALL_WEEK_DAYS.map((w) => {
+    const examTotal = Number(exam.total_marks) || 350
+    const defaultDayTotal = examTotal > 0 ? Math.round(examTotal / 7) : 50
+    const examPass = Number(exam.pass_marks) || 140
+    const defaultDayPass = examPass > 0 ? Math.round(examPass / 7) : 20
+
+    const subjects = (exam.subject || "")
+      .split(/[,+;|/]/)
+      .map((s: string) => s.trim())
+      .filter(Boolean)
+
+    return ALL_WEEK_DAYS.map((w, idx) => {
       if (dayConfigMap[w.id]) {
         return dayConfigMap[w.id]
       }
+      const daySubject = subjects.length > idx ? subjects[idx] : (subjects.length === 1 && !subjects[0].includes("সাপ্তাহিক") ? subjects[0] : (exam.subject || ""))
       return {
         key: w.id,
         day_bn: w.bn,
         day_en: w.en,
-        exam_name: `${w.bn}ের পরীক্ষা`,
-        subject: exam.subject || "",
-        total_marks: 50,
-        pass_marks: 20,
+        exam_name: daySubject && !daySubject.includes("সাপ্তাহিক") ? `${daySubject} পরীক্ষা` : `${w.bn}ের পরীক্ষা`,
+        subject: daySubject,
+        total_marks: defaultDayTotal,
+        pass_marks: defaultDayPass,
       }
     })
   }
@@ -164,11 +226,7 @@ export function parseWeeklyDays(exam: any): any[] {
 }
 
 export function getExamMarksConfig(exam: any) {
-  const isWeekly =
-    exam?.exam_schedule_type === "weekly" ||
-    (Array.isArray(exam?.recurring_days) && exam?.recurring_days.length > 0) ||
-    exam?.is_weekly_published === true ||
-    Boolean(exam?.title?.includes("সাপ্তাহিক"))
+  const isWeekly = checkIsWeeklyExam(exam)
 
   if (isWeekly) {
     const days = parseWeeklyDays(exam)
@@ -176,8 +234,8 @@ export function getExamMarksConfig(exam: any) {
     const sumPass = days.reduce((acc, d) => acc + (Number(d.pass_marks) || 20), 0)
     return {
       isWeekly: true,
-      totalMarks: sumTotal > 0 ? sumTotal : 350,
-      passMarks: sumPass > 0 ? sumPass : 140,
+      totalMarks: sumTotal > 0 ? sumTotal : (Number(exam?.total_marks) || 350),
+      passMarks: sumPass > 0 ? sumPass : (Number(exam?.pass_marks) || 140),
       days,
     }
   }
@@ -1539,8 +1597,8 @@ export default function StudentBatchDetailPage() {
         {/* EXAMS & RESULTS TAB */}
         {activeTab === 'exams' && (() => {
           const completedResults = allExams.filter((item: any) => item.has_result)
-          const weeklyRoutineExams = allExams.filter((item: any) => item.is_weekly)
-          const upcomingOneTimeExams = allExams.filter((item: any) => !item.has_result && item.status === 'upcoming' && !item.is_weekly)
+          const weeklyRoutineExams = allExams.filter((item: any) => item.is_weekly || checkIsWeeklyExam(item.exam))
+          const upcomingOneTimeExams = allExams.filter((item: any) => !item.has_result && item.status === 'upcoming' && !item.is_weekly && !checkIsWeeklyExam(item.exam))
           const scheduledCount = weeklyRoutineExams.length + upcomingOneTimeExams.length
 
           // Performance metrics for Results KPI
@@ -1843,11 +1901,7 @@ export default function StudentBatchDetailPage() {
                   {completedResults.length > 0 ? (
                     <div className="space-y-4">
                       {completedResults.map((item: any, idx: number) => {
-                        const isWeeklyExam = item.is_weekly ||
-                          item.exam?.exam_schedule_type === 'weekly' ||
-                          (Array.isArray(item.exam?.recurring_days) && item.exam?.recurring_days.length > 0) ||
-                          item.exam?.is_weekly_published === true ||
-                          Boolean(item.exam?.title?.includes('সাপ্তাহিক'))
+                        const isWeeklyExam = item.is_weekly || checkIsWeeklyExam(item.exam)
 
                         const weeklyDays = isWeeklyExam ? (item.weekly_days || parseWeeklyDays(item.exam)) : []
                         const totalMarks = isWeeklyExam
