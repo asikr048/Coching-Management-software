@@ -58,12 +58,15 @@ export async function POST(req: NextRequest) {
       console.warn("Could not unlink origin_batch_id:", e)
     }
 
-    // b. Retrieve all enrollment IDs for this batch
+    // b. Retrieve all enrollment IDs and student IDs for this batch
     const { data: enrollments } = await admin
       .from("enrollments")
-      .select("id")
+      .select("id, student_id")
       .eq("batch_id", cleanId)
     const enrollmentIds = (enrollments || []).map(e => e.id)
+    const enrolledStudentIds = Array.from(
+      new Set((enrollments || []).map(e => e.student_id).filter(Boolean))
+    )
 
     // c. Unlink payments that reference these enrollments
     if (enrollmentIds.length > 0) {
@@ -192,14 +195,40 @@ export async function POST(req: NextRequest) {
       console.warn("Could not delete fee_dues:", e)
     }
 
-    // k. Delete enrollments for this batch
+    // k. Delete enrollments for this batch & reset/sync rolls for all affected students
     try {
       await admin
         .from("enrollments")
         .delete()
         .eq("batch_id", cleanId)
+
+      // Clean up rolls for all students enrolled in this deleted batch
+      for (const sId of enrolledStudentIds) {
+        // Query other active enrollments for this student
+        const { data: otherEnrs } = await admin
+          .from("enrollments")
+          .select("id, roll_no, batch_id")
+          .eq("student_id", sId)
+          .neq("batch_id", cleanId)
+          .eq("status", "active")
+          .order("created_at", { ascending: true })
+
+        if (otherEnrs && otherEnrs.length > 0) {
+          const newPrimaryRoll = otherEnrs[0].roll_no ?? null
+          await admin
+            .from("students")
+            .update({ roll_no: newPrimaryRoll, batch_roll: newPrimaryRoll, updated_at: new Date().toISOString() })
+            .eq("id", sId)
+        } else {
+          // Student was only enrolled in this deleted batch: their roll is now deleted ("no one")
+          await admin
+            .from("students")
+            .update({ roll_no: null, batch_roll: null, updated_at: new Date().toISOString() })
+            .eq("id", sId)
+        }
+      }
     } catch (e) {
-      console.warn("Could not delete enrollments:", e)
+      console.warn("Could not delete enrollments or update student rolls:", e)
     }
 
     // l. Finally, delete the batch record itself

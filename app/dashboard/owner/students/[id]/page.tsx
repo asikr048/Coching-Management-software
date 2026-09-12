@@ -7,6 +7,7 @@ import Link from "next/link"
 import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
 import AdmissionSlipTrigger from "@/components/id-card/AdmissionSlipTrigger"
 import StudentCredentialsCard from "./StudentCredentialsCard"
+import StudentEnrolledBatchesCard from "./StudentEnrolledBatchesCard"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -23,13 +24,14 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
   }
   if (!student) notFound()
 
-  const [enrollments, payments, attendance, results, duesRes, issuesRes] = await Promise.all([
+  const [enrollments, payments, attendance, results, duesRes, issuesRes, batchesRes] = await Promise.all([
     admin.from("enrollments").select("*, batch:batches(name, subject, monthly_fee, admission_fee, class_level)").eq("student_id", id),
     admin.from("payments").select("*, batch:batches(name)").eq("student_id", id).order("paid_at", { ascending: false }).limit(20),
     admin.from("attendance").select("date, status, batch:batches(name)").eq("student_id", id).order("date", { ascending: false }).limit(20),
     admin.from("exam_results").select("*, exam:exams(title, total_marks, exam_date)").eq("student_id", id).order("created_at", { ascending: false }),
     admin.from("fee_dues").select("*, batch:batches(name)").eq("student_id", id).order("due_date", { ascending: false }),
     admin.from("material_issues").select("*, material:materials(name, type, subject, total_stock), batch:batches(name)").eq("student_id", id).order("issued_at", { ascending: false }),
+    admin.from("batches").select("id, name, subject, class_level, current_seats, max_seats, branch_id, monthly_fee, admission_fee, is_active, status").eq("is_active", true).order("name", { ascending: true }),
   ])
 
   const duesList = duesRes.data || []
@@ -179,49 +181,13 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
           />
         </div>
 
-        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-4 sm:p-6 shadow-xl">
-          <h3 className="font-black text-slate-900 text-base mb-4">Enrolled Batches</h3>
-          <div className="space-y-2.5">
-            {(enrollments.data || []).map(e => {
-              const roll = e.roll_no ?? student.roll_no ?? student.batch_roll
-              return (
-                <div key={e.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center gap-3">
-                    {roll != null && (
-                      <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-black bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
-                        রোল #{roll}
-                      </span>
-                    )}
-                    <div>
-                      <p className="font-bold text-slate-900 text-sm">{e.batch?.name}</p>
-                      <p className="text-xs text-slate-500">{e.batch?.subject || ""}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-wrap sm:justify-end">
-                    <StudentIdCardTrigger
-                      student={student}
-                      batchName={e.batch?.name}
-                      rollNo={roll}
-                      buttonVariant="badge"
-                      buttonText="🪪 ID Card"
-                    />
-                    <AdmissionSlipTrigger
-                      student={student}
-                      batch={e.batch}
-                      enrollment={e}
-                      payment={payments.data?.find((p: any) => p.batch_id === e.batch_id || !p.batch_id)}
-                      due={duesList.find((d: any) => d.batch_id === e.batch_id || !d.batch_id)}
-                      buttonVariant="badge"
-                      buttonText="🧾 Admission Slip"
-                    />
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${e.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-300" : "bg-slate-100 text-slate-500 border border-slate-200"}`}>{e.status}</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          {(!enrollments.data || enrollments.data.length === 0) && <p className="text-slate-500 text-sm text-center py-6">Not enrolled in any batches</p>}
-        </div>
+        <StudentEnrolledBatchesCard
+          student={student}
+          initialEnrollments={enrollments.data || []}
+          allBatches={batchesRes.data || []}
+          payments={payments.data || []}
+          duesList={duesList}
+        />
       </div>
 
       {/* Fee Dues & Due Balance History */}
