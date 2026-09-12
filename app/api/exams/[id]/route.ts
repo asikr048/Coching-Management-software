@@ -135,9 +135,10 @@ export async function GET(
       if (targetB) {
         allBatches.forEach((b) => {
           if (
-            (targetB.name && (b.name || "").trim().toLowerCase() === targetB.name.trim().toLowerCase()) ||
-            isClassMatch(targetB.name, b.name) ||
-            isClassMatch(targetB.class_level, b.class_level)
+            (b.origin_batch_id && b.origin_batch_id === targetB.id) ||
+            (targetB.origin_batch_id && b.id === targetB.origin_batch_id) ||
+            (targetB.origin_batch_id && b.origin_batch_id === targetB.origin_batch_id) ||
+            (b.name && targetB.name && b.name.trim().toLowerCase() === targetB.name.trim().toLowerCase())
           ) {
             matchingBatchIds.add(b.id)
           }
@@ -147,24 +148,10 @@ export async function GET(
       selectedStudents = rawStudents.filter((s) => {
         if (existingGradedIds.has(s.id)) return true
         const sEnrs = enrollmentsByStudent.get(s.id) || []
-        if (sEnrs.some((e) => matchingBatchIds.has(e.batch_id))) return true
-        if (targetB && (isClassMatch(targetB.name, s.class_level) || isClassMatch(targetB.class_level, s.class_level))) {
-          return true
-        }
-        return false
+        return sEnrs.some((e) => matchingBatchIds.has(e.batch_id) && e.status !== "inactive" && e.status !== "transferred")
       })
-
-      // If still 0, check branch match
-      if (selectedStudents.length === 0 && targetB?.branch_id) {
-        selectedStudents = rawStudents.filter((s) => !s.branch_id || s.branch_id === targetB.branch_id)
-      }
-
-      // If still 0, fallback to all students so teacher is never stuck
-      if (selectedStudents.length === 0) {
-        selectedStudents = rawStudents
-      }
     } else {
-      // Default / Auto: load students for the exam's batch(es)
+      // Default / Auto: strictly load students enrolled in the exam's target batch(es)
       const targetBatchIds = new Set<string>()
       if (exam.batch_id) targetBatchIds.add(exam.batch_id)
       if (Array.isArray(exam.batch_ids)) {
@@ -173,55 +160,45 @@ export async function GET(
         })
       }
 
-      // Also add any batch with identical or matching class name (e.g. "Class 9")
-      const examBatchName = exam.batch?.name || exam.title || ""
-      if (examBatchName) {
+      // Also add branch clones with exact same batch name or origin_batch_id
+      const primaryBatch = allBatches.find((b) => targetBatchIds.has(b.id)) || exam.batch
+      if (primaryBatch) {
         allBatches.forEach((b) => {
           if (
-            (b.name || "").trim().toLowerCase() === examBatchName.trim().toLowerCase() ||
-            isClassMatch(examBatchName, b.name) ||
-            isClassMatch(examBatchName, b.class_level)
+            (primaryBatch.id && b.origin_batch_id === primaryBatch.id) ||
+            (primaryBatch.origin_batch_id && b.id === primaryBatch.origin_batch_id) ||
+            (primaryBatch.origin_batch_id && b.origin_batch_id === primaryBatch.origin_batch_id) ||
+            (b.name && primaryBatch.name && b.name.trim().toLowerCase() === primaryBatch.name.trim().toLowerCase())
           ) {
             targetBatchIds.add(b.id)
           }
         })
       }
 
-      // Strategy A: Match by enrollment in target batch(es)
-      selectedStudents = rawStudents.filter((s) => {
-        if (existingGradedIds.has(s.id)) return true
-        const sEnrs = enrollmentsByStudent.get(s.id) || []
-        return sEnrs.some((e) => targetBatchIds.has(e.batch_id))
-      })
-
-      // Strategy B: If no enrolled students found, match by class_level
-      if (selectedStudents.length === 0 && examBatchName) {
-        const classMatchedStudents = rawStudents.filter((s) => {
-          return isClassMatch(examBatchName, s.class_level)
+      if (targetBatchIds.size > 0) {
+        // Match ONLY students with active enrollment in target batch(es) or with existing marks
+        selectedStudents = rawStudents.filter((s) => {
+          if (existingGradedIds.has(s.id)) return true
+          const sEnrs = enrollmentsByStudent.get(s.id) || []
+          return sEnrs.some((e) => targetBatchIds.has(e.batch_id) && e.status !== "inactive" && e.status !== "transferred")
         })
-        if (classMatchedStudents.length > 0) {
-          selectedStudents = classMatchedStudents
-        }
-      }
-
-      // Strategy C: Check branch students if exam has a branch_id
-      if (selectedStudents.length === 0 && exam.branch_id) {
-        const branchStudents = rawStudents.filter((s) => !s.branch_id || s.branch_id === exam.branch_id)
-        if (branchStudents.length > 0) {
-          selectedStudents = branchStudents
-        }
-      }
-
-      // Strategy D: Fallback to ALL students if still 0!
-      if (selectedStudents.length === 0) {
+      } else {
+        // Exam had no batch specified at all
         selectedStudents = rawStudents
       }
     }
 
+    // Deduplicate students by id
+    const uniqueMap = new Map<string, any>()
+    selectedStudents.forEach((s) => {
+      if (!uniqueMap.has(s.id)) uniqueMap.set(s.id, s)
+    })
+    selectedStudents = Array.from(uniqueMap.values())
+
     // 8. Map students with clean, normalized fields and sequential roll numbers
     const resolvedStudents = selectedStudents.map((s, idx) => {
       const sEnrs = enrollmentsByStudent.get(s.id) || []
-      const matchingEnr = sEnrs.find((e) => exam.batch_id && e.batch_id === exam.batch_id) || sEnrs[0]
+      const matchingEnr = sEnrs.find((e) => (exam.batch_id && e.batch_id === exam.batch_id) || (Array.isArray(exam.batch_ids) && exam.batch_ids.includes(e.batch_id))) || sEnrs[0]
       const rawRoll =
         matchingEnr?.roll_no != null && Number(matchingEnr.roll_no) > 0
           ? Number(matchingEnr.roll_no)

@@ -91,7 +91,7 @@ export default function StudentsClient({
     try {
       let rawEnr: any[] = []
       try {
-        const { data: enrData, error: enrErr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, branch_id, roll_no, batch_roll")
+        const { data: enrData, error: enrErr } = await supabase.from("enrollments").select("id, student_id, batch_id, status, roll_no, batch_roll")
         if (!enrErr && enrData) {
           rawEnr = enrData
         } else {

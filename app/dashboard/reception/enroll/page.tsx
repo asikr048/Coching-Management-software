@@ -52,7 +52,7 @@ export default async function ReceptionEnrollPage() {
   try {
     const { data: enr1, error: err1 } = await supabase
       .from("enrollments")
-      .select("id, created_at, status, batch_id, student_id, branch_id, roll_no")
+      .select("id, created_at, status, batch_id, student_id, roll_no")
       .order("created_at", { ascending: false })
       .limit(200)
 

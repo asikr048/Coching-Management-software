@@ -258,26 +258,56 @@ export default function SliderClient({
     setSlideLoading(true)
     try {
       if (editSlide) {
-        const { error } = await supabase.from("slider_images").update({
+        const updatePayload: Record<string, any> = {
           title: slideForm.title,
           subtitle: slideForm.subtitle,
           image_url: slideForm.image_url,
           link_url: slideForm.link_url,
-          branch_id: slideForm.branch_id || null,
-        }).eq("id", editSlide.id)
+        }
+        if (slideForm.branch_id) {
+          updatePayload.branch_id = slideForm.branch_id
+        }
+
+        let { error } = await supabase.from("slider_images").update(updatePayload).eq("id", editSlide.id)
+        if (error && (
+          error.message?.includes("branch_id") || 
+          error.message?.includes("schema cache") || 
+          (error as any).code === "PGRST204"
+        )) {
+          delete updatePayload.branch_id
+          const retry = await supabase.from("slider_images").update(updatePayload).eq("id", editSlide.id)
+          error = retry.error
+        }
         if (error) throw error
         setSlides(prev => prev.map(s => s.id === editSlide.id ? { ...s, ...slideForm, branch_id: slideForm.branch_id || null } : s))
         toast.success("Slide updated successfully")
       } else {
         const nextOrder = slides.length > 0 ? Math.max(...slides.map(s => s.sort_order)) + 1 : 1
-        const { data, error } = await supabase.from("slider_images").insert([{
-          ...slideForm,
-          branch_id: slideForm.branch_id || null,
+        const insertPayload: Record<string, any> = {
+          title: slideForm.title || "",
+          subtitle: slideForm.subtitle || "",
+          image_url: slideForm.image_url,
+          link_url: slideForm.link_url || "",
           sort_order: nextOrder,
           is_active: true,
-        }]).select().single()
+        }
+        if (slideForm.branch_id) {
+          insertPayload.branch_id = slideForm.branch_id
+        }
+
+        let { data, error } = await supabase.from("slider_images").insert([insertPayload]).select().single()
+        if (error && (
+          error.message?.includes("branch_id") || 
+          error.message?.includes("schema cache") || 
+          (error as any).code === "PGRST204"
+        )) {
+          delete insertPayload.branch_id
+          const retry = await supabase.from("slider_images").insert([insertPayload]).select().single()
+          data = retry.data
+          error = retry.error
+        }
         if (error) throw error
-        setSlides(prev => [...prev, data])
+        setSlides(prev => [...prev, data || { ...insertPayload, id: String(Date.now()) }])
         toast.success("Slide added successfully")
       }
       setShowSlideForm(false)

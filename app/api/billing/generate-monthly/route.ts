@@ -52,13 +52,37 @@ async function handleGenerate(req: NextRequest) {
     const batchIds = batches.map((b) => b.id)
 
     // 2. Fetch active enrollments in these batches
-    const { data: enrollments, error: enrErr } = await admin
+    let enrollments: any[] = []
+    const { data: enrData, error: enrErr } = await admin
       .from("enrollments")
-      .select("id, student_id, batch_id, branch_id, status, created_at, student:students(id, name, student_id, is_active)")
+      .select("id, student_id, batch_id, status, created_at, student:students(id, name, student_id, is_active)")
       .in("batch_id", batchIds)
       .eq("status", "active")
 
-    if (enrErr) throw enrErr
+    if (enrErr) {
+      console.warn("Retrying enrollments query without student relation:", enrErr.message)
+      const { data: fbEnr, error: fbErr } = await admin
+        .from("enrollments")
+        .select("id, student_id, batch_id, status, created_at")
+        .in("batch_id", batchIds)
+        .eq("status", "active")
+
+      if (fbErr) throw fbErr
+
+      const sIds = (fbEnr || []).map((e: any) => e.student_id).filter(Boolean)
+      const { data: sList } = await admin
+        .from("students")
+        .select("id, name, student_id, is_active")
+        .in("id", sIds)
+
+      const sMap = new Map((sList || []).map((s: any) => [s.id, s]))
+      enrollments = (fbEnr || []).map((e: any) => ({
+        ...e,
+        student: sMap.get(e.student_id) || null,
+      }))
+    } else {
+      enrollments = enrData || []
+    }
 
     const activeEnrollments = (enrollments || []).filter((e: any) => {
       return e.student && e.student.is_active !== false

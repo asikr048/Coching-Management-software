@@ -532,22 +532,11 @@ export default function ExamResultsPage() {
             }
           }
 
-          // Fallback if no enrolled students found: match by class level or load all students
-          if (resolvedStudents.length === 0) {
+          // Fallback only if exam had no batch assigned at all
+          if (resolvedStudents.length === 0 && targetBatches.length === 0) {
             const { data: allStData } = await supabase.from("students").select("*")
             const allSt = allStData || []
-
-            const bName = ex?.batch?.name || ex?.title || ""
-            let matchingSt = allSt.filter((s: any) => isClassMatch(bName, s.class_level))
-
-            if (matchingSt.length === 0 && ex?.branch_id) {
-              matchingSt = allSt.filter((s: any) => !s.branch_id || s.branch_id === ex.branch_id)
-            }
-            if (matchingSt.length === 0) {
-              matchingSt = allSt
-            }
-
-            resolvedStudents = matchingSt.map((s: any, idx: number) => ({
+            resolvedStudents = allSt.map((s: any, idx: number) => ({
               ...s,
               roll_no: s.roll_no || s.batch_roll || idx + 1,
               batch_roll: s.roll_no || s.batch_roll || idx + 1,
@@ -693,22 +682,27 @@ export default function ExamResultsPage() {
       // Fallback: Query directly from client Supabase
       const { data: allSt } = await supabase.from("students").select("*")
       if (allSt && allSt.length > 0) {
-        let matched = allSt
+        let matched: any[] = []
         if (batchId === "all") {
           matched = allSt
-        } else if (batchId !== "auto") {
-          const { data: enrs } = await supabase.from("enrollments").select("*").eq("batch_id", batchId)
-          const sIds = new Set((enrs || []).map((e: any) => e.student_id).filter(Boolean))
-          matched = allSt.filter((s: any) => sIds.has(s.id))
-          if (matched.length === 0) {
-            const bObj = availableBatches.find((b) => b.id === batchId)
-            matched = allSt.filter((s: any) => isClassMatch(bObj?.name, s.class_level))
-          }
         } else {
-          const bName = exam?.batch?.name || exam?.title || ""
-          matched = allSt.filter((s: any) => isClassMatch(bName, s.class_level))
+          const targetBIds: string[] = []
+          if (batchId !== "auto") {
+            targetBIds.push(batchId)
+          } else {
+            if (exam?.batch_id) targetBIds.push(exam.batch_id)
+            if (Array.isArray(exam?.batch_ids)) targetBIds.push(...exam.batch_ids)
+          }
+
+          if (targetBIds.length > 0) {
+            const { data: enrs } = await supabase.from("enrollments").select("*").in("batch_id", targetBIds)
+            const activeEnrs = (enrs || []).filter((e: any) => e.status !== "inactive" && e.status !== "transferred")
+            const sIds = new Set(activeEnrs.map((e: any) => e.student_id).filter(Boolean))
+            matched = allSt.filter((s: any) => sIds.has(s.id))
+          } else {
+            matched = allSt
+          }
         }
-        if (matched.length === 0) matched = allSt
 
         const fallbackResolved: Student[] = matched.map((s: any, idx: number) => ({
           ...s,
@@ -717,7 +711,11 @@ export default function ExamResultsPage() {
         }))
         fallbackResolved.sort((a, b) => (a.roll_no || 9999) - (b.roll_no || 9999))
         setStudents(fallbackResolved)
-        toast.success(`✓ ${fallbackResolved.length} জন শিক্ষার্থী লোড করা হয়েছে`)
+        if (fallbackResolved.length > 0) {
+          toast.success(`✓ ${fallbackResolved.length} জন শিক্ষার্থী লোড করা হয়েছে`)
+        } else {
+          toast.info("এই ব্যাচে কোনো শিক্ষার্থী পাওয়া যায়নি")
+        }
       } else {
         toast.error("শিক্ষার্থী লোড করতে সমস্যা হয়েছে")
       }
