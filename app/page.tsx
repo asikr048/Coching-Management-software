@@ -471,8 +471,16 @@ export default function HomePage() {
 
       const isWeekly =
         ex.exam_schedule_type === "weekly" ||
+        ex.exam_type === "weekly" ||
+        ex.is_weekly === true ||
         (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
-        Boolean(ex.title?.includes("সাপ্তাহিক"))
+        note.includes("[WEEKLY_SCHEDULE:") ||
+        note.includes("[WEEKLY_DAYS:") ||
+        note.includes("[RECURRING_DAYS:") ||
+        note.includes("[IS_WEEKLY_PUBLISHED:") ||
+        Boolean(ex.title?.includes("সাপ্তাহিক")) ||
+        Boolean(ex.subject?.includes("সাপ্তাহিক")) ||
+        Number(ex.total_marks) === 350
 
       if (!isWeekly) {
         const isOneTimeLive =
@@ -485,7 +493,7 @@ export default function HomePage() {
           examId: ex.id,
           dayKey: null,
           title: ex.title,
-          badgeText: "পরীক্ষার রেজাল্ট",
+          badgeText: "এককালীন পরীক্ষা",
           badgeType: "one_time",
           subject: ex.subject,
           branchName: ex.branch?.name,
@@ -496,7 +504,7 @@ export default function HomePage() {
           totalMarks: ex.total_marks || 100,
           passMarks: ex.pass_marks || 40,
           link: `/online-result?exam_id=${ex.id}`,
-          buttonText: "ফলাফল ও সম্পূর্ণ মেরিট লিস্ট দেখুন",
+          buttonText: "এককালীন পরীক্ষার ফলাফল দেখুন",
         })
       } else {
         const days = parseWeeklyDaysForExam(ex)
@@ -538,7 +546,7 @@ export default function HomePage() {
             examId: ex.id,
             dayKey: null,
             title: ex.title,
-            badgeText: "সাপ্তাহিক রেজাল্ট (৭ দিন)",
+            badgeText: "সাপ্তাহিক পরীক্ষা (৭ দিন)",
             badgeType: "weekly",
             subject: ex.subject,
             branchName: ex.branch?.name,
@@ -547,7 +555,7 @@ export default function HomePage() {
             totalMarks,
             passMarks,
             link: `/online-result?exam_id=${ex.id}`,
-            buttonText: "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন",
+            buttonText: "সাপ্তাহিক পরীক্ষার ফলাফল দেখুন",
           })
         }
 
@@ -568,7 +576,7 @@ export default function HomePage() {
               examId: ex.id,
               dayKey: dayConf.key,
               title: `${ex.title} - ${dayConf.day_bn}`,
-              badgeText: `দৈনিক পরীক্ষা (${dayConf.day_bn})`,
+              badgeText: `সাপ্তাহিক (${dayConf.day_bn})`,
               badgeType: "daily",
               subject: dayConf.subject || ex.subject,
               branchName: ex.branch?.name,
@@ -577,7 +585,7 @@ export default function HomePage() {
               totalMarks: dayConf.total_marks || 50,
               passMarks: dayConf.pass_marks || 20,
               link: `/online-result?exam_id=${ex.id}&day=${dayConf.key}`,
-              buttonText: `${dayConf.day_bn}ের মেধা তালিকা দেখুন`,
+              buttonText: `${dayConf.day_bn}ের ফলাফল দেখুন`,
             })
           }
         }

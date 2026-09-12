@@ -218,6 +218,7 @@ export default function ExamResultsPage() {
 
   // Table Filter & Search State
   const [tableSearchQuery, setTableSearchQuery] = useState("")
+  const [weeklySearchQuery, setWeeklySearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "entered" | "pending" | "passed" | "failed">("all")
 
   // Batch Selection & Students State
@@ -1117,10 +1118,12 @@ export default function ExamResultsPage() {
     }
 
     const numMarks = parseFloat(raw)
-    const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : exam.total_marks
+    const activeMax = isWeeklyExam
+      ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+      : (exam.total_marks || 100)
 
     if (isNaN(numMarks) || numMarks < 0 || numMarks > activeMax) {
-      if (!silent) toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeMax}-এর মধ্যে হতে হবে`)
+      if (!silent) toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeMax}-এর মধ্যে হতে হবে (সর্বোচ্চ: ${activeMax})`)
       return
     }
 
@@ -1217,7 +1220,7 @@ export default function ExamResultsPage() {
         if (!silent) toast.error(err.message || "Failed to save mark")
       }
     } else {
-      const grade = getGrade(numMarks, exam.total_marks)
+      const grade = getGrade(numMarks, activeMax)
       try {
         const res = await fetch(`/api/exams/${exam.id}/results`, {
           method: "POST",
@@ -1258,7 +1261,7 @@ export default function ExamResultsPage() {
         syncAllRanks({ ...draftMarks, [student.id]: String(numMarks) })
 
         if (!silent) {
-          toast.success(`✓ ${student.name}: ${numMarks}/${exam.total_marks} (${grade}) সংরক্ষিত!`)
+          toast.success(`✓ ${student.name}: ${numMarks}/${activeMax} (${grade}) সংরক্ষিত!`)
         }
 
         if (rowIndex !== undefined) {
@@ -1279,7 +1282,9 @@ export default function ExamResultsPage() {
     const trimmed = rawMark.trim()
     if (trimmed === "") return
     const num = parseFloat(trimmed)
-    const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : (exam?.total_marks || 100)
+    const activeMax = isWeeklyExam
+      ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+      : (exam?.total_marks || 100)
     if (isNaN(num) || num < 0 || num > activeMax) return
 
     setAutoSavingIds((prev) => new Set(prev).add(student.id))
@@ -1314,7 +1319,9 @@ export default function ExamResultsPage() {
     if (trimmed === savedVal) return
 
     const num = parseFloat(trimmed)
-    const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : (exam?.total_marks || 100)
+    const activeMax = isWeeklyExam
+      ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+      : (exam?.total_marks || 100)
 
     if (!isNaN(num) && num >= 0 && num <= activeMax) {
       autoSaveTimersRef.current[student.id] = setTimeout(() => {
@@ -1340,16 +1347,25 @@ export default function ExamResultsPage() {
 
     if (currentVal !== savedVal) {
       const num = parseFloat(currentVal)
-      const activeMax = isWeeklyExam && activeDayConfig ? activeDayConfig.total_marks : (exam?.total_marks || 100)
-      if (!isNaN(num) && num >= 0 && num <= activeMax) {
-        triggerAutoSave(student, currentVal)
+      const activeMax = isWeeklyExam
+        ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+        : (exam?.total_marks || 100)
+      if (isNaN(num) || num < 0 || num > activeMax) {
+        toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeMax}-এর মধ্যে হতে হবে`)
+        return
       }
+      triggerAutoSave(student, currentVal)
     }
   }
 
   // Quick mark save handler
   async function handleSaveQuickMark() {
     if (!selectedStudent) return
+    const num = parseFloat(quickMarkInput)
+    if (isNaN(num) || num < 0 || num > activeTotalMarks) {
+      toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeTotalMarks}-এর মধ্যে হতে হবে`)
+      return
+    }
     setSavingQuickMark(true)
     try {
       await saveStudentMark(selectedStudent, quickMarkInput)
@@ -1365,6 +1381,11 @@ export default function ExamResultsPage() {
   // Save an individual row from table
   async function saveRowMark(student: Student, rowIndex?: number) {
     const raw = draftMarks[student.id] ?? ""
+    const num = parseFloat(raw)
+    if (isNaN(num) || num < 0 || num > activeTotalMarks) {
+      toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeTotalMarks}-এর মধ্যে হতে হবে`)
+      return
+    }
     setSavingRowStudentId(student.id)
     try {
       await saveStudentMark(student, raw, rowIndex)
@@ -1605,7 +1626,7 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Publish / Unpublish Individual Day Result
+  // Publish / Unpublish Individual Day Result (For Batch Students)
   async function handleTogglePublishDay(dayKey: string) {
     if (!exam) return
     const isCurrentlyPub = publishedDays.includes(dayKey.toLowerCase())
@@ -1613,7 +1634,6 @@ export default function ExamResultsPage() {
       ? publishedDays.filter((d) => d.toLowerCase() !== dayKey.toLowerCase())
       : [...publishedDays, dayKey.toLowerCase()]
 
-    const shouldBePublic = nextPubDays.length > 0 || isWeeklyPublished
     const shouldBePublished = nextPubDays.length > 0 || isWeeklyPublished
 
     setPublishingExam(true)
@@ -1624,19 +1644,16 @@ export default function ExamResultsPage() {
         body: JSON.stringify({ 
           published_days: nextPubDays,
           is_published: shouldBePublished,
-          is_public_result: shouldBePublic
         }),
       })
 
       if (!res.ok) {
         const updatedNote = (exam.result_note || "")
           .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
-          .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
-          .trim() + ` [PUBLISHED_DAYS:${nextPubDays.join(",")}] [PUBLIC_RESULT:${shouldBePublic}]`
+          .trim() + ` [PUBLISHED_DAYS:${nextPubDays.join(",")}]`
         await supabase.from("exams").update({ 
           result_note: updatedNote, 
           is_published: shouldBePublished,
-          is_public_result: shouldBePublic
         }).eq("id", params.id)
       }
 
@@ -1645,13 +1662,12 @@ export default function ExamResultsPage() {
         ...prev, 
         published_days: nextPubDays, 
         is_published: shouldBePublished,
-        is_public_result: shouldBePublic
       }))
       const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey.toLowerCase())
       const dayName = matched?.bn || dayKey
       toast.success(
         !isCurrentlyPub
-          ? `✓ ${dayName}ের ফলাফল শিক্ষার্থীদের জন্য ও অনলাইন রেজাল্টে প্রকাশিত হয়েছে!`
+          ? `✓ ${dayName}ের ফলাফল ব্যাচ শিক্ষার্থীদের জন্য প্রকাশিত হয়েছে! শিক্ষার্থীরা তাদের প্রোফাইলে দেখতে পারবে।`
           : `${dayName}ের ফলাফল ড্রাফট করা হয়েছে।`
       )
     } catch (err: any) {
@@ -1661,7 +1677,7 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Publish / Unpublish Consolidated Weekly Result
+  // Publish / Unpublish Consolidated Weekly Result (For Batch Students)
   async function handleTogglePublishWeekly(nextVal: boolean) {
     setPublishingExam(true)
     const isPub = nextVal || publishedDays.length > 0
@@ -1672,20 +1688,17 @@ export default function ExamResultsPage() {
         body: JSON.stringify({ 
           is_weekly_published: nextVal,
           is_published: isPub,
-          is_public_result: isPub
         }),
       })
 
       if (!res.ok) {
         const updatedNote = (exam.result_note || "")
           .replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "")
-          .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
-          .trim() + ` [IS_WEEKLY_PUBLISHED:${nextVal}] [PUBLIC_RESULT:${isPub}]`
+          .trim() + ` [IS_WEEKLY_PUBLISHED:${nextVal}]`
         await supabase.from("exams").update({ 
           result_note: updatedNote,
           is_weekly_published: nextVal,
           is_published: isPub,
-          is_public_result: isPub
         }).eq("id", params.id)
       }
 
@@ -1694,11 +1707,10 @@ export default function ExamResultsPage() {
         ...prev, 
         is_weekly_published: nextVal, 
         is_published: isPub,
-        is_public_result: isPub
       }))
       toast.success(
         nextVal
-          ? "✓ সামগ্রিক সাপ্তাহিক ফলাফল সফলভাবে প্রকাশিত হয়েছে! হোমপেজ এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান।"
+          ? "✓ সামগ্রিক সাপ্তাহিক ফলাফল ব্যাচ শিক্ষার্থীদের জন্য প্রকাশিত হয়েছে! শিক্ষার্থীরা তাদের প্রোফাইলে দেখতে পারবে।"
           : "সাপ্তাহিক সামগ্রিক ফলাফল ড্রাফট করা হয়েছে।"
       )
     } catch (err: any) {
@@ -1708,7 +1720,7 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Publish Exam (One-time exam)
+  // Publish Exam (One-time exam - For Batch Students)
   async function handleTogglePublishOneTime(nextPublished: boolean) {
     setPublishingExam(true)
     try {
@@ -1717,27 +1729,24 @@ export default function ExamResultsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           is_published: nextPublished,
-          is_public_result: nextPublished
         }),
       })
       if (!res.ok) {
         const updatedNote = (exam?.result_note || "")
-          .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
-          .trim() + ` [PUBLIC_RESULT:${nextPublished}]`
+          .replace(/\[BATCH_PUBLISHED:[^\]]*\]/g, "")
+          .trim() + ` [BATCH_PUBLISHED:${nextPublished}]`
         await supabase.from("exams").update({ 
           is_published: nextPublished,
-          is_public_result: nextPublished,
           result_note: updatedNote
         }).eq("id", params.id)
       }
       setExam((prev: any) => ({ 
         ...prev, 
         is_published: nextPublished,
-        is_public_result: nextPublished
       }))
       toast.success(
         nextPublished 
-          ? "✓ ফলাফল শিক্ষার্থীদের জন্য ও অনলাইন রেজাল্ট পোর্টালে প্রকাশিত হয়েছে!" 
+          ? "✓ এককালীন পরীক্ষার ফলাফল ব্যাচ শিক্ষার্থীদের জন্য প্রকাশিত হয়েছে! শিক্ষার্থীরা তাদের প্রোফাইলে দেখতে পারবে।" 
           : "ফলাফল ড্রাফট করা হয়েছে।"
       )
     } catch (err: any) {
@@ -1747,7 +1756,7 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Toggle Public Online Result
+  // Toggle Public Online Result (For Homepage & Public /online-result portal)
   async function handleTogglePublicResult(nextPublic: boolean) {
     setPublishingPublic(true)
     try {
@@ -1756,35 +1765,25 @@ export default function ExamResultsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           is_public_result: nextPublic,
-          is_published: nextPublic,
-          is_weekly_published: isWeeklyExam ? nextPublic : undefined,
         }),
       })
       if (!res.ok) {
         const updatedNote = (exam?.result_note || "")
           .replace(/\[PUBLIC_RESULT:[^\]]*\]/g, "")
-          .replace(/\[IS_WEEKLY_PUBLISHED:[^\]]*\]/g, "")
-          .trim() + ` [PUBLIC_RESULT:${nextPublic}] ${isWeeklyExam ? `[IS_WEEKLY_PUBLISHED:${nextPublic}]` : ""}`
+          .trim() + ` [PUBLIC_RESULT:${nextPublic}]`
         await supabase.from("exams").update({ 
           is_public_result: nextPublic,
-          is_published: nextPublic,
-          is_weekly_published: isWeeklyExam ? nextPublic : false,
           result_note: updatedNote.trim(),
         }).eq("id", params.id)
       }
       setExam((prev: any) => ({ 
         ...prev, 
         is_public_result: nextPublic,
-        is_published: nextPublic,
-        is_weekly_published: isWeeklyExam ? nextPublic : prev?.is_weekly_published,
       }))
-      if (isWeeklyExam && nextPublic) {
-        setIsWeeklyPublished(true)
-      }
       toast.success(
         nextPublic
           ? "✓ মেরিট লিস্ট এখন পাবলিক! হোমপেজ এবং অনলাইন রেজাল্ট পোর্টালে দৃশ্যমান।"
-          : "মেরিট লিস্ট পাবলিক পোর্টাল থেকে অপসারিত হয়েছে।"
+          : "মেরিট লিস্ট পাবলিক পোর্টাল থেকে অপসারিত হয়েছে (তবে ব্যাচ শিক্ষার্থীরা প্রোফাইলে দেখতে পারবে)।"
       )
     } catch (err: any) {
       toast.error(err.message || "Failed to update public status")
@@ -2032,6 +2031,20 @@ export default function ExamResultsPage() {
     })
   }, [students, tableSearchQuery, statusFilter, isWeeklyExam, selectedTab, activeDayConfig, dayMarksMap, savedResults, justSavedIds, stats.pass])
 
+  // Filtered Students for Weekly Multi-Column Table
+  const filteredWeeklyStudents = useMemo(() => {
+    if (!weeklySearchQuery.trim()) return students
+    const q = weeklySearchQuery.trim().toLowerCase()
+    return students.filter((s) => {
+      const nameMatch = (s.name || "").toLowerCase().includes(q)
+      const idMatch = (s.student_id || "").toLowerCase().includes(q)
+      const phoneMatch = (s.phone || "").includes(q)
+      const rollStr = String(s.roll_no || "")
+      const rollMatch = rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q)
+      return nameMatch || idMatch || phoneMatch || rollMatch
+    })
+  }, [students, weeklySearchQuery])
+
   if (fetching) {
     return (
       <div className="flex flex-col items-center justify-center h-80 text-slate-400 gap-3">
@@ -2067,6 +2080,8 @@ export default function ExamResultsPage() {
   const activePassMarks = isWeeklyExam ? (isWeeklyActive ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20)) : exam.pass_marks
 
   const quickMarkNum = parseFloat(quickMarkInput)
+  const isQuickOverMax = !isNaN(quickMarkNum) && quickMarkNum > activeTotalMarks
+  const isQuickNegative = !isNaN(quickMarkNum) && quickMarkNum < 0
   const hasValidQuickMark = !isNaN(quickMarkNum) && quickMarkNum >= 0 && quickMarkNum <= activeTotalMarks
   const quickGradePreview = hasValidQuickMark ? getGrade(quickMarkNum, activeTotalMarks) : ""
   const isQuickPass = hasValidQuickMark && quickMarkNum >= activePassMarks
@@ -2094,7 +2109,7 @@ export default function ExamResultsPage() {
               </span>
               {isWeeklyExam && (
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                  সাপ্তাহিক মডেল টেস্ট
+                  সাপ্তাহিক পরীক্ষা
                 </span>
               )}
             </div>
@@ -2670,16 +2685,37 @@ export default function ExamResultsPage() {
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                {/* Search in weekly breakdown */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={weeklySearchQuery}
+                    onChange={(e) => setWeeklySearchQuery(e.target.value)}
+                    placeholder="শিক্ষার্থী খুঁজুন (নাম, আইডি, রোল)..."
+                    className="w-full pl-9 pr-8 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-amber-400 shadow-xs"
+                  />
+                  {weeklySearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setWeeklySearchQuery("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
                 <button
                   type="button"
                   onClick={handleSaveAllDays}
                   disabled={loading}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-black shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50 shrink-0"
                   title="Save all entered day marks across all students"
                 >
                   {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  <span>সব দিনের নম্বর সেভ করুন (Save All Days)</span>
+                  <span>সব দিনের নম্বর সেভ করুন</span>
                 </button>
               </div>
             </div>
@@ -2706,7 +2742,7 @@ export default function ExamResultsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {students
+                  {filteredWeeklyStudents
                     .map((s) => {
                       const studentDays = { ...(dayMarksMap[s.id] || {}) }
                       
@@ -2753,29 +2789,44 @@ export default function ExamResultsPage() {
                             const currentVal = draftCellMarks[cellKey] !== undefined
                               ? draftCellMarks[cellKey]
                               : (dObj && !isNaN(Number(dObj.marks)) ? String(dObj.marks) : "")
+                            const cellNum = currentVal !== "" ? parseFloat(currentVal) : null
+                            const dayMax = d.total_marks || 50
+                            const isCellOverMax = cellNum !== null && !isNaN(cellNum) && cellNum > dayMax
+                            const isCellNegative = cellNum !== null && !isNaN(cellNum) && cellNum < 0
+                            const isCellInvalid = isCellOverMax || isCellNegative
 
                             return (
                               <td key={d.key} className="px-1.5 py-1.5 text-center">
-                                <input
-                                  type="text"
-                                  inputMode="decimal"
-                                  value={currentVal}
-                                  onChange={(e) => handleCellMarkChange(row.student, d, e.target.value)}
-                                  onBlur={() => handleCellMarkBlur(row.student, d)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") {
-                                      e.preventDefault()
-                                      handleCellMarkBlur(row.student, d)
-                                    }
-                                  }}
-                                  placeholder="—"
-                                  className={cn(
-                                    "w-16 sm:w-20 text-center py-1 px-1 rounded-lg text-xs font-black border transition-all focus:outline-none focus:ring-2 focus:ring-amber-500",
-                                    currentVal !== ""
-                                      ? "bg-amber-50/70 border-amber-400 text-slate-900 shadow-2xs font-extrabold"
-                                      : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"
+                                <div className="inline-flex flex-col items-center">
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={currentVal}
+                                    onChange={(e) => handleCellMarkChange(row.student, d, e.target.value)}
+                                    onBlur={() => handleCellMarkBlur(row.student, d)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault()
+                                        handleCellMarkBlur(row.student, d)
+                                      }
+                                    }}
+                                    placeholder="—"
+                                    className={cn(
+                                      "w-16 sm:w-20 text-center py-1 px-1 rounded-lg text-xs font-black border transition-all focus:outline-none focus:ring-2",
+                                      isCellInvalid
+                                        ? "border-rose-500 bg-rose-50 text-rose-700 ring-2 ring-rose-400/30 font-black"
+                                        : currentVal !== ""
+                                        ? "bg-amber-50/70 border-amber-400 text-slate-900 shadow-2xs font-extrabold focus:ring-amber-500"
+                                        : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300 focus:ring-amber-500"
+                                    )}
+                                    title={isCellOverMax ? `সর্বোচ্চ নম্বর (${dayMax})-এর বেশি হতে পারবে না!` : undefined}
+                                  />
+                                  {isCellOverMax && (
+                                    <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
+                                      &gt;{dayMax}!
+                                    </span>
                                   )}
-                                />
+                                </div>
                               </td>
                             )
                           })}
@@ -2812,6 +2863,13 @@ export default function ExamResultsPage() {
                         </tr>
                       )
                     })}
+                  {filteredWeeklyStudents.length === 0 && (
+                    <tr>
+                      <td colSpan={parsedWeeklyDays.length + 6} className="text-center py-8 text-slate-400 text-xs">
+                        {weeklySearchQuery ? `"${weeklySearchQuery}" দিয়ে কোনো শিক্ষার্থী পাওয়া যায়নি` : "কোনো শিক্ষার্থী নেই"}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2987,57 +3045,80 @@ export default function ExamResultsPage() {
                         e.preventDefault()
                         handleSaveQuickMark()
                       }}
-                      className="flex items-center gap-2.5"
+                      className="space-y-2"
                     >
-                      <div className="relative flex-1">
-                        <input
-                          ref={quickMarkInputRef}
-                          type="text"
-                          inputMode="decimal"
-                          value={quickMarkInput}
-                          onChange={(e) => setQuickMarkInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault()
-                              handleSaveQuickMark()
-                            } else if (e.key === "Escape") {
-                              setSelectedStudent(null)
-                              setQuickMarkInput("")
-                              searchInputRef.current?.focus()
-                            }
-                          }}
-                          placeholder={`0 - ${activeTotalMarks}`}
-                          className="w-full pl-3.5 pr-14 py-2 bg-white border-2 border-amber-500 rounded-xl text-base font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/30"
-                        />
-                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
-                          /{activeTotalMarks}
-                        </span>
-                      </div>
-
-                      {hasValidQuickMark && (
-                        <div className="flex items-center gap-1">
-                          <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-black border border-amber-200">
-                            {quickGradePreview}
-                          </span>
-                          <span
+                      <div className="flex items-center gap-2.5">
+                        <div className="relative flex-1">
+                          <input
+                            ref={quickMarkInputRef}
+                            type="text"
+                            inputMode="decimal"
+                            value={quickMarkInput}
+                            onChange={(e) => setQuickMarkInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault()
+                                handleSaveQuickMark()
+                              } else if (e.key === "Escape") {
+                                setSelectedStudent(null)
+                                setQuickMarkInput("")
+                                searchInputRef.current?.focus()
+                              }
+                            }}
+                            placeholder={`0 - ${activeTotalMarks}`}
                             className={cn(
-                              "px-2 py-1 rounded-lg text-xs font-bold border",
-                              isQuickPass ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                              "w-full pl-3.5 pr-14 py-2 rounded-xl text-base font-black transition-all focus:outline-none",
+                              isQuickOverMax || isQuickNegative
+                                ? "border-2 border-rose-500 bg-rose-50 text-rose-700 ring-2 ring-rose-400/30"
+                                : "bg-white border-2 border-amber-500 text-slate-900 focus:ring-2 focus:ring-amber-500/30"
                             )}
-                          >
-                            {isQuickPass ? "Pass" : "Fail"}
+                          />
+                          <span className={cn(
+                            "absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold",
+                            isQuickOverMax ? "text-rose-500" : "text-slate-400"
+                          )}>
+                            /{activeTotalMarks}
                           </span>
                         </div>
-                      )}
 
-                      <button
-                        type="submit"
-                        disabled={savingQuickMark || !quickMarkInput}
-                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer shrink-0"
-                      >
-                        {savingQuickMark ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Check className="w-4 h-4" />}
-                        <span>Save</span>
-                      </button>
+                        {hasValidQuickMark && (
+                          <div className="flex items-center gap-1">
+                            <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-lg text-xs font-black border border-amber-200">
+                              {quickGradePreview}
+                            </span>
+                            <span
+                              className={cn(
+                                "px-2 py-1 rounded-lg text-xs font-bold border",
+                                isQuickPass ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"
+                              )}
+                            >
+                              {isQuickPass ? "Pass" : "Fail"}
+                            </span>
+                          </div>
+                        )}
+
+                        <button
+                          type="submit"
+                          disabled={savingQuickMark || !hasValidQuickMark}
+                          className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-md shadow-amber-500/20 flex items-center gap-1.5 cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {savingQuickMark ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Check className="w-4 h-4" />}
+                          <span>Save</span>
+                        </button>
+                      </div>
+
+                      {isQuickOverMax && (
+                        <p className="text-[11px] text-rose-600 font-bold flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          সর্বোচ্চ নম্বর {activeTotalMarks}-এর বেশি হওয়া সম্ভব নয়!
+                        </p>
+                      )}
+                      {isQuickNegative && (
+                        <p className="text-[11px] text-rose-600 font-bold flex items-center gap-1">
+                          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                          নম্বর ০ এর কম হতে পারে না!
+                        </p>
+                      )}
                     </form>
                   </div>
                 ) : (
@@ -3134,6 +3215,10 @@ export default function ExamResultsPage() {
                       : (!isWeeklyExam || selectedTab === "weekly_aggregate")
                       ? (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
                       : null
+                    const draftNum = draftVal !== "" ? parseFloat(draftVal) : null
+                    const isRowOverMax = draftNum !== null && !isNaN(draftNum) && draftNum > activeTotalMarks
+                    const isRowNegative = draftNum !== null && !isNaN(draftNum) && draftNum < 0
+                    const isRowInvalid = isRowOverMax || isRowNegative
                     const hasEntered = Boolean(currentMarksNum !== null && !isNaN(currentMarksNum))
                     const isJustSaved = justSavedIds.has(s.id)
                     const isAutoSaving = autoSavingIds.has(s.id)
@@ -3168,57 +3253,74 @@ export default function ExamResultsPage() {
                           <form
                             onSubmit={(e) => {
                               e.preventDefault()
+                              if (isRowInvalid) return
                               if (autoSaveTimersRef.current[s.id]) {
                                 clearTimeout(autoSaveTimersRef.current[s.id])
                                 delete autoSaveTimersRef.current[s.id]
                               }
                               saveRowMark(s, idx)
                             }}
-                            className="inline-flex items-center gap-2"
+                            className="inline-flex flex-col items-center"
                           >
-                            <input
-                              id={`mark-input-${idx}`}
-                              type="text"
-                              inputMode="decimal"
-                              value={draftVal}
-                              onChange={(e) => handleMarkInputChange(s, e.target.value)}
-                              onBlur={() => handleMarkInputBlur(s)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault()
-                                  if (autoSaveTimersRef.current[s.id]) {
-                                    clearTimeout(autoSaveTimersRef.current[s.id])
-                                    delete autoSaveTimersRef.current[s.id]
+                            <div className="inline-flex items-center gap-1.5">
+                              <input
+                                id={`mark-input-${idx}`}
+                                type="text"
+                                inputMode="decimal"
+                                value={draftVal}
+                                onChange={(e) => handleMarkInputChange(s, e.target.value)}
+                                onBlur={() => handleMarkInputBlur(s)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault()
+                                    if (isRowInvalid) return
+                                    if (autoSaveTimersRef.current[s.id]) {
+                                      clearTimeout(autoSaveTimersRef.current[s.id])
+                                      delete autoSaveTimersRef.current[s.id]
+                                    }
+                                    saveRowMark(s, idx)
                                   }
-                                  saveRowMark(s, idx)
-                                }
-                              }}
-                              className={cn(
-                                "w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all focus:outline-none shadow-xs",
-                                isAutoSaving
-                                  ? "border-amber-400 bg-amber-50/50 text-amber-900 ring-2 ring-amber-400/20"
-                                  : isJustSaved
-                                  ? "border-emerald-500 bg-emerald-50 text-emerald-800"
-                                  : hasEntered
-                                  ? "border-emerald-400 bg-white text-emerald-900"
-                                  : "border-slate-300 bg-white text-slate-900 focus:border-amber-500"
-                              )}
-                              placeholder="—"
-                            />
-                            <button
-                              type="submit"
-                              disabled={savingRowStudentId === s.id || isAutoSaving}
-                              title="Save mark (Enter ↵)"
-                              className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
-                            >
-                              {savingRowStudentId === s.id || isAutoSaving ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
-                              ) : isJustSaved ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              ) : (
-                                <Save className="w-3.5 h-3.5" />
-                              )}
-                            </button>
+                                }}
+                                className={cn(
+                                  "w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all focus:outline-none shadow-xs",
+                                  isRowInvalid
+                                    ? "border-rose-500 bg-rose-50 text-rose-700 ring-2 ring-rose-400/30"
+                                    : isAutoSaving
+                                    ? "border-amber-400 bg-amber-50/50 text-amber-900 ring-2 ring-amber-400/20"
+                                    : isJustSaved
+                                    ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                    : hasEntered
+                                    ? "border-emerald-400 bg-white text-emerald-900"
+                                    : "border-slate-300 bg-white text-slate-900 focus:border-amber-500"
+                                )}
+                                placeholder="—"
+                                title={isRowOverMax ? `সর্বোচ্চ নম্বর (${activeTotalMarks})-এর বেশি হতে পারবে না!` : undefined}
+                              />
+                              <button
+                                type="submit"
+                                disabled={savingRowStudentId === s.id || isAutoSaving || isRowInvalid}
+                                title={isRowInvalid ? `সর্বোচ্চ নম্বর (${activeTotalMarks})-এর বেশি হতে পারবে না` : "Save mark (Enter ↵)"}
+                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                              >
+                                {savingRowStudentId === s.id || isAutoSaving ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                ) : isJustSaved ? (
+                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                ) : (
+                                  <Save className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                            {isRowOverMax && (
+                              <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
+                                &gt;{activeTotalMarks}!
+                              </span>
+                            )}
+                            {isRowNegative && (
+                              <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
+                                &lt;0!
+                              </span>
+                            )}
                           </form>
                         </td>
                         <td className="px-4 py-3 text-center">

@@ -201,12 +201,12 @@ export default function StudentExamResultsPage() {
             {isWeekly ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-black bg-purple-400/20 text-purple-200 border border-purple-400/30">
                 <CalendarDays className="w-3.5 h-3.5" />
-                সাপ্তাহিক মডেল টেস্ট (Weekly)
+                সাপ্তাহিক পরীক্ষা
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-black bg-amber-400/20 text-amber-200 border border-amber-400/30">
                 <Calendar className="w-3.5 h-3.5" />
-                এককালীন পরীক্ষা (One-time)
+                এককালীন পরীক্ষা
               </span>
             )}
 

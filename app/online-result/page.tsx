@@ -156,14 +156,30 @@ interface StudentRank {
   day_marks?: Record<string, any>
 }
 
+export function checkIsWeeklyExam(ex: any): boolean {
+  if (!ex) return false
+  const note = String(ex.result_note || "")
+  if (ex.exam_schedule_type === "weekly") return true
+  if (ex.exam_type === "weekly") return true
+  if (ex.is_weekly === true || ex.is_weekly_published === true) return true
+  if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) return true
+  if (
+    note.includes("[WEEKLY_SCHEDULE:") ||
+    note.includes("[WEEKLY_DAYS:") ||
+    note.includes("[RECURRING_DAYS:") ||
+    note.includes("[IS_WEEKLY_PUBLISHED:")
+  ) return true
+  if (ex.title && ex.title.includes("সাপ্তাহিক")) return true
+  if (ex.subject && ex.subject.includes("সাপ্তাহিক")) return true
+  if (Number(ex.total_marks) === 350) return true
+  if (Array.isArray(ex.day_configs) && ex.day_configs.length > 0) return true
+  return false
+}
+
 // Standalone parser for weekly days
 export function parseWeeklyDaysForExam(exam: PublicExam | null): ParsedWeeklyDay[] {
   if (!exam) return []
-  const isWeekly =
-    exam.exam_schedule_type === "weekly" ||
-    (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
-    exam.is_weekly_published === true ||
-    Boolean(exam.title?.includes("সাপ্তাহিক"))
+  const isWeekly = checkIsWeeklyExam(exam)
 
   const dayConfigMap: Record<string, ParsedWeeklyDay> = {}
 
@@ -271,7 +287,7 @@ export default function OnlineResultPortalPage() {
   const [staffRole, setStaffRole] = useState<string>("")
   
   // Filters: default to "all" so published weekly and daily exams are immediately visible
-  const [activeTab, setActiveTab] = useState<"all" | "everyday" | "weekly">("all")
+  const [activeTab, setActiveTab] = useState<"all" | "one_time" | "weekly" | "everyday">("all")
   const [selectedBranch, setSelectedBranch] = useState<string>("all")
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -455,10 +471,7 @@ export default function OnlineResultPortalPage() {
 
       if (isExplicitlyUnpublished) continue
 
-      const isWeekly =
-        ex.exam_schedule_type === "weekly" ||
-        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
-        Boolean(ex.title?.includes("সাপ্তাহিক"))
+      const isWeekly = checkIsWeeklyExam(ex)
 
       if (!isWeekly) {
         items.push({
@@ -466,7 +479,7 @@ export default function OnlineResultPortalPage() {
           parentExam: ex,
           type: "one_time",
           title: ex.title,
-          subTitle: ex.subject,
+          subTitle: ex.subject || "এককালীন পরীক্ষা",
           subject: ex.subject,
           batchName: ex.batch?.name || "All Enrolled Batches",
           branchName: ex.branch?.name,
@@ -504,11 +517,9 @@ export default function OnlineResultPortalPage() {
         }
 
         // 1. WEEKLY CONSOLIDATED EXAM CARD (350 marks):
-        // Only show if is_weekly_published is true and not explicitly disabled
-        const isWeeklyExplicitlyFalse = note.includes("[IS_WEEKLY_PUBLISHED:false]") || ex.is_weekly_published === false
-        const isWeeklyPub = (ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")) && !isWeeklyExplicitlyFalse
-
-        if (isWeeklyPub) {
+        // Show weekly card unless explicitly disabled
+        const isWeeklyExplicitlyFalse = note.includes("[IS_WEEKLY_PUBLISHED:false]")
+        if (!isWeeklyExplicitlyFalse) {
           items.push({
             id: `${ex.id}-weekly`,
             parentExam: ex,
@@ -519,7 +530,7 @@ export default function OnlineResultPortalPage() {
             batchName: ex.batch?.name || "All Enrolled Batches",
             branchName: ex.branch?.name,
             branchId: ex.branch?.id,
-            routineText: "প্রতি সাপ্তাহিক দিন (শনিবার হতে শুক্রবার)",
+            routineText: "সাপ্তাহিক রুটিন (শনিবার হতে শুক্রবার)",
             totalMarks,
             passMarks,
             dayKey: null,
@@ -527,7 +538,7 @@ export default function OnlineResultPortalPage() {
           })
         }
 
-        // 2. FOR EACH PUBLISHED DAY: Add a Daily Exam card
+        // 2. FOR EACH PUBLISHED DAY: Add an individual day card (if published)
         for (const dayConf of days) {
           const isDayPub = pubDays.some((p) => {
             const pLower = String(p).toLowerCase()
@@ -564,8 +575,8 @@ export default function OnlineResultPortalPage() {
   // Filter cards by active tab, branch, and search
   const filteredCards = useMemo(() => {
     return allCardItems.filter((item) => {
-      if (activeTab === "weekly" && item.type !== "weekly") return false
-      if (activeTab === "everyday" && item.type !== "daily" && item.type !== "one_time") return false
+      if (activeTab === "weekly" && item.type !== "weekly" && item.type !== "daily") return false
+      if ((activeTab === "one_time" || (activeTab as string) === "everyday") && item.type !== "one_time") return false
 
       if (selectedBranch !== "all" && item.branchId && item.branchId !== selectedBranch) {
         return false
@@ -593,12 +604,7 @@ export default function OnlineResultPortalPage() {
   // Is the selected exam in the modal a weekly exam?
   const isWeeklyExam = useMemo(() => {
     if (!selectedExam) return false
-    return (
-      selectedExam.exam_schedule_type === "weekly" ||
-      (Array.isArray(selectedExam.recurring_days) && selectedExam.recurring_days.length > 0) ||
-      selectedExam.is_weekly_published === true ||
-      Boolean(selectedExam.title?.includes("সাপ্তাহিক"))
-    )
+    return checkIsWeeklyExam(selectedExam)
   }, [selectedExam])
 
   // Parse structured days for weekly exams (GUARANTEE ALL 7 DAYS: Saturday to Friday)
@@ -935,15 +941,15 @@ export default function OnlineResultPortalPage() {
               <p className="text-2xl font-black text-amber-400 mt-0.5">{allCardItems.length}</p>
             </div>
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
-              <p className="text-[11px] text-indigo-200 font-semibold">দৈনিক পরীক্ষা</p>
+              <p className="text-[11px] text-indigo-200 font-semibold">এককালীন পরীক্ষা</p>
               <p className="text-2xl font-black text-white mt-0.5">
-                {allCardItems.filter((i) => i.type === "daily" || i.type === "one_time").length}
+                {allCardItems.filter((i) => i.type === "one_time").length}
               </p>
             </div>
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
-              <p className="text-[11px] text-indigo-200 font-semibold">সাপ্তাহিক মডেল টেস্ট</p>
+              <p className="text-[11px] text-indigo-200 font-semibold">সাপ্তাহিক পরীক্ষা</p>
               <p className="text-2xl font-black text-purple-300 mt-0.5">
-                {allCardItems.filter((i) => i.type === "weekly").length}
+                {allCardItems.filter((i) => i.type === "weekly" || i.type === "daily").length}
               </p>
             </div>
             <div className="bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15">
@@ -980,18 +986,18 @@ export default function OnlineResultPortalPage() {
               }`}
             >
               <CalendarDays className="w-4 h-4" />
-              <span>সাপ্তাহিক পরীক্ষার মেরিট লিস্ট ({allCardItems.filter((i) => i.type === "weekly").length})</span>
+              <span>সাপ্তাহিক পরীক্ষা ({allCardItems.filter((i) => i.type === "weekly" || i.type === "daily").length})</span>
             </button>
             <button
-              onClick={() => setActiveTab("everyday")}
+              onClick={() => setActiveTab("one_time")}
               className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all whitespace-nowrap flex items-center gap-2 ${
-                activeTab === "everyday"
+                activeTab === "one_time" || (activeTab as string) === "everyday"
                   ? "bg-amber-500 text-white shadow-xs"
                   : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
               }`}
             >
               <Calendar className="w-4 h-4" />
-              <span>দৈনিক পরীক্ষার মেরিট লিস্ট ({allCardItems.filter((i) => i.type === "daily" || i.type === "one_time").length})</span>
+              <span>এককালীন পরীক্ষা ({allCardItems.filter((i) => i.type === "one_time").length})</span>
             </button>
           </div>
 
@@ -1054,17 +1060,17 @@ export default function OnlineResultPortalPage() {
                         {isWeekly ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-700 border border-purple-200">
                             <CalendarDays className="w-3 h-3" />
-                            WEEKLY (সাপ্তাহিক ৭ দিন)
+                            সাপ্তাহিক পরীক্ষা
                           </span>
                         ) : isDaily ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-200">
-                            <Calendar className="w-3 h-3 text-amber-700" />
-                            দৈনিক পরীক্ষা ({card.dayConfig?.day_bn || "দিন"})
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-50 text-purple-700 border border-purple-200">
+                            <Calendar className="w-3 h-3 text-purple-600" />
+                            সাপ্তাহিক ({card.dayConfig?.day_bn || "দিন"})
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
                             <Calendar className="w-3 h-3" />
-                            ONE-TIME
+                            এককালীন পরীক্ষা
                           </span>
                         )}
                         {card.subject && (
@@ -1120,7 +1126,7 @@ export default function OnlineResultPortalPage() {
                       className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 hover:scale-[1.01] transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       <Trophy className="w-4 h-4 text-amber-200" />
-                      <span>{isWeekly ? "সাপ্তাহিক রেজাল্ট ও মেধা তালিকা দেখুন" : isDaily ? `${card.dayConfig?.day_bn || "দিন"}ের মেরিট লিস্ট দেখুন` : "সম্পূর্ণ মেরিট লিস্ট দেখুন"}</span>
+                      <span>{isWeekly ? "সাপ্তাহিক পরীক্ষার রেজাল্ট ও মেধা তালিকা দেখুন" : isDaily ? `${card.dayConfig?.day_bn || "দিন"}ের রেজাল্ট দেখুন` : "এককালীন পরীক্ষার রেজাল্ট দেখুন"}</span>
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -1151,17 +1157,21 @@ export default function OnlineResultPortalPage() {
                     <h3 className="text-base sm:text-lg font-black text-slate-900">
                       {selectedDayKey && activeDayConfig
                         ? `${selectedExam.title} - ${activeDayConfig.day_bn} (${activeDayConfig.subject || activeDayConfig.exam_name})`
-                        : `${selectedExam.title} - ${isWeeklyExam ? "সাপ্তাহিক মূল্যায়ন ও সামগ্রিক মেধাতালিকা" : "মেধাতালিকা"}`}
+                        : `${selectedExam.title} - ${isWeeklyExam ? "সাপ্তাহিক পরীক্ষার সামগ্রিক মেধাতালিকা" : "এককালীন পরীক্ষার মেধাতালিকা"}`}
                     </h3>
                     {selectedDayKey && activeDayConfig ? (
-                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
-                        দৈনিক পরীক্ষা • {activeDayConfig.day_bn}
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200">
+                        সাপ্তাহিক পরীক্ষা • {activeDayConfig.day_bn}
                       </span>
                     ) : isWeeklyExam ? (
                       <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200">
-                        সাপ্তাহিক মূল্যায়ন
+                        সাপ্তাহিক পরীক্ষা
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 border border-blue-200">
+                        এককালীন পরীক্ষা
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {selectedExam.branch?.name && <span>শাখা: {selectedExam.branch.name} • </span>}

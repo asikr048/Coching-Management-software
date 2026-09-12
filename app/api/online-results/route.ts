@@ -29,14 +29,41 @@ export function normalizeDayMarks(days: Record<string, any> | undefined | null):
   return normalized
 }
 
+export function checkIsWeeklyExam(ex: any): boolean {
+  if (!ex) return false
+  const note = String(ex.result_note || "")
+  if (ex.exam_schedule_type === "weekly") return true
+  if (ex.exam_type === "weekly") return true
+  if (ex.is_weekly === true || ex.is_weekly_published === true) return true
+  if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) return true
+  if (
+    note.includes("[WEEKLY_SCHEDULE:") ||
+    note.includes("[WEEKLY_DAYS:") ||
+    note.includes("[RECURRING_DAYS:") ||
+    note.includes("[IS_WEEKLY_PUBLISHED:")
+  ) return true
+  if (ex.title && ex.title.includes("সাপ্তাহিক")) return true
+  if (ex.subject && ex.subject.includes("সাপ্তাহিক")) return true
+  if (Number(ex.total_marks) === 350) return true
+  if (Array.isArray(ex.day_configs) && ex.day_configs.length > 0) return true
+  return false
+}
+
 // Helper to normalize an exam record with fallback tags from result_note
 function normalizeExam(ex: any) {
   const note = ex.result_note || ""
 
-  // Parse recurring_days
+  // Parse recurring_days from multiple formats
   let recDays: any[] = []
   if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
     recDays = ex.recurring_days
+  } else if (note.includes("[WEEKLY_SCHEDULE:")) {
+    try {
+      const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+      if (match && match[1]) {
+        recDays = JSON.parse(match[1])
+      }
+    } catch {}
   } else if (note.includes("[RECURRING_DAYS:")) {
     try {
       const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
@@ -46,14 +73,10 @@ function normalizeExam(ex: any) {
     } catch {}
   }
 
-  const isWeekly =
-    ex.exam_schedule_type === "weekly" ||
-    recDays.length > 0 ||
-    Boolean(ex.title?.includes("সাপ্তাহিক"))
+  const isWeekly = checkIsWeeklyExam(ex) || recDays.length > 0
 
   const isExplicitlyUnpublished =
     ex.is_public_result === false ||
-    ex.is_published === false ||
     note.includes("[PUBLIC_RESULT:false]")
 
   // Parse is_weekly_published
@@ -91,14 +114,12 @@ function normalizeExam(ex: any) {
     }
   }
 
-  // Parse is_public_result
+  // Parse is_public_result (Public online result portal)
+  // Must NOT blindly treat is_published as public result
   const isPubResult =
     !isExplicitlyUnpublished &&
     (ex.is_public_result === true ||
-      note.includes("[PUBLIC_RESULT:true]") ||
-      isWeeklyPub ||
-      pubDays.length > 0 ||
-      ex.is_published === true)
+      note.includes("[PUBLIC_RESULT:true]"))
 
   // Guarantee all 7 days for weekly exams
   let totalMarks = Number(ex.total_marks) || 100
@@ -125,7 +146,9 @@ function normalizeExam(ex: any) {
       sumPass += dPass
     }
     if (sumTotal > 0) totalMarks = sumTotal
+    else if (totalMarks < 350) totalMarks = 350
     if (sumPass > 0) passMarks = sumPass
+    else if (passMarks < 140) passMarks = 140
   }
 
   return {
@@ -136,8 +159,8 @@ function normalizeExam(ex: any) {
     is_weekly_published: isWeeklyPub,
     published_days: pubDays,
     recurring_days: recDays,
-    exam_schedule_type: isWeekly ? "weekly" : (ex.exam_schedule_type || "everyday"),
-    is_published: isPubResult,
+    exam_schedule_type: isWeekly ? "weekly" : (ex.exam_schedule_type || "one_time"),
+    is_published: ex.is_published === true || isPubResult,
   }
 }
 
@@ -317,16 +340,11 @@ export async function GET(req: NextRequest) {
     const branches = branchesRes.data || []
     const rawExams = examsRes.data || []
 
-    // Filter to only exams that are published or public
+    // Filter to only exams that are enabled for public online results
     const publishedExams = rawExams
       .map(normalizeExam)
       .filter((ex) => {
-        return (
-          ex.is_public_result === true ||
-          ex.is_published === true ||
-          ex.is_weekly_published === true ||
-          (Array.isArray(ex.published_days) && ex.published_days.length > 0)
-        )
+        return ex.is_public_result === true
       })
 
     return NextResponse.json({

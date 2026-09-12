@@ -1427,7 +1427,7 @@ export default function StudentProfilePage() {
                                 {isWeekly ? (
                                   <span className="text-[10px] text-purple-700 font-bold bg-purple-50 px-2 py-0.5 rounded border border-purple-200 flex items-center gap-1">
                                     <CalendarDays className="w-3 h-3" />
-                                    সাপ্তাহিক মডেল টেস্ট
+                                    সাপ্তাহিক পরীক্ষা
                                   </span>
                                 ) : (
                                   <span className="text-[10px] text-amber-800 font-bold bg-amber-50 px-2 py-0.5 rounded border border-amber-200 flex items-center gap-1">

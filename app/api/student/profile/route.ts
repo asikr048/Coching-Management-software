@@ -19,9 +19,17 @@ function getWeeklyMarks(ex: any, recDays: any[]) {
   const note = ex?.result_note || ""
   const isWeekly =
     ex?.exam_schedule_type === "weekly" ||
+    ex?.exam_type === "weekly" ||
+    ex?.is_weekly === true ||
     (Array.isArray(recDays) && recDays.length > 0) ||
     ex?.is_weekly_published === true ||
-    Boolean(ex?.title?.includes("সাপ্তাহিক"))
+    note.includes("[WEEKLY_SCHEDULE:") ||
+    note.includes("[WEEKLY_DAYS:") ||
+    note.includes("[RECURRING_DAYS:") ||
+    note.includes("[IS_WEEKLY_PUBLISHED:") ||
+    Boolean(ex?.title?.includes("সাপ্তাহিক")) ||
+    Boolean(ex?.subject?.includes("সাপ্তাহিক")) ||
+    Number(ex?.total_marks) === 350
 
   if (!isWeekly) {
     return {
@@ -457,14 +465,21 @@ export async function GET(req: NextRequest) {
       if (normalizedExam) {
         const note = normalizedExam.result_note || ""
         let recDays = normalizedExam.recurring_days
-        if ((!recDays || (Array.isArray(recDays) && recDays.length === 0)) && note.includes("[RECURRING_DAYS:")) {
-          try {
-            const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
-            if (match && match[1]) recDays = JSON.parse(match[1])
-          } catch {}
+        if (!recDays || (Array.isArray(recDays) && recDays.length === 0)) {
+          if (note.includes("[WEEKLY_SCHEDULE:")) {
+            try {
+              const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+              if (match && match[1]) recDays = JSON.parse(match[1])
+            } catch {}
+          } else if (note.includes("[RECURRING_DAYS:")) {
+            try {
+              const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+              if (match && match[1]) recDays = JSON.parse(match[1])
+            } catch {}
+          }
         }
         const isWeeklyPub = normalizedExam.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
-        const isPubRes = normalizedExam.is_public_result === true || note.includes("[PUBLIC_RESULT:true]") || isWeeklyPub
+        const isPubRes = normalizedExam.is_public_result === true || note.includes("[PUBLIC_RESULT:true]")
         let pubDays = normalizedExam.published_days || []
         if (note.includes("[PUBLISHED_DAYS:")) {
           try {
@@ -474,6 +489,11 @@ export async function GET(req: NextRequest) {
         }
 
         const marksInfo = getWeeklyMarks(normalizedExam, recDays)
+        const isBatchPub =
+          normalizedExam.is_published === true ||
+          note.includes("[BATCH_PUBLISHED:true]") ||
+          isWeeklyPub ||
+          pubDays.length > 0
 
         normalizedExam = {
           ...normalizedExam,
@@ -483,8 +503,26 @@ export async function GET(req: NextRequest) {
           is_weekly_published: isWeeklyPub,
           is_public_result: isPubRes,
           published_days: pubDays,
-          is_published: normalizedExam.is_published === true || isWeeklyPub || isPubRes || pubDays.length > 0,
+          is_published: isBatchPub,
           exam_schedule_type: marksInfo.isWeekly ? "weekly" : (normalizedExam.exam_schedule_type || "one_time"),
+        }
+
+        // If weekly and only specific days are published, filter day_marks to published days only
+        if (marksInfo.isWeekly && !isWeeklyPub && pubDays.length > 0 && sDayMarks && typeof sDayMarks === "object") {
+          const pubDaysLower = pubDays.map((p: string) => String(p).toLowerCase().trim())
+          const filteredDayMarks: Record<string, any> = {}
+          for (const [dKey, dVal] of Object.entries(sDayMarks)) {
+            const kLower = dKey.toLowerCase().trim()
+            if (
+              pubDaysLower.includes(kLower) ||
+              ALL_WEEK_DAYS.some(
+                (w) => (w.id === kLower || w.bn === dKey || w.en.toLowerCase() === kLower) && pubDaysLower.includes(w.id)
+              )
+            ) {
+              filteredDayMarks[dKey] = dVal
+            }
+          }
+          sDayMarks = filteredDayMarks
         }
       }
 
@@ -521,6 +559,22 @@ export async function GET(req: NextRequest) {
         grade: autoGrade,
         day_marks: sDayMarks || {},
         exam: normalizedExam,
+      }
+    })
+
+    // Filter out unpublished exam results so draft marks do not leak to student profile
+    examResults = examResults.filter((r: any) => {
+      const ex = r.exam
+      if (!ex) return false
+      const note = ex.result_note || ""
+      const isWeekly = ex.exam_schedule_type === "weekly"
+      if (isWeekly) {
+        const isWeeklyPub = ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
+        const pubDays = Array.isArray(ex.published_days) ? ex.published_days : []
+        const isBatchPub = ex.is_published === true || note.includes("[BATCH_PUBLISHED:true]")
+        return isWeeklyPub || pubDays.length > 0 || isBatchPub
+      } else {
+        return ex.is_published === true || note.includes("[BATCH_PUBLISHED:true]")
       }
     })
 
@@ -637,14 +691,21 @@ export async function GET(req: NextRequest) {
           .map((ex: any) => {
             const note = ex.result_note || ""
             let recDays = ex.recurring_days
-            if ((!recDays || (Array.isArray(recDays) && recDays.length === 0)) && note.includes("[RECURRING_DAYS:")) {
-              try {
-                const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
-                if (match && match[1]) recDays = JSON.parse(match[1])
-              } catch {}
+            if (!recDays || (Array.isArray(recDays) && recDays.length === 0)) {
+              if (note.includes("[WEEKLY_SCHEDULE:")) {
+                try {
+                  const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+                  if (match && match[1]) recDays = JSON.parse(match[1])
+                } catch {}
+              } else if (note.includes("[RECURRING_DAYS:")) {
+                try {
+                  const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+                  if (match && match[1]) recDays = JSON.parse(match[1])
+                } catch {}
+              }
             }
             const isWeeklyPub = ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
-            const isPubRes = ex.is_public_result === true || note.includes("[PUBLIC_RESULT:true]") || isWeeklyPub
+            const isPubRes = ex.is_public_result === true || note.includes("[PUBLIC_RESULT:true]")
             let pubDays = ex.published_days || []
             if (note.includes("[PUBLISHED_DAYS:")) {
               try {
@@ -653,6 +714,12 @@ export async function GET(req: NextRequest) {
               } catch {}
             }
             const marksInfo = getWeeklyMarks(ex, recDays)
+            const isBatchPub =
+              ex.is_published === true ||
+              note.includes("[BATCH_PUBLISHED:true]") ||
+              isWeeklyPub ||
+              pubDays.length > 0
+
             return {
               ...ex,
               total_marks: marksInfo.totalMarks,
@@ -661,7 +728,7 @@ export async function GET(req: NextRequest) {
               is_weekly_published: isWeeklyPub,
               is_public_result: isPubRes,
               published_days: pubDays,
-              is_published: ex.is_published === true || isWeeklyPub || isPubRes || pubDays.length > 0,
+              is_published: isBatchPub,
               exam_schedule_type:
                 marksInfo.isWeekly
                   ? "weekly"
