@@ -112,12 +112,28 @@ export default async function AccountantDeskPage() {
     role: "accountant" as const,
   }
 
+  const activeBatches = batchesRes.data || []
+  const activeBatchIdSet = new Set(activeBatches.map((b: any) => b.id))
+
+  // Only consider payments associated with existing active batches
+  const rawPayments = (paymentsRes.data as any[]) || []
+  const validPayments = rawPayments.filter(
+    (p: any) => p.batch_id && activeBatchIdSet.has(p.batch_id)
+  );
+
+  // Permanently clean up orphaned payments from deleted batches in background
+  (async () => {
+    try {
+      await admin.from("payments").delete().is("batch_id", null)
+    } catch {}
+  })()
+
   return (
     <AccountantClient
       initialStudents={enrichedStudents}
-      initialBatches={batchesRes.data || []}
+      initialBatches={activeBatches}
       initialDues={duesRes.data || []}
-      initialPayments={paymentsRes.data || []}
+      initialPayments={validPayments}
       branches={branchesRes.data || []}
       currentStaff={currentStaff}
     />

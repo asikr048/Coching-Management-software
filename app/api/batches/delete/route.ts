@@ -68,30 +68,26 @@ export async function POST(req: NextRequest) {
       new Set((enrollments || []).map(e => e.student_id).filter(Boolean))
     )
 
-    // c. Unlink payments that reference these enrollments
+    // c. Delete payments that reference these enrollments
     if (enrollmentIds.length > 0) {
       try {
         await admin
           .from("payments")
-          .update({ enrollment_id: null, batch_id: null })
+          .delete()
           .in("enrollment_id", enrollmentIds)
       } catch (e) {
-        console.warn("Could not unlink payments by enrollment_id:", e)
+        console.warn("Could not delete payments by enrollment_id:", e)
       }
     }
 
-    // d. Unlink or clean payments referencing this batch
+    // d. Delete payments referencing this batch
     try {
-      const { error: payErr } = await admin
+      await admin
         .from("payments")
-        .update({ batch_id: null })
+        .delete()
         .eq("batch_id", cleanId)
-      if (payErr) {
-        console.warn("Could not nullify batch_id in payments, deleting test payments:", payErr)
-        await admin.from("payments").delete().eq("batch_id", cleanId)
-      }
     } catch (e) {
-      console.warn("Could not handle payments:", e)
+      console.warn("Could not delete payments for batch:", e)
     }
 
     // e. Delete payment_submissions associated with this batch

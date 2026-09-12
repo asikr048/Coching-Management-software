@@ -80,6 +80,7 @@ interface LedgerItem {
   isMonthly: boolean
   expectedAmount: number
   paidAmount: number
+  currencyCollected: number
   dueAmount: number
   status: "paid" | "partial" | "due"
   dueObj?: DueRow | null
@@ -289,10 +290,37 @@ export default function AccountantClient({
         const thisBatchRollObj = allBatchRolls.find((br) => br.batchId === batch.id)
         const rollNo = thisBatchRollObj ? thisBatchRollObj.roll : ((enr.roll_no != null && Number(enr.roll_no) > 0) ? Number(enr.roll_no) : 1)
 
+        // Calculate Referral amount paid for this student & batch
+        const referralPaymentsForThis = payments.filter(
+          (p) =>
+            p.student_id === st.id &&
+            p.batch_id === batch.id &&
+            (p.payment_method === "referral" || (p.notes && p.notes.includes("Referral:"))) &&
+            (!isMonthly || p.payment_month === selectedMonth || !p.payment_month)
+        )
+        const referralAmount = referralPaymentsForThis.reduce(
+          (acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0),
+          0
+        )
+        const hasReferral = referralAmount > 0
+        const referralNotes = referralPaymentsForThis[0]?.notes || null
+
+        // Calculate Currency payments (cash, bkash, nagad, card, bank, online) - strictly excluding referral!
+        const currencyPaymentsForThis = payments.filter(
+          (p) =>
+            p.student_id === st.id &&
+            p.batch_id === batch.id &&
+            p.payment_method !== "referral" &&
+            (!p.notes || !p.notes.includes("Referral:")) &&
+            (!isMonthly || p.payment_month === selectedMonth || !p.payment_month)
+        )
+        const currencyPaymentsSum = currencyPaymentsForThis.reduce(
+          (acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0),
+          0
+        )
+
         let expectedAmount = 0
-        let paidAmount = 0
-        let dueAmount = 0
-        let status: "paid" | "partial" | "due" = "due"
+        let currencyCollected = 0
         let dueObj: DueRow | null = null
 
         if (isMonthly) {
@@ -300,17 +328,12 @@ export default function AccountantClient({
           expectedAmount = dueObj ? Number(dueObj.due_amount) : Number(batch.monthly_fee) || 0
 
           if (dueObj) {
-            paidAmount = Number(dueObj.paid_amount || 0)
+            // dueObj.paid_amount may record total settled (currency + referral)
+            const rawPaid = Number(dueObj.paid_amount || 0)
+            currencyCollected = Math.max(currencyPaymentsSum, Math.max(0, rawPaid - referralAmount))
           } else {
-            // Check payments for this student, batch, and month
-            const monthPayments = payments.filter(
-              (p) => p.student_id === st.id && p.batch_id === batch.id && p.payment_month === selectedMonth
-            )
-            paidAmount = monthPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+            currencyCollected = currencyPaymentsSum
           }
-
-          dueAmount = Math.max(0, expectedAmount - paidAmount)
-          status = expectedAmount > 0 && dueAmount <= 0 ? "paid" : paidAmount > 0 ? "partial" : "due"
         } else {
           // One-time / Course Batch - check if an active due record exists in fee_dues
           dueObj =
@@ -327,36 +350,23 @@ export default function AccountantClient({
             expectedAmount =
               Number(dueObj.due_amount) ||
               (Number(batch.admission_fee) || 0) + (Number(batch.monthly_fee) || 0)
-            const batchPayments = payments.filter((p) => p.student_id === st.id && p.batch_id === batch.id)
-            const paySum = batchPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
-            paidAmount = Math.max(Number(dueObj.paid_amount || 0), paySum)
+            const rawPaid = Number(dueObj.paid_amount || 0)
+            currencyCollected = Math.max(currencyPaymentsSum, Math.max(0, rawPaid - referralAmount))
           } else {
             expectedAmount = (Number(batch.admission_fee) || 0) + (Number(batch.monthly_fee) || 0)
             if (expectedAmount === 0 && Number(batch.admission_fee) > 0) {
               expectedAmount = Number(batch.admission_fee)
             }
-            const batchPayments = payments.filter((p) => p.student_id === st.id && p.batch_id === batch.id)
-            paidAmount = batchPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
+            currencyCollected = currencyPaymentsSum
           }
-
-          dueAmount = Math.max(0, expectedAmount - paidAmount)
-          status = expectedAmount > 0 && dueAmount <= 0 ? "paid" : paidAmount > 0 ? "partial" : "due"
         }
 
-        // Calculate Referral amount paid for this student & batch
-        const referralPaymentsForThis = payments.filter(
-          (p) =>
-            p.student_id === st.id &&
-            p.batch_id === batch.id &&
-            (p.payment_method === "referral" || (p.notes && p.notes.includes("Referral:"))) &&
-            (!isMonthly || p.payment_month === selectedMonth || !p.payment_month)
-        )
-        const referralAmount = referralPaymentsForThis.reduce(
-          (acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0),
-          0
-        )
-        const hasReferral = referralAmount > 0
-        const referralNotes = referralPaymentsForThis[0]?.notes || null
+        // Formula requested by user:
+        // "outstanding due is expected target minus collected and referall ."
+        const dueAmount = Math.max(0, expectedAmount - currencyCollected - referralAmount)
+        const totalSettled = currencyCollected + referralAmount
+        const status: "paid" | "partial" | "due" =
+          expectedAmount > 0 && dueAmount <= 0 ? "paid" : totalSettled > 0 ? "partial" : "due"
 
         const feeTypeLabel = isMonthly
           ? `Monthly (৳${batch.monthly_fee || 0}/mo)`
@@ -371,7 +381,8 @@ export default function AccountantClient({
           allBatchRolls,
           isMonthly,
           expectedAmount,
-          paidAmount,
+          paidAmount: currencyCollected, // "collected is total currency is got , here is not added the referal amount ."
+          currencyCollected,
           dueAmount,
           status,
           dueObj,
@@ -474,18 +485,16 @@ export default function AccountantClient({
     let totalReferralAmount = 0
     let referralCount = 0
 
-    // Compute total referral across all payments
-    for (const p of payments) {
-      if (p.payment_method === "referral") {
-        totalReferralAmount += Number(p.total_paid ?? p.amount) || 0
-        referralCount++
-      }
-    }
-
     for (const item of filteredLedgerItems) {
       studentIdSet.add(item.student.id)
       expectedRevenue += item.expectedAmount
-      totalCollected += item.paidAmount
+      totalCollected += item.currencyCollected || item.paidAmount || 0
+      totalReferralAmount += item.referralAmount || 0
+
+      if (item.hasReferral) {
+        referralCount++
+      }
+
       totalDue += item.dueAmount
 
       if (item.status === "paid") {
@@ -495,6 +504,8 @@ export default function AccountantClient({
       }
     }
 
+    // Formula requested by user:
+    // "collection rate is collected divided by exoected target ."
     const collectionRate = expectedRevenue > 0 ? Math.round((totalCollected / expectedRevenue) * 100) : 0
 
     return {
@@ -509,7 +520,7 @@ export default function AccountantClient({
       totalReferralAmount,
       referralCount,
     }
-  }, [filteredLedgerItems, payments])
+  }, [filteredLedgerItems])
 
   // Checkbox Selection Controls
   const isAllFilteredSelected = useMemo(() => {
@@ -619,7 +630,7 @@ export default function AccountantClient({
 
     if (item && item.expectedAmount > 0) {
       targetFee = item.expectedAmount
-      prevPaid = item.paidAmount
+      prevPaid = (item.currencyCollected ?? item.paidAmount) + (item.referralAmount ?? 0)
     } else if (resolvedType === "monthly") {
       targetFee = dueObj ? Number(dueObj.due_amount) : Number(batch.monthly_fee) || 0
       const monthPayments = payments.filter(
