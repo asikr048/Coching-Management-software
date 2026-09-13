@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import type { Branch } from "@/lib/supabase/types"
+import { useBranch } from "@/components/providers/BranchContext"
 
 interface StudentRow {
   id: string
@@ -112,6 +113,7 @@ export default function AccountantClient({
   currentStaff,
 }: Props) {
   const supabase = createClient()
+  const { selectedBranchId: contextBranchId, setSelectedBranchId: setContextBranchId } = useBranch()
 
   // Main State
   const [students, setStudents] = useState<StudentRow[]>(initialStudents)
@@ -132,7 +134,25 @@ export default function AccountantClient({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedBatchId, setSelectedBatchId] = useState<string>("all")
   const [batchTypeFilter, setBatchTypeFilter] = useState<"all" | "monthly" | "course">("all")
-  const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
+    if (contextBranchId && contextBranchId !== "all") return contextBranchId
+    return "all"
+  })
+
+  // Keep branch state synchronized with top-navbar branch selector
+  useEffect(() => {
+    if (contextBranchId && contextBranchId !== selectedBranchId) {
+      setSelectedBranchId(contextBranchId)
+    }
+  }, [contextBranchId])
+
+  function handleBranchChange(branchId: string) {
+    setSelectedBranchId(branchId)
+    if (setContextBranchId) {
+      setContextBranchId(branchId)
+    }
+  }
+
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "partial" | "due" | "referral">("all")
   const [historyMethodFilter, setHistoryMethodFilter] = useState<string>("all")
 
@@ -258,13 +278,25 @@ export default function AccountantClient({
 
     // Pre-calculate batchwise sequential order for fallback roll numbers
     const batchCounterMap = new Map<string, number>()
+    const activeBatchIdSet = new Set(batches.map((b) => b.id))
 
     for (const st of students) {
-      const activeEnrollments = (st.enrollments || []).filter((e) => e.status === "active" && e.batch)
+      // Deduplicate active enrollments per batch so each student only has 1 ledger row per batch
+      const seenBatchIds = new Set<string>()
+      const activeEnrollments = (st.enrollments || []).filter((e) => {
+        const isActiveStatus = e.status === "active" || (!e.status && e.status !== "inactive")
+        if (!isActiveStatus) return false
+        const b = e.batch || batches.find((batch) => batch.id === e.batch_id)
+        if (!b || b.is_active === false) return false
+        const bId = b.id || e.batch_id
+        if (!bId || !activeBatchIdSet.has(bId) || seenBatchIds.has(bId)) return false
+        seenBatchIds.add(bId)
+        return true
+      })
 
       // Gather all batch rolls for this student across their active enrollments
       const allBatchRolls = activeEnrollments.map((enr, idx) => {
-        const b = enr.batch
+        const b = enr.batch || batches.find((batch) => batch.id === enr.batch_id)
         const bId = b?.id || enr.batch_id || "default"
         const count = (batchCounterMap.get(bId) || 0) + 1
         batchCounterMap.set(bId, count)
@@ -283,7 +315,8 @@ export default function AccountantClient({
       })
 
       for (const enr of activeEnrollments) {
-        const batch: BatchRow = enr.batch
+        const batch: BatchRow = enr.batch || batches.find((b) => b.id === enr.batch_id)
+        if (!batch) continue
         const rowKey = `${st.id}_${batch.id}`
         const isMonthly = batch.fee_type === "monthly" || (Number(batch.monthly_fee) || 0) > 0
 
@@ -395,14 +428,36 @@ export default function AccountantClient({
     }
 
     return items
-  }, [students, duesMapForSelectedMonth, payments, selectedMonth])
+  }, [students, batches, duesMapForSelectedMonth, payments, selectedMonth])
+
+  // Count registered active students in the selected branch scope
+  const totalBranchStudents = useMemo(() => {
+    return students.filter((st) => {
+      if (selectedBranchId !== "all") {
+        const studentBranch = st.branch_id
+        const hasEnrollmentInBranch = (st.enrollments || []).some(
+          (e: any) =>
+            (e.branch_id && e.branch_id === selectedBranchId) ||
+            (e.batch && e.batch.branch_id === selectedBranchId)
+        )
+        if (studentBranch !== selectedBranchId && !hasEnrollmentInBranch) {
+          return false
+        }
+      }
+      return true
+    }).length
+  }, [students, selectedBranchId])
 
   // Filtered Ledger Items
   const filteredLedgerItems = useMemo(() => {
     return allLedgerItems.filter((item) => {
-      // 1. Branch Filter
-      if (selectedBranchId !== "all" && item.student.branch_id !== selectedBranchId) {
-        return false
+      // 1. Branch Filter (matches either student branch or batch branch)
+      if (selectedBranchId !== "all") {
+        const studentBranch = item.student.branch_id
+        const batchBranch = item.batch.branch_id
+        if (studentBranch !== selectedBranchId && batchBranch !== selectedBranchId) {
+          return false
+        }
       }
 
       // 2. Batch Filter
@@ -508,8 +563,13 @@ export default function AccountantClient({
     // "collection rate is collected divided by exoected target ."
     const collectionRate = expectedRevenue > 0 ? Math.round((totalCollected / expectedRevenue) * 100) : 0
 
+    const resolvedTotalStudents =
+      selectedBatchId === "all"
+        ? Math.max(totalBranchStudents, studentIdSet.size)
+        : studentIdSet.size
+
     return {
-      totalStudents: studentIdSet.size,
+      totalStudents: resolvedTotalStudents,
       totalEnrollments: filteredLedgerItems.length,
       expectedRevenue,
       totalCollected,
@@ -520,7 +580,7 @@ export default function AccountantClient({
       totalReferralAmount,
       referralCount,
     }
-  }, [filteredLedgerItems])
+  }, [filteredLedgerItems, totalBranchStudents, selectedBatchId])
 
   // Checkbox Selection Controls
   const isAllFilteredSelected = useMemo(() => {
@@ -1339,7 +1399,7 @@ export default function AccountantClient({
             {branches.length > 0 ? (
               <select
                 value={selectedBranchId}
-                onChange={(e) => setSelectedBranchId(e.target.value)}
+                onChange={(e) => handleBranchChange(e.target.value)}
                 className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium py-2 px-3 focus:outline-hidden focus:border-indigo-500 cursor-pointer"
               >
                 <option value="all">All Branches</option>

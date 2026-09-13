@@ -17,7 +17,7 @@ export default async function AccountantDeskPage() {
   const [studentsRes, batchesRes, duesRes, paymentsRes, branchesRes] = await Promise.all([
     admin
       .from("students")
-      .select("*, enrollments(id, batch_id, roll_no, status, created_at, batch:batches(id, name, monthly_fee, admission_fee, branch_id, class_level, fee_type))")
+      .select("*, enrollments(id, batch_id, roll_no, status, created_at, batch:batches(id, name, monthly_fee, admission_fee, branch_id, class_level, fee_type, is_active))")
       .eq("is_active", true)
       .order("name", { ascending: true }),
 
@@ -50,17 +50,24 @@ export default async function AccountantDeskPage() {
   if (rawStudents.length === 0) {
     const { data: fbStudents } = await supabase
       .from("students")
-      .select("*, enrollments(id, batch_id, roll_no, status, created_at, batch:batches(id, name, monthly_fee, admission_fee, branch_id, class_level, fee_type))")
+      .select("*, enrollments(id, batch_id, roll_no, status, created_at, batch:batches(id, name, monthly_fee, admission_fee, branch_id, class_level, fee_type, is_active))")
       .eq("is_active", true)
       .order("name", { ascending: true })
     if (fbStudents) rawStudents = fbStudents
   }
 
+  const activeBatches = batchesRes.data || []
+  const activeBatchIdSet = new Set(activeBatches.map((b: any) => b.id))
+
   // Calculate batch-wise sequential order for enrollments if roll_no is null
   const allEnrollmentsList: any[] = []
   rawStudents.forEach((st: any) => {
     (st.enrollments || []).forEach((enr: any) => {
-      allEnrollmentsList.push({ ...enr, student_id: st.id })
+      const bId = enr.batch_id || enr.batch?.id
+      const isActiveStatus = enr.status === "active" || (!enr.status && enr.status !== "inactive")
+      if (bId && activeBatchIdSet.has(bId) && isActiveStatus) {
+        allEnrollmentsList.push({ ...enr, student_id: st.id })
+      }
     })
   })
 
@@ -84,10 +91,16 @@ export default async function AccountantDeskPage() {
 
   const enrichedStudents = rawStudents.map((st: any) => ({
     ...st,
-    enrollments: (st.enrollments || []).map((e: any) => ({
-      ...e,
-      roll_no: enrRollMap.get(e.id) ?? e.roll_no ?? st.roll_no ?? 1
-    }))
+    enrollments: (st.enrollments || [])
+      .filter((e: any) => {
+        const bId = e.batch_id || e.batch?.id
+        const isActiveStatus = e.status === "active" || (!e.status && e.status !== "inactive")
+        return bId && activeBatchIdSet.has(bId) && isActiveStatus
+      })
+      .map((e: any) => ({
+        ...e,
+        roll_no: enrRollMap.get(e.id) ?? e.roll_no ?? st.roll_no ?? 1
+      }))
   }))
 
   // Auto-heal any enrollments missing roll_no in database in background
@@ -111,9 +124,6 @@ export default async function AccountantDeskPage() {
     email: user?.email || "accountant@medhashiree.com",
     role: "accountant" as const,
   }
-
-  const activeBatches = batchesRes.data || []
-  const activeBatchIdSet = new Set(activeBatches.map((b: any) => b.id))
 
   // Only consider payments associated with existing active batches
   const rawPayments = (paymentsRes.data as any[]) || []
