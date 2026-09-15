@@ -37,6 +37,8 @@ import {
   Edit2,
 } from "lucide-react"
 import { getGrade, cn } from "@/lib/utils"
+import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
+import ExamPrintModal from "@/components/modules/exams/ExamPrintModal"
 
 interface Student {
   id: string
@@ -220,6 +222,10 @@ export default function ExamResultsPage() {
   const [tableSearchQuery, setTableSearchQuery] = useState("")
   const [weeklySearchQuery, setWeeklySearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "entered" | "pending" | "passed" | "failed">("all")
+
+  // Print Modal State
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
+  const [printModalDefaultMode, setPrintModalDefaultMode] = useState<"one_time" | "weekly_aggregate" | "weekly_day">("one_time")
 
   // Batch Selection & Students State
   const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string }[]>([])
@@ -2085,7 +2091,46 @@ export default function ExamResultsPage() {
   const isQuickPass = hasValidQuickMark && quickMarkNum >= activePassMarks
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+    <>
+      {/* GLOBAL PRINT STYLES */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: ${isWeeklyActive ? "A4 landscape" : "A4 portrait"};
+            margin: 8mm 10mm 10mm 10mm;
+          }
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          aside, header, nav, [role="navigation"], .no-print, [data-no-print="true"] {
+            display: none !important;
+          }
+          #printable-exam-sheet,
+          #printable-exam-sheet * {
+            visibility: visible !important;
+          }
+        }
+      `}</style>
+
+      {/* DIRECT PRINT-ONLY SHEET (Rendered on direct Ctrl+P / window.print when modal is not active) */}
+      <div className="hidden print:block">
+        <PrintableExamSheet
+          exam={exam}
+          mode={isWeeklyActive ? "weekly_aggregate" : isWeeklyExam ? "weekly_day" : "one_time"}
+          weeklyDays={parsedWeeklyDays}
+          activeDayConfig={activeDayConfig}
+          totalWeeklyMaxMarks={totalWeeklyMaxMarks}
+          students={students}
+          savedResults={savedResults}
+          dayMarksMap={dayMarksMap}
+          sortBy="rank"
+        />
+      </div>
+
+      <div className="space-y-6 max-w-7xl mx-auto pb-16 print:hidden">
       {/* Top Header Card */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
         <div className="flex items-start gap-4">
@@ -2255,6 +2300,20 @@ export default function ExamResultsPage() {
             <Edit2 className="w-4 h-4 text-indigo-600" />
             <span>Edit Exam (সম্পাদনা)</span>
           </Link>
+
+          {/* 5.6. Print Result Sheet Button (PDF) */}
+          <button
+            type="button"
+            onClick={() => {
+              setPrintModalDefaultMode(isWeeklyActive ? "weekly_aggregate" : isWeeklyExam ? "weekly_day" : "one_time")
+              setIsPrintModalOpen(true)
+            }}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer border border-slate-800 active:scale-95"
+            title="প্রিন্ট রেজাল্ট শিট বা PDF সংরক্ষণ করুন"
+          >
+            <Printer className="w-4 h-4 text-amber-400" />
+            <span>প্রিন্ট রেজাল্ট (PDF)</span>
+          </button>
 
           {/* 6. Delete Exam */}
           <button
@@ -2554,10 +2613,14 @@ export default function ExamResultsPage() {
               </div>
               <button
                 type="button"
-                onClick={() => window.print()}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                onClick={() => {
+                  setPrintModalDefaultMode("weekly_aggregate")
+                  setIsPrintModalOpen(true)
+                }}
+                className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                title="সাপ্তাহিক সামগ্রিক মেধা তালিকা প্রিন্ট করুন"
               >
-                <Printer className="w-3.5 h-3.5" /> প্রিন্ট মেধা তালিকা
+                <Printer className="w-3.5 h-3.5 text-amber-400" /> প্রিন্ট মেধা তালিকা (PDF)
               </button>
             </div>
 
@@ -2704,6 +2767,19 @@ export default function ExamResultsPage() {
                     </button>
                   )}
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintModalDefaultMode("weekly_aggregate")
+                    setIsPrintModalOpen(true)
+                  }}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95"
+                  title="সাপ্তাহিক সামগ্রিক মেধা ও মূল্যায়ন শিট প্রিন্ট করুন"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>প্রিন্ট শিট (PDF)</span>
+                </button>
 
                 <button
                   type="button"
@@ -3179,6 +3255,19 @@ export default function ExamResultsPage() {
                     {tab.label}
                   </button>
                 ))}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintModalDefaultMode(isWeeklyExam ? "weekly_day" : "one_time")
+                    setIsPrintModalOpen(true)
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 active:scale-95"
+                  title="বর্তমান রেজাল্ট শিট প্রিন্ট বা PDF সংরক্ষণ করুন"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-400" />
+                  <span>প্রিন্ট শিট (PDF)</span>
+                </button>
               </div>
             </div>
 
@@ -3499,6 +3588,22 @@ export default function ExamResultsPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+
+      {/* PRINT PREVIEW & PDF EXPORT MODAL */}
+      <ExamPrintModal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        exam={exam}
+        isWeeklyExam={isWeeklyExam}
+        weeklyDays={parsedWeeklyDays}
+        activeDayConfig={activeDayConfig}
+        totalWeeklyMaxMarks={totalWeeklyMaxMarks}
+        students={students}
+        savedResults={savedResults}
+        dayMarksMap={dayMarksMap}
+        defaultMode={printModalDefaultMode}
+      />
+    </>
   )
 }

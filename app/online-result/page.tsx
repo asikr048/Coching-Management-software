@@ -860,7 +860,63 @@ export default function OnlineResultPortalPage() {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans antialiased">
-      {/* Top Utility Header */}
+      {/* Global Print Styles */}
+      <style jsx global>{`
+        @media print {
+          @page {
+            size: ${isWeeklyExam && !selectedDayKey ? "A4 landscape" : "A4 portrait"};
+            margin: 8mm 10mm 10mm 10mm;
+          }
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            height: auto !important;
+            overflow: visible !important;
+          }
+          header, footer, .no-print, [data-no-print="true"] {
+            display: none !important;
+          }
+          .online-result-page-content {
+            display: none !important;
+          }
+          .online-result-modal-container {
+            position: static !important;
+            padding: 0 !important;
+            background: transparent !important;
+          }
+          .online-result-modal-box {
+            max-width: 100% !important;
+            max-height: none !important;
+            box-shadow: none !important;
+            border: none !important;
+            margin: 0 !important;
+          }
+          .online-result-modal-body {
+            overflow: visible !important;
+            padding: 0 !important;
+          }
+          .online-result-modal-footer,
+          .online-result-hide-print,
+          button {
+            display: none !important;
+          }
+          table {
+            border-collapse: collapse !important;
+            width: 100% !important;
+          }
+          th, td {
+            border: 1px solid #cbd5e1 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
+          }
+        }
+      `}</style>
+
+      <div className="online-result-page-content print:hidden">
+        {/* Top Utility Header */}
       <header className="bg-[#1e1b4b] text-white py-3.5 px-4 sm:px-8 border-b border-indigo-900/60 sticky top-0 z-40 shadow-md">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -1136,13 +1192,14 @@ export default function OnlineResultPortalPage() {
           </div>
         )}
       </main>
+      </div>
 
       {/* Full Merit List Modal */}
       {selectedExam && (
-        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto">
+        <div className="online-result-modal-container fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4 overflow-y-auto print:static print:p-0 print:bg-transparent print:z-auto">
           <div
             className={cn(
-              "bg-white rounded-3xl w-full shadow-2xl my-4 sm:my-8 flex flex-col max-h-[92vh] border border-slate-200 animate-in fade-in zoom-in-95 duration-150",
+              "online-result-modal-box bg-white rounded-3xl w-full shadow-2xl my-4 sm:my-8 flex flex-col max-h-[92vh] border border-slate-200 animate-in fade-in zoom-in-95 duration-150 print:border-none print:shadow-none print:max-h-none print:my-0",
               isWeeklyExam ? "max-w-6xl" : "max-w-4xl"
             )}
           >
@@ -1190,7 +1247,7 @@ export default function OnlineResultPortalPage() {
                   setSelectedExam(null)
                   setSelectedDayKey(null)
                 }}
-                className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer"
+                className="p-2 text-slate-400 hover:text-slate-800 hover:bg-slate-200 rounded-xl transition-colors cursor-pointer print:hidden"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1198,7 +1255,7 @@ export default function OnlineResultPortalPage() {
 
             {/* Day Switcher Bar in Modal (If weekly exam has published days or weekly published) */}
             {isWeeklyExam && (modalPublishedDays.length > 0 || selectedExam.is_weekly_published) && (
-              <div className="px-4 sm:px-6 py-2.5 bg-slate-100/90 border-b border-slate-200 flex items-center gap-2 overflow-x-auto">
+              <div className="px-4 sm:px-6 py-2.5 bg-slate-100/90 border-b border-slate-200 flex items-center gap-2 overflow-x-auto print:hidden">
                 <span className="text-[11px] font-bold text-slate-500 mr-1 whitespace-nowrap">দিন নির্বাচন:</span>
                 {modalPublishedDays.map((d) => {
                   const isDayActive = selectedDayKey?.toLowerCase() === d.key.toLowerCase()
@@ -1237,7 +1294,7 @@ export default function OnlineResultPortalPage() {
             )}
 
             {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+            <div className="online-result-modal-body flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 print:overflow-visible print:p-0">
               {loadingResults ? (
                 <div className="py-16 text-center text-slate-500">
                   <div className="w-8 h-8 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
@@ -1822,10 +1879,28 @@ export default function OnlineResultPortalPage() {
                   )}
                 </>
               )}
+              {/* Official Signature Block for Print */}
+              <div
+                className="hidden print:grid grid-cols-3 gap-6 pt-14 mt-10 border-t border-slate-300 text-center text-xs text-slate-700 font-semibold"
+                style={{ pageBreakInside: "avoid" }}
+              >
+                <div>
+                  <div className="border-t border-slate-700 pt-1.5 w-36 mx-auto">শ্রেণি শিক্ষক / পরীক্ষক</div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">তারিখ: .......................</p>
+                </div>
+                <div>
+                  <div className="border-t border-slate-700 pt-1.5 w-36 mx-auto">পরীক্ষা নিয়ন্ত্রক</div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">তারিখ: .......................</p>
+                </div>
+                <div>
+                  <div className="border-t border-slate-700 pt-1.5 w-36 mx-auto">শাখা প্রধান / পরিচালক</div>
+                  <p className="text-[10px] text-slate-400 mt-0.5">তারিখ: .......................</p>
+                </div>
+              </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-between p-4 border-t border-slate-200 bg-slate-50 rounded-b-3xl shrink-0">
+            <div className="online-result-modal-footer flex items-center justify-between p-4 border-t border-slate-200 bg-slate-50 rounded-b-3xl shrink-0 print:hidden">
               <button
                 type="button"
                 onClick={() => window.print()}
