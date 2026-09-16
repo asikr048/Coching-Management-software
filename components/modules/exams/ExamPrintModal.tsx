@@ -54,6 +54,7 @@ export default function ExamPrintModal({
   )
   const [sortBy, setSortBy] = useState<"rank" | "roll">("rank")
   const [showPodium, setShowPodium] = useState<boolean>(true)
+  const [showSubjectToppers, setShowSubjectToppers] = useState<boolean>(true)
   const [showSignatures, setShowSignatures] = useState<boolean>(true)
 
   // Sync mode and orientation when defaultMode changes
@@ -285,6 +286,19 @@ export default function ExamPrintModal({
               <span>শীর্ষ ৩ মেধা পোডিয়াম</span>
             </label>
 
+            {/* Toggle Subject Toppers (for weekly exams) */}
+            {isWeeklyExam && selectedMode === "weekly_aggregate" && (
+              <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={showSubjectToppers}
+                  onChange={(e) => setShowSubjectToppers(e.target.checked)}
+                  className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                />
+                <span>বিষয়ভিত্তিক শীর্ষ মেধা</span>
+              </label>
+            )}
+
             {/* Toggle Signatures */}
             <label className="flex items-center gap-1.5 cursor-pointer select-none text-slate-700">
               <input
@@ -317,6 +331,7 @@ export default function ExamPrintModal({
               dayMarksMap={dayMarksMap}
               sortBy={sortBy}
               showPodium={showPodium}
+              showSubjectToppers={showSubjectToppers}
               showSignatures={showSignatures}
             />
           </div>

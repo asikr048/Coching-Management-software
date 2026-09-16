@@ -49,6 +49,7 @@ export interface PrintableExamSheetProps {
   dayMarksMap?: Record<string, Record<string, { marks: number; total: number; grade: string; subject?: string; exam_name?: string }>>
   sortBy?: "rank" | "roll"
   showPodium?: boolean
+  showSubjectToppers?: boolean
   showSignatures?: boolean
   instituteName?: string
   instituteBranch?: string
@@ -86,6 +87,7 @@ export default function PrintableExamSheet({
   dayMarksMap = {},
   sortBy = "rank",
   showPodium = true,
+  showSubjectToppers = true,
   showSignatures = true,
   instituteName = "মেধাশিরী কোচিং সেন্টার",
   instituteBranch,
@@ -283,6 +285,62 @@ export default function PrintableExamSheet({
     return evaluated.slice(0, 3)
   }, [processedRows])
 
+  // Subject-wise toppers calculation for Weekly Aggregate
+  const { subjectToppers, dayTopperMap } = useMemo(() => {
+    if (!isWeeklyAggregate || weeklyDays.length === 0) {
+      return {
+        subjectToppers: [],
+        dayTopperMap: new Map<string, { score: number; names: string; rolls: string; topStudentIds: Set<string> }>(),
+      }
+    }
+
+    const toppersList: Array<{
+      day: (typeof weeklyDays)[0]
+      topScore: number
+      winners: Array<{ student: (typeof students)[0]; rollNumber: number; score: number }>
+    }> = []
+
+    const map = new Map<string, { score: number; names: string; rolls: string; topStudentIds: Set<string> }>()
+
+    for (const d of weeklyDays) {
+      let maxScore = -1
+      const studentDayEntries: Array<{ student: (typeof students)[0]; rollNumber: number; score: number }> = []
+
+      for (const s of students) {
+        const studentDays = dayMarksMap[s.id] || {}
+        const item = getDayMarkItemHelper(studentDays, d.key, d.day_bn, d.day_en)
+        if (item && !isNaN(Number(item.marks))) {
+          const sc = Number(item.marks)
+          if (sc > maxScore) {
+            maxScore = sc
+          }
+          studentDayEntries.push({
+            student: s,
+            rollNumber: s.roll_no || s.batch_roll || 0,
+            score: sc,
+          })
+        }
+      }
+
+      const winners = maxScore >= 0 ? studentDayEntries.filter((e) => e.score === maxScore) : []
+      toppersList.push({
+        day: d,
+        topScore: maxScore,
+        winners,
+      })
+
+      const topIds = new Set(winners.map((w) => w.student.id))
+      map.set(d.key, {
+        score: maxScore,
+        names: winners.map((w) => w.student.name).join(", "),
+        rolls: winners.map((w) => w.rollNumber).join(", "),
+        topStudentIds: topIds,
+      })
+    }
+
+    return { subjectToppers: toppersList, dayTopperMap: map }
+  }, [isWeeklyAggregate, weeklyDays, students, dayMarksMap])
+
   const formattedExamDate = useMemo(() => {
     if (exam.exam_date) {
       try {
@@ -452,6 +510,95 @@ export default function PrintableExamSheet({
         </div>
       )}
 
+      {/* 3.1 SUBJECT-WISE TOPPERS (বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী) */}
+      {showSubjectToppers && isWeeklyAggregate && subjectToppers.length > 0 && (
+        <div
+          className="mb-4 border border-purple-300 rounded-xl p-3 bg-purple-50/40 print:border-slate-400 print:bg-transparent"
+          style={{ pageBreakInside: "avoid" }}
+        >
+          <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-purple-200 print:border-slate-300">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-purple-700" />
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
+                বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী (Subject-wise Toppers)
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-purple-800 bg-purple-100/80 px-2 py-0.5 rounded-md border border-purple-200 print:hidden">
+              প্রতিটি বিষয়ের নির্ধারিত দিনে সর্বোচ্চ নম্বর অর্জনকারী
+            </span>
+          </div>
+
+          <div
+            className={cn(
+              "grid gap-2",
+              subjectToppers.length <= 4
+                ? "grid-cols-2 sm:grid-cols-4"
+                : subjectToppers.length <= 6
+                ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-6"
+                : "grid-cols-2 sm:grid-cols-4 lg:grid-cols-7"
+            )}
+          >
+            {subjectToppers.map((st) => {
+              const hasWinner = st.winners.length > 0 && st.topScore >= 0
+              const primaryWinner = hasWinner ? st.winners[0] : null
+              const isTie = st.winners.length > 1
+
+              return (
+                <div
+                  key={st.day.key}
+                  className="p-2 bg-white rounded-lg border border-purple-200 print:border-slate-400 flex flex-col justify-between space-y-1 text-left shadow-2xs print:shadow-none"
+                >
+                  <div>
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="text-[11px] font-black text-slate-900 flex items-center gap-1 truncate">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0"></span>
+                        <span className="truncate">{st.day.day_bn}</span>
+                      </span>
+                      <span className="text-[9px] font-bold px-1 rounded bg-slate-100 text-slate-600 shrink-0 border border-slate-200 print:border-slate-300">
+                        পূর্ণমান: {st.day.total_marks}
+                      </span>
+                    </div>
+                    <p
+                      className="text-[10px] font-bold text-purple-900 truncate mt-0.5"
+                      title={st.day.subject || st.day.exam_name}
+                    >
+                      {st.day.subject || st.day.exam_name}
+                    </p>
+                  </div>
+
+                  {hasWinner ? (
+                    <div className="pt-1.5 border-t border-slate-100 print:border-slate-300">
+                      <p
+                        className="text-[11px] font-black text-slate-950 truncate flex items-center gap-1"
+                        title={st.winners.map((w) => `${w.student.name} (রোল: ${w.rollNumber})`).join(", ")}
+                      >
+                        <span className="shrink-0 text-amber-600">🏆</span>
+                        <span className="truncate">{primaryWinner?.student.name}</span>
+                        {isTie && (
+                          <span className="text-[9px] font-normal text-purple-700 shrink-0">
+                            (+{st.winners.length - 1})
+                          </span>
+                        )}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono mt-0.5">
+                        <span>রোল: {primaryWinner?.rollNumber}</span>
+                        <span className="font-black text-amber-800 ml-1">
+                          {st.topScore}/{st.day.total_marks}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100">
+                      নম্বর এখনও বাকি
+                    </p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 4. OFFICIAL TABULATION SHEET TABLE */}
       <div className="overflow-x-visible">
         <table className="w-full border-collapse border border-slate-400 text-xs">
@@ -530,13 +677,29 @@ export default function PrintableExamSheet({
                   {isWeeklyAggregate &&
                     weeklyDays.map((d) => {
                       const dayVal = row.dayBreakdown[d.key]?.marks
+                      const isTopper =
+                        dayVal !== null &&
+                        dayVal !== undefined &&
+                        dayTopperMap.get(d.key)?.topStudentIds.has(row.student.id) &&
+                        dayVal > 0
+
                       return (
                         <td
                           key={d.key}
-                          className="border border-slate-300 py-1.5 px-1 text-center font-mono font-semibold"
+                          className={cn(
+                            "border border-slate-300 py-1.5 px-1 text-center font-mono font-semibold",
+                            isTopper ? "bg-amber-100/70 font-black text-amber-950 print:bg-amber-100" : ""
+                          )}
                         >
                           {dayVal !== null && dayVal !== undefined ? (
-                            <span className={cn(dayVal >= d.pass_marks ? "text-slate-900" : "text-rose-700 font-bold")}>
+                            <span
+                              className={cn(
+                                dayVal >= d.pass_marks ? "text-slate-900" : "text-rose-700 font-bold",
+                                isTopper ? "text-amber-950 font-black inline-flex items-center justify-center gap-0.5" : ""
+                              )}
+                              title={isTopper ? "🏆 বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী" : undefined}
+                            >
+                              {isTopper && <span className="text-[10px]">🏆</span>}
                               {dayVal}
                             </span>
                           ) : (
@@ -595,6 +758,73 @@ export default function PrintableExamSheet({
               </tr>
             )}
           </tbody>
+
+          {/* TABLE SUMMARY FOOTER FOR WEEKLY AGGREGATE */}
+          {isWeeklyAggregate && weeklyDays.length > 0 && processedRows.length > 0 && (
+            <tfoot style={{ pageBreakInside: "avoid" }}>
+              {/* Row 1: Subject-wise Highest Score */}
+              <tr className="bg-amber-50/80 font-black border-t-2 border-slate-400 text-xs print:bg-slate-100">
+                <td colSpan={5} className="border border-slate-400 py-1.5 px-3 text-right text-slate-900">
+                  <span className="flex items-center justify-end gap-1.5">
+                    <Trophy className="w-3.5 h-3.5 text-amber-600 inline shrink-0" />
+                    <span>বিষয়ভিত্তিক সর্বোচ্চ নম্বর (Highest Mark):</span>
+                  </span>
+                </td>
+                {weeklyDays.map((d) => {
+                  const topper = dayTopperMap.get(d.key)
+                  return (
+                    <td
+                      key={d.key}
+                      className="border border-slate-400 py-1.5 px-1 text-center font-mono font-black text-amber-950 bg-amber-100/60 print:bg-transparent"
+                    >
+                      {topper && topper.score >= 0 ? `${topper.score}/${d.total_marks}` : "—"}
+                    </td>
+                  )
+                })}
+                <td className="border border-slate-400 py-1.5 px-2 text-center font-mono font-black text-amber-950 bg-amber-100/70">
+                  {summary.highestScore}/{activeTotalMarks}
+                </td>
+                <td
+                  colSpan={3}
+                  className="border border-slate-400 py-1.5 px-2 text-center text-[10px] text-slate-600 font-bold"
+                >
+                  সর্বোচ্চ প্রাপ্তি
+                </td>
+              </tr>
+
+              {/* Row 2: Subject Toppers Names / Rolls */}
+              <tr className="bg-slate-100 font-bold border-t border-slate-300 text-[10px] print:bg-slate-50">
+                <td colSpan={5} className="border border-slate-400 py-1.5 px-3 text-right text-purple-900 font-black">
+                  <span className="flex items-center justify-end gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-purple-700 inline shrink-0" />
+                    <span>বিষয়ভিত্তিক শীর্ষ মেধা (Subject Topper):</span>
+                  </span>
+                </td>
+                {weeklyDays.map((d) => {
+                  const topper = dayTopperMap.get(d.key)
+                  return (
+                    <td
+                      key={d.key}
+                      className="border border-slate-400 py-1 px-1 text-center text-[10px] font-semibold text-slate-900"
+                      title={topper?.names}
+                    >
+                      {topper && topper.names ? (
+                        <div className="truncate max-w-[85px] mx-auto">
+                          <span className="font-black text-slate-950 block truncate">🏆 {topper.names}</span>
+                          <span className="text-[9px] text-slate-600 font-mono block">রোল: {topper.rolls}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
+                    </td>
+                  )
+                })}
+                <td colSpan={4} className="border border-slate-400 py-1.5 px-2 text-center text-[10px] text-slate-400">
+                  —
+                </td>
+              </tr>
+            </tfoot>
+          )}
         </table>
       </div>
 
