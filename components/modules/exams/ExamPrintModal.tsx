@@ -94,7 +94,7 @@ export default function ExamPrintModal({
         @media print {
           @page {
             size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"};
-            margin: 8mm 10mm 10mm 10mm;
+            margin: 6mm 8mm 6mm 8mm;
           }
           /* Hide non-print overlays, headers, and UI chrome */
           body * {
@@ -125,7 +125,12 @@ export default function ExamPrintModal({
         }
       `}</style>
 
-      <div className="bg-slate-100 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xl w-full max-w-5xl max-h-[96vh] flex flex-col overflow-hidden print:border-none print:shadow-none print:max-w-none print:max-h-none print:bg-white">
+      <div
+        className={cn(
+          "bg-slate-100 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xl w-full max-h-[96vh] flex flex-col overflow-hidden print:border-none print:shadow-none print:max-w-none print:max-h-none print:bg-white",
+          orientation === "landscape" ? "max-w-[1180px]" : "max-w-4xl"
+        )}
+      >
         {/* Top Control Bar (Screen only) */}
         <div className="p-4 sm:p-5 bg-white border-b border-slate-200 flex flex-col gap-3 shrink-0 print:hidden">
           <div className="flex items-center justify-between">
@@ -313,11 +318,11 @@ export default function ExamPrintModal({
         </div>
 
         {/* Document Preview Viewport (Scrollable container on screen, printed directly) */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-200/70 flex justify-center print:p-0 print:bg-white print:overflow-visible">
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 bg-slate-200/70 flex justify-center print:p-0 print:bg-white print:overflow-visible">
           <div
             className={cn(
               "bg-white shadow-xl rounded-xl transition-all border border-slate-300/80 print:shadow-none print:border-none print:rounded-none",
-              orientation === "landscape" ? "w-full max-w-[1100px]" : "w-full max-w-[850px]"
+              orientation === "landscape" ? "w-full max-w-[1080px]" : "w-full max-w-[820px]"
             )}
           >
             <PrintableExamSheet

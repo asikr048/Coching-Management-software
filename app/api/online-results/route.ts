@@ -138,17 +138,22 @@ function normalizeExam(ex: any) {
 
     let sumTotal = 0
     let sumPass = 0
-    for (const w of ALL_WEEK_DAYS) {
+    const confKeys = Object.keys(confMap)
+    const targetDays = confKeys.length > 0
+      ? ALL_WEEK_DAYS.filter((w) => !!confMap[w.id])
+      : ALL_WEEK_DAYS
+
+    for (const w of targetDays) {
       const conf = confMap[w.id]
       const dTotal = conf && typeof conf === "object" && conf.total_marks ? Number(conf.total_marks) : 50
       const dPass = conf && typeof conf === "object" && conf.pass_marks ? Number(conf.pass_marks) : 20
       sumTotal += dTotal
       sumPass += dPass
     }
-    if (sumTotal > 0) totalMarks = sumTotal
-    else if (totalMarks < 350) totalMarks = 350
-    if (sumPass > 0) passMarks = sumPass
-    else if (passMarks < 140) passMarks = 140
+    if (sumTotal > 0) {
+      totalMarks = sumTotal
+      passMarks = sumPass > 0 ? sumPass : Math.round(sumTotal * 0.4)
+    }
   }
 
   return {

@@ -638,10 +638,11 @@ export default function ExamsClient({
     }
 
     if (isWeekly) {
+      const hasConfiguredDays = Object.keys(dayConfigs).length > 0
       const examTotal = Number(exam.total_marks) || 350
-      const defaultDayTotal = examTotal > 0 ? String(Math.round(examTotal / 7)) : "50"
+      const defaultDayTotal = examTotal > 0 ? String(Math.round(examTotal / (hasConfiguredDays ? Object.keys(dayConfigs).length : 7))) : "50"
       const examPass = Number(exam.pass_marks) || 140
-      const defaultDayPass = examPass > 0 ? String(Math.round(examPass / 7)) : "20"
+      const defaultDayPass = examPass > 0 ? String(Math.round(examPass / (hasConfiguredDays ? Object.keys(dayConfigs).length : 7))) : "20"
       
       const subjects = (exam.subject || "")
         .split(/[,+;|/]/)
@@ -651,7 +652,7 @@ export default function ExamsClient({
       WEEK_DAYS.forEach((w, idx) => {
         if (dayConfigs[w.id]) {
           newSched[w.id as keyof typeof newSched] = dayConfigs[w.id]
-        } else {
+        } else if (!hasConfiguredDays) {
           const daySubject = subjects.length > idx ? subjects[idx] : (subjects.length === 1 && !subjects[0].includes("সাপ্তাহিক") ? subjects[0] : (exam.subject || ""))
           newSched[w.id as keyof typeof newSched] = {
             selected: true,
@@ -659,6 +660,14 @@ export default function ExamsClient({
             subject: daySubject,
             total_marks: defaultDayTotal,
             pass_marks: defaultDayPass,
+          }
+        } else {
+          newSched[w.id as keyof typeof newSched] = {
+            selected: false,
+            exam_name: `${w.bn}ের পরীক্ষা`,
+            subject: "",
+            total_marks: "50",
+            pass_marks: "20",
           }
         }
       })

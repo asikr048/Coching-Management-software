@@ -169,33 +169,42 @@ export function parseWeeklyDays(exam: any): any[] {
     } catch {}
   }
 
-  const textToCheck = `${exam.title || ""} ${exam.subject || ""}`
-  const foundDaysInTitle = ALL_WEEK_DAYS.filter(
-    (d) => textToCheck.includes(d.bn) || textToCheck.toLowerCase().includes(d.id)
-  )
-  if (foundDaysInTitle.length > 0) {
-    const subjectList = (exam.subject || "")
-      .split(",")
-      .map((s: string) => s.trim())
-      .filter(Boolean)
+  if (Object.keys(dayConfigMap).length === 0) {
+    const textToCheck = `${exam.title || ""} ${exam.subject || ""}`
+    const foundDaysInTitle = ALL_WEEK_DAYS.filter(
+      (d) => textToCheck.includes(d.bn) || textToCheck.toLowerCase().includes(d.id)
+    )
+    if (foundDaysInTitle.length > 0) {
+      const subjectList = (exam.subject || "")
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean)
 
-    foundDaysInTitle.forEach((d, idx) => {
-      if (!dayConfigMap[d.id]) {
-        const assignedSubj = subjectList[idx] || exam.subject || ""
-        dayConfigMap[d.id] = {
-          key: d.id,
-          day_bn: d.bn,
-          day_en: d.en,
-          exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
-          subject: assignedSubj,
-          total_marks: 50,
-          pass_marks: 20,
+      foundDaysInTitle.forEach((d, idx) => {
+        if (!dayConfigMap[d.id]) {
+          const assignedSubj = subjectList[idx] || exam.subject || ""
+          dayConfigMap[d.id] = {
+            key: d.id,
+            day_bn: d.bn,
+            day_en: d.en,
+            exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
+            subject: assignedSubj,
+            total_marks: 50,
+            pass_marks: 20,
+          }
         }
-      }
-    })
+      })
+    }
   }
 
   if (isWeekly) {
+    const configuredKeys = Object.keys(dayConfigMap)
+    if (configuredKeys.length > 0) {
+      const ordered = ALL_WEEK_DAYS.filter((w) => !!dayConfigMap[w.id]).map((w) => dayConfigMap[w.id])
+      const remaining = Object.values(dayConfigMap).filter((d) => !ordered.some((o) => o.key === d.key))
+      return [...ordered, ...remaining]
+    }
+
     const examTotal = Number(exam.total_marks) || 350
     const defaultDayTotal = examTotal > 0 ? Math.round(examTotal / 7) : 50
     const examPass = Number(exam.pass_marks) || 140
@@ -207,9 +216,6 @@ export function parseWeeklyDays(exam: any): any[] {
       .filter(Boolean)
 
     return ALL_WEEK_DAYS.map((w, idx) => {
-      if (dayConfigMap[w.id]) {
-        return dayConfigMap[w.id]
-      }
       const daySubject = subjects.length > idx ? subjects[idx] : (subjects.length === 1 && !subjects[0].includes("সাপ্তাহিক") ? subjects[0] : (exam.subject || ""))
       return {
         key: w.id,

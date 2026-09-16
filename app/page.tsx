@@ -74,8 +74,14 @@ function parseWeeklyDaysForExam(exam: any) {
     } catch {}
   }
 
+  const configuredKeys = Object.keys(dayMap)
+  if (configuredKeys.length > 0) {
+    const ordered = ALL_WEEK_DAYS.filter((w) => !!dayMap[w.id]).map((w) => dayMap[w.id])
+    const remaining = Object.values(dayMap).filter((d) => !ordered.some((o) => o.key === d.key))
+    return [...ordered, ...remaining]
+  }
+
   return ALL_WEEK_DAYS.map((w) => {
-    if (dayMap[w.id]) return dayMap[w.id]
     return {
       key: w.id,
       day_bn: w.bn,

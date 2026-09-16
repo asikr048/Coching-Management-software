@@ -363,7 +363,7 @@ export default function PrintableExamSheet({
   return (
     <div
       id="printable-exam-sheet"
-      className="bg-white text-slate-900 p-6 sm:p-8 font-sans leading-normal selection:bg-none print:p-0 print:m-0 print:w-full print:border-none print:shadow-none"
+      className="bg-white text-slate-900 p-4 sm:p-6 font-sans leading-normal selection:bg-none print:p-0 print:m-0 print:w-full print:border-none print:shadow-none"
       style={{ minHeight: "100%" }}
     >
       {/* 1. OFFICIAL INSTITUTION HEADER */}
@@ -404,11 +404,11 @@ export default function PrintableExamSheet({
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-3.5 pt-3 border-t border-slate-200 text-xs">
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 print:bg-transparent print:border-slate-300">
             <span className="text-[10px] uppercase font-bold text-slate-500 block">পরীক্ষার নাম</span>
-            <span className="font-black text-slate-900 truncate block">{exam.title}</span>
+            <span className="font-black text-slate-900 leading-snug block">{exam.title}</span>
           </div>
           <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 print:bg-transparent print:border-slate-300">
             <span className="text-[10px] uppercase font-bold text-slate-500 block">ব্যাচ ও বিষয়</span>
-            <span className="font-black text-slate-900 truncate block">
+            <span className="font-black text-slate-900 leading-snug block">
               {exam.batch?.name || "সকল ব্যাচ"} • {displaySubject}
             </span>
           </div>
@@ -511,12 +511,13 @@ export default function PrintableExamSheet({
       )}
 
       {/* 3.1 SUBJECT-WISE TOPPERS (বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী) */}
+      {/* 3.1 SUBJECT-WISE TOPPERS (বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী) */}
       {showSubjectToppers && isWeeklyAggregate && subjectToppers.length > 0 && (
         <div
           className="mb-4 border border-purple-300 rounded-xl p-3 bg-purple-50/40 print:border-slate-400 print:bg-transparent"
           style={{ pageBreakInside: "avoid" }}
         >
-          <div className="flex items-center justify-between pb-1.5 mb-2 border-b border-purple-200 print:border-slate-300">
+          <div className="flex items-center justify-between pb-1.5 mb-2.5 border-b border-purple-200 print:border-slate-300">
             <div className="flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-purple-700" />
               <h3 className="text-xs font-black uppercase tracking-wider text-slate-900">
@@ -528,16 +529,7 @@ export default function PrintableExamSheet({
             </span>
           </div>
 
-          <div
-            className={cn(
-              "grid gap-2",
-              subjectToppers.length <= 4
-                ? "grid-cols-2 sm:grid-cols-4"
-                : subjectToppers.length <= 6
-                ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-6"
-                : "grid-cols-2 sm:grid-cols-4 lg:grid-cols-7"
-            )}
-          >
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {subjectToppers.map((st) => {
               const hasWinner = st.winners.length > 0 && st.topScore >= 0
               const primaryWinner = hasWinner ? st.winners[0] : null
@@ -546,51 +538,54 @@ export default function PrintableExamSheet({
               return (
                 <div
                   key={st.day.key}
-                  className="p-2 bg-white rounded-lg border border-purple-200 print:border-slate-400 flex flex-col justify-between space-y-1 text-left shadow-2xs print:shadow-none"
+                  className="p-2.5 sm:p-3 bg-white rounded-xl border border-purple-200/90 print:border-slate-300 flex flex-col justify-between space-y-2 text-left shadow-2xs print:shadow-none"
+                  style={{ pageBreakInside: "avoid" }}
                 >
                   <div>
-                    <div className="flex items-center justify-between gap-1">
-                      <span className="text-[11px] font-black text-slate-900 flex items-center gap-1 truncate">
-                        <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0"></span>
-                        <span className="truncate">{st.day.day_bn}</span>
+                    <div className="flex items-center justify-between gap-1 pb-1 border-b border-purple-100 print:border-slate-200">
+                      <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-purple-600 shrink-0"></span>
+                        <span>{st.day.day_bn}</span>
                       </span>
-                      <span className="text-[9px] font-bold px-1 rounded bg-slate-100 text-slate-600 shrink-0 border border-slate-200 print:border-slate-300">
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 print:border-slate-300">
                         পূর্ণমান: {st.day.total_marks}
                       </span>
                     </div>
-                    <p
-                      className="text-[10px] font-bold text-purple-900 truncate mt-0.5"
-                      title={st.day.subject || st.day.exam_name}
-                    >
+                    <p className="text-xs font-bold text-purple-900 mt-1">
                       {st.day.subject || st.day.exam_name}
                     </p>
                   </div>
 
                   {hasWinner ? (
-                    <div className="pt-1.5 border-t border-slate-100 print:border-slate-300">
-                      <p
-                        className="text-[11px] font-black text-slate-950 truncate flex items-center gap-1"
-                        title={st.winners.map((w) => `${w.student.name} (রোল: ${w.rollNumber})`).join(", ")}
-                      >
-                        <span className="shrink-0 text-amber-600">🏆</span>
-                        <span className="truncate">{primaryWinner?.student.name}</span>
-                        {isTie && (
-                          <span className="text-[9px] font-normal text-purple-700 shrink-0">
-                            (+{st.winners.length - 1})
+                    <div className="pt-2 border-t border-slate-100 print:border-slate-200 flex items-center justify-between text-xs gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-black text-slate-950 text-xs flex items-center gap-1">
+                          <span className="shrink-0 text-amber-500">🏆</span>
+                          <span className="font-black text-slate-950">
+                            {isTie ? st.winners.map((w) => w.student.name).join(", ") : primaryWinner?.student.name}
                           </span>
-                        )}
-                      </p>
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono mt-0.5">
-                        <span>রোল: {primaryWinner?.rollNumber}</span>
-                        <span className="font-black text-amber-800 ml-1">
+                        </p>
+                        <p className="text-[10px] text-slate-600 font-mono mt-0.5">
+                          {isTie
+                            ? `রোল: ${st.winners.map((w) => w.rollNumber).join(", ")}`
+                            : `রোল: ${primaryWinner?.rollNumber} • আইডি: ${primaryWinner?.student.student_id}`}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-black text-xs sm:text-sm text-amber-800 block">
                           {st.topScore}/{st.day.total_marks}
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-700 block">
+                          {Math.round((st.topScore / (st.day.total_marks || 50)) * 100)}%
                         </span>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100">
-                      নম্বর এখনও বাকি
-                    </p>
+                    <div className="pt-1.5 border-t border-slate-100 print:border-slate-200">
+                      <p className="text-xs text-slate-400 italic">
+                        নম্বর এখনও যুক্ত হয়নি
+                      </p>
+                    </div>
                   )}
                 </div>
               )
@@ -600,34 +595,39 @@ export default function PrintableExamSheet({
       )}
 
       {/* 4. OFFICIAL TABULATION SHEET TABLE */}
-      <div className="overflow-x-visible">
+      <div className="w-full overflow-x-auto print:overflow-visible">
         <table className="w-full border-collapse border border-slate-400 text-xs">
           <thead>
             <tr className="bg-slate-100 text-slate-900 font-black border-b-2 border-slate-400 text-center uppercase tracking-wider text-[11px] print:bg-slate-200">
-              <th className="border border-slate-400 py-2 px-1.5 w-8">#</th>
-              <th className="border border-slate-400 py-2 px-2 w-14">মেধাক্রম</th>
-              <th className="border border-slate-400 py-2 px-2 w-14">রোল</th>
-              <th className="border border-slate-400 py-2 px-2 w-20">শিক্ষার্থী আইডি</th>
-              <th className="border border-slate-400 py-2 px-3 text-left">শিক্ষার্থীর নাম</th>
+              <th className="border border-slate-400 py-1.5 px-1 w-8 min-w-[32px] text-center whitespace-nowrap">#</th>
+              <th className="border border-slate-400 py-1.5 px-1.5 w-14 min-w-[50px] text-center whitespace-nowrap">মেধাক্রম</th>
+              <th className="border border-slate-400 py-1.5 px-1.5 w-12 min-w-[44px] text-center whitespace-nowrap font-mono">রোল</th>
+              <th className="border border-slate-400 py-1.5 px-1.5 w-24 min-w-[85px] text-center whitespace-nowrap font-mono">শিক্ষার্থী আইডি</th>
+              <th className="border border-slate-400 py-1.5 px-3 text-left min-w-[140px] whitespace-nowrap">শিক্ষার্থীর নাম</th>
 
-              {/* Weekly Aggregate: 7 Days Columns */}
+              {/* Weekly Aggregate: Active Days Columns */}
               {isWeeklyAggregate &&
                 weeklyDays.map((d) => (
-                  <th key={d.key} className="border border-slate-400 py-2 px-1.5 min-w-[55px]">
-                    <span className="block font-black">{d.day_bn}</span>
-                    <span className="text-[9px] font-semibold text-slate-600 block truncate max-w-[65px]">
+                  <th key={d.key} className="border border-slate-400 py-1.5 px-1 text-center whitespace-nowrap min-w-[52px]">
+                    <span className="block font-black text-[11px] leading-tight">{d.day_bn}</span>
+                    <span className="text-[9px] font-semibold text-slate-600 block truncate max-w-[62px] mx-auto leading-tight" title={d.subject || d.exam_name}>
                       {d.subject || d.exam_name}
                     </span>
-                    <span className="text-[9px] text-amber-900 font-bold">({d.total_marks})</span>
+                    <span className="text-[9px] text-amber-900 font-bold block leading-tight">({d.total_marks})</span>
                   </th>
                 ))}
 
-              <th className="border border-slate-400 py-2 px-2 bg-amber-50/60 print:bg-transparent min-w-[70px]">
-                {isWeeklyAggregate ? `মোট প্রাপ্ত (${totalWeeklyMaxMarks})` : `প্রাপ্ত নম্বর (${activeTotalMarks})`}
+              <th className="border border-slate-400 py-1.5 px-2 bg-amber-50/70 print:bg-transparent text-center whitespace-nowrap w-20 min-w-[70px]">
+                <span className="block font-black text-[11px] leading-tight">
+                  {isWeeklyAggregate ? "মোট প্রাপ্ত" : "প্রাপ্ত নম্বর"}
+                </span>
+                <span className="text-[9px] text-amber-900 font-bold block leading-tight">
+                  ({isWeeklyAggregate ? totalWeeklyMaxMarks : activeTotalMarks})
+                </span>
               </th>
-              <th className="border border-slate-400 py-2 px-1.5 w-12">শতকরা</th>
-              <th className="border border-slate-400 py-2 px-1.5 w-12">গ্রেড</th>
-              <th className="border border-slate-400 py-2 px-2 w-16">ফলাফল</th>
+              <th className="border border-slate-400 py-1.5 px-1.5 w-12 min-w-[44px] text-center whitespace-nowrap">শতকরা</th>
+              <th className="border border-slate-400 py-1.5 px-1.5 w-12 min-w-[40px] text-center whitespace-nowrap">গ্রেড</th>
+              <th className="border border-slate-400 py-1.5 px-2 w-14 min-w-[55px] text-center whitespace-nowrap">ফলাফল</th>
             </tr>
           </thead>
           <tbody>
@@ -640,10 +640,10 @@ export default function PrintableExamSheet({
 
               return (
                 <tr key={row.student.id} className={rowClass} style={{ pageBreakInside: "avoid" }}>
-                  <td className="border border-slate-300 py-1.5 px-1 text-center font-mono text-slate-500 font-semibold">
+                  <td className="border border-slate-300 py-1.5 px-1 text-center font-mono text-slate-500 font-semibold whitespace-nowrap">
                     {idx + 1}
                   </td>
-                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-bold">
+                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-bold whitespace-nowrap">
                     {row.rank !== null ? (
                       <span
                         className={cn(
@@ -663,13 +663,13 @@ export default function PrintableExamSheet({
                       <span className="text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-mono font-bold text-slate-900">
+                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-mono font-bold text-slate-900 whitespace-nowrap">
                     {row.rollNumber}
                   </td>
-                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-mono text-[11px] text-slate-700">
+                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-mono text-[11px] text-slate-700 whitespace-nowrap">
                     {row.student.student_id}
                   </td>
-                  <td className="border border-slate-300 py-1.5 px-3 font-bold text-slate-950">
+                  <td className="border border-slate-300 py-1.5 px-3 font-bold text-slate-950 whitespace-nowrap min-w-[140px]">
                     {row.student.name}
                   </td>
 
@@ -687,14 +687,14 @@ export default function PrintableExamSheet({
                         <td
                           key={d.key}
                           className={cn(
-                            "border border-slate-300 py-1.5 px-1 text-center font-mono font-semibold",
+                            "border border-slate-300 py-1 px-1 text-center font-mono text-xs whitespace-nowrap",
                             isTopper ? "bg-amber-100/70 font-black text-amber-950 print:bg-amber-100" : ""
                           )}
                         >
                           {dayVal !== null && dayVal !== undefined ? (
                             <span
                               className={cn(
-                                dayVal >= d.pass_marks ? "text-slate-900" : "text-rose-700 font-bold",
+                                dayVal >= d.pass_marks ? "text-slate-900 font-semibold" : "text-rose-700 font-bold",
                                 isTopper ? "text-amber-950 font-black inline-flex items-center justify-center gap-0.5" : ""
                               )}
                               title={isTopper ? "🏆 বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী" : undefined}
@@ -709,13 +709,13 @@ export default function PrintableExamSheet({
                       )
                     })}
 
-                  <td className="border border-slate-300 py-1.5 px-2 text-center font-mono font-black text-amber-950 bg-amber-50/30 print:bg-transparent">
+                  <td className="border border-slate-300 py-1.5 px-2 text-center font-mono font-black text-amber-950 bg-amber-50/40 print:bg-transparent whitespace-nowrap">
                     {row.mark !== null ? row.mark : <span className="text-slate-400 font-normal">—</span>}
                   </td>
-                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-mono font-bold text-slate-800">
+                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-mono font-bold text-slate-800 whitespace-nowrap">
                     {row.pct !== null ? `${row.pct}%` : "—"}
                   </td>
-                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-black">
+                  <td className="border border-slate-300 py-1.5 px-1.5 text-center font-black whitespace-nowrap">
                     {row.grade !== "—" ? (
                       <span
                         className={cn(
@@ -732,7 +732,7 @@ export default function PrintableExamSheet({
                       <span className="text-slate-400 font-normal">—</span>
                     )}
                   </td>
-                  <td className="border border-slate-300 py-1.5 px-2 text-center font-bold text-[11px]">
+                  <td className="border border-slate-300 py-1.5 px-2 text-center font-bold text-[11px] whitespace-nowrap">
                     {row.mark !== null ? (
                       row.isPass ? (
                         <span className="text-emerald-800 font-black">উত্তীর্ণ</span>

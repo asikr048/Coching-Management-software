@@ -270,7 +270,13 @@ export async function PATCH(
     delete payload.id
 
     // Ensure metadata tags in result_note for guaranteed persistence
-    let updatedNote = currentExam.result_note || ""
+    let updatedNote = typeof body.result_note === "string" ? body.result_note : (currentExam.result_note || "")
+    if (Array.isArray(body.recurring_days)) {
+      payload.recurring_days = body.recurring_days
+      updatedNote = updatedNote.replace(/\[WEEKLY_SCHEDULE:[^\]]*\]/g, "").trim()
+      updatedNote = updatedNote.replace(/\[WEEKLY_DAYS:[^\]]*\]/g, "").trim()
+      updatedNote = `${updatedNote} [WEEKLY_SCHEDULE:${JSON.stringify(body.recurring_days)}] [WEEKLY_DAYS:${body.recurring_days.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`.trim()
+    }
     if (typeof body.is_paused === "boolean") {
       updatedNote = updatedNote.replace(/\[IS_PAUSED:(true|false)\]/g, "").trim()
       updatedNote = `${updatedNote} [IS_PAUSED:${body.is_paused}]`.trim()

@@ -84,7 +84,14 @@ export async function GET(
       Boolean(exam.title?.includes("সাপ্তাহিক"))
 
     if (isWeeklyExam) {
-      const recDays = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
+      let recDays = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
+      if (recDays.length === 0 && exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+        try {
+          const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+          if (match && match[1]) recDays = JSON.parse(match[1])
+        } catch {}
+      }
+
       const confMap: Record<string, any> = {}
       for (const d of recDays) {
         const isObj = typeof d === "object" && d !== null
@@ -97,7 +104,12 @@ export async function GET(
 
       let sumTotal = 0
       let sumPass = 0
-      for (const w of ALL_WEEK_DAYS) {
+      const confKeys = Object.keys(confMap)
+      const targetDays = confKeys.length > 0
+        ? ALL_WEEK_DAYS.filter((w) => !!confMap[w.id])
+        : ALL_WEEK_DAYS
+
+      for (const w of targetDays) {
         const conf = confMap[w.id]
         const dTotal = conf && typeof conf === "object" && conf.total_marks ? Number(conf.total_marks) : 50
         const dPass = conf && typeof conf === "object" && conf.pass_marks ? Number(conf.pass_marks) : 20
@@ -531,7 +543,14 @@ export async function POST(
     let calculatedWeeklyMax = 0
     let calculatedWeeklyPass = 0
     if (isWeekly) {
-      const recDays = Array.isArray(currentExam.recurring_days) ? currentExam.recurring_days : []
+      let recDays = Array.isArray(currentExam.recurring_days) ? currentExam.recurring_days : []
+      if (recDays.length === 0 && currentExam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+        try {
+          const match = currentExam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+          if (match && match[1]) recDays = JSON.parse(match[1])
+        } catch {}
+      }
+
       const confMap: Record<string, any> = {}
       for (const d of recDays) {
         const isObj = typeof d === "object" && d !== null
@@ -542,7 +561,12 @@ export async function POST(
         confMap[canonicalKey] = d
       }
 
-      for (const w of ALL_WEEK_DAYS) {
+      const confKeys = Object.keys(confMap)
+      const targetDays = confKeys.length > 0
+        ? ALL_WEEK_DAYS.filter((w) => !!confMap[w.id])
+        : ALL_WEEK_DAYS
+
+      for (const w of targetDays) {
         const conf = confMap[w.id]
         const dTotal = conf && typeof conf === "object" && conf.total_marks ? Number(conf.total_marks) : 50
         const dPass = conf && typeof conf === "object" && conf.pass_marks ? Number(conf.pass_marks) : 20

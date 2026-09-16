@@ -233,36 +233,42 @@ export function parseWeeklyDaysForExam(exam: PublicExam | null): ParsedWeeklyDay
     } catch {}
   }
 
-  const foundDaysInTitle = ALL_WEEK_DAYS.filter(
-    (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
-  )
-  if (foundDaysInTitle.length > 0) {
-    const subjectList = (exam.subject || "")
-      .split(",")
-      .map((s: string) => s.trim())
-      .filter(Boolean)
+  if (Object.keys(dayConfigMap).length === 0) {
+    const foundDaysInTitle = ALL_WEEK_DAYS.filter(
+      (d) => exam.title?.includes(d.bn) || exam.title?.toLowerCase()?.includes(d.id)
+    )
+    if (foundDaysInTitle.length > 0) {
+      const subjectList = (exam.subject || "")
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean)
 
-    foundDaysInTitle.forEach((d, idx) => {
-      if (!dayConfigMap[d.id]) {
-        const assignedSubj = subjectList[idx] || exam.subject || ""
-        dayConfigMap[d.id] = {
-          key: d.id,
-          day_bn: d.bn,
-          day_en: d.en,
-          exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
-          subject: assignedSubj,
-          total_marks: 50,
-          pass_marks: 20,
+      foundDaysInTitle.forEach((d, idx) => {
+        if (!dayConfigMap[d.id]) {
+          const assignedSubj = subjectList[idx] || exam.subject || ""
+          dayConfigMap[d.id] = {
+            key: d.id,
+            day_bn: d.bn,
+            day_en: d.en,
+            exam_name: assignedSubj ? `${assignedSubj} পরীক্ষা` : `${d.bn}ের পরীক্ষা`,
+            subject: assignedSubj,
+            total_marks: 50,
+            pass_marks: 20,
+          }
         }
-      }
-    })
+      })
+    }
   }
 
   if (isWeekly) {
+    const configuredKeys = Object.keys(dayConfigMap)
+    if (configuredKeys.length > 0) {
+      const ordered = ALL_WEEK_DAYS.filter((w) => !!dayConfigMap[w.id]).map((w) => dayConfigMap[w.id])
+      const remaining = Object.values(dayConfigMap).filter((d) => !ordered.some((o) => o.key === d.key))
+      return [...ordered, ...remaining]
+    }
+
     return ALL_WEEK_DAYS.map((w) => {
-      if (dayConfigMap[w.id]) {
-        return dayConfigMap[w.id]
-      }
       return {
         key: w.id,
         day_bn: w.bn,
