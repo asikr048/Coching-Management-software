@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { extractWeeklyScheduleFromNote } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -55,15 +56,11 @@ function normalizeExam(ex: any) {
 
   // Parse recurring_days from multiple formats
   let recDays: any[] = []
-  if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
+  const noteSchedule = extractWeeklyScheduleFromNote(ex.result_note)
+  if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+    recDays = noteSchedule
+  } else if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
     recDays = ex.recurring_days
-  } else if (note.includes("[WEEKLY_SCHEDULE:")) {
-    try {
-      const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-      if (match && match[1]) {
-        recDays = JSON.parse(match[1])
-      }
-    } catch {}
   } else if (note.includes("[RECURRING_DAYS:")) {
     try {
       const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)

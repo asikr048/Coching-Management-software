@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { cleanWeeklyScheduleFromNote } from "@/lib/utils"
 
 export async function GET(
   req: NextRequest,
@@ -273,8 +274,7 @@ export async function PATCH(
     let updatedNote = typeof body.result_note === "string" ? body.result_note : (currentExam.result_note || "")
     if (Array.isArray(body.recurring_days)) {
       payload.recurring_days = body.recurring_days
-      updatedNote = updatedNote.replace(/\[WEEKLY_SCHEDULE:[^\]]*\]/g, "").trim()
-      updatedNote = updatedNote.replace(/\[WEEKLY_DAYS:[^\]]*\]/g, "").trim()
+      updatedNote = cleanWeeklyScheduleFromNote(updatedNote)
       updatedNote = `${updatedNote} [WEEKLY_SCHEDULE:${JSON.stringify(body.recurring_days)}] [WEEKLY_DAYS:${body.recurring_days.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`.trim()
     }
     if (typeof body.is_paused === "boolean") {
@@ -360,19 +360,19 @@ export async function PATCH(
 
     if (error) {
       console.warn("Exam update first attempt failed:", error.message)
-      // Prune newer columns if Postgres rejected them
-      if ("show_all_results" in payload) delete payload.show_all_results
-      if ("show_results_immediately" in payload) delete payload.show_results_immediately
-      if ("is_paused" in payload) delete payload.is_paused
-      if ("is_public_result" in payload) delete payload.is_public_result
-      if ("exam_schedule_type" in payload) delete payload.exam_schedule_type
-      if ("recurring_days" in payload) delete payload.recurring_days
-      if ("schedule_notice_id" in payload) delete payload.schedule_notice_id
-      if ("published_days" in payload) delete payload.published_days
-      if ("is_weekly_published" in payload) delete payload.is_weekly_published
-      if ("duration_minutes" in payload) delete payload.duration_minutes
-      if ("batch_ids" in payload) delete payload.batch_ids
-      if ("branch_id" in payload) delete payload.branch_id
+      const errMsg = error.message || ""
+      if (errMsg.includes("branch_id")) delete payload.branch_id
+      if (errMsg.includes("batch_ids")) delete payload.batch_ids
+      if (errMsg.includes("schedule_notice_id")) delete payload.schedule_notice_id
+      if (errMsg.includes("published_days")) delete payload.published_days
+      if (errMsg.includes("is_weekly_published")) delete payload.is_weekly_published
+      if (errMsg.includes("duration_minutes")) delete payload.duration_minutes
+      if (errMsg.includes("recurring_days")) delete payload.recurring_days
+      if (errMsg.includes("exam_schedule_type")) delete payload.exam_schedule_type
+      if (errMsg.includes("is_paused")) delete payload.is_paused
+      if (errMsg.includes("is_public_result")) delete payload.is_public_result
+      if (errMsg.includes("show_all_results")) delete payload.show_all_results
+      if (errMsg.includes("show_results_immediately")) delete payload.show_results_immediately
 
       let { data: fbExam, error: fbErr } = await admin
         .from("exams")
@@ -383,36 +383,58 @@ export async function PATCH(
 
       if (fbErr) {
         console.warn("Exam update second attempt failed:", fbErr.message)
-        const coreBaseColumns = [
-          "title",
-          "subject",
-          "exam_type",
-          "total_marks",
-          "pass_marks",
-          "exam_date",
-          "batch_id",
-          "is_published",
-          "is_online",
-          "result_note"
+        const newerColumns = [
+          "show_all_results", "show_results_immediately", "is_paused", "is_public_result",
+          "exam_schedule_type", "recurring_days", "schedule_notice_id", "published_days",
+          "is_weekly_published", "duration_minutes", "batch_ids", "branch_id"
         ]
-        const corePayload: Record<string, any> = {}
-        for (const k of coreBaseColumns) {
-          if (k in payload) {
-            corePayload[k] = payload[k]
-          }
+        for (const col of newerColumns) {
+          delete payload[col]
         }
-        const { data: coreExam, error: coreErr } = await admin
+        let { data: thirdExam, error: thirdErr } = await admin
           .from("exams")
-          .update(corePayload)
+          .update(payload)
           .eq("id", examId)
           .select("*")
           .maybeSingle()
 
-        if (coreErr) throw coreErr
-        fbExam = coreExam
+        if (thirdErr) {
+          console.warn("Exam update third attempt failed:", thirdErr.message)
+          const coreBaseColumns = [
+            "title", "subject", "exam_type", "total_marks", "pass_marks",
+            "exam_date", "batch_id", "is_published", "is_online", "result_note"
+          ]
+          const corePayload: Record<string, any> = {}
+          for (const k of coreBaseColumns) {
+            if (k in payload) corePayload[k] = payload[k]
+          }
+          const { data: coreExam, error: coreErr } = await admin
+            .from("exams")
+            .update(corePayload)
+            .eq("id", examId)
+            .select("*")
+            .maybeSingle()
+
+          if (coreErr) throw coreErr
+          fbExam = coreExam
+        } else {
+          fbExam = thirdExam
+        }
       }
 
-      updatedExam = { ...fbExam, ...body }
+      updatedExam = { 
+        ...fbExam, 
+        ...body, 
+        result_note: updatedNote, 
+        recurring_days: Array.isArray(body.recurring_days) ? body.recurring_days : (fbExam?.recurring_days || []) 
+      }
+    } else {
+      updatedExam = {
+        ...updatedExam,
+        ...body,
+        result_note: updatedNote,
+        recurring_days: Array.isArray(body.recurring_days) ? body.recurring_days : (updatedExam?.recurring_days || [])
+      }
     }
 
     return NextResponse.json({ success: true, exam: updatedExam })

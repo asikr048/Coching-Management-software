@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { formatDate, getGrade, cn } from "@/lib/utils"
+import { formatDate, getGrade, cn, extractWeeklyScheduleFromNote } from "@/lib/utils"
 import {
   Trophy,
   Award,
@@ -204,33 +204,24 @@ export function parseWeeklyDaysForExam(exam: PublicExam | null): ParsedWeeklyDay
     }
   }
 
-  const note = (exam as any).result_note || ""
-  if (note.includes("[WEEKLY_SCHEDULE:")) {
-    try {
-      const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-      if (match && match[1]) {
-        const parsed = JSON.parse(match[1])
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          for (const item of parsed) {
-            const rawKey = item.day || item.day_bn || item.day_en || ""
-            const dayKey = String(rawKey).toLowerCase()
-            const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
-            const canonicalKey = matched?.id || dayKey
-            if (!dayConfigMap[canonicalKey]) {
-              dayConfigMap[canonicalKey] = {
-                key: canonicalKey,
-                day_bn: matched?.bn || item.day_bn || item.day,
-                day_en: matched?.en || item.day_en || item.day,
-                exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
-                subject: item.subject || exam.subject || "",
-                total_marks: Number(item.total_marks) || 50,
-                pass_marks: Number(item.pass_marks) || 20,
-              }
-            }
-          }
-        }
+  const noteSchedule = extractWeeklyScheduleFromNote((exam as any).result_note)
+  if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+    for (const item of noteSchedule) {
+      const rawKey = item.day || item.day_bn || item.day_en || ""
+      const dayKey = String(rawKey).toLowerCase()
+      const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+      const canonicalKey = matched?.id || dayKey
+      const existing = dayConfigMap[canonicalKey]
+      dayConfigMap[canonicalKey] = {
+        key: canonicalKey,
+        day_bn: matched?.bn || item.day_bn || item.day || existing?.day_bn || "",
+        day_en: matched?.en || item.day_en || item.day || existing?.day_en || "",
+        exam_name: item.exam_name || existing?.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+        subject: item.subject || existing?.subject || exam.subject || "",
+        total_marks: item.total_marks != null ? Number(item.total_marks) : (existing?.total_marks || 50),
+        pass_marks: item.pass_marks != null ? Number(item.pass_marks) : (existing?.pass_marks || 20),
       }
-    } catch {}
+    }
   }
 
   if (Object.keys(dayConfigMap).length === 0) {

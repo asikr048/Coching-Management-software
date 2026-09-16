@@ -1,5 +1,5 @@
 "use client"
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { 
@@ -7,7 +7,7 @@ import {
   Trash2, Edit2, PlayCircle, Eye, Globe, MessageSquare, Landmark, Building2, BookOpen,
   Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle, Search, ExternalLink, Filter
 } from "lucide-react"
-import { formatDate, cn } from "@/lib/utils"
+import { formatDate, cn, extractWeeklyScheduleFromNote, cleanWeeklyScheduleFromNote } from "@/lib/utils"
 import Link from "next/link"
 import { useBranch } from "@/components/providers/BranchContext"
 import type { Branch } from "@/lib/supabase/types"
@@ -594,6 +594,7 @@ export default function ExamsClient({
     const newSched = defaultWeeklySchedule()
     const dayConfigs: Record<string, any> = {}
 
+    // A. Parse from recurring_days column if present
     if (Array.isArray(recDays) && recDays.length > 0) {
       for (const item of recDays) {
         const isObj = typeof item === "object" && item !== null
@@ -605,36 +606,32 @@ export default function ExamsClient({
             selected: true,
             exam_name: isObj && item.exam_name ? item.exam_name : `${matched.bn}ের পরীক্ষা`,
             subject: isObj && item.subject ? item.subject : (exam.subject || ""),
-            total_marks: isObj && item.total_marks ? String(item.total_marks) : "50",
-            pass_marks: isObj && item.pass_marks ? String(item.pass_marks) : "20",
+            total_marks: isObj && item.total_marks != null ? String(item.total_marks) : "50",
+            pass_marks: isObj && item.pass_marks != null ? String(item.pass_marks) : "20",
           }
         }
       }
     }
 
-    if (exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
-      try {
-        const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-        if (match && match[1]) {
-          const parsed = JSON.parse(match[1])
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            for (const item of parsed) {
-              const rawKey = item.day || item.day_bn || item.day_en || ""
-              const dayKey = String(rawKey).toLowerCase()
-              const matched = WEEK_DAYS.find(w => w.id.toLowerCase() === dayKey || w.bn === rawKey)
-              if (matched && !dayConfigs[matched.id]) {
-                dayConfigs[matched.id] = {
-                  selected: true,
-                  exam_name: item.exam_name || `${matched.bn}ের পরীক্ষা`,
-                  subject: item.subject || exam.subject || "",
-                  total_marks: item.total_marks ? String(item.total_marks) : "50",
-                  pass_marks: item.pass_marks ? String(item.pass_marks) : "20",
-                }
-              }
-            }
+    // B. ALWAYS parse [WEEKLY_SCHEDULE:...] from result_note using robust extractor
+    // result_note contains the user's latest saved day-by-day marks and names!
+    const noteSchedule = extractWeeklyScheduleFromNote(exam.result_note)
+    if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+      for (const item of noteSchedule) {
+        const rawKey = item.day || item.day_bn || item.day_en || ""
+        const dayKey = String(rawKey).toLowerCase()
+        const matched = WEEK_DAYS.find(w => w.id.toLowerCase() === dayKey || w.bn === rawKey)
+        if (matched) {
+          const existing = dayConfigs[matched.id] || {}
+          dayConfigs[matched.id] = {
+            selected: true,
+            exam_name: item.exam_name || existing.exam_name || `${matched.bn}ের পরীক্ষা`,
+            subject: item.subject || existing.subject || exam.subject || "",
+            total_marks: item.total_marks != null ? String(item.total_marks) : (existing.total_marks || "50"),
+            pass_marks: item.pass_marks != null ? String(item.pass_marks) : (existing.pass_marks || "20"),
           }
         }
-      } catch {}
+      }
     }
 
     if (isWeekly) {
@@ -651,7 +648,11 @@ export default function ExamsClient({
 
       WEEK_DAYS.forEach((w, idx) => {
         if (dayConfigs[w.id]) {
-          newSched[w.id as keyof typeof newSched] = dayConfigs[w.id]
+          newSched[w.id as keyof typeof newSched] = {
+            ...dayConfigs[w.id],
+            total_marks: dayConfigs[w.id].total_marks || defaultDayTotal,
+            pass_marks: dayConfigs[w.id].pass_marks || defaultDayPass,
+          }
         } else if (!hasConfiguredDays) {
           const daySubject = subjects.length > idx ? subjects[idx] : (subjects.length === 1 && !subjects[0].includes("সাপ্তাহিক") ? subjects[0] : (exam.subject || ""))
           newSched[w.id as keyof typeof newSched] = {
@@ -681,11 +682,9 @@ export default function ExamsClient({
 
     setWeeklySchedule(newSched)
 
-    let cleanedNote = exam.result_note || ""
+    let cleanedNote = cleanWeeklyScheduleFromNote(exam.result_note)
     cleanedNote = cleanedNote
       .replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "")
-      .replace(/\[WEEKLY_SCHEDULE:[^\]]*\]/g, "")
-      .replace(/\[WEEKLY_DAYS:[^\]]*\]/g, "")
       .replace(/\[IS_PAUSED:(true|false)\]/g, "")
       .replace(/\[PUBLIC_RESULT:(true|false)\]/g, "")
       .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
@@ -743,14 +742,16 @@ export default function ExamsClient({
     setShowModal(true)
   }
 
-  // Support ?edit=EXAM_ID in URL query params
+  // Support ?edit=EXAM_ID in URL query params (only auto-open once on initial load)
+  const hasAutoOpenedEdit = useRef(false)
   useEffect(() => {
-    if (typeof window !== "undefined" && exams.length > 0) {
+    if (typeof window !== "undefined" && exams.length > 0 && !hasAutoOpenedEdit.current) {
       const urlParams = new URLSearchParams(window.location.search)
       const editId = urlParams.get("edit")
       if (editId) {
         const found = exams.find(e => e.id === editId)
         if (found) {
+          hasAutoOpenedEdit.current = true
           handleOpenEdit(found)
         }
       }
@@ -836,7 +837,9 @@ export default function ExamsClient({
           duration_minutes: examMode === "offline" ? parseInt(form.duration_minutes) : null,
           show_results_immediately: form.show_results_immediately,
           show_all_results: form.show_all_results,
-          result_note: (form.result_note ? form.result_note + " " : "") + 
+          result_note: (form.result_note 
+            ? cleanWeeklyScheduleFromNote(form.result_note).replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "").trim() + " " 
+            : "") + 
             `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
             (form.exam_schedule_type === "weekly" 
               ? ` [WEEKLY_SCHEDULE:${JSON.stringify(activeWeeklyDays)}] [WEEKLY_DAYS:${activeWeeklyDays.map(d => d.day).join(",")}]` 
@@ -941,8 +944,8 @@ export default function ExamsClient({
         const matchedBatch = batches.find(b => b.id === selectedBatchIdToUse)
         const finalUpdatedExam: ExamRow = {
           ...editingExam,
-          ...updatePayload,
           ...(updatedData || {}),
+          ...updatePayload, // Ensure updated activeWeeklyDays and marks take precedence in local state
           batch: matchedBatch ? { name: matchedBatch.name } : editingExam.batch,
         }
 
@@ -950,6 +953,13 @@ export default function ExamsClient({
         toast.success(`✓ "${finalTitle}" updated successfully! (পরীক্ষা আপডেট সম্পন্ন হয়েছে)`)
         setShowModal(false)
         resetForm()
+        if (typeof window !== "undefined") {
+          const url = new URL(window.location.href)
+          if (url.searchParams.has("edit")) {
+            url.searchParams.delete("edit")
+            window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""))
+          }
+        }
         setLoading(false)
         return
       }

@@ -9,6 +9,7 @@ import {
   Landmark, ArrowUpRight, Star, Search, CalendarDays
 } from "lucide-react"
 import type { Branch, Blog, Achievement, Notice } from "@/lib/supabase/types"
+import { extractWeeklyScheduleFromNote } from "@/lib/utils"
 
 interface Slide {
   id: string
@@ -52,16 +53,14 @@ const ALL_WEEK_DAYS = [
 function getExamDaysList(ex: any) {
   const note = ex.result_note || ""
   let recDays: any[] = []
-  if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
+  const noteSchedule = extractWeeklyScheduleFromNote(note)
+  if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+    recDays = noteSchedule
+  } else if (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) {
     recDays = ex.recurring_days
   } else if (note.includes("[RECURRING_DAYS:")) {
     try {
       const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
-      if (match && match[1]) recDays = JSON.parse(match[1])
-    } catch {}
-  } else if (note.includes("[WEEKLY_SCHEDULE:")) {
-    try {
-      const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
       if (match && match[1]) recDays = JSON.parse(match[1])
     } catch {}
   }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { extractWeeklyScheduleFromNote } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -544,13 +545,6 @@ export async function POST(
     let calculatedWeeklyPass = 0
     if (isWeekly) {
       let recDays = Array.isArray(currentExam.recurring_days) ? currentExam.recurring_days : []
-      if (recDays.length === 0 && currentExam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
-        try {
-          const match = currentExam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-          if (match && match[1]) recDays = JSON.parse(match[1])
-        } catch {}
-      }
-
       const confMap: Record<string, any> = {}
       for (const d of recDays) {
         const isObj = typeof d === "object" && d !== null
@@ -559,6 +553,17 @@ export async function POST(
         const matched = ALL_WEEK_DAYS.find((w) => w.id === lowerKey || w.bn === rawKey || w.en.toLowerCase() === lowerKey)
         const canonicalKey = matched?.id || lowerKey
         confMap[canonicalKey] = d
+      }
+
+      const noteSchedule = extractWeeklyScheduleFromNote(currentExam.result_note)
+      if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+        for (const item of noteSchedule) {
+          const rawKey = item.day || item.day_bn || item.day_en || ""
+          const lowerKey = String(rawKey).toLowerCase()
+          const matched = ALL_WEEK_DAYS.find((w) => w.id === lowerKey || w.bn === rawKey || w.en.toLowerCase() === lowerKey)
+          const canonicalKey = matched?.id || lowerKey
+          confMap[canonicalKey] = { ...(confMap[canonicalKey] || {}), ...item }
+        }
       }
 
       const confKeys = Object.keys(confMap)

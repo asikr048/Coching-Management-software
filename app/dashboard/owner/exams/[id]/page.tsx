@@ -36,7 +36,7 @@ import {
   BookOpen,
   Edit2,
 } from "lucide-react"
-import { getGrade, cn } from "@/lib/utils"
+import { getGrade, cn, extractWeeklyScheduleFromNote } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
 import ExamPrintModal from "@/components/modules/exams/ExamPrintModal"
 
@@ -293,34 +293,24 @@ export default function ExamResultsPage() {
       }
     }
 
-    // B. Check result_note fallback tag [WEEKLY_SCHEDULE:...]
-    if (exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
-      try {
-        const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-        if (match && match[1]) {
-          const parsed = JSON.parse(match[1])
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            for (const item of parsed) {
-              const rawKey = item.day || item.day_bn || item.day_en || ""
-              const dayKey = String(rawKey).toLowerCase()
-              const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
-              const canonicalKey = matched?.id || dayKey
-              if (!dayConfigMap[canonicalKey]) {
-                dayConfigMap[canonicalKey] = {
-                  key: canonicalKey,
-                  day_bn: matched?.bn || item.day_bn || item.day,
-                  day_en: matched?.en || item.day_en || item.day,
-                  exam_name: item.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
-                  subject: item.subject || exam.subject || "",
-                  total_marks: Number(item.total_marks) || 50,
-                  pass_marks: Number(item.pass_marks) || 20,
-                }
-              }
-            }
-          }
+    // B. Check result_note tag [WEEKLY_SCHEDULE:...] using robust extractor
+    const noteSchedule = extractWeeklyScheduleFromNote(exam.result_note)
+    if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+      for (const item of noteSchedule) {
+        const rawKey = item.day || item.day_bn || item.day_en || ""
+        const dayKey = String(rawKey).toLowerCase()
+        const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+        const canonicalKey = matched?.id || dayKey
+        const existing = dayConfigMap[canonicalKey]
+        dayConfigMap[canonicalKey] = {
+          key: canonicalKey,
+          day_bn: matched?.bn || item.day_bn || item.day || existing?.day_bn || "",
+          day_en: matched?.en || item.day_en || item.day || existing?.day_en || "",
+          exam_name: item.exam_name || existing?.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+          subject: item.subject || existing?.subject || exam.subject || "",
+          total_marks: item.total_marks != null ? Number(item.total_marks) : (existing?.total_marks || 50),
+          pass_marks: item.pass_marks != null ? Number(item.pass_marks) : (existing?.pass_marks || 20),
         }
-      } catch (e) {
-        console.warn("Error parsing weekly schedule fallback:", e)
       }
     }
 

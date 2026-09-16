@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { extractWeeklyScheduleFromNote } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -465,13 +466,11 @@ export async function GET(req: NextRequest) {
       if (normalizedExam) {
         const note = normalizedExam.result_note || ""
         let recDays = normalizedExam.recurring_days
-        if (!recDays || (Array.isArray(recDays) && recDays.length === 0)) {
-          if (note.includes("[WEEKLY_SCHEDULE:")) {
-            try {
-              const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-              if (match && match[1]) recDays = JSON.parse(match[1])
-            } catch {}
-          } else if (note.includes("[RECURRING_DAYS:")) {
+        const noteSchedule = extractWeeklyScheduleFromNote(note)
+        if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+          recDays = noteSchedule
+        } else if (!recDays || (Array.isArray(recDays) && recDays.length === 0)) {
+          if (note.includes("[RECURRING_DAYS:")) {
             try {
               const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
               if (match && match[1]) recDays = JSON.parse(match[1])
@@ -691,13 +690,11 @@ export async function GET(req: NextRequest) {
           .map((ex: any) => {
             const note = ex.result_note || ""
             let recDays = ex.recurring_days
-            if (!recDays || (Array.isArray(recDays) && recDays.length === 0)) {
-              if (note.includes("[WEEKLY_SCHEDULE:")) {
-                try {
-                  const match = note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-                  if (match && match[1]) recDays = JSON.parse(match[1])
-                } catch {}
-              } else if (note.includes("[RECURRING_DAYS:")) {
+            const noteSchedule = extractWeeklyScheduleFromNote(note)
+            if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+              recDays = noteSchedule
+            } else if (!recDays || (Array.isArray(recDays) && recDays.length === 0)) {
+              if (note.includes("[RECURRING_DAYS:")) {
                 try {
                   const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
                   if (match && match[1]) recDays = JSON.parse(match[1])
