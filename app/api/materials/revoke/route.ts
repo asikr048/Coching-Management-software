@@ -40,14 +40,25 @@ export async function POST(req: NextRequest) {
         .maybeSingle()
 
       if (mat) {
-        const { count: remainingActiveCount } = await admin
+        let activeCount = 0
+        const { count: remainingActiveCount, error: countErr } = await admin
           .from("material_issues")
           .select("*", { count: "exact", head: true })
           .eq("material_id", targetMatId)
           .eq("status", "issued")
 
+        if (!countErr && typeof remainingActiveCount === "number") {
+          activeCount = remainingActiveCount
+        } else {
+          const { count: nullReturnedCount } = await admin
+            .from("material_issues")
+            .select("*", { count: "exact", head: true })
+            .eq("material_id", targetMatId)
+            .is("returned_at", null)
+          activeCount = typeof nullReturnedCount === "number" ? nullReturnedCount : 0
+        }
+
         const totalStock = Number(mat.total_stock) || 0
-        const activeCount = typeof remainingActiveCount === "number" ? remainingActiveCount : 0
         newStock = Math.max(0, totalStock - activeCount)
         await admin
           .from("materials")

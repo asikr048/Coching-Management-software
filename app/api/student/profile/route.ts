@@ -741,18 +741,19 @@ export async function GET(req: NextRequest) {
       const allBatchMatIds = (bMatsRes.data || []).map((m: any) => m.id).filter((id: any) => uuidRegex.test(String(id)))
       if (studentEnrolledBatchIds.length > 0 || allBatchMatIds.length > 0) {
         try {
-          let bIssueQuery = admin
-            .from("material_issues")
-            .select("*, material:materials(*), student:students(id, name, student_id, phone, email)")
-            .eq("status", "issued")
+          let bIssues: any[] = []
+          const { data: issuesWithStatus, error: statusErr } = await (allBatchMatIds.length > 0
+            ? admin.from("material_issues").select("*, material:materials(*), student:students(id, name, student_id, phone, email)").eq("status", "issued").in("material_id", allBatchMatIds)
+            : admin.from("material_issues").select("*, material:materials(*), student:students(id, name, student_id, phone, email)").eq("status", "issued").in("batch_id", studentEnrolledBatchIds))
 
-          if (allBatchMatIds.length > 0) {
-            bIssueQuery = bIssueQuery.in("material_id", allBatchMatIds)
+          if (!statusErr && issuesWithStatus) {
+            bIssues = issuesWithStatus
           } else {
-            bIssueQuery = bIssueQuery.in("batch_id", studentEnrolledBatchIds)
+            const { data: issuesFallback } = await (allBatchMatIds.length > 0
+              ? admin.from("material_issues").select("*, material:materials(*), student:students(id, name, student_id, phone, email)").is("returned_at", null).in("material_id", allBatchMatIds)
+              : admin.from("material_issues").select("*, material:materials(*), student:students(id, name, student_id, phone, email)").is("returned_at", null).in("batch_id", studentEnrolledBatchIds))
+            bIssues = issuesFallback || []
           }
-
-          const { data: bIssues } = await bIssueQuery
 
           const isNameSimilar = (n1: string, n2: string) => {
             if (!n1 || !n2) return false

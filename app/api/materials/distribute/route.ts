@@ -133,26 +133,52 @@ export async function POST(req: NextRequest) {
     const nowIso = new Date().toISOString()
 
     // 6. Filter out students who already have an active issue for this material
-    const { data: existingIssues } = await admin
+    let existingIssues: any[] = []
+    const { data: issuesWithStatus, error: statusErr } = await admin
       .from("material_issues")
-      .select("student_id")
+      .select("student_id, returned_at")
       .eq("material_id", targetMaterial.id)
       .in("student_id", verifiedStudentIds)
       .eq("status", "issued")
+
+    if (!statusErr && issuesWithStatus) {
+      existingIssues = issuesWithStatus
+    } else {
+      // Fallback: If 'status' column does not exist in schema cache, active means returned_at IS NULL
+      const { data: issuesByNullReturn } = await admin
+        .from("material_issues")
+        .select("student_id, returned_at")
+        .eq("material_id", targetMaterial.id)
+        .in("student_id", verifiedStudentIds)
+        .is("returned_at", null)
+      existingIssues = issuesByNullReturn || []
+    }
 
     const existingStudentSet = new Set((existingIssues || []).map((i: any) => i.student_id))
     const studentsToIssue = verifiedStudentIds.filter(sid => !existingStudentSet.has(sid))
 
     if (studentsToIssue.length === 0) {
       // Return current dynamic available stock even if already issued
-      const { count: currentActiveCount } = await admin
+      let currentActiveCount = 0
+      const { count: countWithStatus, error: cStatusErr } = await admin
         .from("material_issues")
         .select("*", { count: "exact", head: true })
         .eq("material_id", targetMaterial.id)
         .eq("status", "issued")
 
+      if (!cStatusErr && typeof countWithStatus === "number") {
+        currentActiveCount = countWithStatus
+      } else {
+        const { count: countByNull } = await admin
+          .from("material_issues")
+          .select("*", { count: "exact", head: true })
+          .eq("material_id", targetMaterial.id)
+          .is("returned_at", null)
+        currentActiveCount = countByNull || 0
+      }
+
       const totalStock = Number(targetMaterial.total_stock) || 0
-      const currentAvailable = Math.max(0, totalStock - (currentActiveCount || 0))
+      const currentAvailable = Math.max(0, totalStock - currentActiveCount)
 
       return NextResponse.json({
         success: true,
@@ -184,37 +210,71 @@ export async function POST(req: NextRequest) {
     if (!firstErr && firstTry) {
       insertedIssues = firstTry
     } else {
-      console.warn("First insert attempt had constraint warning, retrying with safe minimal fields:", firstErr)
-      // Fallback: minimal insert without optional foreign keys
-      const fallbackRows = studentsToIssue.map(stId => ({
+      console.warn("First insert attempt had warning/column error, retrying with schema-safe fields:", firstErr?.message)
+      
+      // Fallback 1: Try without 'status' (in case 'status' column is not in schema cache)
+      const rowsWithoutStatus = studentsToIssue.map(stId => ({
         material_id: targetMaterial.id,
         student_id: stId,
+        batch_id: verifiedBatchId,
+        issued_by: verifiedIssuedBy,
         issued_at: nowIso,
-        status: "issued",
-        notes: notes || "Distributed via Admin Panel"
+        notes: notes || "Distributed via Admin Panel",
+        return_due_date: validDueDate
       }))
 
       const { data: secondTry, error: secondErr } = await admin
         .from("material_issues")
-        .insert(fallbackRows)
+        .insert(rowsWithoutStatus)
         .select()
 
-      if (secondErr) {
-        console.error("Critical: Failed to insert material issues even on fallback:", secondErr)
-        return NextResponse.json({ error: secondErr.message || "Failed to record distribution" }, { status: 500 })
+      if (!secondErr && secondTry) {
+        insertedIssues = secondTry
+      } else {
+        console.warn("Second insert attempt had warning, retrying with minimal base schema fields:", secondErr?.message)
+        // Fallback 2: minimal base schema (material_id, student_id, issued_at, notes)
+        const minimalRows = studentsToIssue.map(stId => ({
+          material_id: targetMaterial.id,
+          student_id: stId,
+          issued_at: nowIso,
+          notes: notes || "Distributed via Admin Panel"
+        }))
+
+        const { data: thirdTry, error: thirdErr } = await admin
+          .from("material_issues")
+          .insert(minimalRows)
+          .select()
+
+        if (thirdErr) {
+          console.error("Critical: Failed to insert material issues even on fallback:", thirdErr)
+          return NextResponse.json({ error: thirdErr.message || "Failed to record distribution" }, { status: 500 })
+        }
+        insertedIssues = thirdTry || []
       }
-      insertedIssues = secondTry || []
     }
 
     // 8. EXACT dynamic stock recalculation based on actual DB records
-    const { count: totalActiveCount } = await admin
+    let activeCount = studentsToIssue.length
+    const { count: totalActiveCount, error: countErr } = await admin
       .from("material_issues")
       .select("*", { count: "exact", head: true })
       .eq("material_id", targetMaterial.id)
       .eq("status", "issued")
 
+    if (!countErr && typeof totalActiveCount === "number") {
+      activeCount = totalActiveCount
+    } else {
+      const { count: nullReturnedCount } = await admin
+        .from("material_issues")
+        .select("*", { count: "exact", head: true })
+        .eq("material_id", targetMaterial.id)
+        .is("returned_at", null)
+      if (typeof nullReturnedCount === "number") {
+        activeCount = nullReturnedCount
+      }
+    }
+
     const totalStock = Number(targetMaterial.total_stock) || 0
-    const activeCount = typeof totalActiveCount === "number" ? totalActiveCount : studentsToIssue.length
     const newAvailableStock = Math.max(0, totalStock - activeCount)
 
     await admin

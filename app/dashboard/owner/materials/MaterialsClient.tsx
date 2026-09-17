@@ -133,6 +133,13 @@ export default function MaterialsClient({
   const [materials, setMaterials] = useState<Material[]>(initialMaterials)
   const [issues, setIssues] = useState<MaterialIssue[]>(initialIssues)
 
+  // Robust check for active issue regardless of whether status column exists
+  const isIssueActive = (i: any) => {
+    if (!i) return false
+    if (i.status === "returned") return false
+    return i.status === "issued" || (!i.status && !i.returned_at)
+  }
+
   // Keep state synchronized with server props, but preserve local distributed records
   useEffect(() => {
     setMaterials(initialMaterials)
@@ -560,7 +567,7 @@ export default function MaterialsClient({
     if (!distributeMaterial) return new Set<string>()
     const set = new Set<string>()
     issues
-      .filter(i => i.material_id === distributeMaterial.id && i.status === "issued")
+      .filter(i => i.material_id === distributeMaterial.id && isIssueActive(i))
       .forEach(i => set.add(i.student_id))
     return set
   }, [distributeMaterial, issues])
@@ -601,7 +608,7 @@ export default function MaterialsClient({
     // Exact dynamic stock check
     const activeForMat = issues.filter(i => 
       (i.material_id === distributeMaterial.id || (i.material?.name && i.material.name.toLowerCase() === distributeMaterial.name.toLowerCase())) &&
-      i.status === "issued"
+      isIssueActive(i)
     ).length
     const currentStock = Math.max(0, (distributeMaterial.total_stock || 0) - activeForMat)
 
@@ -735,7 +742,7 @@ export default function MaterialsClient({
     if (!whoGotItMaterial) return []
     return issues.filter(i => 
       (i.material_id === whoGotItMaterial.id || (i.material?.name && i.material.name.toLowerCase() === whoGotItMaterial.name.toLowerCase())) && 
-      i.status === "issued"
+      isIssueActive(i)
     )
   }, [whoGotItMaterial, issues])
 
@@ -759,7 +766,7 @@ export default function MaterialsClient({
     // Dynamic stock calculation
     const activeForMat = issues.filter(i => 
       (i.material_id === whoGotItMaterial.id || (i.material?.name && i.material.name.toLowerCase() === whoGotItMaterial.name.toLowerCase())) &&
-      i.status === "issued"
+      isIssueActive(i)
     ).length
     const currentStock = Math.max(0, (whoGotItMaterial.total_stock || 0) - activeForMat)
 
@@ -991,18 +998,18 @@ export default function MaterialsClient({
 
   // Overall stats
   const totalMaterialsCount = materials.length
-  const totalDistributedCount = issues.filter(i => i.status === "issued").length
+  const totalDistributedCount = issues.filter(i => isIssueActive(i)).length
   const totalStockInHand = materials.reduce((acc, m) => {
     const dist = issues.filter(i => 
       (i.material_id === m.id || (i.material?.name && i.material.name.toLowerCase() === m.name.toLowerCase())) && 
-      i.status === "issued"
+      isIssueActive(i)
     ).length
     return acc + Math.max(0, (m.total_stock || 0) - dist)
   }, 0)
   const lowStockCount = materials.filter(m => {
     const dist = issues.filter(i => 
       (i.material_id === m.id || (i.material?.name && i.material.name.toLowerCase() === m.name.toLowerCase())) && 
-      i.status === "issued"
+      isIssueActive(i)
     ).length
     const avail = Math.max(0, (m.total_stock || 0) - dist)
     return avail <= 5 && avail > 0
@@ -1185,7 +1192,7 @@ export default function MaterialsClient({
             const assignedBatches = batches.filter(b => assignedBatchIds.includes(b.id))
             const distributedForThis = issues.filter(i => 
               (i.material_id === m.id || (i.material?.name && i.material.name.toLowerCase() === m.name.toLowerCase())) && 
-              i.status === "issued"
+              isIssueActive(i)
             ).length
             const dynamicAvailable = Math.max(0, (m.total_stock || 0) - distributedForThis)
             const isOutOfStock = dynamicAvailable <= 0
@@ -1901,7 +1908,7 @@ export default function MaterialsClient({
               {distributeMaterial && (() => {
                 const activeCount = issues.filter(i => 
                   (i.material_id === distributeMaterial.id || (i.material?.name && i.material.name.toLowerCase() === distributeMaterial.name.toLowerCase())) && 
-                  i.status === "issued"
+                  isIssueActive(i)
                 ).length
                 const dynStock = Math.max(0, (distributeMaterial.total_stock || 0) - activeCount)
                 const remainingAfter = dynStock - distributeSelectedStudentIds.size
@@ -1945,7 +1952,7 @@ export default function MaterialsClient({
                     if (!distributeMaterial) return true
                     const activeCount = issues.filter(i => 
                       (i.material_id === distributeMaterial.id || (i.material?.name && i.material.name.toLowerCase() === distributeMaterial.name.toLowerCase())) && 
-                      i.status === "issued"
+                      isIssueActive(i)
                     ).length
                     const dynStock = Math.max(0, (distributeMaterial.total_stock || 0) - activeCount)
                     return distributeSelectedStudentIds.size > dynStock
