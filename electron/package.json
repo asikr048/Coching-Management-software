@@ -1,0 +1,29 @@
+{
+  "name": "medhashiree-coaching",
+  "productName": "MedhaShiree Coaching",
+  "version": "1.0.0",
+  "description": "MedhaShiree Coaching Management System - PC Desktop Edition",
+  "main": "main.js",
+  "author": "MedhaShiree",
+  "build": {
+    "appId": "com.medhashiree.coaching",
+    "productName": "MedhaShiree Coaching",
+    "copyright": "Copyright © 2026 MedhaShiree",
+    "electronVersion": "44.2.0",
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
+    "directories": {
+      "output": "../dist"
+    },
+    "files": [
+      "**/*"
+    ],
+    "win": {
+      "target": [
+        "dir",
+        "portable"
+      ],
+      "icon": "icon.ico"
+    }
+  }
+}

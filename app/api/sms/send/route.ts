@@ -105,9 +105,10 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const {
-      recipients, // Array of { phone: string; message?: string; name?: string; studentId?: string } or string[]
-      message, // Global message fallback
+      recipients, // Array<{ phone, message, name?, studentId? }> | string (single phone)
+      message, // Global message if recipients array only has phones
       configOverride, // Optional testing config
+      branchId, // Optional branch ID to use branch-specific SMS gateway
     } = body
 
     if (!recipients || (!Array.isArray(recipients) && typeof recipients !== "string")) {
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // 1. Fetch Gateway Config from site_settings or configOverride
+    // 1. Fetch Gateway Config from branch, site_settings or configOverride
     let config: GatewayConfig = {
       apiKey: "",
       callType: "GET",
@@ -124,32 +125,66 @@ export async function POST(req: NextRequest) {
       senderId: "",
     }
 
-    if (configOverride && (configOverride.apiKey || configOverride.urlTemplate)) {
-      config = { ...config, ...configOverride }
-    } else {
+    let branchFound = false
+    let branchName = ""
+    if (branchId && branchId !== "all") {
       try {
-        const { data: settingRow } = await admin
-          .from("site_settings")
-          .select("value")
-          .eq("key", "sms_gateway_config")
+        const { data: branchRow } = await admin
+          .from("branches")
+          .select("sms_gateway_config, name")
+          .eq("id", branchId)
           .maybeSingle()
 
-        if (settingRow?.value) {
-          try {
-            const parsed = JSON.parse(settingRow.value)
-            config = { ...config, ...parsed }
-          } catch (e) {
-            console.error("Failed to parse sms_gateway_config JSON:", e)
+        if (branchRow) {
+          branchName = branchRow.name || ""
+          const bConf = branchRow.sms_gateway_config
+          if (bConf && (bConf.apiKey || bConf.api_key)) {
+            config.apiKey = bConf.apiKey || bConf.api_key || ""
+            if (bConf.callType) config.callType = bConf.callType
+            if (bConf.senderId || bConf.sender_id) config.senderId = bConf.senderId || bConf.sender_id
+            if (bConf.urlTemplate) {
+              config.urlTemplate = bConf.urlTemplate
+            } else if (bConf.api_url) {
+              config.urlTemplate = bConf.api_url.includes("{api_key}")
+                ? bConf.api_url
+                : `${bConf.api_url}?api_key={api_key}&msg={msg}&to={to}`
+            }
+            branchFound = true
           }
         }
-      } catch (e) {
-        console.warn("Could not load gateway config from site_settings:", e)
+      } catch (bErr) {
+        console.warn("Could not load branch-specific SMS config:", bErr)
+      }
+    }
+
+    if (!branchFound) {
+      if (configOverride && (configOverride.apiKey || configOverride.urlTemplate)) {
+        config = { ...config, ...configOverride }
+      } else {
+        try {
+          const { data: settingRow } = await admin
+            .from("site_settings")
+            .select("value")
+            .eq("key", "sms_gateway_config")
+            .maybeSingle()
+
+          if (settingRow?.value) {
+            try {
+              const parsed = JSON.parse(settingRow.value)
+              config = { ...config, ...parsed }
+            } catch (e) {
+              console.error("Failed to parse sms_gateway_config JSON:", e)
+            }
+          }
+        } catch (e) {
+          console.warn("Could not load gateway config from site_settings:", e)
+        }
       }
     }
 
     if (!config.apiKey) {
       return NextResponse.json(
-        { error: "SMS Gateway API Key is not configured. Please set it in Gateway Settings." },
+        { error: "SMS Gateway API Key is not configured. Please set it in Branch or Gateway Settings." },
         { status: 400 }
       )
     }
@@ -208,6 +243,9 @@ export async function POST(req: NextRequest) {
           targetUrl = targetUrl.replace(/\{msg\}|\{MSG\}|\{YOUR_MSG\}|\{message\}/g, encodeURIComponent(task.message))
           // Replace {to} token or any template sample phone number
           targetUrl = targetUrl.replace(/\{to\}|\{TO\}|\{YOUR_TO\}|\{number\}|\{phone\}|\{msisdn\}|8801800000000/g, encodeURIComponent(phoneToUse))
+          if (config.senderId) {
+            targetUrl = targetUrl.replace(/\{sender_id\}|\{senderId\}|\{SENDER_ID\}|\{sender_id_value\}/g, encodeURIComponent(config.senderId))
+          }
 
           const res = await fetch(targetUrl, { method: "GET" })
           const text = await res.text()
@@ -294,6 +332,8 @@ export async function POST(req: NextRequest) {
       total: results.length,
       sentCount: sentSuccessCount,
       failedCount,
+      gatewayUsed: branchFound ? `Branch: ${branchName || branchId}` : "Global Default",
+      branchUsed: branchName || null,
       results,
       sampleResponse: results[0]?.response || null,
     })

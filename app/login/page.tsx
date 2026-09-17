@@ -2,7 +2,7 @@
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { GraduationCap, Eye, EyeOff, Loader2, Lock, Users, TrendingUp, Star, ArrowRight, UserPlus, BookOpen, IdCard, AlertCircle } from "lucide-react"
+import { Eye, EyeOff, Loader2, Lock, Users, TrendingUp, Star, ArrowRight, UserPlus, BookOpen, IdCard, AlertCircle } from "lucide-react"
 import Link from "next/link"
 
 function LoginFormContent() {
@@ -151,6 +151,11 @@ function LoginFormContent() {
         return
       }
 
+      // Clear any cached student profile in sessionStorage to prevent stale data
+      try {
+        sessionStorage.removeItem("ms_student_profile_cache")
+      } catch {}
+
       // 4. Successful login: auto-link staff record if applicable and redirect
       let { data: staff } = await supabase
         .from("staff")
@@ -178,17 +183,24 @@ function LoginFormContent() {
         return
       }
 
-      if (role === "owner" || role === "super_manager" || role === "manager") {
-        window.location.href = "/dashboard/owner"
-      } else if (role === "receptionist") {
-        window.location.href = "/dashboard/reception"
-      } else if (role === "teacher") {
-        window.location.href = "/dashboard/teacher"
-      } else if (role === "accountant") {
-        window.location.href = "/dashboard/accountant"
-      } else {
-        window.location.href = "/student/profile"
+      // If authenticated user is Staff / Admin / Owner:
+      if (role) {
+        if (role === "owner" || role === "branch_director" || role === "super_manager" || role === "manager") {
+          window.location.href = "/dashboard/owner"
+        } else if (role === "receptionist") {
+          window.location.href = "/dashboard/reception"
+        } else if (role === "teacher") {
+          window.location.href = "/dashboard/teacher"
+        } else if (role === "accountant") {
+          window.location.href = "/dashboard/accountant"
+        } else {
+          window.location.href = "/dashboard/owner"
+        }
+        return
       }
+
+      // Non-staff accounts go to Student Portal
+      window.location.href = "/student/profile"
     } catch (err: unknown) {
       console.error("Login error:", err)
       setError(err instanceof Error ? err.message : "Login failed. Please try again.")
@@ -197,24 +209,26 @@ function LoginFormContent() {
   }
 
   return (
-    <div className="w-full max-w-[420px] space-y-8">
+    <div className="w-full max-w-[420px] space-y-7">
       <div className="lg:hidden text-center mb-4">
-        <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl mb-3">
-          <GraduationCap className="w-6 h-6 text-white" />
+        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full overflow-hidden mb-3 border border-indigo-200 bg-white shadow-sm">
+          <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
         </div>
         <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiree</span></h1>
       </div>
-
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-          <p className="text-gray-500 text-sm mt-1">Sign in with your Email or Student ID</p>
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">Welcome back</h2>
+          <p className="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">Sign in to your MedhaShiree portal</p>
         </div>
         <Link
           href="/signup"
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-sm font-semibold hover:bg-indigo-100 transition-colors"
+          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs sm:text-sm font-semibold hover:bg-indigo-100 transition-colors shrink-0"
         >
-          <UserPlus className="w-4 h-4" /> Sign Up
+          <UserPlus className="w-4 h-4 shrink-0" />
+          <span className="hidden xs:inline">Sign Up</span>
+          <span className="xs:hidden">Join</span>
         </Link>
       </div>
 
@@ -227,7 +241,9 @@ function LoginFormContent() {
 
       <form onSubmit={handleLogin} className="space-y-5">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">User ID or Email</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            User ID or Email
+          </label>
           <div className="relative">
             <IdCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -235,7 +251,7 @@ function LoginFormContent() {
               onChange={e => setUserId(e.target.value)}
               required
               className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200/80 rounded-xl text-gray-900 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent shadow-sm transition-shadow focus:shadow-md"
-              placeholder="MS-10001 or your@email.com"
+              placeholder="MS-00001 or your@email.com"
             />
           </div>
         </div>
@@ -324,8 +340,8 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/10">
-              <GraduationCap className="w-6 h-6 text-white" />
+            <div className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center border border-white/20 bg-white">
+              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             <span className="text-2xl font-bold text-white tracking-tight">Medha<span className="text-indigo-300">Shiree</span></span>
           </div>
@@ -375,7 +391,7 @@ export default function LoginPage() {
       </div>
 
       {/* RIGHT — Auth Form */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50 p-6 sm:p-8 lg:p-12">
+      <div className="flex-1 flex items-center justify-center bg-slate-50 p-4 sm:p-8 lg:p-12">
         <Suspense fallback={<div className="flex justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-indigo-600" /></div>}>
           <LoginFormContent />
         </Suspense>

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     const { data: staff } = await supabase.from("staff").select("role").eq("auth_user_id", user.id).maybeSingle()
     const role = staff?.role
-    if (role === "owner" || role === "super_manager" || role === "manager") return NextResponse.redirect(`${origin}/dashboard/owner`)
+    if (role === "owner" || role === "branch_director" || role === "super_manager" || role === "manager") return NextResponse.redirect(`${origin}/dashboard/owner`)
     if (role === "receptionist") return NextResponse.redirect(`${origin}/dashboard/reception`)
     if (role === "teacher") return NextResponse.redirect(`${origin}/dashboard/teacher`)
     if (role === "accountant") return NextResponse.redirect(`${origin}/dashboard/accountant`)

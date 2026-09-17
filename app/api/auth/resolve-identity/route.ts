@@ -59,12 +59,12 @@ export async function POST(req: NextRequest) {
         // Continue if listUsers fails
       }
     } else {
-      // Input is a User ID (e.g. MS-10001, 10001, ms-10001)
+      // Input is a User ID (e.g. MS-00001, 10001, ms-10001)
       const cleanId = raw.toUpperCase().startsWith("MS-")
         ? raw.toUpperCase()
         : `MS-${raw.toUpperCase()}`
 
-      // Check user_profiles
+      // Check user_profiles (holds user_id like MS-00001 for admin/owner and users)
       const { data: profile } = await admin
         .from("user_profiles")
         .select("email")
@@ -74,6 +74,20 @@ export async function POST(req: NextRequest) {
 
       if (profile?.email) {
         candidates.push(profile.email.toLowerCase())
+      }
+
+      // If cleanId is MS-00001 (Admin / Owner ID), prioritize owner's email
+      if (cleanId === "MS-00001") {
+        const { data: ownerStaff } = await admin
+          .from("staff")
+          .select("email")
+          .eq("role", "owner")
+          .limit(1)
+          .maybeSingle()
+
+        if (ownerStaff?.email && !candidates.includes(ownerStaff.email.toLowerCase())) {
+          candidates.unshift(ownerStaff.email.toLowerCase())
+        }
       }
 
       // Check students table

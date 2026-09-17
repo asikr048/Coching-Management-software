@@ -1,37 +1,75 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import AttendanceClient from "./AttendanceClient"
 import { format, subDays } from "date-fns"
+
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
 export default async function AttendancePage() {
   const supabase = await createClient()
   const today = format(new Date(), "yyyy-MM-dd")
   const sevenDaysAgo = format(subDays(new Date(), 7), "yyyy-MM-dd")
 
-  // Fetch today's attendance
-  const { data: todayAttendance } = await supabase
+  // 1. Fetch batches using supabase first (matches BatchesPage), fallback to admin
+  let batches: any[] = []
+  const { data: serverBatches, error: batchErr } = await supabase
+    .from("batches")
+    .select("*, branch:branches(id, name)")
+    .order("name")
+
+  if (serverBatches && serverBatches.length > 0) {
+    batches = serverBatches
+  } else {
+    try {
+      const admin = createAdminClient()
+      const { data: adminBatches } = await admin
+        .from("batches")
+        .select("*, branch:branches(id, name)")
+        .order("name")
+      if (adminBatches && adminBatches.length > 0) {
+        batches = adminBatches
+      }
+    } catch (e) {
+      console.warn("Admin batches fallback error:", e)
+    }
+  }
+
+  // 2. Fetch today's attendance
+  let todayAttendance: any[] = []
+  const { data: attData } = await supabase
     .from("attendance")
-    .select("*, student:students(name), batch:batches(name)")
+    .select("*, student:students(id, name, student_id, roll_no, batch_roll), batch:batches(id, name, subject)")
     .eq("date", today)
 
-  // Fetch all batches
-  const { data: batches } = await supabase
-    .from("batches")
-    .select("id, name, current_seats, is_active")
-    .eq("is_active", true)
+  if (attData) {
+    todayAttendance = attData
+  } else {
+    try {
+      const admin = createAdminClient()
+      const { data: adminAtt } = await admin
+        .from("attendance")
+        .select("*, student:students(id, name, student_id, roll_no, batch_roll), batch:batches(id, name, subject)")
+        .eq("date", today)
+      if (adminAtt) todayAttendance = adminAtt
+    } catch (e) {
+      console.warn("Admin attendance fallback error:", e)
+    }
+  }
 
-  // Fetch last 7 days attendance
+  // 3. Fetch last 7 days attendance
   const { data: recentAttendance } = await supabase
     .from("attendance")
     .select("id, date, status")
     .gte("date", sevenDaysAgo)
     .lte("date", today)
 
-  // Fetch all time attendance for leaderboard (this might get large, so we could limit or aggregate)
+  // 4. Fetch all time attendance for leaderboard
   const { data: allAttendance } = await supabase
     .from("attendance")
     .select("student_id, status, student:students(name)")
 
-  // Aggregate leaderboard in server
+  // Aggregate leaderboard
   const studentStats: Record<string, { name: string; present: number; total: number }> = {}
   if (allAttendance) {
     allAttendance.forEach((record: any) => {
@@ -51,7 +89,7 @@ export default async function AttendancePage() {
     name: s.name,
     rate: Math.round((s.present / s.total) * 100),
     total: s.total
-  })).filter(s => s.total >= 5) // at least 5 classes
+  })).filter(s => s.total >= 5)
 
   leaderboard.sort((a, b) => b.rate - a.rate)
   const top10 = leaderboard.slice(0, 10)

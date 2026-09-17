@@ -36,7 +36,32 @@ import {
   Trophy,
   GripVertical,
   Award,
+  Building,
 } from "lucide-react"
+import { getGrade, cn } from "@/lib/utils"
+import { useBranch } from "@/components/providers/BranchContext"
+
+interface ExamItem {
+  id: string
+  title: string
+  subject?: string
+  total_marks: number
+  pass_marks: number
+  exam_date?: string
+  batch_id?: string
+  batch?: { id: string; name: string }
+}
+
+interface ExamStudentRow {
+  id: string
+  student_id: string
+  name: string
+  phone: string | null
+  guardian_phone: string | null
+  obtainedMarks: number | string | null
+  grade: string | null
+  rank: number | null
+}
 
 interface Student {
   id: string
@@ -106,8 +131,15 @@ interface CsvRecipient {
   isValid: boolean
 }
 
+const defaultGatewayParams: ParamItem[] = [
+  { id: "p1", key: "api_key", value: "{api_key}", description: "Your API Key / Secret Token", isStandard: true },
+  { id: "p2", key: "msg", value: "{msg}", description: "URL-encoded SMS text content", isStandard: true },
+  { id: "p3", key: "to", value: "{to}", description: "Recipient mobile number", isStandard: true },
+]
+
 export default function SmsPage() {
   const supabase = useMemo(() => createClient(), [])
+  const { selectedBranchId, branches, currentBranch, refreshBranches } = useBranch()
 
   // Navigation Tabs: "compose" | "gateway" | "logs"
   const [activeTab, setActiveTab] = useState<"compose" | "gateway" | "logs">("compose")
@@ -142,6 +174,10 @@ export default function SmsPage() {
   const [testResult, setTestResult] = useState<any>(null)
   const [hasMissingTable, setHasMissingTable] = useState(false)
 
+  // Branch Selection for Custom SMS Gateway API
+  const [selectedGatewayBranches, setSelectedGatewayBranches] = useState<string[]>([])
+  const [testBranchId, setTestBranchId] = useState<string>("custom")
+
   // Drag over target tracking
   const [activeDragSlot, setActiveDragSlot] = useState<string | null>(null)
 
@@ -155,19 +191,14 @@ export default function SmsPage() {
   // Batch Filter
   const [selectedBatchIds, setSelectedBatchIds] = useState<string[]>([])
 
-  // Exam Result Target State
-  const [exams, setExams] = useState<any[]>([])
+  // Exam Results Filter & Selection
+  const [exams, setExams] = useState<ExamItem[]>([])
   const [selectedExamId, setSelectedExamId] = useState<string>("")
-  const [examDetails, setExamDetails] = useState<any | null>(null)
-  const [examStudentResults, setExamStudentResults] = useState<Array<{
-    student: Student
-    obtained_marks: number | string | null
-    grade?: string
-    rank?: number | null
-  }>>([])
+  const [examStudents, setExamStudents] = useState<ExamStudentRow[]>([])
   const [selectedExamStudentIds, setSelectedExamStudentIds] = useState<string[]>([])
   const [loadingExamData, setLoadingExamData] = useState(false)
-  const [examSearchQuery, setExamSearchQuery] = useState("")
+  const [isDraggingOverTextarea, setIsDraggingOverTextarea] = useState(false)
+  const [previewRecipientIndex, setPreviewRecipientIndex] = useState(0)
 
   // Custom Student Picker Filter & Checkbox Selection
   const [pickerSearchQuery, setPickerSearchQuery] = useState("")
@@ -207,6 +238,131 @@ export default function SmsPage() {
     return queryString ? `${cleanBase}?${queryString}` : cleanBase
   }
 
+  // Load global default gateway config from localStorage or fallback
+  function loadDefaultGatewayConfig() {
+    try {
+      const cached = localStorage.getItem("medhashiree_sms_gateway_config")
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        const base = cleanBaseUrl(parsed.baseUrl || "https://api.sms.net.bd/sendsms")
+        const params = parsed.params?.length ? parsed.params : defaultGatewayParams
+        setGatewayConfig({
+          apiKey: parsed.apiKey || parsed.api_key || "",
+          callType: parsed.callType || "GET",
+          baseUrl: base,
+          urlTemplate: parsed.urlTemplate ? syncUrlTemplate(base, params) : syncUrlTemplate(base, defaultGatewayParams),
+          params,
+          senderId: parsed.senderId || parsed.sender_id || "",
+        })
+        return
+      }
+    } catch (e) {
+      console.warn("Could not reload default config:", e)
+    }
+    setGatewayConfig({
+      apiKey: "",
+      callType: "GET",
+      baseUrl: "https://api.sms.net.bd/sendsms",
+      urlTemplate: syncUrlTemplate("https://api.sms.net.bd/sendsms", defaultGatewayParams),
+      params: defaultGatewayParams,
+      senderId: "",
+    })
+  }
+
+  // Load a specific branch's gateway config if it has one
+  function loadBranchGatewayConfig(branchId: string) {
+    const b = branches.find((item) => item.id === branchId)
+    if (b?.sms_gateway_config && (b.sms_gateway_config.apiKey || b.sms_gateway_config.api_key)) {
+      const bConf = b.sms_gateway_config
+      const base = cleanBaseUrl(bConf.baseUrl || "https://api.sms.net.bd/sendsms")
+      const params = bConf.params?.length ? bConf.params : defaultGatewayParams
+      setGatewayConfig({
+        apiKey: bConf.apiKey || bConf.api_key || "",
+        callType: bConf.callType || "GET",
+        baseUrl: base,
+        urlTemplate: bConf.urlTemplate || syncUrlTemplate(base, params),
+        params: params,
+        senderId: bConf.senderId || bConf.sender_id || "",
+      })
+      return true
+    }
+    return false
+  }
+
+  // Toggle branch in selection
+  function handleToggleBranchSelection(branchId: string) {
+    setSelectedGatewayBranches((prev) => {
+      let next: string[]
+      if (prev.includes(branchId)) {
+        next = prev.filter((id) => id !== branchId)
+      } else {
+        next = [...prev, branchId]
+      }
+
+      // If only 1 branch is left selected, load its configuration
+      if (next.length === 1) {
+        const loaded = loadBranchGatewayConfig(next[0])
+        if (!loaded) {
+          loadDefaultGatewayConfig()
+        }
+      }
+      return next
+    })
+  }
+
+  // Focus and select only 1 branch
+  function selectOnlyBranch(branchId: string) {
+    setSelectedGatewayBranches([branchId])
+    const loaded = loadBranchGatewayConfig(branchId)
+    if (!loaded) {
+      loadDefaultGatewayConfig()
+    }
+  }
+
+  // Select all available branches
+  function selectAllBranches() {
+    setSelectedGatewayBranches(branches.map((b) => b.id))
+  }
+
+  // Clear branch selection
+  function clearBranchSelection() {
+    setSelectedGatewayBranches([])
+  }
+
+  // Revert a branch to the global default SMS API
+  async function handleRevertBranchToDefault(branchId: string) {
+    try {
+      const { error } = await supabase
+        .from("branches")
+        .update({ sms_gateway_config: null })
+        .eq("id", branchId)
+
+      if (error) throw error
+
+      if (refreshBranches) {
+        await refreshBranches()
+      }
+
+      loadDefaultGatewayConfig()
+      const bName = branches.find((b) => b.id === branchId)?.name || "Branch"
+      toast.success(`✓ Reverted "${bName}" to Default SMS Gateway API.`)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to revert branch to default API")
+    }
+  }
+
+  // Keep selectedGatewayBranches populated when branches load
+  useEffect(() => {
+    if (branches.length > 0 && selectedGatewayBranches.length === 0) {
+      if (selectedBranchId && selectedBranchId !== "all") {
+        setSelectedGatewayBranches([selectedBranchId])
+        loadBranchGatewayConfig(selectedBranchId)
+      } else {
+        setSelectedGatewayBranches(branches.map((b) => b.id))
+      }
+    }
+  }, [branches, selectedBranchId])
+
   // 1. Load Data on Mount
   useEffect(() => {
     // 1a. Load from localStorage cache immediately
@@ -229,17 +385,6 @@ export default function SmsPage() {
 
     async function loadAll() {
       try {
-        // 0. Exams
-        try {
-          const examsRes = await supabase
-            .from("exams")
-            .select("id, title, subject, total_marks, pass_marks, exam_date, batch_id, batch:batches(name)")
-            .order("created_at", { ascending: false })
-          if (examsRes.data) setExams(examsRes.data)
-        } catch (e) {
-          console.warn("Exams load issue:", e)
-        }
-
         // 1. Batches
         const batchesRes = await supabase.from("batches").select("id, name, current_seats, subject")
         if (batchesRes.data) setBatches(batchesRes.data)
@@ -332,6 +477,31 @@ export default function SmsPage() {
         } catch (e) {
           console.warn("SMS queue query issue:", e)
         }
+
+        // 7. Exams list
+        try {
+          const { data: exList } = await supabase
+            .from("exams")
+            .select("*, batch:batches(id, name)")
+            .order("created_at", { ascending: false })
+          if (exList) setExams(exList)
+        } catch (e) {
+          console.warn("Exams query issue in SMS page:", e)
+        }
+
+        // 8. Check URL parameters for direct exam result mode
+        try {
+          if (typeof window !== "undefined") {
+            const urlParams = new URLSearchParams(window.location.search)
+            const examId = urlParams.get("exam_id")
+            const mode = urlParams.get("mode")
+            if (examId || mode === "exam_result") {
+              setActiveTab("compose")
+              setTargetType("exam_result")
+              if (examId) setSelectedExamId(examId)
+            }
+          }
+        } catch {}
       } catch (err: any) {
         console.warn("SMS data load issue:", err)
       } finally {
@@ -341,118 +511,136 @@ export default function SmsPage() {
     loadAll()
   }, [supabase])
 
-  // Load Exam Result details for SMS
-  async function loadExamResultDetails(examId: string) {
-    if (!examId) return
-    setLoadingExamData(true)
-    try {
-      // 1. Fetch exam
-      const { data: ex, error: exErr } = await supabase
-        .from("exams")
-        .select("id, title, subject, total_marks, pass_marks, exam_date, batch_id, batch:batches(name)")
-        .eq("id", examId)
-        .single()
-      if (exErr) throw exErr
-      setExamDetails(ex)
-      setSelectedExamId(examId)
-
-      // 2. Fetch results for this exam
-      const { data: results, error: resErr } = await supabase
-        .from("exam_results")
-        .select("student_id, obtained_marks, grade, rank")
-        .eq("exam_id", examId)
-      if (resErr) throw resErr
-
-      const resultsMap = new Map<string, { obtained_marks: number | string | null; grade?: string; rank?: number | null }>()
-      for (const r of results || []) {
-        resultsMap.set(r.student_id, {
-          obtained_marks: r.obtained_marks,
-          grade: r.grade,
-          rank: r.rank,
-        })
-      }
-
-      // 3. Fetch students of this batch
-      let examStudents: Student[] = []
-      if (ex.batch_id) {
-        const { data: enrollRes } = await supabase
-          .from("enrollments")
-          .select("student_id, student:students(id, name, student_id, phone, guardian_phone, guardian_name, is_active)")
-          .eq("batch_id", ex.batch_id)
-
-        if (enrollRes) {
-          examStudents = enrollRes
-            .map((en: any) => en.student)
-            .filter((s: any) => s && s.is_active !== false)
-        }
-      }
-
-      // Fallback: If no batch enrolled or results have other students
-      for (const r of results || []) {
-        if (!examStudents.some((s) => s.id === r.student_id)) {
-          const { data: sData } = await supabase
-            .from("students")
-            .select("id, name, student_id, phone, guardian_phone, guardian_name, is_active")
-            .eq("id", r.student_id)
-            .maybeSingle()
-          if (sData && sData.is_active !== false) examStudents.push(sData)
-        }
-      }
-
-      // Combine students with their results
-      const combined = examStudents.map((s) => {
-        const res = resultsMap.get(s.id)
-        return {
-          student: s,
-          obtained_marks: res ? res.obtained_marks : null,
-          grade: res ? res.grade : undefined,
-          rank: res ? res.rank : null,
-        }
-      })
-
-      // Sort by rank ascending (or obtained_marks descending)
-      combined.sort((a, b) => {
-        const ma = typeof a.obtained_marks === "number" ? a.obtained_marks : parseFloat(String(a.obtained_marks || "-1"))
-        const mb = typeof b.obtained_marks === "number" ? b.obtained_marks : parseFloat(String(b.obtained_marks || "-1"))
-        return mb - ma
-      })
-
-      setExamStudentResults(combined)
-      // All students selected by default!
-      const allIds = combined.map((c) => c.student.id)
-      setSelectedExamStudentIds(allIds)
-
-      // Set default exam result SMS template
-      const defaultExamMsg = `Dear Parent, your child {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks (Grade: {{grade}}, Rank: {{rank}}) in {{exam_title}} exam. - Prottasha Coaching`
-      setMessage((prev) => (!prev.trim() || prev.includes("pending fee") || prev.includes("routine this week") || prev.includes("closed on the upcoming") ? defaultExamMsg : prev))
-
-      toast.success(`✓ Loaded "${ex.title}" (${allIds.length} students selected)`, {
-        description: "Review marks below or drag {{number}} into your message.",
-      })
-    } catch (err: any) {
-      console.error("Error loading exam result details for SMS:", err)
-      toast.error(err.message || "Failed to load exam student results")
-    } finally {
-      setLoadingExamData(false)
+  // Load Exam Students and Exam Results when selectedExamId changes
+  useEffect(() => {
+    if (!selectedExamId) {
+      setExamStudents([])
+      setSelectedExamStudentIds([])
+      return
     }
-  }
 
-  // Check if navigating from Students page or Exams page
+    let isCancelled = false
+
+    async function loadExamData() {
+      setLoadingExamData(true)
+      try {
+        let currentExam = exams.find((e) => e.id === selectedExamId)
+        if (!currentExam) {
+          const { data: exData } = await supabase
+            .from("exams")
+            .select("*, batch:batches(id, name)")
+            .eq("id", selectedExamId)
+            .single()
+          if (exData) {
+            currentExam = exData
+            setExams((prev) => (prev.some((e) => e.id === exData.id) ? prev : [exData, ...prev]))
+          }
+        }
+
+        const batchId = currentExam?.batch_id
+        let studentList: Student[] = []
+
+        if (batchId) {
+          const { data: enrs } = await supabase
+            .from("enrollments")
+            .select("student:students(id, name, student_id, phone, guardian_phone, is_active)")
+            .eq("batch_id", batchId)
+            .eq("status", "active")
+          studentList = (enrs || [])
+            .map((e: any) => e.student)
+            .filter((s: any) => s && s.is_active !== false)
+        } else {
+          studentList = students.filter((s) => s.is_active !== false)
+        }
+
+        // Fetch exam results
+        const { data: resultsData } = await supabase
+          .from("exam_results")
+          .select("*")
+          .eq("exam_id", selectedExamId)
+
+        // Fetch online submissions if any
+        const { data: subsData } = await supabase
+          .from("exam_submissions")
+          .select("*")
+          .eq("exam_id", selectedExamId)
+          .eq("is_submitted", true)
+
+        const resultMap = new Map<string, any>()
+        resultsData?.forEach((r) => resultMap.set(r.student_id, r))
+        subsData?.forEach((s) => {
+          if (!resultMap.has(s.student_id)) {
+            resultMap.set(s.student_id, {
+              obtained_marks: s.total_obtained,
+              grade: "",
+            })
+          }
+        })
+
+        const rows: ExamStudentRow[] = studentList.map((s) => {
+          const r = resultMap.get(s.id)
+          const rawMark = r?.obtained_marks
+          const numMark = rawMark !== undefined && rawMark !== null && rawMark !== "" ? Number(rawMark) : null
+          const totalM = currentExam?.total_marks || 100
+          const calcGrade = r?.grade || (numMark !== null ? getGrade(numMark, totalM) : null)
+          return {
+            id: s.id,
+            student_id: s.student_id,
+            name: s.name,
+            phone: s.phone,
+            guardian_phone: s.guardian_phone,
+            obtainedMarks: numMark,
+            grade: calcGrade,
+            rank: null,
+          }
+        })
+
+        // Rank students with valid numeric marks descending (highest to lowest)
+        const scoredStudents = [...rows]
+          .filter((s) => s.obtainedMarks !== null && !isNaN(s.obtainedMarks as number))
+          .sort((a, b) => (b.obtainedMarks as number) - (a.obtainedMarks as number))
+
+        const rankMap = new Map<string, number>()
+        scoredStudents.forEach((st, idx) => rankMap.set(st.id, idx + 1))
+
+        const finalRows = rows.map((s) => ({
+          ...s,
+          rank: rankMap.get(s.id) || null,
+        }))
+
+        if (!isCancelled) {
+          setExamStudents(finalRows)
+          // Default: select all students of the exam!
+          setSelectedExamStudentIds(finalRows.map((s) => s.id))
+
+          // Auto-write default exam result SMS message if currently blank or generic
+          setMessage((prev) => {
+            if (!prev.trim() || prev.includes("pending fee due") || prev.includes("classes for") || prev.includes("Type your SMS")) {
+              return "Dear Guardian, {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks in {{exam_title}} (Batch: {{batch}}). Grade: {{grade}}, Merit Rank: {{rank}}. - MedhaShiree"
+            }
+            return prev
+          })
+        }
+      } catch (err) {
+        console.error("Failed to load exam student results:", err)
+      } finally {
+        if (!isCancelled) setLoadingExamData(false)
+      }
+    }
+
+    loadExamData()
+    return () => {
+      isCancelled = true
+    }
+  }, [selectedExamId, exams, students, supabase])
+
+  // Check if navigating from Students page with pre-selected students
   useEffect(() => {
     try {
+      const stored = sessionStorage.getItem("sms_selected_student_ids")
       const searchParams = new URLSearchParams(window.location.search)
       const targetParam = searchParams.get("target")
-      const examIdParam = searchParams.get("exam_id")
 
-      if (targetParam === "exam_result" && examIdParam) {
-        setActiveTab("compose")
-        setTargetType("exam_result")
-        setSelectedExamId(examIdParam)
-        loadExamResultDetails(examIdParam)
-        return
-      }
-
-      const stored = sessionStorage.getItem("sms_selected_student_ids")
       let idsToSelect: string[] = []
       if (stored) {
         try {
@@ -596,7 +784,7 @@ CREATE POLICY "Public read settings" ON public.site_settings FOR SELECT USING (t
 DROP POLICY IF EXISTS "Staff manage settings" ON public.site_settings;
 CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (true);`
 
-  // Save Gateway Configuration
+  // Save Gateway Configuration for Selected Branches
   async function handleSaveGateway(e?: React.FormEvent) {
     if (e) e.preventDefault()
     if (!gatewayConfig.apiKey.trim()) {
@@ -616,6 +804,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       return
     }
 
+    if (selectedGatewayBranches.length === 0) {
+      toast.error("Please select at least one branch for this SMS Gateway API")
+      return
+    }
+
     setSavingGateway(true)
 
     // 1. ALWAYS persist to browser localStorage first so it works immediately
@@ -625,43 +818,64 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       console.warn("Could not save to localStorage:", e)
     }
 
-    // 2. Attempt to save to Supabase site_settings
-    let savedToCloud = false
-    let isTableMissing = false
-
-    try {
-      const { error } = await supabase.from("site_settings").upsert({
-        key: "sms_gateway_config",
-        value: JSON.stringify(gatewayConfig),
-        updated_at: new Date().toISOString(),
-      })
-
-      if (error) {
-        if (error.message?.includes("site_settings") || error.code === "PGRST205" || (error as any).status === 404) {
-          isTableMissing = true
-        } else {
-          console.warn("Cloud save error:", error)
-        }
-      } else {
-        savedToCloud = true
-      }
-    } catch (err: any) {
-      if (err?.message?.includes("site_settings") || err?.code === "PGRST205") {
-        isTableMissing = true
-      }
-    } finally {
-      setSavingGateway(false)
+    const gatewayPayload = {
+      apiKey: gatewayConfig.apiKey.trim(),
+      api_key: gatewayConfig.apiKey.trim(),
+      callType: gatewayConfig.callType,
+      baseUrl: gatewayConfig.baseUrl.trim(),
+      urlTemplate: gatewayConfig.urlTemplate.trim(),
+      api_url: gatewayConfig.urlTemplate.trim(),
+      params: gatewayConfig.params,
+      senderId: gatewayConfig.senderId?.trim() || "",
+      sender_id: gatewayConfig.senderId?.trim() || "",
     }
 
-    if (savedToCloud) {
-      setHasMissingTable(false)
-      toast.success("✓ SMS Gateway saved & synced to Supabase! All messaging options are active.")
-    } else if (isTableMissing) {
-      setHasMissingTable(true)
-      toast.success("✓ Gateway saved locally and ACTIVE! You can now send SMS.", { duration: 5000 })
-      toast.info("Database table 'site_settings' not created yet. See SQL script below to sync cloud.", { duration: 8000 })
-    } else {
-      toast.success("✓ Gateway configuration saved locally and active.")
+    let savedBranches = false
+    try {
+      // 2. Save directly to selected branches in Supabase
+      const { error: branchErr } = await supabase
+        .from("branches")
+        .update({ sms_gateway_config: gatewayPayload })
+        .in("id", selectedGatewayBranches)
+
+      if (branchErr) {
+        console.warn("Could not update branch sms_gateway_config:", branchErr)
+        throw branchErr
+      }
+      savedBranches = true
+
+      // 3. If all branches are selected, also persist to site_settings as system-wide default
+      if (selectedGatewayBranches.length === branches.length || branches.length === 0) {
+        try {
+          await supabase.from("site_settings").upsert({
+            key: "sms_gateway_config",
+            value: JSON.stringify(gatewayConfig),
+            updated_at: new Date().toISOString(),
+          })
+          setHasMissingTable(false)
+        } catch (globalErr) {
+          console.warn("Could not sync global site_settings:", globalErr)
+        }
+      }
+
+      // 4. Refresh branches in BranchContext
+      if (refreshBranches) {
+        await refreshBranches()
+      }
+
+      if (selectedGatewayBranches.length === 1) {
+        const bName = branches.find((b) => b.id === selectedGatewayBranches[0])?.name || "Selected Branch"
+        toast.success(`✓ SMS Gateway API saved specifically for "${bName}"!`)
+      } else if (selectedGatewayBranches.length === branches.length) {
+        toast.success(`✓ SMS Gateway API applied to all ${branches.length} branches!`)
+      } else {
+        toast.success(`✓ SMS Gateway API applied to ${selectedGatewayBranches.length} selected branches!`)
+      }
+    } catch (err: any) {
+      console.error("Save gateway error:", err)
+      toast.error(err?.message || "Failed to save SMS gateway settings to database")
+    } finally {
+      setSavingGateway(false)
     }
   }
 
@@ -671,8 +885,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       toast.error("Please enter a test recipient phone number")
       return
     }
-    if (!gatewayConfig.apiKey) {
-      toast.error("Please enter an API Key first")
+    if (testBranchId === "custom" && !gatewayConfig.apiKey) {
+      toast.error("Please enter an API Key in the builder first")
       return
     }
 
@@ -680,21 +894,29 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
     setTestResult(null)
 
     try {
+      const payload: any = {
+        recipients: [testPhone.trim()],
+        message: "MedhaShiree: Test SMS gateway configuration verified successfully!",
+      }
+
+      if (testBranchId === "custom") {
+        payload.configOverride = gatewayConfig
+      } else {
+        payload.branchId = testBranchId
+      }
+
       const res = await fetch("/api/sms/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipients: [testPhone.trim()],
-          message: "MedhaShiree: Test SMS gateway configuration verified successfully!",
-          configOverride: gatewayConfig,
-        }),
+        body: JSON.stringify(payload),
       })
 
       const data = await res.json()
       setTestResult(data)
 
       if (res.ok && data.sentCount > 0) {
-        toast.success(`✓ Test SMS sent successfully to ${testPhone}!`)
+        const routeLabel = data.gatewayUsed ? ` via ${data.gatewayUsed}` : ""
+        toast.success(`✓ Test SMS sent successfully to ${testPhone}${routeLabel}!`)
         refreshLogs()
       } else {
         toast.error(`Test failed: ${data.error || "Gateway returned an error"}`)
@@ -730,11 +952,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
     studentId?: string
     batchName?: string
     dueAmount?: number
+    examTitle?: string
     obtainedMarks?: number | string
     totalMarks?: number | string
     grade?: string
     rank?: number | string
-    examTitle?: string
   }
 
   // Parse Direct Custom Numbers Textarea
@@ -895,13 +1117,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           addStudentPhones(sObj, d.due_amount, d.due_month)
         }
       })
-    } else if (targetType === "custom_picker") {
-      const selected = students.filter((s) => customSelectedStudentIds.includes(s.id))
-      selected.forEach((s) => addStudentPhones(s))
     } else if (targetType === "exam_result") {
-      const selected = examStudentResults.filter((item) => selectedExamStudentIds.includes(item.student.id))
-      for (const item of selected) {
-        const s = item.student
+      const selectedEx = exams.find((e) => e.id === selectedExamId)
+      const selectedStudents = examStudents.filter((s) => selectedExamStudentIds.includes(s.id))
+
+      selectedStudents.forEach((s) => {
         const phonesToAdd: string[] = []
         if (targetPhoneType === "guardian" || targetPhoneType === "both") {
           if (s.guardian_phone) phonesToAdd.push(s.guardian_phone)
@@ -914,27 +1134,23 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           else if (s.phone) phonesToAdd.push(s.phone)
         }
 
-        const markVal = item.obtained_marks !== null && item.obtained_marks !== undefined ? item.obtained_marks : "Absent"
-        const totMarks = examDetails?.total_marks ?? 100
-        const gradeVal = item.grade || "-"
-        const rankVal = item.rank ? `#${item.rank}` : "-"
-        const exTitle = examDetails?.title || "Exam"
-        const bName = examDetails?.batch?.name || ""
-
         for (const ph of phonesToAdd) {
           list.push({
             phone: ph,
             name: s.name,
             studentId: s.student_id,
-            batchName: bName,
-            obtainedMarks: markVal,
-            totalMarks: totMarks,
-            grade: gradeVal,
-            rank: rankVal,
-            examTitle: exTitle,
+            batchName: selectedEx?.batch?.name || "All Batches",
+            examTitle: selectedEx?.title || "Exam",
+            obtainedMarks: s.obtainedMarks !== null ? s.obtainedMarks : "N/A",
+            totalMarks: selectedEx?.total_marks || 100,
+            grade: s.grade || "N/A",
+            rank: s.rank ? `#${s.rank}` : "N/A",
           })
         }
-      }
+      })
+    } else if (targetType === "custom_picker") {
+      const selected = students.filter((s) => customSelectedStudentIds.includes(s.id))
+      selected.forEach((s) => addStudentPhones(s))
     } else if (targetType === "direct_numbers") {
       parsedDirectNumbers.forEach((num, idx) => {
         list.push({
@@ -962,7 +1178,22 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       seen.add(clean)
       return true
     })
-  }, [targetType, targetPhoneType, students, batches, enrollments, selectedBatchIds, dues, customSelectedStudentIds, parsedDirectNumbers, csvRecipients, examStudentResults, selectedExamStudentIds, examDetails])
+  }, [
+    targetType,
+    targetPhoneType,
+    students,
+    batches,
+    enrollments,
+    selectedBatchIds,
+    dues,
+    exams,
+    selectedExamId,
+    examStudents,
+    selectedExamStudentIds,
+    customSelectedStudentIds,
+    parsedDirectNumbers,
+    csvRecipients,
+  ])
 
   // Message length & SMS Parts
   const smsStats = useMemo(() => {
@@ -998,56 +1229,62 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
   // Pre-made Templates
   const templates = [
     {
-      label: "Exam Result Notice",
-      text: "Dear Parent, your child {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks (Grade: {{grade}}, Rank: {{rank}}) in {{exam_title}} exam. - Prottasha Coaching",
+      label: "Exam Result (Full)",
+      text: "Dear Guardian, {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks in {{exam_title}} (Batch: {{batch}}). Grade: {{grade}}, Merit Rank: {{rank}}. - MedhaShiree",
+    },
+    {
+      label: "পরীক্ষার ফলাফল (বাংলা)",
+      text: "অভিভাবক মহোদয়, আপনার সন্তান {{name}} (আইডি: {{student_id}}) {{exam_title}} পরীক্ষায় {{number}}/{{total_marks}} নম্বর পেয়েছে। মেধা স্থান: {{rank}}। - মেধাশিরী",
+    },
+    {
+      label: "Exam Result (Short)",
+      text: "Dear Guardian, {{name}} got {{number}}/{{total_marks}} in {{exam_title}}. Grade: {{grade}}. - MedhaShiree",
     },
     {
       label: "Fee Due Reminder",
-      text: "Dear Parent, your child {{name}} (ID: {{student_id}}) has a pending fee due of {{due_amount}}. Please complete payment at the earliest. - Prottasha Coaching",
+      text: "Dear Parent, your child {{name}} (ID: {{student_id}}) has a pending fee due of {{due_amount}}. Please complete payment at the earliest. - MedhaShiree",
     },
     {
       label: "Exam Schedule",
-      text: "Dear Parent, the upcoming exam for {{name}} in {{batch}} is scheduled for next week. Please ensure regular attendance and preparation. - Prottasha Coaching",
+      text: "Dear Parent, the upcoming exam for {{name}} in {{batch}} is scheduled for next week. Please ensure regular attendance and preparation. - MedhaShiree",
     },
     {
       label: "Class Notice",
-      text: "Dear Parent, please note that classes for {{batch}} will follow a special routine this week. Thank you. - Prottasha Coaching",
+      text: "Dear Parent, please note that classes for {{batch}} will follow a special routine this week. Thank you. - MedhaShiree",
     },
     {
       label: "General Notice",
-      text: "Notice: Academic activities will remain closed on the upcoming public holiday. Regular classes will resume on Sunday. - Prottasha Coaching",
+      text: "Notice: Academic activities will remain closed on the upcoming public holiday. Regular classes will resume on Sunday. - MedhaShiree",
     },
   ]
 
   // Sample Preview text
   const sampleMessagePreview = useMemo(() => {
     if (!message) return "Your message preview will appear here..."
-    const sample = resolvedRecipients[0] || {
+    const sample = resolvedRecipients[previewRecipientIndex] || resolvedRecipients[0] || {
       name: "Md Asikur Rahman",
       studentId: "MS-00007",
       batchName: "Physics 10 AM",
       dueAmount: 2500,
+      examTitle: "Physics Term Exam",
       obtainedMarks: 85,
       totalMarks: 100,
       grade: "A+",
       rank: "#1",
-      examTitle: "Physics First Term Exam",
     }
     let res = message
     res = res.replace(/\{\{name\}\}/gi, sample.name || "Student Name")
     res = res.replace(/\{\{student_id\}\}/gi, sample.studentId || "MS-00007")
     res = res.replace(/\{\{batch\}\}/gi, sample.batchName || "Batch Name")
     res = res.replace(/\{\{due_amount\}\}/gi, sample.dueAmount ? `৳${sample.dueAmount}` : "৳2,500")
-    res = res.replace(/\{\{date\}\}/gi, new Date().toLocaleDateString("en-GB"))
-    res = res.replace(/\{\{number\}\}/gi, String(sample.obtainedMarks ?? "85"))
-    res = res.replace(/\{\{marks\}\}/gi, String(sample.obtainedMarks ?? "85"))
-    res = res.replace(/\{\{total_marks\}\}/gi, String(sample.totalMarks ?? "100"))
-    res = res.replace(/\{\{grade\}\}/gi, sample.grade ?? "A+")
-    res = res.replace(/\{\{rank\}\}/gi, String(sample.rank ?? "#1"))
     res = res.replace(/\{\{exam_title\}\}/gi, sample.examTitle || "Physics Exam")
-    res = res.replace(/\{\{exam_name\}\}/gi, sample.examTitle || "Physics Exam")
+    res = res.replace(/\{\{number\}\}|\{\{marks\}\}/gi, sample.obtainedMarks !== undefined && sample.obtainedMarks !== null ? String(sample.obtainedMarks) : "85")
+    res = res.replace(/\{\{total_marks\}\}/gi, String(sample.totalMarks || "100"))
+    res = res.replace(/\{\{grade\}\}/gi, sample.grade || "A+")
+    res = res.replace(/\{\{rank\}\}/gi, sample.rank ? String(sample.rank) : "#1")
+    res = res.replace(/\{\{date\}\}/gi, new Date().toLocaleDateString("en-GB"))
     return res
-  }, [message, resolvedRecipients])
+  }, [message, resolvedRecipients, previewRecipientIndex])
 
   // Execute Bulk Dispatch
   async function handleExecuteBulkSend() {
@@ -1084,14 +1321,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           customMsg = customMsg.replace(/\{\{student_id\}\}/gi, rec.studentId || "")
           customMsg = customMsg.replace(/\{\{batch\}\}/gi, rec.batchName || "")
           customMsg = customMsg.replace(/\{\{due_amount\}\}/gi, rec.dueAmount ? `৳${rec.dueAmount}` : "")
-          customMsg = customMsg.replace(/\{\{date\}\}/gi, new Date().toLocaleDateString("en-GB"))
-          customMsg = customMsg.replace(/\{\{number\}\}/gi, rec.obtainedMarks !== undefined ? String(rec.obtainedMarks) : "")
-          customMsg = customMsg.replace(/\{\{marks\}\}/gi, rec.obtainedMarks !== undefined ? String(rec.obtainedMarks) : "")
-          customMsg = customMsg.replace(/\{\{total_marks\}\}/gi, rec.totalMarks !== undefined ? String(rec.totalMarks) : "")
+          customMsg = customMsg.replace(/\{\{exam_title\}\}/gi, rec.examTitle || "")
+          customMsg = customMsg.replace(/\{\{number\}\}|\{\{marks\}\}/gi, rec.obtainedMarks !== undefined && rec.obtainedMarks !== null ? String(rec.obtainedMarks) : "")
+          customMsg = customMsg.replace(/\{\{total_marks\}\}/gi, rec.totalMarks ? String(rec.totalMarks) : "")
           customMsg = customMsg.replace(/\{\{grade\}\}/gi, rec.grade || "")
           customMsg = customMsg.replace(/\{\{rank\}\}/gi, rec.rank ? String(rec.rank) : "")
-          customMsg = customMsg.replace(/\{\{exam_title\}\}/gi, rec.examTitle || "")
-          customMsg = customMsg.replace(/\{\{exam_name\}\}/gi, rec.examTitle || "")
+          customMsg = customMsg.replace(/\{\{date\}\}/gi, new Date().toLocaleDateString("en-GB"))
 
           return {
             phone: rec.phone,
@@ -1107,6 +1342,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           body: JSON.stringify({
             recipients: payloadRecipients,
             configOverride: gatewayConfig,
+            branchId: selectedBranchId !== "all" ? selectedBranchId : undefined,
           }),
         })
 
@@ -1149,16 +1385,16 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-20">
       {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white backdrop-blur-md p-5 rounded-2xl border border-slate-200 shadow-xl">
         <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-100 shrink-0">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shadow-inner shrink-0">
             <MessageSquare className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
               Bulk SMS Management
             </h1>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-400 mt-1">
               Visual SMS Gateway builder and multi-mode student audience targeting
             </p>
           </div>
@@ -1167,16 +1403,16 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         {/* Gateway Status Badge */}
         <div className="flex items-center gap-3">
           {isGatewayReady ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/40 text-emerald-300 border border-emerald-800/50 text-xs font-bold">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               Gateway Connected & Active
             </div>
           ) : (
             <button
               onClick={() => setActiveTab("gateway")}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold hover:bg-amber-100 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-amber-950/40 text-amber-300 border border-amber-800/50 text-xs font-bold hover:bg-amber-900/50 transition-colors cursor-pointer"
             >
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
               Configure Gateway API Key
             </button>
           )}
@@ -1184,13 +1420,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-gray-200 pb-2">
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-2">
         <button
           onClick={() => setActiveTab("compose")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "compose"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
+              : "text-slate-400 hover:text-slate-900 hover:bg-slate-100/80"
           }`}
         >
           <Send className="w-4 h-4" /> Send Bulk SMS
@@ -1200,20 +1436,20 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           onClick={() => setActiveTab("gateway")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "gateway"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
+              : "text-slate-400 hover:text-slate-900 hover:bg-slate-100/80"
           }`}
         >
           <Settings className="w-4 h-4" /> Gateway & API Settings
-          {!isGatewayReady && <span className="w-2 h-2 rounded-full bg-amber-500" />}
+          {!isGatewayReady && <span className="w-2 h-2 rounded-full bg-amber-400" />}
         </button>
 
         <button
           onClick={() => setActiveTab("logs")}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer ${
             activeTab === "logs"
-              ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
-              : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg shadow-amber-500/20"
+              : "text-slate-400 hover:text-slate-900 hover:bg-slate-100/80"
           }`}
         >
           <History className="w-4 h-4" /> Delivery Logs ({logs.length})
@@ -1227,24 +1463,24 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left Column: Target Audience Selector */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <h2 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                  <Users className="w-4 h-4 text-indigo-600" />
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Users className="w-4 h-4 text-amber-400" />
                   1. Select Target Audience
                 </h2>
-                <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg">
+                <span className="text-xs font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-1 rounded-lg">
                   {resolvedRecipients.length} Recipient{resolvedRecipients.length !== 1 ? "s" : ""}
                 </span>
               </div>
 
               {/* Target Mode Navigation */}
-              <div className="grid grid-cols-3 sm:grid-cols-7 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
                 {[
                   { id: "all", label: "All Active", icon: Users },
                   { id: "batch", label: "Batch-wise", icon: Layers },
-                  { id: "exam_result", label: "Exam Results", icon: Trophy },
                   { id: "due", label: "Due Fees", icon: AlertTriangle },
+                  { id: "exam_result", label: "Exam Results", icon: Trophy },
                   { id: "custom_picker", label: "Student Picker", icon: Search },
                   { id: "direct_numbers", label: "Custom Numbers", icon: PhoneCall },
                   { id: "csv", label: "Custom CSV", icon: Upload },
@@ -1258,11 +1494,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       onClick={() => setTargetType(mode.id as any)}
                       className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1.5 text-center transition-all cursor-pointer ${
                         isActive
-                          ? "border-indigo-600 bg-indigo-50/80 text-indigo-900 font-black shadow-sm"
-                          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50 font-medium"
+    ? "border-amber-500 bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black shadow-md shadow-amber-500/25"
+    : "border-slate-200 bg-white text-slate-700 hover:bg-amber-50/50 hover:border-amber-300 hover:text-amber-900 font-bold shadow-2xs"
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${isActive ? "text-indigo-600" : "text-gray-400"}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-500 group-hover:text-amber-600"}`} />
                       <span className="text-[10px] leading-tight font-bold">{mode.label}</span>
                     </button>
                   )
@@ -1271,8 +1507,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Phone Target Selector (Guardian vs Student) */}
               {targetType !== "csv" && targetType !== "direct_numbers" && (
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/80 flex items-center justify-between gap-3">
-                  <span className="text-xs font-bold text-gray-700">Send To:</span>
+                <div className="p-3 bg-amber-50/40 rounded-xl border border-amber-200/70 flex items-center justify-between gap-3">
+                  <span className="text-xs font-extrabold text-amber-950">Send To:</span>
                   <div className="flex items-center gap-2">
                     {[
                       { id: "guardian", label: "Guardian Phone" },
@@ -1285,8 +1521,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         onClick={() => setTargetPhoneType(opt.id as any)}
                         className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                           targetPhoneType === opt.id
-                            ? "bg-indigo-600 text-white shadow-sm"
-                            : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-200"
+    ? "bg-amber-500 text-white shadow-sm font-black"
+    : "bg-white text-slate-700 hover:bg-slate-100 border border-slate-200 font-bold"
                         }`}
                       >
                         {opt.label}
@@ -1298,9 +1534,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* SUB-PANEL: All Active */}
               {targetType === "all" && (
-                <div className="p-4 bg-indigo-50/40 rounded-xl border border-indigo-100 text-center space-y-1">
-                  <p className="text-xs font-bold text-gray-800">Targeting All Active Enrolled Students</p>
-                  <p className="text-[11px] text-gray-500">
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center space-y-1">
+                  <p className="text-xs font-bold text-slate-200">Targeting All Active Enrolled Students</p>
+                  <p className="text-[11px] text-slate-400">
                     Total {students.length} active students enrolled in coaching.
                   </p>
                 </div>
@@ -1310,28 +1546,30 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {targetType === "batch" && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-gray-700">Choose Batches:</p>
+                    <p className="text-xs font-bold text-slate-400">Choose Batches:</p>
                     <button
                       type="button"
                       onClick={() => {
                         if (selectedBatchIds.length === batches.length) setSelectedBatchIds([])
                         else setSelectedBatchIds(batches.map((b) => b.id))
                       }}
-                      className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                      className="text-[11px] font-bold text-amber-400 hover:underline cursor-pointer"
                     >
                       {selectedBatchIds.length === batches.length ? "Deselect All" : "Select All Batches"}
                     </button>
                   </div>
-                  <div className="max-h-48 overflow-y-auto space-y-1.5 border border-gray-200 rounded-xl p-2.5 bg-gray-50/50">
+                  <div className="max-h-56 overflow-y-auto space-y-1.5 border border-slate-200 rounded-xl p-2.5 bg-slate-50/70">
                     {batches.map((b) => {
                       const isChecked = selectedBatchIds.includes(b.id)
                       const count = enrollments.filter((e) => e.batch_id === b.id).length
                       return (
                         <label
                           key={b.id}
-                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-colors ${
-                            isChecked ? "bg-indigo-50 border border-indigo-200" : "hover:bg-white"
-                          }`}
+                          className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
+    isChecked
+      ? "bg-amber-50 border-amber-500 text-amber-950 shadow-xs ring-1 ring-amber-500/20"
+      : "bg-white border-slate-200 hover:border-amber-300 hover:bg-amber-50/30 text-slate-900"
+  }`}
                         >
                           <div className="flex items-center gap-2.5">
                             <input
@@ -1341,13 +1579,17 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                 if (e.target.checked) setSelectedBatchIds([...selectedBatchIds, b.id])
                                 else setSelectedBatchIds(selectedBatchIds.filter((id) => id !== b.id))
                               }}
-                              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer"
+                              className="w-4 h-4 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer accent-amber-500"
                             />
-                            <span className="text-xs font-bold text-gray-900">{b.name}</span>
+                            <span className={`text-xs font-bold ${isChecked ? "text-amber-950" : "text-slate-900"}`}>{b.name}</span>
                           </div>
-                          <span className="text-[11px] px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-600 font-mono font-bold">
-                            {count} Students
-                          </span>
+                          <span className={`text-[11px] px-2.5 py-0.5 rounded-lg font-bold font-mono border ${
+    isChecked
+      ? "bg-amber-200/80 border-amber-300 text-amber-900"
+      : "bg-indigo-50 border-indigo-200 text-indigo-700"
+  }`}>
+    {count} Students
+  </span>
                         </label>
                       )
                     })}
@@ -1355,226 +1597,28 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 </div>
               )}
 
-              {/* SUB-PANEL: Exam Results */}
-              {targetType === "exam_result" && (
-                <div className="space-y-3">
-                  {/* Exam Selector Dropdown */}
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">
-                      Choose Exam to Send Results For:
-                    </label>
-                    <select
-                      value={selectedExamId}
-                      onChange={(e) => {
-                        const id = e.target.value
-                        setSelectedExamId(id)
-                        loadExamResultDetails(id)
-                      }}
-                      className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:border-indigo-600 shadow-sm cursor-pointer"
-                    >
-                      <option value="">-- Select an Exam --</option>
-                      {exams.map((ex) => (
-                        <option key={ex.id} value={ex.id}>
-                          {ex.title} {ex.batch?.name ? `(${ex.batch.name})` : ""} • Total: {ex.total_marks} marks
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {loadingExamData ? (
-                    <div className="p-8 text-center bg-gray-50 rounded-xl border border-gray-200 text-gray-500 text-xs">
-                      <Loader2 className="w-5 h-5 animate-spin mx-auto text-indigo-600 mb-2" />
-                      Loading exam student results...
-                    </div>
-                  ) : !examDetails ? (
-                    <div className="p-6 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300 text-gray-500 text-xs">
-                      Please select an exam from the dropdown above to load its students and scores.
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {/* Exam Header Info Banner */}
-                      <div className="p-3.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-200 rounded-xl space-y-1.5 shadow-xs">
-                        <div className="flex items-center justify-between flex-wrap gap-1">
-                          <div className="flex items-center gap-1.5">
-                            <Trophy className="w-4 h-4 text-emerald-600" />
-                            <span className="font-black text-xs text-gray-900">{examDetails.title}</span>
-                          </div>
-                          <span className="px-2 py-0.5 bg-white/90 text-emerald-800 border border-emerald-200 rounded-md text-[10px] font-bold">
-                            Total: {examDetails.total_marks} marks (Pass: {examDetails.pass_marks})
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-gray-600 flex items-center gap-2 flex-wrap">
-                          <span>Batch: <strong>{examDetails.batch?.name || "All Enrolled"}</strong></span>
-                          <span>•</span>
-                          <span>Enrolled: <strong>{examStudentResults.length}</strong> students</span>
-                          <span>•</span>
-                          <span className="text-emerald-700 font-semibold">
-                            With Marks: <strong>{examStudentResults.filter((r) => r.obtained_marks !== null).length}</strong>
-                          </span>
-                        </p>
-                      </div>
-
-                      {/* Filter Search and Quick Select Actions */}
-                      <div className="space-y-2">
-                        <div className="relative">
-                          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={examSearchQuery}
-                            onChange={(e) => setExamSearchQuery(e.target.value)}
-                            placeholder="Filter student by name, roll/ID, or phone..."
-                            className="w-full pl-8 pr-3 py-1.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600 shadow-xs"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between text-xs px-1 text-[11px]">
-                          <span className="text-gray-500">
-                            Selected: <strong className="text-indigo-600 font-bold">{selectedExamStudentIds.length}</strong> of {examStudentResults.length}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedExamStudentIds(examStudentResults.map((r) => r.student.id))}
-                              className="text-indigo-600 font-bold hover:underline cursor-pointer"
-                            >
-                              Select All
-                            </button>
-                            <span>•</span>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedExamStudentIds([])}
-                              className="text-gray-500 font-bold hover:underline cursor-pointer"
-                            >
-                              Deselect All
-                            </button>
-                            <span>•</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const withMarks = examStudentResults.filter((r) => r.obtained_marks !== null && r.obtained_marks !== undefined).map((r) => r.student.id)
-                                setSelectedExamStudentIds(withMarks)
-                              }}
-                              className="text-emerald-600 font-bold hover:underline cursor-pointer"
-                            >
-                              Only with Marks
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Students List */}
-                      <div className="max-h-56 overflow-y-auto space-y-1.5 border border-gray-200 rounded-xl p-2 bg-gray-50/50 divide-y divide-gray-100">
-                        {examStudentResults
-                          .filter((item) => {
-                            if (!examSearchQuery.trim()) return true
-                            const q = examSearchQuery.toLowerCase()
-                            return (
-                              item.student.name.toLowerCase().includes(q) ||
-                              item.student.student_id.toLowerCase().includes(q) ||
-                              (item.student.phone || "").includes(q) ||
-                              (item.student.guardian_phone || "").includes(q)
-                            )
-                          })
-                          .map((item) => {
-                            const isChecked = selectedExamStudentIds.includes(item.student.id)
-                            const markText = item.obtained_marks !== null && item.obtained_marks !== undefined ? String(item.obtained_marks) : "Absent"
-                            return (
-                              <div
-                                key={item.student.id}
-                                className={`pt-1.5 first:pt-0 flex items-center justify-between p-2 rounded-lg transition-colors ${
-                                  isChecked ? "bg-white border border-indigo-100 shadow-xs" : "hover:bg-white/60 opacity-60"
-                                }`}
-                              >
-                                <label className="flex items-center gap-2.5 cursor-pointer flex-1 min-w-0 mr-2">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedExamStudentIds([...selectedExamStudentIds, item.student.id])
-                                      } else {
-                                        setSelectedExamStudentIds(selectedExamStudentIds.filter((id) => id !== item.student.id))
-                                      }
-                                    }}
-                                    className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0"
-                                  />
-                                  <div className="truncate">
-                                    <p className="text-xs font-bold text-gray-900 truncate">{item.student.name}</p>
-                                    <p className="text-[10px] text-gray-500 font-mono truncate">
-                                      {item.student.student_id} • 📞 {item.student.guardian_phone || item.student.phone || "No phone"}
-                                    </p>
-                                  </div>
-                                </label>
-
-                                {/* Draggable Mark Badge */}
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  <div
-                                    draggable
-                                    onDragStart={(e) => {
-                                      e.dataTransfer.setData("text/plain", markText)
-                                    }}
-                                    onClick={() => insertMergeTag(markText)}
-                                    title="Drag or click to insert this student's score"
-                                    className={`px-2 py-0.5 rounded-lg border font-mono font-bold text-xs flex items-center gap-1 cursor-grab active:cursor-grabbing shadow-2xs transition-all ${
-                                      item.obtained_marks !== null && item.obtained_marks !== undefined
-                                        ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                                        : "bg-gray-100 text-gray-500 border-gray-200"
-                                    }`}
-                                  >
-                                    <GripVertical className="w-3 h-3 text-emerald-600" />
-                                    <span>{markText}</span>
-                                    <span className="text-[9px] text-gray-400 font-sans font-normal">/{examDetails.total_marks}</span>
-                                  </div>
-
-                                  {item.grade && (
-                                    <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold">
-                                      {item.grade}
-                                    </span>
-                                  )}
-                                  {item.rank && (
-                                    <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">
-                                      #{item.rank}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            )
-                          })}
-                      </div>
-
-                      <p className="text-[11px] text-indigo-700 bg-indigo-50/60 p-2 rounded-lg border border-indigo-100 flex items-center gap-1.5">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                        <span>
-                          <strong>Dynamic Marks:</strong> Drag the <code className="font-mono font-bold bg-white px-1 py-0.5 rounded border border-indigo-200 text-indigo-800">{"{{number}}"}</code> tag into the message box on the right. It will automatically be replaced with each student&apos;s individual score!
-                        </span>
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* SUB-PANEL: Due Fees */}
               {targetType === "due" && (
                 <div className="space-y-3">
-                  <div className="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl flex items-start gap-2.5">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-amber-900">
+                  <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-amber-950">
                       <p className="font-bold">Students with Outstanding Dues ({dues.length})</p>
                       <p className="text-[11px] text-amber-800 mt-0.5">
-                        Use <code className="px-1 py-0.5 bg-amber-100 rounded font-mono font-bold">{"{{due_amount}}"}</code> in your message to automatically insert each student's exact owed amount!
+                        Use <code className="px-1.5 py-0.5 bg-amber-200/70 border border-amber-300 rounded font-mono font-bold text-amber-950">{"{{due_amount}}"}</code> in your message to automatically insert each student's exact owed amount!
                       </p>
                     </div>
                   </div>
-                  <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-white">
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs">
                     {dues.map((d) => (
                       <div key={d.id} className="p-2.5 flex items-center justify-between text-xs">
                         <div>
-                          <p className="font-bold text-gray-900">{d.student?.name || "Student"}</p>
-                          <p className="text-[11px] text-gray-500 font-mono">
-                            {d.student?.student_id} • Month: {d.due_month}
+                          <p className="font-bold text-slate-900">{d.student?.name || "Student"}</p>
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            <span className="text-amber-400">{d.student?.student_id}</span> • Month: {d.due_month}
                           </p>
                         </div>
-                        <span className="px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md font-bold text-xs">
+                        <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md font-bold text-xs">
                           ৳{d.due_amount}
                         </span>
                       </div>
@@ -1583,24 +1627,162 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 </div>
               )}
 
+              {/* SUB-PANEL: Exam Results */}
+              {targetType === "exam_result" && (
+                <div className="space-y-3">
+                  <div className="p-3.5 bg-purple-50 border border-purple-200 rounded-xl flex items-start gap-2.5">
+                    <Trophy className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
+                    <div className="text-xs text-purple-950 flex-1">
+                      <p className="font-bold">Exam Results SMS Dispatch</p>
+                      <p className="text-[11px] text-purple-800 mt-0.5">
+                        Deliver individual student exam marks, grade, and merit rank directly to students and guardians.
+                        Drag <code className="px-1.5 py-0.5 bg-purple-200/70 border border-purple-300 rounded font-mono font-bold text-purple-950">{"{{number}}"}</code> token into your message!
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Exam Selector Dropdown */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Select Exam:</label>
+                    <select
+                      value={selectedExamId}
+                      onChange={(e) => setSelectedExamId(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 shadow-sm"
+                    >
+                      <option value="">-- Choose an Exam --</option>
+                      {exams.map((ex) => (
+                        <option key={ex.id} value={ex.id}>
+                          {ex.title} ({ex.batch?.name || "All Batches"} • {ex.total_marks} Marks)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {loadingExamData ? (
+                    <div className="p-6 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+                      Loading students and results for this exam...
+                    </div>
+                  ) : selectedExamId && examStudents.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs px-1">
+                        <span className="text-slate-400 font-medium">
+                          Total Students: <strong className="text-purple-400">{examStudents.length}</strong> • Selected:{" "}
+                          <strong className="text-amber-400">{selectedExamStudentIds.length}</strong>
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedExamStudentIds(examStudents.map((s) => s.id))}
+                            className="text-amber-400 font-bold hover:underline cursor-pointer"
+                          >
+                            Select All
+                          </button>
+                          <span className="text-slate-600">•</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedExamStudentIds([])}
+                            className="text-rose-400 font-bold hover:underline cursor-pointer"
+                          >
+                            Deselect All
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Student Table with Draggable Number Badges */}
+                      <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs">
+                        {examStudents.map((s) => {
+                          const isSelected = selectedExamStudentIds.includes(s.id)
+                          const selectedEx = exams.find((e) => e.id === selectedExamId)
+                          return (
+                            <div
+                              key={s.id}
+                              className={`p-2.5 flex items-center justify-between gap-2 transition-colors ${
+                                isSelected ? "bg-amber-50/70 text-slate-900" : "hover:bg-slate-50 text-slate-800"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) setSelectedExamStudentIds([...selectedExamStudentIds, s.id])
+                                    else setSelectedExamStudentIds(selectedExamStudentIds.filter((id) => id !== s.id))
+                                  }}
+                                  className="w-4 h-4 text-amber-500 rounded border-slate-700 bg-slate-900 focus:ring-amber-400 cursor-pointer shrink-0"
+                                />
+                                <div className="truncate">
+                                  <p className="text-xs font-bold text-slate-900 truncate flex items-center gap-1.5">
+                                    {s.name}
+                                    {s.rank && (
+                                      <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold">
+                                        #{s.rank}
+                                      </span>
+                                    )}
+                                  </p>
+                                  <p className="text-[11px] text-slate-400 font-mono">
+                                    <span className="font-semibold text-amber-400">{s.student_id}</span> • G:{" "}
+                                    {s.guardian_phone || "N/A"} • S: {s.phone || "N/A"}
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Draggable Student Marks / Number */}
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span
+                                  draggable
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData("text/plain", "{{number}}")
+                                    toast.info(`Dragging {{number}} token for ${s.name}`)
+                                  }}
+                                  onClick={() => insertMergeTag("{{number}}")}
+                                  className="px-2 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 font-mono font-bold text-[11px] cursor-grab active:cursor-grabbing flex items-center gap-1 shadow-sm transition-all select-none"
+                                  title="Drag this marks token into the message box (or click to insert)"
+                                >
+                                  <GripVertical className="w-3 h-3 text-amber-400" />
+                                  {s.obtainedMarks !== null ? `${s.obtainedMarks}/${selectedEx?.total_marks || 100}` : "N/A"}
+                                </span>
+                                {s.grade && (
+                                  <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                                    {s.grade}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ) : selectedExamId ? (
+                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-200">
+                      No active students found in this exam's batch.
+                    </div>
+                  ) : (
+                    <div className="p-4 text-center text-xs text-slate-400 bg-slate-950 rounded-xl border border-slate-200">
+                      Please select an exam above to load students and marks.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* SUB-PANEL: CUSTOM STUDENT PICKER (Comprehensive selection) */}
               {targetType === "custom_picker" && (
                 <div className="space-y-3">
                   <div className="flex flex-col sm:flex-row gap-2">
                     <div className="relative flex-1">
-                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
                         value={pickerSearchQuery}
                         onChange={(e) => setPickerSearchQuery(e.target.value)}
                         placeholder="Search student name, ID, or phone..."
-                        className="w-full pl-9 pr-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600 shadow-sm"
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-400 shadow-sm"
                       />
                     </div>
                     <select
                       value={pickerBatchFilter}
                       onChange={(e) => setPickerBatchFilter(e.target.value)}
-                      className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-700 focus:outline-none focus:border-indigo-600 shadow-sm"
+                      className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500 shadow-sm"
                     >
                       <option value="all">All Batches</option>
                       {batches.map((b) => (
@@ -1612,9 +1794,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   </div>
 
                   <div className="flex items-center justify-between text-xs px-1">
-                    <span className="text-gray-500 font-medium">
+                    <span className="text-slate-400 font-medium">
                       Showing {filteredStudentsInPicker.length} • Selected:{" "}
-                      <strong className="text-indigo-600 font-bold">{customSelectedStudentIds.length}</strong>
+                      <strong className="text-amber-400 font-bold">{customSelectedStudentIds.length}</strong>
                     </span>
                     <div className="flex items-center gap-2">
                       <button
@@ -1623,29 +1805,29 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           const visibleIds = filteredStudentsInPicker.map((s) => s.id)
                           setCustomSelectedStudentIds(Array.from(new Set([...customSelectedStudentIds, ...visibleIds])))
                         }}
-                        className="text-indigo-600 font-bold hover:underline cursor-pointer"
+                        className="text-amber-400 font-bold hover:underline cursor-pointer"
                       >
                         Select All Filtered
                       </button>
-                      <span>•</span>
+                      <span className="text-slate-600">•</span>
                       <button
                         type="button"
                         onClick={() => setCustomSelectedStudentIds([])}
-                        className="text-rose-600 font-bold hover:underline cursor-pointer"
+                        className="text-rose-400 font-bold hover:underline cursor-pointer"
                       >
                         Clear Selection
                       </button>
                     </div>
                   </div>
 
-                  <div className="max-h-56 overflow-y-auto divide-y divide-gray-100 border border-gray-200 rounded-xl bg-white shadow-inner">
+                  <div className="max-h-56 overflow-y-auto divide-y divide-slate-100 border border-slate-200 rounded-xl bg-white shadow-2xs">
                     {filteredStudentsInPicker.map((s) => {
                       const isSelected = customSelectedStudentIds.includes(s.id)
                       return (
                         <label
                           key={s.id}
                           className={`p-2.5 flex items-center justify-between cursor-pointer transition-colors ${
-                            isSelected ? "bg-indigo-50/70" : "hover:bg-gray-50"
+                            isSelected ? "bg-amber-50/70 text-slate-900" : "hover:bg-slate-50 text-slate-800"
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
@@ -1656,12 +1838,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                 if (e.target.checked) setCustomSelectedStudentIds([...customSelectedStudentIds, s.id])
                                 else setCustomSelectedStudentIds(customSelectedStudentIds.filter((id) => id !== s.id))
                               }}
-                              className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500 cursor-pointer shrink-0"
+                              className="w-4 h-4 text-amber-500 rounded border-slate-700 bg-slate-900 focus:ring-amber-400 cursor-pointer shrink-0"
                             />
                             <div className="truncate">
-                              <p className="text-xs font-bold text-gray-900 truncate">{s.name}</p>
-                              <p className="text-[11px] text-gray-500 font-mono">
-                                <span className="font-semibold text-indigo-600">{s.student_id}</span> • G:{" "}
+                              <p className="text-xs font-bold text-slate-900 truncate">{s.name}</p>
+                              <p className="text-[11px] text-slate-400 font-mono">
+                                <span className="font-semibold text-amber-400">{s.student_id}</span> • G:{" "}
                                 {s.guardian_phone || "N/A"} • S: {s.phone || "N/A"}
                               </p>
                             </div>
@@ -1670,7 +1852,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       )
                     })}
                     {filteredStudentsInPicker.length === 0 && (
-                      <div className="p-6 text-center text-xs text-gray-400">No matching students found.</div>
+                      <div className="p-6 text-center text-xs text-slate-500">No matching students found.</div>
                     )}
                   </div>
                 </div>
@@ -1680,10 +1862,10 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {targetType === "direct_numbers" && (
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-gray-700">
+                    <label className="text-xs font-bold text-slate-400">
                       Paste / Type Custom Phone Numbers:
                     </label>
-                    <span className="text-xs font-bold text-indigo-600">
+                    <span className="text-xs font-bold text-amber-400">
                       {parsedDirectNumbers.length} Valid Numbers
                     </span>
                   </div>
@@ -1692,11 +1874,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     value={directNumbersText}
                     onChange={(e) => setDirectNumbersText(e.target.value)}
                     placeholder="Enter phone numbers separated by comma, space, or newline...&#10;e.g.&#10;01800000000&#10;01711111111&#10;01922222222"
-                    className="w-full p-3 bg-white border-2 border-gray-200 rounded-xl font-mono text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600"
+                    className="w-full p-3 bg-white border border-slate-300 rounded-xl font-mono text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs"
                   />
-                  <p className="text-[11px] text-gray-500">
-                    Supports Bangladeshi formats: <code className="font-bold">01XXXXXXXXX</code> or{" "}
-                    <code className="font-bold">8801XXXXXXXXX</code>
+                  <p className="text-[11px] text-slate-500">
+                    Supports Bangladeshi formats: <code className="font-bold text-slate-300">01XXXXXXXXX</code> or{" "}
+                    <code className="font-bold text-slate-300">8801XXXXXXXXX</code>
                   </p>
                 </div>
               )}
@@ -1704,23 +1886,23 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* SUB-PANEL: Custom CSV File */}
               {targetType === "csv" && (
                 <div className="space-y-3">
-                  <div className="border-2 border-dashed border-gray-300 hover:border-indigo-400 bg-gray-50/60 hover:bg-indigo-50/30 rounded-2xl p-5 text-center transition-all">
-                    <Upload className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
-                    <p className="text-xs font-bold text-gray-800">Upload CSV / TXT Contact List</p>
-                    <p className="text-[11px] text-gray-500 mt-0.5">
-                      File format: Column for <span className="font-mono font-bold">phone</span> and optional{" "}
-                      <span className="font-mono font-bold">name</span>
+                  <div className="border-2 border-dashed border-slate-700 hover:border-amber-500/50 bg-slate-50 rounded-2xl p-5 text-center transition-all">
+                    <Upload className="w-8 h-8 text-amber-400 mx-auto mb-2" />
+                    <p className="text-xs font-bold text-slate-900">Upload CSV / TXT Contact List</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      File format: Column for <span className="font-mono font-bold text-amber-400">phone</span> and optional{" "}
+                      <span className="font-mono font-bold text-amber-400">name</span>
                     </p>
-                    <label className="mt-3 inline-block px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm cursor-pointer">
+                    <label className="mt-3 inline-block px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-md cursor-pointer">
                       Browse File
                       <input type="file" accept=".csv,.txt" onChange={handleCsvUpload} className="hidden" />
                     </label>
                   </div>
 
                   {csvFileName && (
-                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between text-xs text-emerald-800">
+                    <div className="p-3 bg-emerald-950/40 border border-emerald-800/50 rounded-xl flex items-center justify-between text-xs text-emerald-300">
                       <div className="flex items-center gap-2 truncate">
-                        <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
                         <span className="font-bold truncate">{csvFileName}</span>
                         <span>({csvRecipients.filter((r) => r.isValid).length} valid numbers)</span>
                       </div>
@@ -1730,7 +1912,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           setCsvFileName("")
                           setCsvRecipients([])
                         }}
-                        className="text-rose-600 hover:text-rose-800 font-bold text-[11px] cursor-pointer"
+                        className="text-rose-400 hover:text-rose-300 font-bold text-[11px] cursor-pointer"
                       >
                         Remove
                       </button>
@@ -1741,44 +1923,44 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
             </div>
 
             {/* Recipient Count Summary Banner */}
-            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-4 text-white shadow-md flex items-center justify-between">
+            <div className="bg-gradient-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a] border border-amber-400/40 rounded-2xl p-5 text-white shadow-xl flex items-center justify-between">
               <div>
-                <p className="text-xs text-indigo-100 font-semibold uppercase tracking-wider">Ready to Deliver</p>
-                <h3 className="text-2xl font-black mt-0.5">
+                <p className="text-xs text-amber-300 font-extrabold uppercase tracking-wider">Ready to Deliver</p>
+                <h3 className="text-2xl font-black mt-0.5 text-white">
                   {resolvedRecipients.length} Recipient{resolvedRecipients.length !== 1 ? "s" : ""}
                 </h3>
               </div>
               <div className="text-right">
-                <span className="px-3 py-1 bg-white/20 backdrop-blur-sm rounded-lg text-xs font-bold inline-block">
+                <span className="px-3 py-1 bg-amber-500/20 border border-amber-500/30 rounded-lg text-xs font-bold inline-block text-amber-300">
                   {targetType.toUpperCase().replace("_", " ")}
                 </span>
-                <p className="text-[11px] text-indigo-100 mt-1">Est. {resolvedRecipients.length * smsStats.parts} SMS Parts</p>
+                <p className="text-[11px] text-slate-400 mt-1">Est. {resolvedRecipients.length * smsStats.parts} SMS Parts</p>
               </div>
             </div>
           </div>
 
           {/* Right Column: Compose Message, Merge Tags & Preview */}
           <div className="lg:col-span-6 space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <h2 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-indigo-600" />
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+                <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-amber-400" />
                   2. Compose Message & Dynamic Merge Tags
                 </h2>
               </div>
 
               {/* Quick Template Picker */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">Load Quick Template:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Load Quick Template:</label>
                 <div className="grid grid-cols-2 gap-2">
                   {templates.map((t, i) => (
                     <button
                       key={i}
                       type="button"
                       onClick={() => setMessage(t.text)}
-                      className="p-2 border border-gray-200 rounded-xl text-left hover:border-indigo-300 hover:bg-indigo-50/50 transition-all text-xs cursor-pointer truncate"
+                      className="p-2.5 border border-slate-200 bg-white hover:bg-amber-50/50 hover:border-amber-400 rounded-xl text-left transition-all text-xs cursor-pointer truncate shadow-2xs group"
                     >
-                      <span className="font-bold text-gray-800 block truncate">{t.label}</span>
+                      <span className="font-bold text-slate-800 group-hover:text-amber-800 block truncate">{t.label}</span>
                     </button>
                   ))}
                 </div>
@@ -1786,25 +1968,22 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* Merge Tag Chips */}
               <div>
-                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                  <label className="text-xs font-bold text-gray-700 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                    Dynamic Merge Tags (Drag or Click):
-                  </label>
-                  <span className="text-[11px] text-gray-500">Drag or click to insert token into message</span>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-400">Drag or Click to Insert Dynamic Tag:</label>
+                  <span className="text-[11px] text-slate-500">Drag tag directly into message or click to insert</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {[
-                    { tag: "{{number}}", label: "Marks / Score", desc: "Student's marks in exam", highlight: true },
-                    { tag: "{{total_marks}}", label: "Total Marks", desc: "Exam total marks" },
-                    { tag: "{{grade}}", label: "Grade", desc: "Student's grade (e.g. A+)" },
-                    { tag: "{{rank}}", label: "Rank", desc: "Student's merit rank" },
-                    { tag: "{{exam_title}}", label: "Exam Title", desc: "Exam name" },
-                    { tag: "{{name}}", label: "Student Name", desc: "Student full name" },
-                    { tag: "{{student_id}}", label: "Student ID", desc: "Student roll/ID" },
-                    { tag: "{{batch}}", label: "Batch Name", desc: "Batch title" },
-                    { tag: "{{due_amount}}", label: "Due (৳)", desc: "Outstanding due fee" },
-                    { tag: "{{date}}", label: "Date", desc: "Today's date" },
+                    { tag: "{{number}}", label: "Marks / Number", isHighlight: true },
+                    { tag: "{{total_marks}}", label: "Total Marks" },
+                    { tag: "{{exam_title}}", label: "Exam Title" },
+                    { tag: "{{rank}}", label: "Merit Rank" },
+                    { tag: "{{grade}}", label: "Grade" },
+                    { tag: "{{name}}", label: "Student Name" },
+                    { tag: "{{student_id}}", label: "Student ID" },
+                    { tag: "{{batch}}", label: "Batch Name" },
+                    { tag: "{{due_amount}}", label: "Due (৳)" },
+                    { tag: "{{date}}", label: "Date" },
                   ].map((item) => (
                     <button
                       key={item.tag}
@@ -1814,16 +1993,17 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         e.dataTransfer.setData("text/plain", item.tag)
                       }}
                       onClick={() => insertMergeTag(item.tag)}
-                      title={`Drag into message or click to insert (${item.desc})`}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-grab active:cursor-grabbing flex items-center gap-1 shadow-2xs ${
-                        item.highlight
-                          ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-2 border-emerald-300 ring-2 ring-emerald-100/50"
-                          : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200"
-                      }`}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-grab active:cursor-grabbing flex items-center gap-1 shadow-sm select-none",
+                        item.isHighlight
+    ? "bg-amber-100/90 hover:bg-amber-200 text-amber-950 border-2 border-amber-400 ring-2 ring-amber-400/20 font-bold"
+    : "bg-indigo-50/90 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 font-semibold"
+                      )}
+                      title={`Drag ${item.tag} into the message box or click to insert`}
                     >
-                      <GripVertical className={`w-3 h-3 ${item.highlight ? "text-emerald-600" : "text-indigo-400"}`} />
+                      <GripVertical className={cn("w-3 h-3", item.isHighlight ? "text-amber-600" : "text-indigo-600")} />
                       <span>{item.tag}</span>
-                      <span className={`text-[10px] font-sans font-normal ${item.highlight ? "text-emerald-700 font-semibold" : "text-indigo-500"}`}>
+                      <span className={cn("text-[10px] font-sans font-normal", item.isHighlight ? "text-amber-900 font-bold" : "text-indigo-700")}>
                         ({item.label})
                       </span>
                     </button>
@@ -1831,12 +2011,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 </div>
               </div>
 
-              {/* Message Textarea with Drag and Drop */}
+              {/* Message Textarea */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-gray-700">Message Content *</label>
-                  <span className="text-[11px] text-gray-400">Supports dropping tags & student marks</span>
-                </div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Message Content *</label>
                 <textarea
                   ref={messageTextareaRef}
                   required
@@ -1845,41 +2022,62 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   onChange={(e) => setMessage(e.target.value)}
                   onDragOver={(e) => {
                     e.preventDefault()
-                    e.dataTransfer.dropEffect = "copy"
+                    setIsDraggingOverTextarea(true)
                   }}
+                  onDragLeave={() => setIsDraggingOverTextarea(false)}
                   onDrop={(e) => {
                     e.preventDefault()
-                    const droppedText = e.dataTransfer.getData("text/plain")
-                    if (droppedText) {
-                      insertMergeTag(droppedText)
-                    }
+                    setIsDraggingOverTextarea(false)
+                    const tag = e.dataTransfer.getData("text/plain")
+                    if (tag) insertMergeTag(tag)
                   }}
-                  placeholder="Type your SMS here or select a template above... (e.g. Dear Parent, your child {{name}} has obtained {{number}}/{{total_marks}} in {{exam_title}})"
-                  className="w-full p-3.5 bg-white border-2 border-gray-200 rounded-xl text-sm font-medium text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
+                  placeholder="Type your SMS here or drag tags/select a template above... (e.g. Dear Parent, your child {{name}} has obtained {{number}}/{{total_marks}} marks in {{exam_title}})"
+                  className={cn(
+                    "w-full p-3.5 bg-white border border-slate-300 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 rounded-xl text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none transition-all shadow-2xs",
+                    isDraggingOverTextarea
+                      ? "border-amber-400 ring-4 ring-amber-400/20 bg-amber-950/20"
+                      : "border-slate-700 focus:border-amber-400 focus:ring-4 focus:ring-amber-400/10"
+                  )}
                 />
 
                 {/* SMS Parts Counter & Unicode indicator */}
-                <div className="flex items-center justify-between text-xs text-gray-500 mt-1.5">
+                <div className="flex items-center justify-between text-xs text-slate-400 mt-1.5">
                   <span>
-                    <strong className="text-gray-800">{smsStats.len}</strong> characters •{" "}
-                    <strong className="text-indigo-600">{smsStats.parts}</strong> SMS part{smsStats.parts !== 1 ? "s" : ""}
+                    <strong className="text-white">{smsStats.len}</strong> characters •{" "}
+                    <strong className="text-amber-400">{smsStats.parts}</strong> SMS part{smsStats.parts !== 1 ? "s" : ""}
                   </span>
-                  <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-600 font-medium text-[11px]">
+                  <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-medium text-[11px]">
                     {smsStats.isUnicode ? "Unicode / Bengali (70 chars/part)" : "Standard GSM (160 chars/part)"}
                   </span>
                 </div>
               </div>
 
               {/* Live Smartphone Screen Mockup */}
-              <div className="p-3.5 bg-slate-900 rounded-2xl text-white space-y-2 border border-slate-800">
-                <div className="flex items-center justify-between text-slate-400 text-[11px] pb-1 border-b border-slate-800">
+              <div className="p-3.5 bg-slate-50 rounded-2xl text-slate-900 space-y-2 border border-slate-200 shadow-xs">
+                <div className="flex items-center justify-between text-slate-400 text-[11px] pb-1 border-b border-slate-200">
                   <span className="flex items-center gap-1.5">
-                    <Smartphone className="w-3.5 h-3.5 text-indigo-400" />
+                    <Smartphone className="w-3.5 h-3.5 text-amber-400" />
                     Recipient Mobile View Simulation
                   </span>
-                  <span>MedhaShiree</span>
+                  <span className="text-amber-400/80 font-semibold">MedhaShiree</span>
                 </div>
-                <div className="p-3 bg-slate-800/90 rounded-xl text-xs text-slate-100 font-medium leading-relaxed shadow-inner">
+                {resolvedRecipients.length > 1 && (
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-[10px] text-slate-400 shrink-0">Simulate for:</span>
+                    <select
+                      value={previewRecipientIndex}
+                      onChange={(e) => setPreviewRecipientIndex(Number(e.target.value))}
+                      className="bg-white text-slate-800 border border-slate-300 rounded-lg text-[11px] px-2.5 py-1 max-w-[240px] truncate focus:outline-none shadow-2xs"
+                    >
+                      {resolvedRecipients.slice(0, 50).map((r, i) => (
+                        <option key={i} value={i}>
+                          {r.name} {r.obtainedMarks !== undefined ? `(Marks: ${r.obtainedMarks})` : ""} {r.rank ? `[${r.rank}]` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="p-3.5 bg-white rounded-xl text-xs text-slate-800 font-medium leading-relaxed border border-slate-200 shadow-2xs">
                   {sampleMessagePreview}
                 </div>
               </div>
@@ -1899,7 +2097,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   setShowConfirmModal(true)
                 }}
                 disabled={sending || resolvedRecipients.length === 0 || !message.trim()}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:shadow-none cursor-pointer"
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
               >
                 {sending ? (
                   <>
@@ -1922,50 +2120,193 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       {activeTab === "gateway" && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-8 space-y-6">
-            <form onSubmit={handleSaveGateway} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-6">
-              <div className="border-b border-gray-100 pb-4">
+            <form onSubmit={handleSaveGateway} className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-6 shadow-xl space-y-6">
+              <div className="border-b border-slate-200 pb-4">
                 <div className="flex items-center gap-2">
-                  <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+                  <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
                     <Settings className="w-5 h-5" />
                   </div>
                   <div>
-                    <h2 className="text-base font-black text-gray-900">Custom SMS Gateway API Builder</h2>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <h2 className="text-base font-black text-slate-900">Custom SMS Gateway API Builder</h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
                       Visual parameter mapping with drag-and-drop token placement for sms.net.bd and any SMS provider
                     </p>
                   </div>
                 </div>
               </div>
 
+              {/* Branch Selection for SMS Gateway API */}
+              <div className="p-4 bg-amber-50/40 border border-amber-200/80 rounded-2xl space-y-3.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-200/60 pb-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Building className="w-4 h-4 text-amber-600" />
+                      <label className="text-xs font-black text-slate-900 uppercase tracking-wider">
+                        Branch Selection (Who uses this SMS Gateway API?) *
+                      </label>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      Select <strong>1 branch</strong> for a branch-specific API, or <strong>multi-select</strong> to apply these settings across multiple branches at once.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllBranches}
+                      className="px-2.5 py-1 text-xs font-bold text-amber-700 hover:text-amber-800 bg-amber-100/90 hover:bg-amber-200/80 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Select All ({branches.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearBranchSelection}
+                      className="px-2.5 py-1 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {/* Branches Grid */}
+                {branches.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic">Loading branches...</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                    {branches.map((b) => {
+                      const isSelected = selectedGatewayBranches.includes(b.id)
+                      const hasDedicatedApi = Boolean(b.sms_gateway_config?.apiKey || b.sms_gateway_config?.api_key)
+
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => handleToggleBranchSelection(b.id)}
+                          className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex flex-col justify-between gap-2.5 ${
+                            isSelected
+                              ? "bg-white border-amber-500 shadow-sm ring-2 ring-amber-500/25"
+                              : "bg-white/80 border-slate-200/90 hover:border-amber-300 hover:bg-white"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 border ${
+                                isSelected ? "bg-amber-500 border-amber-600 text-white" : "border-slate-300 bg-white"
+                              }`}>
+                                {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                              </div>
+                              <span className="text-xs font-bold text-slate-900 truncate">
+                                {b.name}
+                              </span>
+                            </div>
+                            {hasDedicatedApi ? (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300/80">
+                                Dedicated API
+                              </span>
+                            ) : (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                                Default API
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-slate-100">
+                            <span className="text-slate-500 truncate max-w-[130px]">
+                              {b.location || b.address || "Main branch"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                selectOnlyBranch(b.id)
+                              }}
+                              className="text-amber-700 hover:text-amber-900 font-bold hover:underline cursor-pointer ml-2 shrink-0 text-[11px]"
+                              title="Select only this branch to view or configure its dedicated API"
+                            >
+                              Configure Only →
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Dynamic Selection Alert / Notice */}
+                {selectedGatewayBranches.length === 1 && (() => {
+                  const single = branches.find((b) => b.id === selectedGatewayBranches[0])
+                  const hasDedicated = Boolean(single?.sms_gateway_config?.apiKey || single?.sms_gateway_config?.api_key)
+                  return (
+                    <div className="flex flex-wrap items-center justify-between gap-2 p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-xs">
+                      <div className="flex items-center gap-2 text-slate-900 font-medium">
+                        <CheckCircle2 className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>
+                          Configuring SMS API for <strong>{single?.name}</strong>. {hasDedicated ? "This branch has a dedicated SMS API active." : "Currently using default API. Saving will assign a dedicated API."}
+                        </span>
+                      </div>
+                      {hasDedicated && (
+                        <button
+                          type="button"
+                          onClick={() => single && handleRevertBranchToDefault(single.id)}
+                          className="px-2.5 py-1 bg-white hover:bg-rose-50 text-rose-600 hover:text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-colors cursor-pointer shadow-2xs"
+                        >
+                          Revert to Default API
+                        </button>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {selectedGatewayBranches.length > 1 && (
+                  <div className="p-3 rounded-xl bg-sky-50 border border-sky-200 text-xs text-sky-950 font-medium flex items-center gap-2">
+                    <Users className="w-4 h-4 text-sky-600 shrink-0" />
+                    <span>
+                      <strong>Multi-Branch Selected ({selectedGatewayBranches.length} Branches):</strong> Saving will apply this entire SMS API configuration across all {selectedGatewayBranches.length} selected branches at once. Other branches will remain completely untouched.
+                    </span>
+                  </div>
+                )}
+
+                {selectedGatewayBranches.length === 0 && (
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 font-medium flex items-center justify-between gap-2">
+                    <span>⚠️ No branch selected. Please select at least one branch to apply this SMS Gateway API to.</span>
+                    <button
+                      type="button"
+                      onClick={selectAllBranches}
+                      className="px-2 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 rounded font-bold transition-colors cursor-pointer"
+                    >
+                      Select All Branches
+                    </button>
+                  </div>
+                )}
+              </div>
+
               {/* 1-Click Provider Templates */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-2">1-Click Provider Presets:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-2">1-Click Provider Presets:</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("sms_net_bd")}
-                    className="p-3 rounded-xl border border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-900 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold text-xs text-center transition-all cursor-pointer shadow-sm"
                   >
                     🚀 sms.net.bd (Recommended)
                   </button>
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("greenweb")}
-                    className="p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs text-center transition-all cursor-pointer shadow-2xs"
                   >
                     Greenweb BD
                   </button>
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("mimsms")}
-                    className="p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs text-center transition-all cursor-pointer shadow-2xs"
                   >
                     MIM SMS (JSON)
                   </button>
                   <button
                     type="button"
                     onClick={() => applyGatewayPreset("ssl_wireless")}
-                    className="p-3 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800 font-bold text-xs text-center transition-all cursor-pointer"
+                    className="p-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs text-center transition-all cursor-pointer shadow-2xs"
                   >
                     SSL Wireless
                   </button>
@@ -1974,7 +2315,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 1. API Key */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   1. Provider API Key *
                 </label>
                 <div className="relative">
@@ -1984,12 +2325,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     value={gatewayConfig.apiKey}
                     onChange={(e) => setGatewayConfig({ ...gatewayConfig, apiKey: e.target.value })}
                     placeholder="e.g. 48673a5a87b1c4e92... (paste your API key here)"
-                    className="w-full pl-3.5 pr-10 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm font-mono text-gray-900 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
+                    className="w-full pl-3.5 pr-10 py-2.5 bg-white border border-slate-300 rounded-xl text-sm font-mono text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-500"
                   />
                   <button
                     type="button"
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 cursor-pointer"
                   >
                     {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
@@ -1998,7 +2339,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 2. HTTP Call Type Selection */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   2. HTTP Call Type / Request Method *
                 </label>
                 <div className="grid grid-cols-3 gap-3">
@@ -2011,8 +2352,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       key={ct.id}
                       className={`p-3 rounded-xl border flex flex-col cursor-pointer transition-all ${
                         gatewayConfig.callType === ct.id
-                          ? "border-indigo-600 bg-indigo-50/70 text-indigo-900 font-bold shadow-sm"
-                          : "border-gray-200 hover:bg-gray-50 text-gray-600"
+                          ? "border-amber-500/60 bg-amber-500/10 text-amber-300 font-bold shadow-sm ring-1 ring-amber-500/30"
+                          : "border-slate-200 hover:bg-amber-50/30 text-slate-400 bg-slate-50"
                       }`}
                     >
                       <div className="flex items-center gap-2">
@@ -2021,11 +2362,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           name="callType"
                           checked={gatewayConfig.callType === ct.id}
                           onChange={() => setGatewayConfig({ ...gatewayConfig, callType: ct.id as any })}
-                          className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                          className="w-4 h-4 text-amber-500 border-slate-700 focus:ring-amber-500 bg-slate-950"
                         />
                         <span className="text-xs">{ct.label}</span>
                       </div>
-                      <span className="text-[10px] text-gray-500 mt-1 ml-6">{ct.hint}</span>
+                      <span className="text-[10px] text-slate-500 mt-1 ml-6">{ct.hint}</span>
                     </label>
                   ))}
                 </div>
@@ -2033,11 +2374,11 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
               {/* 3. Base Endpoint URL */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
                   3. Base Gateway Endpoint URL *
                 </label>
                 <div className="relative">
-                  <Link2 className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                  <Link2 className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
                     required
@@ -2049,28 +2390,28 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       setGatewayConfig({ ...gatewayConfig, baseUrl: clean, urlTemplate: newTemplate })
                     }}
                     placeholder="https://api.sms.net.bd/sendsms"
-                    className="w-full pl-10 pr-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-indigo-600 focus:ring-4 focus:ring-indigo-100 transition-all"
+                    className="w-full pl-10 pr-3 py-2.5 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all placeholder:text-slate-500"
                   />
                 </div>
               </div>
 
               {/* 4. DRAGGABLE TOKEN TOOLBOX */}
-              <div className="p-4 bg-gradient-to-r from-indigo-50 via-purple-50 to-blue-50 rounded-2xl border-2 border-indigo-200/80 space-y-2">
+              <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-amber-500/30 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-black text-gray-900 flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-indigo-600" />
+                  <span className="text-xs font-black text-white flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
                     4. Draggable Variable Tokens (Drag into slots below or click to assign):
                   </span>
-                  <span className="text-[11px] text-indigo-700 font-bold hidden sm:inline">
+                  <span className="text-[11px] text-amber-400 font-bold hidden sm:inline">
                     Drag tokens into the destination parameter slots below
                   </span>
                 </div>
 
                 <div className="flex flex-wrap gap-2.5 pt-1">
                   {[
-                    { token: "{msg}", label: "Message Content", desc: "Encoded SMS text", color: "indigo" },
-                    { token: "{to}", label: "Phone Number", desc: "Recipient mobile", color: "purple" },
-                    { token: "{api_key}", label: "API Key", desc: "Your auth token", color: "blue" },
+                    { token: "{msg}", label: "Message Content", desc: "Encoded SMS text", color: "amber" },
+                    { token: "{to}", label: "Phone Number", desc: "Recipient mobile", color: "amber" },
+                    { token: "{api_key}", label: "API Key", desc: "Your auth token", color: "amber" },
                   ].map((item) => (
                     <div
                       key={item.token}
@@ -2079,12 +2420,12 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         e.dataTransfer.setData("text/plain", item.token)
                         e.dataTransfer.setData("tokenType", item.token)
                       }}
-                      className="px-3.5 py-2 bg-white border-2 border-indigo-300 hover:border-indigo-600 rounded-xl shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-all flex items-center gap-2 group select-none"
+                      className="px-3.5 py-2 bg-slate-900 border border-slate-700 hover:border-amber-400/60 rounded-xl shadow-sm cursor-grab active:cursor-grabbing hover:shadow-md transition-all flex items-center gap-2 group select-none"
                     >
-                      <span className="font-mono font-black text-xs text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
+                      <span className="font-mono font-black text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
                         {item.token}
                       </span>
-                      <span className="text-xs font-bold text-gray-800">{item.label}</span>
+                      <span className="text-xs font-bold text-slate-200">{item.label}</span>
                     </div>
                   ))}
                 </div>
@@ -2093,13 +2434,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* 5. VISUAL PARAMETER SLOTS (DROP TARGETS) */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-black text-gray-900">
+                  <label className="text-xs font-black text-white">
                     5. Parameter Mapping & Drop Targets:
                   </label>
                   <button
                     type="button"
                     onClick={addCustomParam}
-                    className="flex items-center gap-1 text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-lg cursor-pointer"
+                    className="flex items-center gap-1 text-xs font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg cursor-pointer transition-all"
                   >
                     <Plus className="w-3.5 h-3.5" /> Add Custom Parameter
                   </button>
@@ -2124,27 +2465,27 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           const token = e.dataTransfer.getData("text/plain")
                           if (token) assignTokenToParam(param.id, token)
                         }}
-                        className={`p-3.5 rounded-2xl border-2 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                        className={`p-3.5 rounded-2xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                           isOver
-                            ? "border-indigo-600 bg-indigo-50 ring-4 ring-indigo-100 scale-[1.01]"
+                            ? "border-amber-400 bg-amber-500/15 ring-2 ring-amber-500/40 scale-[1.01]"
                             : isAssigned
-                            ? "border-emerald-200 bg-emerald-50/30"
-                            : "border-gray-200 bg-white"
+                            ? "border-emerald-500/30 bg-emerald-950/20"
+                            : "border-slate-200 bg-slate-950"
                         }`}
                       >
                         {/* Parameter Key */}
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-mono font-bold text-gray-400 w-5">#{idx + 1}</span>
+                          <span className="text-xs font-mono font-bold text-slate-500 w-5">#{idx + 1}</span>
                           <div>
-                            <span className="text-[10px] font-bold text-gray-400 block uppercase">Param Name</span>
+                            <span className="text-[10px] font-bold text-slate-500 block uppercase">Param Name</span>
                             <input
                               type="text"
                               value={param.key}
                               onChange={(e) => updateParamKey(param.id, e.target.value)}
-                              className="px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-xs font-mono font-bold text-gray-900 focus:outline-none focus:border-indigo-600 w-28"
+                              className="px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:border-amber-500 w-28"
                             />
                           </div>
-                          <span className="text-gray-400 font-bold">=</span>
+                          <span className="text-slate-600 font-bold">=</span>
                         </div>
 
                         {/* Drop Target Box */}
@@ -2152,10 +2493,10 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                           <div
                             className={`flex-1 p-2.5 rounded-xl border-2 border-dashed flex items-center justify-between transition-all ${
                               isOver
-                                ? "border-indigo-600 bg-indigo-100 text-indigo-900 font-black animate-pulse"
+                                ? "border-amber-400 bg-amber-500/20 text-amber-200 font-black animate-pulse"
                                 : isAssigned
-                                ? "border-emerald-400 bg-white text-emerald-950 font-bold"
-                                : "border-gray-300 bg-gray-50/70 text-gray-400"
+                                ? "border-emerald-500/40 bg-slate-900 text-emerald-300 font-bold"
+                                : "border-slate-200 bg-slate-50 text-slate-500"
                             }`}
                           >
                             <span className="text-xs font-mono">
@@ -2163,7 +2504,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                             </span>
 
                             {isAssigned && (
-                              <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1">
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
                                 <Check className="w-3 h-3" /> Configured
                               </span>
                             )}
@@ -2178,8 +2519,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                                 onClick={() => assignTokenToParam(param.id, tk)}
                                 className={`px-2 py-1 rounded text-[10px] font-mono font-bold transition-all cursor-pointer ${
                                   param.value === tk
-                                    ? "bg-indigo-600 text-white"
-                                    : "bg-gray-100 hover:bg-indigo-50 text-gray-700 border border-gray-200"
+                                    ? "bg-amber-500 text-slate-950 font-black"
+                                    : "bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700"
                                 }`}
                                 title={`Assign ${tk} to this slot`}
                               >
@@ -2190,7 +2531,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                               <button
                                 type="button"
                                 onClick={() => removeParam(param.id)}
-                                className="p-1 text-gray-400 hover:text-rose-600 p-1.5 rounded-lg"
+                                className="p-1 text-slate-500 hover:text-rose-400 p-1.5 rounded-lg transition-colors"
                                 title="Remove parameter"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2205,8 +2546,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </div>
 
               {/* Assembled Request URL Preview */}
-              <div className="p-4 bg-slate-900 rounded-xl text-slate-300 font-mono text-xs space-y-1.5 border border-slate-800">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-sans font-bold flex items-center gap-1.5">
+              <div className="p-4 bg-slate-950 rounded-xl text-slate-300 font-mono text-xs space-y-1.5 border border-slate-200">
+                <p className="text-[10px] text-slate-600 uppercase tracking-wider font-sans font-bold flex items-center gap-1.5">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   Live Assembled Request URL
                 </p>
@@ -2221,31 +2562,39 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               {/* Save Button */}
               <button
                 type="submit"
-                disabled={savingGateway}
-                className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-sm shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-2 disabled:bg-indigo-400 cursor-pointer"
+                disabled={savingGateway || selectedGatewayBranches.length === 0}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-sm shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
               >
                 {savingGateway ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin" /> Saving Gateway Configuration...
+                    <Loader2 className="w-4 h-4 animate-spin" /> Saving SMS Gateway Configuration...
+                  </>
+                ) : selectedGatewayBranches.length === 1 ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" /> Save SMS Gateway for {branches.find((b) => b.id === selectedGatewayBranches[0])?.name || "Selected Branch"}
+                  </>
+                ) : selectedGatewayBranches.length > 1 ? (
+                  <>
+                    <CheckCircle2 className="w-4 h-4" /> Save & Apply SMS Gateway to {selectedGatewayBranches.length} Selected Branches
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="w-4 h-4" /> Save Gateway Configuration & Activate
+                    <CheckCircle2 className="w-4 h-4" /> Select Branch(es) Above to Save SMS Gateway
                   </>
                 )}
               </button>
 
               {/* Database Schema Cache / Missing Table Notice */}
               {hasMissingTable && (
-                <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-2xl text-amber-900 space-y-3 shadow-sm">
+                <div className="p-4 bg-amber-950/40 border border-amber-500/40 rounded-2xl text-amber-200 space-y-3 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
                       <div>
-                        <h4 className="font-bold text-sm text-amber-950">
+                        <h4 className="font-bold text-sm text-amber-300">
                           Supabase Table &apos;site_settings&apos; Not Created Yet
                         </h4>
-                        <p className="text-xs text-amber-800 mt-0.5">
+                        <p className="text-xs text-amber-200/80 mt-0.5">
                           Your gateway settings are saved in your browser and <strong>fully active</strong> for this device (SMS will send normally). To enable multi-device sync and save settings permanently in Supabase, run this 1-click SQL in your Supabase SQL Editor:
                         </p>
                       </div>
@@ -2256,13 +2605,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         navigator.clipboard.writeText(SITE_SETTINGS_SQL)
                         toast.success("Copied SQL to clipboard! Paste into Supabase SQL Editor.")
                       }}
-                      className="shrink-0 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+                      className="shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-amber-500/20"
                     >
                       <Copy className="w-3.5 h-3.5" />
                       Copy SQL Fix
                     </button>
                   </div>
-                  <div className="bg-slate-900 text-slate-200 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-800">
+                  <div className="bg-slate-950 text-slate-300 p-3 rounded-xl font-mono text-[11px] overflow-x-auto border border-slate-200">
                     <pre>{SITE_SETTINGS_SQL}</pre>
                   </div>
                 </div>
@@ -2273,35 +2622,35 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           {/* Right Column: Gateway Status & Live Test Sender */}
           <div className="lg:col-span-4 space-y-6">
             {/* Setup Status Checklist */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
-              <h3 className="text-sm font-black text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl space-y-4">
+              <h3 className="text-sm font-black text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 Gateway Readiness Checklist
               </h3>
 
               <div className="space-y-2 text-xs">
                 <div className="flex items-center gap-2.5">
                   {gatewayConfig.apiKey ? (
-                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                   ) : (
-                    <X className="w-4 h-4 text-rose-500 shrink-0" />
+                    <X className="w-4 h-4 text-rose-400 shrink-0" />
                   )}
-                  <span className={gatewayConfig.apiKey ? "text-gray-800 font-bold" : "text-gray-400"}>
+                  <span className={gatewayConfig.apiKey ? "text-slate-900 font-bold" : "text-slate-500"}>
                     API Key Entered
                   </span>
                 </div>
 
                 <div className="flex items-center gap-2.5">
                   {gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}") ? (
-                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                   ) : (
-                    <X className="w-4 h-4 text-rose-500 shrink-0" />
+                    <X className="w-4 h-4 text-rose-400 shrink-0" />
                   )}
                   <span
                     className={
                       gatewayConfig.params.some((p) => p.value === "{msg}") || gatewayConfig.urlTemplate.includes("{msg}")
-                        ? "text-gray-800 font-bold"
-                        : "text-gray-400"
+                        ? "text-slate-900 font-bold"
+                        : "text-slate-500"
                     }
                   >
                     Message Token {"{msg}"} Configured
@@ -2310,15 +2659,15 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
                 <div className="flex items-center gap-2.5">
                   {gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}") ? (
-                    <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0" />
                   ) : (
-                    <X className="w-4 h-4 text-rose-500 shrink-0" />
+                    <X className="w-4 h-4 text-rose-400 shrink-0" />
                   )}
                   <span
                     className={
                       gatewayConfig.params.some((p) => p.value === "{to}") || gatewayConfig.urlTemplate.includes("{to}")
-                        ? "text-gray-800 font-bold"
-                        : "text-gray-400"
+                        ? "text-slate-900 font-bold"
+                        : "text-slate-500"
                     }
                   >
                     Phone Token {"{to}"} Configured
@@ -2327,39 +2676,55 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </div>
 
               {isGatewayReady ? (
-                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800 font-medium">
+                <div className="p-3 bg-emerald-950/40 rounded-xl border border-emerald-500/30 text-xs text-emerald-300 font-medium">
                   ✓ Setup complete! You can now send single or bulk SMS anytime.
                 </div>
               ) : (
-                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 font-medium">
+                <div className="p-3 bg-amber-950/40 rounded-xl border border-amber-500/30 text-xs text-amber-300 font-medium">
                   Please complete the checklist to enable SMS dispatching.
                 </div>
               )}
             </div>
 
             {/* Test Gateway Sender Tool */}
-            <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-3.5">
-              <h3 className="text-sm font-black text-gray-900 border-b border-gray-100 pb-2 flex items-center gap-2">
-                <Send className="w-4 h-4 text-indigo-600" />
+            <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 shadow-xl space-y-3.5">
+              <h3 className="text-sm font-black text-slate-900 border-b border-slate-200 pb-2 flex items-center gap-2">
+                <Send className="w-4 h-4 text-amber-400" />
                 Live Test SMS Sender
               </h3>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Test Recipient Phone</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Send Test Via</label>
+                <select
+                  value={testBranchId}
+                  onChange={(e) => setTestBranchId(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:border-amber-500"
+                >
+                  <option value="custom">Current Form Settings (Direct)</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} {b.sms_gateway_config?.api_key || b.sms_gateway_config?.apiKey ? "(Dedicated API)" : "(Default API)"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Test Recipient Phone</label>
                 <input
                   type="text"
                   value={testPhone}
                   onChange={(e) => setTestPhone(e.target.value)}
                   placeholder="e.g. 01800000000 or 88018..."
-                  className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:outline-none focus:border-indigo-600"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:border-amber-500 placeholder:text-slate-500"
                 />
               </div>
 
               <button
                 type="button"
                 onClick={handleSendTestSms}
-                disabled={testingGateway || !testPhone.trim() || !gatewayConfig.apiKey}
-                className="w-full py-2.5 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs shadow-sm transition-all flex items-center justify-center gap-1.5 disabled:bg-gray-300 cursor-pointer"
+                disabled={testingGateway || !testPhone.trim() || (testBranchId === "custom" && !gatewayConfig.apiKey)}
+                className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 disabled:opacity-40 cursor-pointer"
               >
                 {testingGateway ? (
                   <>
@@ -2373,9 +2738,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </button>
 
               {testResult && (
-                <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 space-y-1 text-xs">
-                  <p className="font-bold text-gray-800">Gateway Response:</p>
-                  <pre className="text-[11px] font-mono text-gray-700 bg-white p-2 rounded border border-gray-200 overflow-x-auto max-h-32">
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-200 space-y-1 text-xs">
+                  <p className="font-bold text-slate-200">Gateway Response:</p>
+                  <pre className="text-[11px] font-mono text-emerald-400 bg-slate-900 p-2 rounded border border-slate-200 overflow-x-auto max-h-32">
                     {JSON.stringify(testResult, null, 2)}
                   </pre>
                 </div>
@@ -2389,18 +2754,18 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
       {/* TAB 3: DELIVERY LOGS & SMS QUEUE */}
       {/* ========================================================================= */}
       {activeTab === "logs" && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50/60">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden">
+          <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
             <div>
-              <h3 className="text-sm font-black text-gray-900 flex items-center gap-2">
-                <History className="w-4 h-4 text-indigo-600" />
+              <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-400" />
                 Recent Message Delivery Logs
               </h3>
-              <p className="text-xs text-gray-500 mt-0.5">Real-time status of messages dispatched through the system</p>
+              <p className="text-xs text-slate-400 mt-0.5">Real-time status of messages dispatched through the system</p>
             </div>
             <button
               onClick={refreshLogs}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 rounded-xl text-xs font-bold transition-all cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" /> Refresh
             </button>
@@ -2409,7 +2774,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
           <div className="overflow-x-auto">
             <table className="w-full text-left">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase tracking-wider text-[11px] font-bold">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider text-[11px] font-bold">
                   <th className="px-4 py-3">Phone</th>
                   <th className="px-4 py-3">Message Snippet</th>
                   <th className="px-4 py-3">Type</th>
@@ -2417,13 +2782,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                   <th className="px-4 py-3 text-right">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 text-xs">
+              <tbody className="divide-y divide-slate-100 text-xs">
                 {logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50/80 transition-colors">
-                    <td className="px-4 py-3 font-mono font-bold text-gray-900">{log.to_phone}</td>
-                    <td className="px-4 py-3 max-w-md truncate text-gray-700 font-medium">{log.message}</td>
+                  <tr key={log.id} className="hover:bg-amber-50/30 transition-colors">
+                    <td className="px-4 py-3 font-mono font-bold text-white">{log.to_phone}</td>
+                    <td className="px-4 py-3 max-w-md truncate text-slate-300 font-medium">{log.message}</td>
                     <td className="px-4 py-3">
-                      <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[11px] font-semibold uppercase">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700 text-[11px] font-semibold uppercase">
                         {log.type || "bulk"}
                       </span>
                     </td>
@@ -2431,10 +2796,10 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                       <span
                         className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[11px] ${
                           log.status === "sent"
-                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
                             : log.status === "pending"
-                            ? "bg-amber-50 text-amber-700 border border-amber-200"
-                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                            ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                            : "bg-rose-500/15 text-rose-400 border border-rose-500/30"
                         }`}
                       >
                         {log.status === "sent" ? (
@@ -2447,7 +2812,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                         {log.status.toUpperCase()}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-500 font-mono text-[11px]">
+                    <td className="px-4 py-3 text-right text-slate-400 font-mono text-[11px]">
                       {new Date(log.created_at).toLocaleString("en-GB", {
                         day: "2-digit",
                         month: "short",
@@ -2459,7 +2824,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 ))}
                 {logs.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-gray-400">
+                    <td colSpan={5} className="py-12 text-center text-slate-500">
                       No SMS delivery logs recorded yet.
                     </td>
                   </tr>
@@ -2472,41 +2837,41 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
       {/* CONFIRM BULK SEND MODAL */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-150">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="text-base font-black text-gray-900 flex items-center gap-2">
-                <Send className="w-4 h-4 text-indigo-600" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white text-slate-900 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-slate-200/90 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-black text-slate-900 flex items-center gap-2">
+                <Send className="w-4 h-4 text-amber-400" />
                 Confirm Bulk SMS Dispatch
               </h3>
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 cursor-pointer"
+                className="text-slate-400 hover:text-white p-1 cursor-pointer transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-gray-600">
-              <div className="p-3 bg-indigo-50/70 rounded-xl space-y-1.5 text-indigo-900">
+            <div className="space-y-3 text-xs text-slate-300">
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5 text-amber-200">
                 <div className="flex justify-between">
                   <span>Total Recipients:</span>
-                  <strong className="text-sm font-black">{resolvedRecipients.length}</strong>
+                  <strong className="text-sm font-black text-amber-300">{resolvedRecipients.length}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Estimated SMS Parts:</span>
-                  <strong className="text-sm font-black">{resolvedRecipients.length * smsStats.parts}</strong>
+                  <strong className="text-sm font-black text-amber-300">{resolvedRecipients.length * smsStats.parts}</strong>
                 </div>
                 <div className="flex justify-between">
                   <span>Target Destination:</span>
-                  <strong className="font-bold">{targetPhoneType.toUpperCase()}</strong>
+                  <strong className="font-bold text-amber-700">{targetPhoneType.toUpperCase()}</strong>
                 </div>
               </div>
 
               <div>
-                <p className="font-bold text-gray-800 mb-1">Message Preview:</p>
-                <div className="p-3 bg-gray-50 border border-gray-200 rounded-xl text-gray-800 font-medium max-h-36 overflow-y-auto">
+                <p className="font-bold text-slate-200 mb-1">Message Preview:</p>
+                <div className="p-3 bg-white border border-slate-300 rounded-xl text-slate-300 font-medium max-h-36 overflow-y-auto">
                   {sampleMessagePreview}
                 </div>
               </div>
@@ -2516,14 +2881,14 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               <button
                 type="button"
                 onClick={() => setShowConfirmModal(false)}
-                className="flex-1 py-2.5 border border-gray-200 text-gray-700 rounded-xl font-bold text-xs hover:bg-gray-50 transition-colors cursor-pointer"
+                className="flex-1 py-2.5 border border-slate-200 text-slate-700 rounded-xl font-bold text-xs hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleExecuteBulkSend}
-                className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Send className="w-3.5 h-3.5" /> Start Dispatch
               </button>
@@ -2534,28 +2899,28 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
       {/* SENDING PROGRESS MODAL */}
       {sending && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-gray-100">
-            <Loader2 className="w-10 h-10 text-indigo-600 animate-spin mx-auto" />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white text-slate-900 rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-slate-200/90">
+            <Loader2 className="w-10 h-10 text-amber-400 animate-spin mx-auto" />
             <div>
-              <h3 className="text-base font-black text-gray-900">Dispatching Messages...</h3>
-              <p className="text-xs text-gray-500 mt-1">Please keep this window open while sending.</p>
+              <h3 className="text-base font-black text-slate-900">Dispatching Messages...</h3>
+              <p className="text-xs text-slate-400 mt-1">Please keep this window open while sending.</p>
             </div>
 
             <div className="space-y-1.5">
-              <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-white border border-slate-300 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-indigo-600 rounded-full transition-all duration-300"
+                  className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full transition-all duration-300"
                   style={{
                     width: `${sendProgress.total ? (sendProgress.current / sendProgress.total) * 100 : 0}%`,
                   }}
                 />
               </div>
-              <div className="flex justify-between text-[11px] text-gray-500 font-mono font-bold">
+              <div className="flex justify-between text-[11px] text-slate-400 font-mono font-bold">
                 <span>
                   {sendProgress.current} / {sendProgress.total} Sent
                 </span>
-                <span className="text-emerald-600">✓ {sendProgress.success}</span>
+                <span className="text-emerald-400">✓ {sendProgress.success}</span>
               </div>
             </div>
           </div>

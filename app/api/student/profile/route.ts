@@ -1,9 +1,72 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { extractWeeklyScheduleFromNote } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
+
+const ALL_WEEK_DAYS = [
+  { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  { id: "sunday", bn: "রবিবার", en: "Sunday" },
+  { id: "monday", bn: "সোমবার", en: "Monday" },
+  { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+  { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+  { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+  { id: "friday", bn: "শুক্রবার", en: "Friday" },
+]
+
+function getWeeklyMarks(ex: any, recDays: any[]) {
+  const note = ex?.result_note || ""
+  const isWeekly =
+    ex?.exam_schedule_type === "weekly" ||
+    ex?.exam_type === "weekly" ||
+    ex?.is_weekly === true ||
+    (Array.isArray(recDays) && recDays.length > 0) ||
+    ex?.is_weekly_published === true ||
+    note.includes("[WEEKLY_SCHEDULE:") ||
+    note.includes("[WEEKLY_DAYS:") ||
+    note.includes("[RECURRING_DAYS:") ||
+    note.includes("[IS_WEEKLY_PUBLISHED:") ||
+    Boolean(ex?.title?.includes("সাপ্তাহিক")) ||
+    Boolean(ex?.subject?.includes("সাপ্তাহিক")) ||
+    Number(ex?.total_marks) === 350
+
+  if (!isWeekly) {
+    return {
+      isWeekly: false,
+      totalMarks: Number(ex?.total_marks) || 100,
+      passMarks: Number(ex?.pass_marks) || 33,
+    }
+  }
+
+  const confMap: Record<string, any> = {}
+  const candidateDays = Array.isArray(recDays) ? recDays : []
+  for (const d of candidateDays) {
+    const isObj = typeof d === "object" && d !== null
+    const rawKey = isObj ? (d.day || d.day_bn || d.day_en || "") : String(d)
+    const lowerKey = String(rawKey).toLowerCase()
+    const matched = ALL_WEEK_DAYS.find((w) => w.id === lowerKey || w.bn === rawKey || w.en.toLowerCase() === lowerKey)
+    const canonicalKey = matched?.id || lowerKey
+    confMap[canonicalKey] = d
+  }
+
+  let sumTotal = 0
+  let sumPass = 0
+  for (const w of ALL_WEEK_DAYS) {
+    const conf = confMap[w.id]
+    const dTotal = conf && typeof conf === "object" && conf.total_marks ? Number(conf.total_marks) : 50
+    const dPass = conf && typeof conf === "object" && conf.pass_marks ? Number(conf.pass_marks) : 20
+    sumTotal += dTotal
+    sumPass += dPass
+  }
+
+  return {
+    isWeekly: true,
+    totalMarks: sumTotal > 0 ? sumTotal : 350,
+    passMarks: sumPass > 0 ? sumPass : 140,
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -72,18 +135,13 @@ export async function GET(req: NextRequest) {
     registerPhone(currentProfile.phone)
     registerPhone(user.user_metadata?.phone)
 
-    // Run all student identity lookups in parallel
+    // Run high-confidence student identity lookups in parallel
     const studentQueries: any[] = [
       admin.from("students").select("*").eq("auth_user_id", user.id),
     ]
     if (candidateCodes.size > 0) {
       studentQueries.push(
         admin.from("students").select("*").in("student_id", Array.from(candidateCodes))
-      )
-    }
-    if (candidatePhones.size > 0) {
-      studentQueries.push(
-        admin.from("students").select("*").in("phone", Array.from(candidatePhones))
       )
     }
     if (candidateEmails.size > 0) {
@@ -99,12 +157,32 @@ export async function GET(req: NextRequest) {
       res.data?.forEach((s: any) => matchedStudentsMap.set(s.id, s))
     }
 
+    // Always include students matching candidate phones
+    if (candidatePhones.size > 0) {
+      const { data: phoneStudents } = await admin
+        .from("students")
+        .select("*")
+        .in("phone", Array.from(candidatePhones))
+
+      if (phoneStudents && phoneStudents.length > 0) {
+        for (const s of phoneStudents) {
+          if (!s.auth_user_id || s.auth_user_id === user.id) {
+            matchedStudentsMap.set(s.id, s)
+          }
+        }
+      }
+    }
+
     const matchedStudents = Array.from(matchedStudentsMap.values())
-    const candidateDbIds = new Set<string>(matchedStudents.map(s => s.id))
 
     let primaryStudent: any = null
     if (matchedStudents.length > 0) {
-      primaryStudent = matchedStudents.find(s => s.student_id === currentProfile.user_id) || matchedStudents[0]
+      primaryStudent =
+        matchedStudents.find(s => s.auth_user_id === user.id) ||
+        matchedStudents.find(s => s.student_id && candidateCodes.has(s.student_id)) ||
+        matchedStudents.find(s => s.email && candidateEmails.has(s.email.toLowerCase())) ||
+        matchedStudents[0]
+
       if (primaryStudent.student_id) candidateCodes.add(primaryStudent.student_id)
       if (primaryStudent.phone) registerPhone(primaryStudent.phone)
       if (primaryStudent.email) candidateEmails.add(primaryStudent.email.toLowerCase())
@@ -120,6 +198,59 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Also find any sibling student records in the student's enrolled batches sharing the same name
+    const studentNames = new Set<string>()
+    if (primaryStudent?.name) studentNames.add(primaryStudent.name.trim().toLowerCase())
+    if (currentProfile?.name) studentNames.add(currentProfile.name.trim().toLowerCase())
+    matchedStudents.forEach((s: any) => {
+      if (s.name) studentNames.add(s.name.trim().toLowerCase())
+    })
+
+    const studentBatchIds = Array.from(new Set([
+      primaryStudent?.batch_id,
+      ...matchedStudents.map((s: any) => s.batch_id)
+    ].filter(Boolean)))
+
+    if (studentNames.size > 0 && studentBatchIds.length > 0) {
+      try {
+        const { data: batchSiblingStudents } = await admin
+          .from("students")
+          .select("*")
+          .in("batch_id", studentBatchIds)
+
+        if (batchSiblingStudents) {
+          for (const bs of batchSiblingStudents) {
+            const bsName = String(bs.name || "").trim().toLowerCase()
+            if (bsName && studentNames.has(bsName)) {
+              if (!bs.auth_user_id || bs.auth_user_id === user.id) {
+                matchedStudentsMap.set(bs.id, bs)
+                if (bs.student_id) candidateCodes.add(bs.student_id)
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Ensure candidateDbIds ONLY contains records that belong to THIS student
+    const candidateDbIds = new Set<string>()
+    if (primaryStudent?.id) {
+      candidateDbIds.add(primaryStudent.id)
+    }
+    for (const s of matchedStudents) {
+      // Must not belong to a different student code (prevent cross-student data leakage)
+      if (primaryStudent?.student_id && s.student_id && s.student_id !== primaryStudent.student_id) {
+        continue
+      }
+      if (
+        (primaryStudent?.student_id && s.student_id === primaryStudent.student_id) ||
+        (s.auth_user_id && s.auth_user_id === user.id) ||
+        (primaryStudent?.email && s.email && s.email.toLowerCase() === primaryStudent.email.toLowerCase())
+      ) {
+        candidateDbIds.add(s.id)
+      }
+    }
+
     const sid = primaryStudent?.id || null
     const studentDbIdArray = Array.from(candidateDbIds)
 
@@ -128,15 +259,14 @@ export async function GET(req: NextRequest) {
     if (studentDbIdArray.length > 0) {
       subQueries.push(admin.from("payment_submissions").select("*").in("student_id", studentDbIdArray))
     }
-    if (candidatePhones.size > 0) {
-      subQueries.push(admin.from("payment_submissions").select("*").in("sender_number", Array.from(candidatePhones)))
-    }
     if (candidateCodes.size > 0) {
-      subQueries.push(admin.from("payment_submissions").select("*").or(Array.from(candidateCodes).map(c => `notes.ilike.%${c}%`).join(",")))
-    }
-    const validPhonesForNotes = Array.from(candidatePhones).filter(p => p.length >= 10)
-    if (validPhonesForNotes.length > 0) {
-      subQueries.push(admin.from("payment_submissions").select("*").or(validPhonesForNotes.map(p => `notes.ilike.%${p}%`).join(",")))
+      const codeArray = Array.from(candidateCodes)
+      // Check if student_id column directly stored student code (e.g. MS-98422)
+      subQueries.push(admin.from("payment_submissions").select("*").in("student_id", codeArray))
+      // Check if notes specifically contains the unique student ID
+      subQueries.push(
+        admin.from("payment_submissions").select("*").or(codeArray.map(c => `notes.ilike.%${c}%`).join(","))
+      )
     }
 
     const [
@@ -171,14 +301,14 @@ export async function GET(req: NextRequest) {
             .from("fee_dues")
             .select("*, batch:batches(name)")
             .in("student_id", studentDbIdArray)
-            .in("status", ["pending", "partial"])
+            .in("status", ["pending", "partial", "paid", "waived"])
             .order("due_month", { ascending: false })
         : Promise.resolve({ data: [] }),
 
       studentDbIdArray.length > 0
         ? admin
             .from("exam_results")
-            .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, show_all_results, result_note)")
+            .select("*, exam:exams(*)")
             .in("student_id", studentDbIdArray)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] }),
@@ -186,7 +316,7 @@ export async function GET(req: NextRequest) {
       studentDbIdArray.length > 0
         ? admin
             .from("exam_submissions")
-            .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, show_all_results, result_note)")
+            .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, result_note)")
             .in("student_id", studentDbIdArray)
             .eq("is_submitted", true)
             .order("submitted_at", { ascending: false })
@@ -313,7 +443,138 @@ export async function GET(req: NextRequest) {
     examResults = examResults.map((r: any) => {
       const raw = r.obtained_marks ?? r.marks_obtained
       const obt = raw != null && raw !== "" ? Number(raw) : 0
-      return { ...r, obtained_marks: obt, marks_obtained: obt }
+
+      // Extract fallback day marks from exam.result_note if needed
+      let sDayMarks = r.day_marks
+      if (
+        (!sDayMarks || typeof sDayMarks !== "object" || Object.keys(sDayMarks).length === 0) &&
+        r.exam?.result_note?.includes("[STUDENT_DAY_MARKS:")
+      ) {
+        try {
+          const match = r.exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+          if (match && match[1]) {
+            const parsed = JSON.parse(match[1])
+            if (parsed[r.student_id]) {
+              sDayMarks = parsed[r.student_id]
+            }
+          }
+        } catch {}
+      }
+
+      // Normalize exam inside result
+      let normalizedExam = r.exam
+      if (normalizedExam) {
+        const note = normalizedExam.result_note || ""
+        let recDays = normalizedExam.recurring_days
+        const noteSchedule = extractWeeklyScheduleFromNote(note)
+        if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+          recDays = noteSchedule
+        } else if (!recDays || (Array.isArray(recDays) && recDays.length === 0)) {
+          if (note.includes("[RECURRING_DAYS:")) {
+            try {
+              const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+              if (match && match[1]) recDays = JSON.parse(match[1])
+            } catch {}
+          }
+        }
+        const isWeeklyPub = normalizedExam.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
+        const isPubRes = normalizedExam.is_public_result === true || note.includes("[PUBLIC_RESULT:true]")
+        let pubDays = normalizedExam.published_days || []
+        if (note.includes("[PUBLISHED_DAYS:")) {
+          try {
+            const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+            if (match && match[1]) pubDays = match[1].split(",").filter(Boolean)
+          } catch {}
+        }
+
+        const marksInfo = getWeeklyMarks(normalizedExam, recDays)
+        const isBatchPub =
+          normalizedExam.is_published === true ||
+          note.includes("[BATCH_PUBLISHED:true]") ||
+          isWeeklyPub ||
+          pubDays.length > 0
+
+        normalizedExam = {
+          ...normalizedExam,
+          total_marks: marksInfo.totalMarks,
+          pass_marks: marksInfo.passMarks,
+          recurring_days: recDays,
+          is_weekly_published: isWeeklyPub,
+          is_public_result: isPubRes,
+          published_days: pubDays,
+          is_published: isBatchPub,
+          exam_schedule_type: marksInfo.isWeekly ? "weekly" : (normalizedExam.exam_schedule_type || "one_time"),
+        }
+
+        // If weekly and only specific days are published, filter day_marks to published days only
+        if (marksInfo.isWeekly && !isWeeklyPub && pubDays.length > 0 && sDayMarks && typeof sDayMarks === "object") {
+          const pubDaysLower = pubDays.map((p: string) => String(p).toLowerCase().trim())
+          const filteredDayMarks: Record<string, any> = {}
+          for (const [dKey, dVal] of Object.entries(sDayMarks)) {
+            const kLower = dKey.toLowerCase().trim()
+            if (
+              pubDaysLower.includes(kLower) ||
+              ALL_WEEK_DAYS.some(
+                (w) => (w.id === kLower || w.bn === dKey || w.en.toLowerCase() === kLower) && pubDaysLower.includes(w.id)
+              )
+            ) {
+              filteredDayMarks[dKey] = dVal
+            }
+          }
+          sDayMarks = filteredDayMarks
+        }
+      }
+
+      // Check day marks sum
+      let finalObt = obt
+      if (normalizedExam?.exam_schedule_type === "weekly" && sDayMarks && typeof sDayMarks === "object") {
+        let daySum = 0
+        for (const v of Object.values(sDayMarks)) {
+          const m = typeof v === "object" && v !== null ? Number((v as any).marks) : Number(v)
+          if (!isNaN(m) && m > 0) daySum += m
+        }
+        if (daySum > 0 && (finalObt === 0 || daySum > finalObt)) {
+          finalObt = daySum
+        }
+      }
+
+      const totalMarks = Number(normalizedExam?.total_marks) || 100
+      const pct = totalMarks > 0 ? Math.round((finalObt / totalMarks) * 100) : 0
+      let autoGrade = r.grade
+      if (!autoGrade || autoGrade === "Pass" || autoGrade === "Fail") {
+        if (pct >= 80) autoGrade = "A+"
+        else if (pct >= 70) autoGrade = "A"
+        else if (pct >= 60) autoGrade = "A-"
+        else if (pct >= 50) autoGrade = "B"
+        else if (pct >= 40) autoGrade = "C"
+        else if (pct >= 33) autoGrade = "D"
+        else autoGrade = "F"
+      }
+
+      return {
+        ...r,
+        obtained_marks: finalObt,
+        marks_obtained: finalObt,
+        grade: autoGrade,
+        day_marks: sDayMarks || {},
+        exam: normalizedExam,
+      }
+    })
+
+    // Filter out unpublished exam results so draft marks do not leak to student profile
+    examResults = examResults.filter((r: any) => {
+      const ex = r.exam
+      if (!ex) return false
+      const note = ex.result_note || ""
+      const isWeekly = ex.exam_schedule_type === "weekly"
+      if (isWeekly) {
+        const isWeeklyPub = ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
+        const pubDays = Array.isArray(ex.published_days) ? ex.published_days : []
+        const isBatchPub = ex.is_published === true || note.includes("[BATCH_PUBLISHED:true]")
+        return isWeeklyPub || pubDays.length > 0 || isBatchPub
+      } else {
+        return ex.is_published === true || note.includes("[BATCH_PUBLISHED:true]")
+      }
     })
 
     // Dynamic Rank Computation
@@ -361,6 +622,283 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 5b. Fetch scheduled batch exams & materials for enrolled batches
+    const studentEnrolledBatchIds = Array.from(new Set([
+      ...enrollments.map((e: any) => e.batch_id || e.batch?.id).filter(Boolean),
+      ...(primaryStudent?.batch_id ? [primaryStudent.batch_id] : []),
+      ...matchedStudents.map((s: any) => s.batch_id).filter(Boolean),
+      ...subResults.flatMap((sr: any) => sr.data || []).filter((s: any) => s.batch_id).map((s: any) => s.batch_id),
+    ]))
+    const studentBatchIdSet = new Set(studentEnrolledBatchIds.map(String))
+    let batchExams: any[] = []
+    let batchMaterials: any[] = []
+    let materialIssues: any[] = []
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const allStudentUuidsSet = new Set<string>()
+    if (primaryStudent?.id && uuidRegex.test(String(primaryStudent.id))) {
+      allStudentUuidsSet.add(String(primaryStudent.id))
+    }
+    studentDbIdArray.forEach(id => {
+      if (id && uuidRegex.test(String(id))) allStudentUuidsSet.add(String(id))
+    })
+    matchedStudents.forEach((s: any) => {
+      if (s?.id && uuidRegex.test(String(s.id))) allStudentUuidsSet.add(String(s.id))
+    })
+    const cleanIssueStudentUuids = Array.from(allStudentUuidsSet)
+
+    try {
+      const [bExamsRes, bMatsRes, mIssRes] = await Promise.all([
+        studentEnrolledBatchIds.length > 0
+          ? admin
+              .from("exams")
+              .select("*, teacher:staff(name)")
+              .order("exam_date", { ascending: false })
+          : Promise.resolve({ data: [] }),
+        admin
+          .from("materials")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        cleanIssueStudentUuids.length > 0
+          ? admin
+              .from("material_issues")
+              .select("*, material:materials(*)")
+              .in("student_id", cleanIssueStudentUuids)
+              .order("issued_at", { ascending: false })
+            : Promise.resolve({ data: [] })
+      ])
+
+      if (bExamsRes.data) {
+        const rawExams = bExamsRes.data || []
+        batchExams = rawExams
+          .filter((ex: any) => {
+            if (ex.batch_id && studentBatchIdSet.has(String(ex.batch_id))) return true
+            if (ex.batch_ids) {
+              if (Array.isArray(ex.batch_ids)) {
+                if (ex.batch_ids.some((bid: any) => studentBatchIdSet.has(String(bid)))) return true
+              } else if (typeof ex.batch_ids === "string") {
+                try {
+                  const parsed = JSON.parse(ex.batch_ids)
+                  if (Array.isArray(parsed) && parsed.some((bid: any) => studentBatchIdSet.has(String(bid)))) return true
+                } catch {
+                  if (Array.from(studentBatchIdSet).some((bid) => ex.batch_ids.includes(bid))) return true
+                }
+              }
+            }
+            return false
+          })
+          .map((ex: any) => {
+            const note = ex.result_note || ""
+            let recDays = ex.recurring_days
+            const noteSchedule = extractWeeklyScheduleFromNote(note)
+            if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+              recDays = noteSchedule
+            } else if (!recDays || (Array.isArray(recDays) && recDays.length === 0)) {
+              if (note.includes("[RECURRING_DAYS:")) {
+                try {
+                  const match = note.match(/\[RECURRING_DAYS:(.*?)\]/)
+                  if (match && match[1]) recDays = JSON.parse(match[1])
+                } catch {}
+              }
+            }
+            const isWeeklyPub = ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
+            const isPubRes = ex.is_public_result === true || note.includes("[PUBLIC_RESULT:true]")
+            let pubDays = ex.published_days || []
+            if (note.includes("[PUBLISHED_DAYS:")) {
+              try {
+                const match = note.match(/\[PUBLISHED_DAYS:([^\]]*)\]/)
+                if (match && match[1]) pubDays = match[1].split(",").filter(Boolean)
+              } catch {}
+            }
+            const marksInfo = getWeeklyMarks(ex, recDays)
+            const isBatchPub =
+              ex.is_published === true ||
+              note.includes("[BATCH_PUBLISHED:true]") ||
+              isWeeklyPub ||
+              pubDays.length > 0
+
+            return {
+              ...ex,
+              total_marks: marksInfo.totalMarks,
+              pass_marks: marksInfo.passMarks,
+              recurring_days: recDays,
+              is_weekly_published: isWeeklyPub,
+              is_public_result: isPubRes,
+              published_days: pubDays,
+              is_published: isBatchPub,
+              exam_schedule_type:
+                marksInfo.isWeekly
+                  ? "weekly"
+                  : ex.exam_schedule_type || "one_time",
+            }
+          })
+      }
+      if (mIssRes.data) {
+        materialIssues = mIssRes.data.filter((iss: any) => iss.status !== "returned")
+      }
+
+      // Also check issues in enrolled batches or matching available materials
+      const allBatchMatIds = (bMatsRes.data || []).map((m: any) => m.id).filter((id: any) => uuidRegex.test(String(id)))
+      if (studentEnrolledBatchIds.length > 0 || allBatchMatIds.length > 0) {
+        try {
+          let bIssueQuery = admin
+            .from("material_issues")
+            .select("*, material:materials(*), student:students(id, name, student_id, phone, email)")
+            .eq("status", "issued")
+
+          if (allBatchMatIds.length > 0) {
+            bIssueQuery = bIssueQuery.in("material_id", allBatchMatIds)
+          } else {
+            bIssueQuery = bIssueQuery.in("batch_id", studentEnrolledBatchIds)
+          }
+
+          const { data: bIssues } = await bIssueQuery
+
+          const isNameSimilar = (n1: string, n2: string) => {
+            if (!n1 || !n2) return false
+            const a = n1.trim().toLowerCase()
+            const b = n2.trim().toLowerCase()
+            if (a === b || a.includes(b) || b.includes(a)) return true
+            const wa = a.split(/\s+/).filter(w => w.length > 2)
+            const wb = b.split(/\s+/).filter(w => w.length > 2)
+            return wa.some(w => wb.includes(w))
+          }
+
+          if (bIssues) {
+            const seenIds = new Set(materialIssues.map((i: any) => i.id))
+            for (const bi of bIssues) {
+              if (seenIds.has(bi.id)) continue
+              const st = bi.student || {}
+              const stId = st.id || bi.student_id
+              const stCode = (st.student_id || "").trim().toLowerCase()
+              const stPhone = (st.phone || "").trim()
+              const stEmail = (st.email || "").trim().toLowerCase()
+              const stName = (st.name || "").trim().toLowerCase()
+
+              let isMatch = false
+              if (stId && cleanIssueStudentUuids.includes(stId)) isMatch = true
+              if (stCode && candidateCodes.has(stCode)) isMatch = true
+              if (stPhone && candidatePhones.has(stPhone)) isMatch = true
+              if (stEmail && candidateEmails.has(stEmail)) isMatch = true
+              if (stName && Array.from(studentNames).some(sn => isNameSimilar(stName, sn))) isMatch = true
+
+              if (isMatch) {
+                materialIssues.push(bi)
+                seenIds.add(bi.id)
+              }
+            }
+          }
+        } catch (bErr) {
+          console.warn("Batch material issues lookup note:", bErr)
+        }
+      }
+
+      const rawMats = bMatsRes.data || []
+      const issuedMatIds = new Set(materialIssues.map((iss: any) => String(iss.material_id)).filter(Boolean))
+      const issuedMatNames = new Set(
+        materialIssues.map((iss: any) => String(iss.material?.name || iss.material_name || iss.name || "").trim().toLowerCase()).filter(Boolean)
+      )
+
+      const studentBranchIdSet = new Set(
+        enrollments.map((e: any) => e.batch?.branch_id).filter(Boolean).map(String)
+      )
+      if (primaryStudent?.branch_id) studentBranchIdSet.add(String(primaryStudent.branch_id))
+
+      const enrolledBatchNames = new Set(
+        enrollments.map((e: any) => e.batch?.name).filter(Boolean).map(n => String(n).trim().toLowerCase())
+      )
+
+      // Collect any enrolled or purchased course IDs and titles
+      const enrolledCourseIdSet = new Set<string>()
+      const enrolledCourseTitles = new Set<string>()
+      const allCoursePurchases = [ ...(cpSidResult?.data || []), ...(cpEmailResult?.data || []) ]
+      allCoursePurchases.forEach((cp: any) => {
+        if (cp.course_id) enrolledCourseIdSet.add(String(cp.course_id))
+        if (cp.course?.title) enrolledCourseTitles.add(String(cp.course.title).trim().toLowerCase())
+      })
+
+      // Also include any approved payment submissions for courses
+      for (const sr of subResults) {
+        sr.data?.forEach((sub: any) => {
+          if (sub.status === "approved" && sub.course_id) {
+            enrolledCourseIdSet.add(String(sub.course_id))
+            if (sub.course?.title) enrolledCourseTitles.add(String(sub.course.title).trim().toLowerCase())
+          }
+        })
+      }
+
+      batchMaterials = rawMats.filter((m: any) => {
+        // 1. If student was issued this material directly (by ID or by name), always show
+        if (issuedMatIds.has(m.id) || (m.name && issuedMatNames.has(m.name.trim().toLowerCase()))) return true
+
+        // 2. Direct single batch match
+        if (m.batch_id && studentBatchIdSet.has(String(m.batch_id))) return true
+
+        // 3. Multi-batch match via batch_ids (JSONB or array or string)
+        if (m.batch_ids) {
+          if (Array.isArray(m.batch_ids)) {
+            if (m.batch_ids.some((bid: any) => studentBatchIdSet.has(String(bid)))) return true
+          } else if (typeof m.batch_ids === 'string') {
+            try {
+              const parsed = JSON.parse(m.batch_ids)
+              if (Array.isArray(parsed) && parsed.some((bid: any) => studentBatchIdSet.has(String(bid)))) return true
+            } catch {
+              if (Array.from(studentBatchIdSet).some(bid => m.batch_ids.includes(bid))) return true
+            }
+          }
+        }
+
+        // 3.5. Batch Name Match (e.g. "Class 9")
+        if (enrolledBatchNames.size > 0) {
+          if (m.batch_name && enrolledBatchNames.has(String(m.batch_name).trim().toLowerCase())) return true
+          if (m.subject && enrolledBatchNames.has(String(m.subject).trim().toLowerCase())) return true
+          if (Array.isArray(m.batch_names) && m.batch_names.some((bn: any) => enrolledBatchNames.has(String(bn).trim().toLowerCase()))) return true
+        }
+
+        // 3.8. Course Match (for online course materials)
+        if (m.course_id && enrolledCourseIdSet.has(String(m.course_id))) return true
+        if (enrolledCourseTitles.size > 0) {
+          if (m.subject && enrolledCourseTitles.has(String(m.subject).trim().toLowerCase())) return true
+          if (m.name && Array.from(enrolledCourseTitles).some(ct => m.name.toLowerCase().includes(ct))) return true
+        }
+
+        // 4. If material has NO specific batch or course specified (general batch material)
+        const hasNoBatch = (!m.batch_id || m.batch_id === "" || m.batch_id === "all") &&
+          (!m.batch_ids || (Array.isArray(m.batch_ids) && m.batch_ids.length === 0) || m.batch_ids === "[]") &&
+          !m.course_id
+
+        if (hasNoBatch) {
+          if (m.branch_id && studentBranchIdSet.size > 0) {
+            return studentBranchIdSet.has(String(m.branch_id))
+          }
+          return true
+        }
+
+        // 5. If student has only 1 batch enrolled and the material has 1 batch (fallback safeguard)
+        if (studentBatchIdSet.size === 1 && m.batch_id && studentBatchIdSet.has(String(m.batch_id))) {
+          return true
+        }
+
+        return false
+      }).map((m: any) => {
+        const iss = materialIssues.find((i: any) => {
+          if (i.status === "returned") return false
+          if (i.material_id && String(i.material_id) === String(m.id)) return true
+          const iName = String(i.material?.name || i.material_name || i.name || "").trim().toLowerCase()
+          const mName = String(m.name || "").trim().toLowerCase()
+          return iName && mName && iName === mName
+        })
+        return {
+          ...m,
+          is_received: !!iss && iss.status !== "returned",
+          issued_at: iss?.issued_at || null,
+          issue_record: iss || null,
+        }
+      })
+    } catch (extraErr) {
+      console.warn("Scheduled exams & materials profile fetch notice:", extraErr)
+    }
+
     // 6. Course Purchases
     const courseMap = new Map<string, any>()
     const addCoursePurchase = (cp: any) => {
@@ -404,6 +942,17 @@ export async function GET(req: NextRequest) {
 
     const pendingSubs = allSubmissions.filter(s => {
       if (s.status !== "pending") return false
+
+      // Guard: strictly ensure submission belongs to this student
+      const codeList = Array.from(candidateCodes)
+      const belongsToStudent =
+        (s.student_id && (candidateDbIds.has(s.student_id) || candidateCodes.has(s.student_id))) ||
+        (s.notes && codeList.some(c => s.notes.includes(c)))
+
+      if (!belongsToStudent && (candidateDbIds.size > 0 || candidateCodes.size > 0)) {
+        return false
+      }
+
       if (s.batch_id && !enrolledBatchIds.has(s.batch_id)) return true
       if (s.course_id && !courseMap.has(s.course_id)) return true
       return false
@@ -498,17 +1047,56 @@ export async function GET(req: NextRequest) {
 
     const purchasedCourses = Array.from(courseMap.values())
 
+    const enrichedMaterials = batchMaterials.map((m: any) => {
+      if (m.course_id && !m.course) {
+        return { ...m, course: courseInfoMap.get(m.course_id) || null }
+      }
+      return m
+    })
+
+    // Deduplicate materials by ID and content signature, preserving received status
+    const dedupedMaterials: any[] = []
+
+    for (const m of enrichedMaterials) {
+      const mId = String(m.id || "")
+      const sig = `${String(m.name || "").trim().toLowerCase()}::${String(m.type || "").trim()}::${String(m.subject || "").trim().toLowerCase()}`
+
+      const existingIdx = dedupedMaterials.findIndex(d => {
+        const dId = String(d.id || "")
+        const dSig = `${String(d.name || "").trim().toLowerCase()}::${String(d.type || "").trim()}::${String(d.subject || "").trim().toLowerCase()}`
+        return (mId && dId && mId === dId) || (sig !== "::::" && dSig !== "::::" && sig === dSig)
+      })
+
+      if (existingIdx >= 0) {
+        if (m.is_received && !dedupedMaterials[existingIdx].is_received) {
+          dedupedMaterials[existingIdx] = m
+        }
+      } else {
+        dedupedMaterials.push(m)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       profile: currentProfile,
       student: primaryStudent,
+      allStudentIds: cleanIssueStudentUuids,
       enrollments,
       courses: purchasedCourses,
       pendingSubmissions: enrichedPendingSubmissions,
       attendance,
       dues,
       examResults,
+      batchExams,
+      materials: dedupedMaterials,
+      materialIssues,
       paymentAccounts,
+    }, {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+      }
     })
   } catch (error: any) {
     console.error("Student profile API exception:", error)

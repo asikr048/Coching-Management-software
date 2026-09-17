@@ -1,14 +1,48 @@
 "use client"
 import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, AlertCircle, Printer, Download, RefreshCw } from "lucide-react"
-import { formatCurrency } from "@/lib/utils"
+import { 
+  Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, 
+  AlertCircle, Printer, Download, RefreshCw, Landmark, DoorOpen, History, 
+  Calendar, Filter, Eye, Phone, Mail, UserCheck, ArrowRight, FileText, 
+  CheckCircle2, Clock, DollarSign, ChevronRight, ExternalLink, X, Contact, Sparkles
+} from "lucide-react"
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
+import { StudentIdCardData, printStudentIdCard, printAdmissionAndIdCard, downloadStudentIdCardPDF } from "@/lib/id-card-generator"
+import StudentIdCardModal from "@/components/id-card/StudentIdCardModal"
+import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
+import { useBranch } from "@/components/providers/BranchContext"
 
-interface Batch { id: string; name: string; subject?: string; class_level?: string; max_seats: number; current_seats: number; monthly_fee: number; admission_fee: number; status?: string }
-interface StudentOpt { id: string; name: string; student_id: string; phone?: string; email?: string; guardian_name?: string; guardian_phone?: string; address?: string; class_level?: string; school_college?: string }
+interface Batch { 
+  id: string
+  name: string
+  branch_id?: string | null
+  classroom?: string | null
+  subject?: string
+  class_level?: string
+  max_seats: number
+  current_seats: number
+  monthly_fee: number
+  admission_fee: number
+  status?: string 
+}
+interface StudentOpt { 
+  id: string
+  name: string
+  student_id: string
+  branch_id?: string | null
+  phone?: string
+  email?: string
+  guardian_name?: string
+  guardian_phone?: string
+  address?: string
+  class_level?: string
+  school_college?: string 
+}
 
 interface EnrollmentReceipt {
   receipt_number: string
@@ -20,6 +54,10 @@ interface EnrollmentReceipt {
   guardian_name?: string
   guardian_phone?: string
   batch_name: string
+  batch_roll?: number | string
+  branch_name?: string
+  blood_group?: string
+  photo_url?: string
   subject?: string
   date: string
   total_fee: number
@@ -30,23 +68,345 @@ interface EnrollmentReceipt {
   qr_data: string
 }
 
-export default function NewStudentForm({ batches, students }: { batches: Batch[]; students: StudentOpt[] }) {
+export default function NewStudentForm({ 
+  batches, 
+  students, 
+  branches = [],
+  initialEnrollments = [],
+  initialPayments = [],
+  initialDues = [],
+}: { 
+  batches: Batch[]
+  students: StudentOpt[]
+  branches?: { id: string; name: string }[] 
+  initialEnrollments?: any[]
+  initialPayments?: any[]
+  initialDues?: any[]
+}) {
   const router = useRouter()
   const supabase = createClient()
+  const { selectedBranchId: contextBranchId, currentBranch, branches: contextBranches } = useBranch()
+
+  const effectiveBranches = useMemo(() => {
+    if (branches && branches.length > 0) return branches
+    if (contextBranches && contextBranches.length > 0) return contextBranches
+    return []
+  }, [branches, contextBranches])
+
   const [loading, setLoading] = useState(false)
   const [financialAccess, setFinancialAccess] = useState<boolean | null>(null)
+
+  // Primary tab state: Enroll form vs Enrollment History
+  const [activeTab, setActiveTab] = useState<"enroll" | "history">("enroll")
+
+  // Reactive history lists
+  const [enrollmentsList, setEnrollmentsList] = useState<any[]>(initialEnrollments || [])
+  const [paymentsList, setPaymentsList] = useState<any[]>(initialPayments || [])
+  const [duesList, setDuesList] = useState<any[]>(initialDues || [])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historySearchQuery, setHistorySearchQuery] = useState("")
+  const [historyBranchFilter, setHistoryBranchFilter] = useState<string>(() => {
+    if (contextBranchId && contextBranchId !== "all") return contextBranchId
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("medhashiree_admin_branch_id")
+      if (saved && saved !== "all") return saved
+    }
+    const list = branches.length > 0 ? branches : (contextBranches || [])
+    const mainB = list.find(b => /main|প্রধান/i.test(b.name))
+    return mainB?.id || "all"
+  })
+  const [historyBatchFilter, setHistoryBatchFilter] = useState("all")
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<"all" | "paid" | "due">("all")
+
   const [mode, setMode] = useState<"new" | "existing">("new")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedStudent, setSelectedStudent] = useState<StudentOpt | null>(null)
+  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
+    if (contextBranchId && contextBranchId !== "all") {
+      return contextBranchId
+    }
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("medhashiree_admin_branch_id")
+      if (saved && saved !== "all") {
+        return saved
+      }
+    }
+    const list = branches.length > 0 ? branches : (contextBranches || [])
+    const mainB = list.find(b => /main|প্রধান/i.test(b.name))
+    return mainB?.id || list[0]?.id || ""
+  })
   const [form, setForm] = useState({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
   const [existingFix, setExistingFix] = useState({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
+  const [batchRoll, setBatchRoll] = useState<string>("")
   const [paidAmount, setPaidAmount] = useState("")
   const [dueDate, setDueDate] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10); return d.toISOString().split("T")[0] })
   
   const [enrolledBatchIds, setEnrolledBatchIds] = useState<string[]>([])
+  const [allBatches, setAllBatches] = useState<Batch[]>(batches || [])
+  const [resequencing, setResequencing] = useState(false)
+
+  const handleResequenceBatchRolls = async (targetBatchId?: string) => {
+    const bId = targetBatchId || form.batch_id
+    try {
+      setResequencing(true)
+      const res = await fetch("/api/batches/next-roll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bId ? { batch_id: bId } : { resequence_all: true })
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`রোল নম্বর ধারাবাহিক সিঙ্ক সম্পন্ন হয়েছে! (${data.total_fixed_enrollments ?? data.fixed_batches?.[0]?.students_resequenced ?? 0} updated)`)
+        router.refresh()
+      } else {
+        toast.error(data.error || "Failed to resequence rolls")
+      }
+    } catch {
+      toast.error("Network error while syncing rolls")
+    } finally {
+      setResequencing(false)
+    }
+  }
+
+  // Auto-calculate next batch roll (strictly previous maximum + 1, starting 1, 2, 3...) when batch changes
+  useEffect(() => {
+    if (!form.batch_id) {
+      setBatchRoll("")
+      return
+    }
+    let isCancelled = false
+    async function loadNextRoll() {
+      try {
+        // 1. Immediately pre-calculate from local enrollmentsList and batch metadata
+        const currentBat = allBatches.find(b => b.id === form.batch_id)
+        const currentSeats = Number(currentBat?.current_seats || 0)
+        const matchingLocal = enrollmentsList.filter(e => 
+          e.batch_id === form.batch_id || 
+          (currentBat && (
+            e.batch_id === (currentBat as any).origin_batch_id || 
+            (e.batch?.name && e.batch.name.trim().toLowerCase() === currentBat.name.trim().toLowerCase())
+          ))
+        )
+        let localMax = 0
+        matchingLocal.forEach(e => {
+          const r = Number(e.roll_no ?? e.student?.roll_no ?? e.student?.batch_roll)
+          if (!isNaN(r) && r > localMax) localMax = r
+        })
+        const prevMax = Math.max(localMax, matchingLocal.length, currentSeats)
+        if (!isCancelled) {
+          setBatchRoll(String(prevMax > 0 ? prevMax + 1 : 1))
+        }
+
+        // 2. Call server API to verify database sequence, resequence duplicates if any, and get exact next roll
+        const res = await fetch(`/api/batches/next-roll?batch_id=${encodeURIComponent(form.batch_id)}&auto_fix=true`)
+        if (res.ok) {
+          const data = await res.json()
+          if (!isCancelled && data && typeof data.next_roll === "number") {
+            const guaranteedNext = Math.max(data.next_roll, prevMax > 0 ? prevMax + 1 : 1)
+            setBatchRoll(String(guaranteedNext))
+
+            // If existing enrollments were re-sequenced, live-sync the local enrollments list
+            if (data.resequenced && Array.isArray(data.updated_enrollments) && data.updated_enrollments.length > 0) {
+              const updateMap = new Map<string, number>(data.updated_enrollments.map((u: any) => [u.id, u.roll_no]))
+              setEnrollmentsList(prev =>
+                prev.map(enr => {
+                  if (updateMap.has(enr.id)) {
+                    const newRoll = updateMap.get(enr.id)
+                    return {
+                      ...enr,
+                      roll_no: newRoll,
+                      student: enr.student ? { ...enr.student, roll_no: newRoll, batch_roll: newRoll } : enr.student
+                    }
+                  }
+                  return enr
+                })
+              )
+            }
+            return
+          }
+        }
+
+        // 3. Fallback: Query enrollments directly and inspect both enrollments and student tables
+        const { data: enrs, error: enrErr } = await supabase
+          .from("enrollments")
+          .select("id, roll_no, student_id")
+          .eq("batch_id", form.batch_id)
+
+        let maxRoll = 0
+        if (!enrErr && enrs && enrs.length > 0) {
+          const isUUID = (val: any) => typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim())
+          const sIds = enrs.map((e: any) => e.student_id).filter(Boolean)
+          const uuidIds = sIds.filter(isUUID)
+          const codeIds = sIds.filter((x: any) => !isUUID(x))
+          const sMap = new Map<string, any>()
+
+          if (uuidIds.length > 0) {
+            const { data: stus } = await supabase.from("students").select("id, student_id, roll_no, batch_roll").in("id", uuidIds)
+            stus?.forEach((s: any) => {
+              if (s.id) sMap.set(String(s.id), s)
+              if (s.student_id) sMap.set(String(s.student_id), s)
+            })
+          }
+          if (codeIds.length > 0) {
+            const { data: stus } = await supabase.from("students").select("id, student_id, roll_no, batch_roll").in("student_id", codeIds)
+            stus?.forEach((s: any) => {
+              if (s.id) sMap.set(String(s.id), s)
+              if (s.student_id) sMap.set(String(s.student_id), s)
+            })
+          }
+
+          enrs.forEach((e: any) => {
+            const s = sMap.get(String(e.student_id))
+            const r = Number(e.roll_no || s?.roll_no || s?.batch_roll)
+            if (!isNaN(r) && r > maxRoll) maxRoll = r
+          })
+          maxRoll = Math.max(maxRoll, enrs.length, currentSeats)
+        } else {
+          maxRoll = Math.max(maxRoll, currentSeats)
+        }
+
+        if (isCancelled) return
+        setBatchRoll(String(maxRoll > 0 ? maxRoll + 1 : 1))
+      } catch {
+        if (!isCancelled && !batchRoll) {
+          const currentBat = allBatches.find(b => b.id === form.batch_id)
+          const seats = Number(currentBat?.current_seats || 0)
+          setBatchRoll(String(seats > 0 ? seats + 1 : 1))
+        }
+      }
+    }
+    loadNextRoll()
+    return () => { isCancelled = true }
+  }, [form.batch_id, supabase])
+
+  useEffect(() => {
+    if (initialEnrollments && initialEnrollments.length > 0) {
+      setEnrollmentsList(initialEnrollments)
+    }
+  }, [initialEnrollments])
+
+  useEffect(() => {
+    if (initialPayments && initialPayments.length > 0) {
+      setPaymentsList(initialPayments)
+    }
+  }, [initialPayments])
+
+  useEffect(() => {
+    if (initialDues && initialDues.length > 0) {
+      setDuesList(initialDues)
+    }
+  }, [initialDues])
+
+  async function fetchHistory() {
+    setHistoryLoading(true)
+    try {
+      let rawEnrs: any[] = []
+
+      // 1. Fetch enrollments safely (without roll_no column in query to prevent schema cache PGRST204)
+      const { data: enr1, error: err1 } = await supabase
+        .from("enrollments")
+        .select("id, created_at, status, batch_id, student_id, branch_id")
+        .order("created_at", { ascending: false })
+        .limit(200)
+
+      if (!err1 && enr1 && enr1.length > 0) {
+        rawEnrs = enr1
+      } else {
+        const { data: rawAll } = await supabase
+          .from("enrollments")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(200)
+        if (rawAll) rawEnrs = rawAll
+      }
+
+      // 2. Fetch payments, dues, and fresh students
+      const [payRes, dueRes, freshStRes] = await Promise.all([
+        supabase
+          .from("payments")
+          .select("id, student_id, batch_id, amount, total_paid, payment_method, payment_for, payment_month, receipt_number, created_at, paid_at")
+          .order("created_at", { ascending: false })
+          .limit(300),
+        supabase
+          .from("fee_dues")
+          .select("id, student_id, batch_id, due_amount, paid_amount, due_date, status")
+          .limit(300),
+        supabase
+          .from("students")
+          .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll")
+          .order("name")
+          .limit(500)
+      ])
+
+      const combinedStudents = (freshStRes.data && freshStRes.data.length > 0) ? freshStRes.data : students
+      const studentMap = new Map<string, any>()
+      ;(combinedStudents || []).forEach((s: any) => {
+        if (s.id) studentMap.set(String(s.id), s)
+        if (s.student_id) studentMap.set(String(s.student_id), s)
+      })
+      const batchMap = new Map((allBatches || []).map((b: any) => [b.id, b]))
+
+      const enriched = rawEnrs.map((e: any) => {
+        const student = (e.student_id ? studentMap.get(String(e.student_id)) : null) || e.student || {}
+        const batch = (e.batch_id ? batchMap.get(String(e.batch_id)) : null) || e.batch || {}
+        return {
+          ...e,
+          roll_no: e.roll_no || (student as any).roll_no || (student as any).batch_roll || null,
+          student,
+          batch
+        }
+      })
+
+      setEnrollmentsList(enriched)
+      if (payRes.data) setPaymentsList(payRes.data)
+      if (dueRes.data) setDuesList(dueRes.data)
+    } catch (err) {
+      console.warn("Could not fetch enrollment history:", err)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  // Client-side fallback if enrollmentsList is initially empty
+  useEffect(() => {
+    if (enrollmentsList.length === 0) {
+      fetchHistory()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (batches && batches.length > 0) {
+      setAllBatches(batches)
+    } else {
+      async function fetchBatchesClient() {
+        try {
+          const { data, error } = await supabase
+            .from("batches")
+            .select("id, name, branch_id, origin_batch_id, origin_branch_id, branch_seats, classroom, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee, status, is_active")
+            .order("name")
+
+          if (!error && data && data.length > 0) {
+            const active = data.filter((b: any) => b.is_active !== false && b.status !== "finished")
+            setAllBatches(active.length > 0 ? active : data)
+          }
+        } catch {
+          try {
+            const { data: raw } = await supabase.from("batches").select("*").order("name")
+            if (raw && raw.length > 0) {
+              const active = raw.filter((b: any) => b.is_active !== false && b.status !== "finished")
+              setAllBatches(active.length > 0 ? active : raw)
+            }
+          } catch {}
+        }
+      }
+      fetchBatchesClient()
+    }
+  }, [batches])
   
-  // Post-enrollment receipt modal
+  // Post-enrollment receipt & ID card modal
   const [receipt, setReceipt] = useState<EnrollmentReceipt | null>(null)
+  const [modalTab, setModalTab] = useState<"receipt" | "idcard">("receipt")
+  const [historyIdCardStudent, setHistoryIdCardStudent] = useState<StudentIdCardData | null>(null)
   const receiptRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { checkFinancialAccess().then(({ hasAccess }) => setFinancialAccess(hasAccess)) }, [])
@@ -54,10 +414,12 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
   // When selected student changes, fetch their enrolled batch IDs
   async function handleSelectStudent(s: StudentOpt | null) {
     setSelectedStudent(s)
-    setForm(prev => ({ ...prev, batch_id: "" }))
     if (!s) {
       setEnrolledBatchIds([])
       return
+    }
+    if (s.branch_id) {
+      handleBranchChange(s.branch_id)
     }
     setExistingFix({
       guardian_name: s.guardian_name || "",
@@ -79,16 +441,90 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
   function update(f: string, v: string) { setForm(prev => ({ ...prev, [f]: v })) }
 
+  function handleBranchChange(newBrId: string) {
+    setSelectedBranchId(newBrId)
+    const matches = allBatches.filter(b => 
+      !newBrId ||
+      b.branch_id === newBrId ||
+      (b as any).origin_branch_id === newBrId ||
+      ((b as any).branch_seats && (b as any).branch_seats[newBrId] !== undefined) ||
+      !b.branch_id
+    )
+    const candidateList = matches.length > 0 ? matches : allBatches
+    const openBatch = candidateList.find(b => 
+      !enrolledBatchIds.includes(b.id) &&
+      (b.current_seats || 0) < b.max_seats &&
+      b.status !== "admission_closed" &&
+      b.status !== "finished"
+    )
+
+    setForm(f => ({ ...f, batch_id: openBatch ? openBatch.id : "" }))
+    if (!openBatch) setPaidAmount("")
+  }
+
+  const prevContextBranchIdRef = useRef<string | null>(null)
+
+  // Auto-sync with BranchContext (e.g. "Main Branch" active in the top bar)
+  useEffect(() => {
+    const list = effectiveBranches
+    if (contextBranchId && contextBranchId !== "all") {
+      if (prevContextBranchIdRef.current !== contextBranchId) {
+        prevContextBranchIdRef.current = contextBranchId
+        handleBranchChange(contextBranchId)
+        setHistoryBranchFilter(contextBranchId)
+      }
+    } else {
+      // If contextBranchId is "all", default to Main Branch on initial load if not set
+      if (!prevContextBranchIdRef.current) {
+        prevContextBranchIdRef.current = "all"
+        const mainB = list.find(b => /main|প্রধান/i.test(b.name)) || list[0]
+        if (mainB && !selectedBranchId) {
+          handleBranchChange(mainB.id)
+          setHistoryBranchFilter(mainB.id)
+        }
+      }
+    }
+  }, [contextBranchId, effectiveBranches])
+
   function resetForm() {
-    setForm({ name: "", phone: "", email: "", gender: "male", date_of_birth: "", guardian_name: "", guardian_phone: "", guardian_relation: "Parent", address: "", school_college: "", class_level: "", referred_by_code: "", batch_id: "", password: "", confirmPassword: "" })
+    setForm({ 
+      name: "", 
+      phone: "", 
+      email: "", 
+      gender: "male", 
+      date_of_birth: "", 
+      guardian_name: "", 
+      guardian_phone: "", 
+      guardian_relation: "Parent", 
+      address: "", 
+      school_college: "", 
+      class_level: "", 
+      referred_by_code: "", 
+      batch_id: "", 
+      password: "", 
+      confirmPassword: "" 
+    })
     setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" })
     setSelectedStudent(null)
     setEnrolledBatchIds([])
     setSearchQuery("")
     setPaidAmount("")
+    setBatchRoll("")
+    setMode("new")
     const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10)
     setDueDate(d.toISOString().split("T")[0])
     setReceipt(null)
+  }
+
+  function handleStartNewEnrollment() {
+    resetForm()
+    setMode("new")
+    setActiveTab("enroll")
+    setReceipt(null)
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" })
+    }
+    toast.success("নতুন ভর্তির ফর্ম প্রস্তুত! (Clean form ready for new enrollment)")
   }
 
   const filtered = useMemo(() => {
@@ -97,7 +533,38 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
     return students.filter(s => s.name.toLowerCase().includes(q) || s.student_id.toLowerCase().includes(q) || (s.phone && s.phone.includes(q))).slice(0, 8)
   }, [searchQuery, students])
 
-  const batch = batches.find(b => b.id === form.batch_id)
+  const branchFilteredBatches = useMemo(() => {
+    if (!allBatches || allBatches.length === 0) return []
+    if (!selectedBranchId) return allBatches
+    const matches = allBatches.filter(b => 
+      b.branch_id === selectedBranchId ||
+      (b as any).origin_branch_id === selectedBranchId ||
+      ((b as any).branch_seats && (b as any).branch_seats[selectedBranchId] !== undefined)
+    )
+    const globalBatches = allBatches.filter(b => !b.branch_id && !(b as any).origin_branch_id)
+    const combined = [...matches, ...globalBatches.filter(g => !matches.some(e => e.id === g.id))]
+    return combined.length > 0 ? combined : allBatches
+  }, [allBatches, selectedBranchId])
+
+  // Auto-select first available batch with open seats in active branch
+  useEffect(() => {
+    if (branchFilteredBatches.length > 0) {
+      const currentBatchInList = branchFilteredBatches.find(b => b.id === form.batch_id)
+      const isCurrentBatchFull = currentBatchInList ? (currentBatchInList.current_seats || 0) >= currentBatchInList.max_seats : false
+      if (!currentBatchInList || isCurrentBatchFull) {
+        const firstOpen = branchFilteredBatches.find(b => 
+          !enrolledBatchIds.includes(b.id) &&
+          (b.current_seats || 0) < b.max_seats &&
+          b.status !== "admission_closed" &&
+          b.status !== "finished"
+        )
+        setForm(f => ({ ...f, batch_id: firstOpen ? firstOpen.id : "" }))
+        if (!firstOpen) setPaidAmount("")
+      }
+    }
+  }, [branchFilteredBatches, form.batch_id, enrolledBatchIds])
+
+  const batch = allBatches.find(b => b.id === form.batch_id)
   const total = batch ? batch.monthly_fee + batch.admission_fee : 0
   const paid = parseFloat(paidAmount) || 0
   const due = Math.max(0, total - paid)
@@ -114,19 +581,198 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
     return missing
   }, [selectedStudent])
 
+  function getEnrollmentReceiptData(enr: any): EnrollmentReceipt {
+    const student = (enr.student && enr.student.name)
+      ? enr.student
+      : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+    const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+    const matchingPayment = paymentsList.find(p => 
+      (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+      (p.batch_id === enr.batch_id || !p.batch_id)
+    )
+    const matchingDue = duesList.find(d => 
+      (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+      (d.batch_id === enr.batch_id || !d.batch_id)
+    )
+
+    const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+    const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+    const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+
+    const dateStr = enr.created_at
+      ? new Date(enr.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+      : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+
+    const receiptNo = matchingPayment?.receipt_number || `RCP-${new Date(enr.created_at || Date.now()).getFullYear()}-${(enr.id || '').replace(/-/g, '').slice(-6).toUpperCase()}`
+
+    const dispStudentId = student.student_id || student.id || "N/A"
+    const qrData = `Student ID: ${dispStudentId} | Name: ${student.name || ''} | Batch: ${b.name || ''} | Fee: ${totalFee} | Paid: ${paidAmt}`
+
+    return {
+      receipt_number: receiptNo,
+      student_name: student.name || "Student",
+      student_id: dispStudentId,
+      student_phone: student.phone,
+      student_email: student.email,
+      guardian_name: student.guardian_name,
+      guardian_phone: student.guardian_phone,
+      batch_name: b.name || "Enrolled Batch",
+      subject: b.subject || b.class_level || "General",
+      date: dateStr,
+      total_fee: totalFee,
+      paid_amount: paidAmt,
+      due_amount: dueAmt,
+      due_date: matchingDue?.due_date || undefined,
+      payment_method: matchingPayment?.payment_method?.toUpperCase() || "Cash / Counter",
+      qr_data: qrData
+    }
+  }
+
+  function handlePrintFromHistory(enr: any) {
+    const r = getEnrollmentReceiptData(enr)
+    setReceipt(r)
+    handlePrint(r)
+  }
+
+  function handleSavePDFFromHistory(enr: any) {
+    const r = getEnrollmentReceiptData(enr)
+    setReceipt(r)
+    handleSavePDF(r)
+  }
+
+  function handlePreviewReceipt(enr: any) {
+    const r = getEnrollmentReceiptData(enr)
+    setReceipt(r)
+  }
+
+  const filteredEnrollments = useMemo(() => {
+    return enrollmentsList.filter((enr: any) => {
+      const student = (enr.student && enr.student.name)
+        ? enr.student
+        : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+      const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+      const brId = enr.branch_id || b.branch_id
+
+      if (historyBranchFilter !== "all" && brId !== historyBranchFilter) return false
+      if (historyBatchFilter !== "all" && enr.batch_id !== historyBatchFilter) return false
+
+      if (historySearchQuery.trim()) {
+        const q = historySearchQuery.trim().toLowerCase()
+        const sName = (student.name || "").toLowerCase()
+        const sId = (student.student_id || "").toLowerCase()
+        const sPhone = (student.phone || "").toLowerCase()
+        const gPhone = (student.guardian_phone || "").toLowerCase()
+        const bName = (b.name || "").toLowerCase()
+        const rollVal = enr.roll_no != null ? String(enr.roll_no) : (student.roll_no != null ? String(student.roll_no) : "")
+        const matchRoll = rollVal !== "" && (rollVal === q || `roll ${rollVal}`.includes(q) || `roll #${rollVal}`.includes(q) || `r${rollVal}` === q)
+        const match = sName.includes(q) || sId.includes(q) || sPhone.includes(q) || gPhone.includes(q) || bName.includes(q) || matchRoll
+        if (!match) return false
+      }
+
+      if (historyStatusFilter !== "all") {
+        const matchingPayment = paymentsList.find(p => 
+          (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+          (p.batch_id === enr.batch_id || !p.batch_id)
+        )
+        const matchingDue = duesList.find(d => 
+          (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+          (d.batch_id === enr.batch_id || !d.batch_id)
+        )
+        const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+        const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+        const isPaidFull = totalFee > 0 ? (paidAmt >= totalFee) : true
+
+        if (historyStatusFilter === "paid" && !isPaidFull) return false
+        if (historyStatusFilter === "due" && isPaidFull) return false
+      }
+
+      return true
+    })
+  }, [enrollmentsList, students, allBatches, historyBranchFilter, historyBatchFilter, historySearchQuery, historyStatusFilter, paymentsList, duesList])
+
+  const historyStats = useMemo(() => {
+    let totalEnrolled = enrollmentsList.length
+    let totalPaid = 0
+    let totalDue = 0
+    let paidCount = 0
+
+    enrollmentsList.forEach((enr: any) => {
+      const student = (enr.student && enr.student.name)
+        ? enr.student
+        : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+      const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+      const matchingPayment = paymentsList.find(p => 
+        (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+        (p.batch_id === enr.batch_id || !p.batch_id)
+      )
+      const matchingDue = duesList.find(d => 
+        (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+        (d.batch_id === enr.batch_id || !d.batch_id)
+      )
+      const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+      const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+      const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+
+      totalPaid += paidAmt
+      totalDue += dueAmt
+      if (totalFee > 0 && paidAmt >= totalFee) paidCount++
+    })
+
+    return { totalEnrolled, totalPaid, totalDue, paidCount }
+  }, [enrollmentsList, allBatches, paymentsList, duesList])
+
   if (financialAccess === false) return (
-    <div className="bg-gradient-to-br from-red-50 to-orange-50 border border-red-200 rounded-2xl p-8 text-center shadow-sm">
-      <ShieldAlert className="w-10 h-10 text-red-400 mx-auto mb-2" />
-      <h3 className="font-bold text-red-700">Financial Access Required</h3>
-      <p className="text-sm text-red-600 mt-1">Contact the owner to get financial access.</p>
+    <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-8 text-center shadow-xl">
+      <ShieldAlert className="w-10 h-10 text-rose-400 mx-auto mb-2" />
+      <h3 className="font-bold text-white">Financial Access Required</h3>
+      <p className="text-sm text-rose-400 mt-1">Contact the owner to get financial access.</p>
     </div>
   )
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.batch_id) { toast.error("Select a batch"); return }
+    if (!form.batch_id) { 
+      toast.error("অনুগ্রহ করে একটি আসন ফাঁকা থাকা ব্যাচ নির্বাচন করুন (Please select a batch with open seats)")
+      return 
+    }
     setLoading(true)
     try {
+      // 1. Strict Seat Capacity & Admission Status Verification
+      const { data: targetBatch, error: targetBatchErr } = await supabase
+        .from("batches")
+        .select("id, name, max_seats, current_seats, status")
+        .eq("id", form.batch_id)
+        .maybeSingle()
+
+      if (!targetBatch || targetBatchErr) {
+        toast.error("নির্বাচিত ব্যাচটি পাওয়া যায়নি (Selected batch not found)")
+        setLoading(false)
+        return
+      }
+
+      if (targetBatch.status === "admission_closed" || targetBatch.status === "finished") {
+        toast.error(`ব্যাচ "${targetBatch.name}"-এ ভর্তি বন্ধ রয়েছে (Admission is closed for this batch)`)
+        setLoading(false)
+        return
+      }
+
+      // Count actual active enrollments currently in database
+      const { count: liveActiveCount } = await supabase
+        .from("enrollments")
+        .select("id", { count: "exact", head: true })
+        .eq("batch_id", form.batch_id)
+        .eq("status", "active")
+
+      const occupiedSeats = Math.max(Number(targetBatch.current_seats) || 0, Number(liveActiveCount) || 0)
+
+      if (occupiedSeats >= targetBatch.max_seats) {
+        toast.error(`ব্যাচ "${targetBatch.name}"-এর আসন সংখ্যা পূর্ণ (${targetBatch.max_seats}/${targetBatch.max_seats})! অতিরিক্ত শিক্ষার্থী ভর্তি করা সম্ভব নয়। (Batch is full! Max seats: ${targetBatch.max_seats})`, {
+          duration: 6000
+        })
+        setLoading(false)
+        return
+      }
+
       let sid: string, dispId: string
       let studentName = ""
       let studentPhone = ""
@@ -147,6 +793,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
         // Update missing info
         const updates: Record<string, string> = {}
+        if (selectedBranchId && !selectedStudent.branch_id) (updates as any).branch_id = selectedBranchId
         if (missingFields.includes("guardian_phone") && existingFix.guardian_phone.trim()) updates.guardian_phone = existingFix.guardian_phone.trim()
         if (missingFields.includes("guardian_name") && existingFix.guardian_name.trim()) updates.guardian_name = existingFix.guardian_name.trim()
         if (missingFields.includes("address") && existingFix.address.trim()) updates.address = existingFix.address.trim()
@@ -207,6 +854,7 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         const { data: st, error: sErr } = await supabase.from("students").insert({
           student_id: studentIdStr,
           name: form.name.trim(),
+          branch_id: selectedBranchId || batch?.branch_id || null,
           phone: form.phone.trim() || null,
           email: email,
           gender: form.gender,
@@ -242,10 +890,86 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         return
       }
 
-      // Add enrollment
-      const { error: eErr } = await supabase.from("enrollments").insert({ student_id: sid, batch_id: form.batch_id })
+      // Ensure batch roll number starts from 1, 2, 3... sequentially for this batch
+      let finalRoll = batchRoll && !isNaN(parseInt(batchRoll, 10)) && parseInt(batchRoll, 10) > 0 ? parseInt(batchRoll, 10) : null
+      try {
+        const res = await fetch(`/api/batches/next-roll?batch_id=${encodeURIComponent(form.batch_id)}&auto_fix=true`)
+        if (res.ok) {
+          const nrData = await res.json()
+          if (nrData && typeof nrData.next_roll === "number") {
+            const existingRolls = new Set<number>((nrData.updated_enrollments || []).map((u: any) => Number(u.roll_no)))
+            // If user left it empty or entered a duplicate roll already taken, auto-assign next_roll
+            if (!finalRoll || existingRolls.has(finalRoll)) {
+              finalRoll = nrData.next_roll
+            }
+          }
+        }
+      } catch {}
+
+      if (!finalRoll) {
+        try {
+          const { data: bEnrs } = await supabase
+            .from("enrollments")
+            .select("id, roll_no")
+            .eq("batch_id", form.batch_id)
+          let mRoll = 0
+          if (bEnrs && bEnrs.length > 0) {
+            bEnrs.forEach((e: any) => {
+              const r = Number(e.roll_no)
+              if (!isNaN(r) && r > mRoll) mRoll = r
+            })
+            if (mRoll === 0) mRoll = bEnrs.length
+          }
+          finalRoll = mRoll > 0 ? mRoll + 1 : 1
+        } catch {
+          finalRoll = 1
+        }
+      }
+
+      // Add enrollment with adaptive column support
+      const enrollPayload: Record<string, any> = {
+        student_id: sid,
+        batch_id: form.batch_id,
+        status: "active"
+      }
+      if (selectedBranchId || batch?.branch_id) {
+        enrollPayload.branch_id = selectedBranchId || batch?.branch_id || null
+      }
+      if (finalRoll != null) {
+        enrollPayload.roll_no = finalRoll
+      }
+
+      let { error: eErr } = await supabase.from("enrollments").insert(enrollPayload)
+
+      // Fallback if roll_no or branch_id column doesn't exist in live Supabase enrollments schema cache
+      if (eErr && (
+        eErr.message?.includes("roll_no") ||
+        eErr.message?.includes("branch_id") || 
+        eErr.message?.includes("schema cache") || 
+        (eErr as any).code === "PGRST204"
+      )) {
+        if (eErr.message?.includes("roll_no")) {
+          delete enrollPayload.roll_no
+        }
+        if (eErr.message?.includes("branch_id")) {
+          delete enrollPayload.branch_id
+        }
+        const retryRes = await supabase.from("enrollments").insert(enrollPayload)
+        eErr = retryRes.error
+
+        // If schema cache still complains, insert minimal payload
+        if (eErr && (eErr.message?.includes("schema cache") || (eErr as any).code === "PGRST204")) {
+          const minimalRes = await supabase.from("enrollments").insert({
+            student_id: sid,
+            batch_id: form.batch_id,
+            status: "active"
+          })
+          eErr = minimalRes.error
+        }
+      }
+
       if (eErr) {
-        if (eErr.code === "23505" || eErr.message.includes("unique constraint") || eErr.message.includes("duplicate key")) {
+        if (eErr.code === "23505" || eErr.message?.includes("unique constraint") || eErr.message?.includes("duplicate key")) {
           toast.error(`Student is already enrolled in ${batch?.name || "this batch"}!`)
           setLoading(false)
           return
@@ -253,8 +977,46 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         throw new Error(eErr.message)
       }
 
-      // Update seats count
-      if (batch) await supabase.from("batches").update({ current_seats: batch.current_seats + 1 }).eq("id", form.batch_id)
+      // Sync roll_no and batch_roll to student table
+      if (finalRoll != null) {
+        try {
+          await supabase.from("students").update({
+            roll_no: finalRoll,
+            batch_roll: finalRoll
+          }).eq("id", sid)
+        } catch {}
+      }
+
+      // Update seats count accurately (never exceed max_seats)
+      if (batch && targetBatch) {
+        const accurateSeats = Math.min(targetBatch.max_seats, (occupiedSeats + 1))
+        await supabase.from("batches").update({ current_seats: accurateSeats }).eq("id", form.batch_id)
+        if (selectedBranchId) {
+          try {
+            const { data: childBatch } = await supabase
+              .from("batches")
+              .select("id, current_seats, max_seats")
+              .eq("origin_batch_id", form.batch_id)
+              .eq("branch_id", selectedBranchId)
+              .maybeSingle()
+            if (childBatch) {
+              const childLimit = childBatch.max_seats || targetBatch.max_seats
+              await supabase.from("batches").update({ current_seats: Math.min(childLimit, (childBatch.current_seats || 0) + 1) }).eq("id", childBatch.id)
+            }
+            if ((batch as any).origin_batch_id) {
+              const { data: parentBatch } = await supabase
+                .from("batches")
+                .select("id, current_seats, max_seats")
+                .eq("id", (batch as any).origin_batch_id)
+                .maybeSingle()
+              if (parentBatch) {
+                const parentLimit = parentBatch.max_seats || targetBatch.max_seats
+                await supabase.from("batches").update({ current_seats: Math.min(parentLimit, (parentBatch.current_seats || 0) + 1) }).eq("id", parentBatch.id)
+              }
+            }
+          } catch {}
+        }
+      }
 
       // Record payment
       let receiptNum = `RCP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
@@ -341,7 +1103,8 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
       toast.success(`Enrolled successfully! ID: ${dispId}`)
 
       // Display receipt modal with print & save options, staying on this page
-      const qrData = `Student ID: ${dispId} | Name: ${studentName} | Batch: ${batch?.name || ''} | Fee: ${total} | Paid: ${paid}`
+      const branchName = selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.name : (batch?.branch_id ? branches.find(b => b.id === batch.branch_id)?.name : undefined)
+      const qrData = `Student ID: ${dispId} | Name: ${studentName} | Batch: ${batch?.name || ''} | Roll: #${enrollPayload.roll_no || finalRoll || 1} | Fee: ${total} | Paid: ${paid}`
       setReceipt({
         receipt_number: receiptNum,
         student_name: studentName,
@@ -352,6 +1115,8 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         guardian_name: guardianName,
         guardian_phone: guardianPhone,
         batch_name: batch?.name || "Enrolled Batch",
+        batch_roll: enrollPayload.roll_no || finalRoll || 1,
+        branch_name: branchName,
         subject: batch?.subject || batch?.class_level || "General",
         date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
         total_fee: total,
@@ -361,6 +1126,61 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         payment_method: "Cash / Counter",
         qr_data: qrData
       })
+      setModalTab("receipt")
+
+      // Real-time update history lists
+      const newEnrItem = {
+        id: `enr-${Date.now()}`,
+        student_id: sid,
+        batch_id: form.batch_id,
+        branch_id: selectedBranchId || batch?.branch_id || null,
+        roll_no: enrollPayload.roll_no || finalRoll || 1,
+        status: "active",
+        created_at: new Date().toISOString(),
+        student: {
+          id: sid,
+          name: studentName,
+          student_id: dispId,
+          phone: studentPhone,
+          email: studentEmail,
+          guardian_name: guardianName,
+          guardian_phone: guardianPhone,
+          address: form.address,
+          school_college: form.school_college,
+          class_level: form.class_level,
+          roll_no: enrollPayload.roll_no || finalRoll || 1,
+          batch_roll: enrollPayload.roll_no || finalRoll || 1,
+        },
+        batch: batch || { id: form.batch_id, name: "Enrolled Batch", monthly_fee: 0, admission_fee: 0 },
+      }
+      setEnrollmentsList(prev => [newEnrItem, ...prev])
+      setBatchRoll(String((enrollPayload.roll_no || finalRoll || 1) + 1))
+
+      if (paid > 0) {
+        setPaymentsList(prev => [{
+          id: `pay-${Date.now()}`,
+          student_id: sid,
+          batch_id: form.batch_id,
+          amount: total,
+          total_paid: paid,
+          payment_method: "cash",
+          payment_for: "admission",
+          receipt_number: receiptNum,
+          created_at: new Date().toISOString(),
+        }, ...prev])
+      }
+
+      if (due > 0) {
+        setDuesList(prev => [{
+          id: `due-${Date.now()}`,
+          student_id: sid,
+          batch_id: form.batch_id,
+          due_amount: total,
+          paid_amount: paid,
+          due_date: dueDate,
+          status: paid > 0 ? "partial" : "pending",
+        }, ...prev])
+      }
 
     } catch (err: any) {
       toast.error(err?.message || "Failed")
@@ -370,13 +1190,71 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
     }
   }
 
+  function getReceiptIdCardData(target: EnrollmentReceipt): StudentIdCardData {
+    return {
+      student_id: target.student_id,
+      student_name: target.student_name,
+      student_phone: target.student_phone,
+      guardian_name: target.guardian_name,
+      guardian_phone: target.guardian_phone,
+      batch_name: target.batch_name,
+      batch_roll: target.batch_roll,
+      branch_name: target.branch_name,
+      blood_group: target.blood_group,
+      avatar_url: target.photo_url,
+    }
+  }
+
+  function getHistoryIdCardData(enr: any): StudentIdCardData {
+    const student = (enr.student && enr.student.name)
+      ? enr.student
+      : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+    const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+    const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+    const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
+    return {
+      student_id: student.student_id || "N/A",
+      student_name: student.name || "Student",
+      student_phone: student.phone,
+      guardian_name: student.guardian_name,
+      guardian_phone: student.guardian_phone,
+      batch_name: b.name || "Enrolled Batch",
+      batch_roll: roll,
+      branch_name: branchObj?.name,
+      blood_group: student.blood_group,
+      avatar_url: student.photo_url || student.avatar_url,
+    }
+  }
+
+  function handlePrintIdCard(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
+    const idCardData = getReceiptIdCardData(target)
+    printStudentIdCard(idCardData)
+  }
+
+  function handlePrintBoth(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
+    const idCardData = getReceiptIdCardData(target)
+    printAdmissionAndIdCard(target, idCardData)
+  }
+
+  async function handleDownloadIdCard(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
+    const idCardData = getReceiptIdCardData(target)
+    await downloadStudentIdCardPDF(idCardData)
+  }
+
   // Print function
-  function handlePrint() {
-    if (!receipt) return
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(receipt.qr_data)}`
+  function handlePrint(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(target.qr_data)}`
     const win = window.open("", "_blank", "width=650,height=800")
     if (!win) return
-    win.document.write(`<html><head><title>Admission Document - ${receipt.student_id}</title><style>
+    win.document.write(`<html><head><title>Admission Document - ${target.student_id}</title><style>
       body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 25px; max-width: 520px; margin: 0 auto; color: #1e293b; background: #fff; }
       .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 15px; position: relative; }
       .header h1 { margin: 0; font-size: 22px; color: #4338ca; text-transform: uppercase; letter-spacing: 1px; }
@@ -402,31 +1280,31 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
       </div>
       
       <div class="section-title">Student Information</div>
-      <div class="row"><span class="label">Student ID:</span><span class="value">${receipt.student_id}</span></div>
-      <div class="row"><span class="label">Full Name:</span><span class="value">${receipt.student_name}</span></div>
-      ${receipt.student_phone ? `<div class="row"><span class="label">Phone:</span><span class="value">${receipt.student_phone}</span></div>` : ''}
-      ${receipt.guardian_name ? `<div class="row"><span class="label">Guardian:</span><span class="value">${receipt.guardian_name}</span></div>` : ''}
-      ${receipt.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${receipt.guardian_phone}</span></div>` : ''}
+      <div class="row"><span class="label">Student ID:</span><span class="value">${target.student_id}</span></div>
+      <div class="row"><span class="label">Full Name:</span><span class="value">${target.student_name}</span></div>
+      ${target.student_phone ? `<div class="row"><span class="label">Phone:</span><span class="value">${target.student_phone}</span></div>` : ''}
+      ${target.guardian_name ? `<div class="row"><span class="label">Guardian:</span><span class="value">${target.guardian_name}</span></div>` : ''}
+      ${target.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${target.guardian_phone}</span></div>` : ''}
 
-      ${receipt.password ? `
+      ${target.password ? `
       <div class="cred-box">
-        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Student Portal Login ID:</span><span class="value">${receipt.student_id}</span></div>
-        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Account Password:</span><span class="value font-mono" style="color: #4338ca;">${receipt.password}</span></div>
+        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Student Portal Login ID:</span><span class="value">${target.student_id}</span></div>
+        <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Account Password:</span><span class="value font-mono" style="color: #4338ca;">${target.password}</span></div>
       </div>
       ` : ''}
 
       <div class="section-title">Enrolled Program</div>
-      <div class="row"><span class="label">Batch:</span><span class="value">${receipt.batch_name}</span></div>
-      <div class="row"><span class="label">Subject/Class:</span><span class="value">${receipt.subject}</span></div>
-      <div class="row"><span class="label">Enrollment Date:</span><span class="value">${receipt.date}</span></div>
+      <div class="row"><span class="label">Batch:</span><span class="value">${target.batch_name}</span></div>
+      <div class="row"><span class="label">Subject/Class:</span><span class="value">${target.subject}</span></div>
+      <div class="row"><span class="label">Enrollment Date:</span><span class="value">${target.date}</span></div>
 
       <div class="section-title">Payment Breakdown</div>
       <div class="summary-box">
-        <div class="row"><span class="label">Total Fee:</span><span class="value">৳${receipt.total_fee.toLocaleString("en-BD")}</span></div>
-        <div class="row"><span class="label">Paid Amount:</span><span class="value paid-text">৳${receipt.paid_amount.toLocaleString("en-BD")}</span></div>
-        <div class="total-row"><span class="label">Due Amount:</span><span class="value ${receipt.due_amount > 0 ? 'due-text' : 'paid-text'}">৳${receipt.due_amount.toLocaleString("en-BD")}</span></div>
-        ${receipt.due_date ? `<div class="row"><span class="label">Due Date:</span><span class="value due-text">${receipt.due_date}</span></div>` : ''}
-        <div class="row" style="margin-top: 5px; font-size: 11px; color: #64748b;"><span class="label">Receipt Ref:</span><span>${receipt.receipt_number}</span></div>
+        <div class="row"><span class="label">Total Fee:</span><span class="value">৳${target.total_fee.toLocaleString("en-BD")}</span></div>
+        <div class="row"><span class="label">Paid Amount:</span><span class="value paid-text">৳${target.paid_amount.toLocaleString("en-BD")}</span></div>
+        <div class="total-row"><span class="label">Due Amount:</span><span class="value ${target.due_amount > 0 ? 'due-text' : 'paid-text'}">৳${target.due_amount.toLocaleString("en-BD")}</span></div>
+        ${target.due_date ? `<div class="row"><span class="label">Due Date:</span><span class="value due-text">${target.due_date}</span></div>` : ''}
+        <div class="row" style="margin-top: 5px; font-size: 11px; color: #64748b;"><span class="label">Receipt Ref:</span><span>${target.receipt_number}</span></div>
       </div>
 
       <div class="qr-container">
@@ -448,8 +1326,9 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
   }
 
   // Save / Download PDF function using jsPDF
-  async function handleSavePDF() {
-    if (!receipt) return
+  async function handleSavePDF(customReceipt?: EnrollmentReceipt) {
+    const target = customReceipt || receipt
+    if (!target) return
     try {
       const { jsPDF } = await import("jspdf")
       const doc = new jsPDF({ unit: "mm", format: [105, 148] }) // A6 size receipt
@@ -469,54 +1348,54 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
       doc.setFontSize(9)
       doc.setFont("helvetica", "bold")
       doc.setTextColor(15, 23, 42)
-      doc.text("Student ID: " + receipt.student_id, 10, y)
+      doc.text("Student ID: " + target.student_id, 10, y)
       y += 5
       doc.setFont("helvetica", "normal")
-      doc.text("Name: " + receipt.student_name, 10, y)
+      doc.text("Name: " + target.student_name, 10, y)
       y += 5
-      if (receipt.student_phone) {
-        doc.text("Phone: " + receipt.student_phone, 10, y)
+      if (target.student_phone) {
+        doc.text("Phone: " + target.student_phone, 10, y)
         y += 5
       }
-      if (receipt.guardian_phone) {
-        doc.text("Guardian Phone: " + receipt.guardian_phone, 10, y)
+      if (target.guardian_phone) {
+        doc.text("Guardian Phone: " + target.guardian_phone, 10, y)
         y += 5
       }
 
-      if (receipt.password) {
+      if (target.password) {
         doc.setFillColor(238, 242, 255)
         doc.roundedRect(10, y, 85, 10, 2, 2, "F")
         doc.setFont("helvetica", "bold")
         doc.setTextColor(67, 56, 202)
-        doc.text("Login ID: " + receipt.student_id + "  |  Password: " + receipt.password, 13, y + 6)
+        doc.text("Login ID: " + target.student_id + "  |  Password: " + target.password, 13, y + 6)
         doc.setTextColor(15, 23, 42)
         y += 14
       }
 
       doc.setFont("helvetica", "bold")
-      doc.text("Batch: " + receipt.batch_name, 10, y)
+      doc.text("Batch: " + target.batch_name, 10, y)
       y += 5
       doc.setFont("helvetica", "normal")
-      doc.text("Date: " + receipt.date, 10, y)
+      doc.text("Date: " + target.date, 10, y)
       y += 6
 
       doc.setFillColor(248, 250, 252)
       doc.roundedRect(10, y, 85, 22, 2, 2, "F")
-      doc.text("Total Fee: ৳" + receipt.total_fee.toLocaleString("en-BD"), 13, y + 6)
+      doc.text("Total Fee: ৳" + target.total_fee.toLocaleString("en-BD"), 13, y + 6)
       doc.setTextColor(22, 163, 74)
-      doc.text("Paid: ৳" + receipt.paid_amount.toLocaleString("en-BD"), 13, y + 11)
-      doc.setTextColor(receipt.due_amount > 0 ? 220 : 22, receipt.due_amount > 0 ? 38 : 163, receipt.due_amount > 0 ? 38 : 74)
+      doc.text("Paid: ৳" + target.paid_amount.toLocaleString("en-BD"), 13, y + 11)
+      doc.setTextColor(target.due_amount > 0 ? 220 : 22, target.due_amount > 0 ? 38 : 163, target.due_amount > 0 ? 38 : 74)
       doc.setFont("helvetica", "bold")
-      doc.text("Due: ৳" + receipt.due_amount.toLocaleString("en-BD"), 13, y + 17)
-      if (receipt.due_date) {
+      doc.text("Due: ৳" + target.due_amount.toLocaleString("en-BD"), 13, y + 17)
+      if (target.due_date) {
         doc.setFontSize(7)
         doc.setTextColor(180, 83, 9)
-        doc.text("Due Date: " + receipt.due_date, 55, y + 17)
+        doc.text("Due Date: " + target.due_date, 55, y + 17)
       }
 
       y += 26
       // Add QR code image
-      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(receipt.qr_data)}`
+      const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(target.qr_data)}`
       const img = new Image()
       img.crossOrigin = "anonymous"
       img.src = qrUrl
@@ -530,69 +1409,123 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
         img.onerror = () => resolve(true)
       })
 
-      doc.save(`Enrollment_${receipt.student_id}.pdf`)
+      doc.save(`Enrollment_${target.student_id}.pdf`)
       toast.success("PDF document downloaded!")
     } catch (e: any) {
       toast.error("Could not generate PDF: " + (e?.message || "Please use print option"))
     }
   }
 
-  const ic = "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent transition-shadow"
-  const labelCls = "block text-xs font-medium text-gray-500 mb-1"
+  const ic = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
+  const labelCls = "block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5"
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Top Navigation Tabs */}
+      <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/90 shadow-2xs mb-5">
+        <button
+          type="button"
+          onClick={() => {
+            if (activeTab === "enroll") {
+              handleStartNewEnrollment()
+            } else {
+              setActiveTab("enroll")
+            }
+          }}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeTab === "enroll"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          }`}
+          title="নতুন শিক্ষার্থী ভর্তি ফর্ম"
+        >
+          <UserPlus className="w-4 h-4 text-amber-500" />
+          <span>➕ Enroll Student (নতুন শিক্ষার্থী ভর্তি)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("history")}
+          className={`flex-1 py-2.5 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeTab === "history"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          }`}
+        >
+          <History className="w-4 h-4 text-indigo-600" />
+          <span>📜 Enrollment History (ভর্তির ইতিহাস ও মানি রিসিট)</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            activeTab === "history" ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-700"
+          }`}>
+            {enrollmentsList.length}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === "enroll" && (
+        <div className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
         {/* Mode selector */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3">
-          <select value={mode} onChange={e => { setMode(e.target.value as "new"|"existing"); setSelectedStudent(null); setSearchQuery(""); setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" }) }}
-            className="px-3 py-2 border border-gray-200 rounded-lg text-sm font-semibold text-gray-800 bg-gradient-to-r from-indigo-50 to-white focus:ring-2 focus:ring-indigo-400 focus:outline-none cursor-pointer">
-            <option value="new">➕ New Student</option>
-            <option value="existing">🔍 Existing Student</option>
-          </select>
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 flex-1 min-w-[280px]">
+            <select value={mode} onChange={e => { setMode(e.target.value as "new"|"existing"); setSelectedStudent(null); setSearchQuery(""); setExistingFix({ guardian_name: "", guardian_phone: "", address: "", class_level: "", school_college: "" }) }}
+              className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 bg-slate-50 hover:bg-white focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none cursor-pointer">
+              <option value="new">➕ New Student (নতুন শিক্ষার্থী)</option>
+              <option value="existing">🔍 Existing Student (পূর্বের শিক্ষার্থী)</option>
+            </select>
 
-          {mode === "existing" && !selectedStudent && (
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search name, ID, phone..."
-                className="w-full pl-8 pr-3 py-2 text-sm text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" autoFocus />
-              {filtered.length > 0 && (
-                <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white rounded-xl border border-gray-100 shadow-xl max-h-52 overflow-y-auto">
-                  {filtered.map(s => (
-                    <button type="button" key={s.id} onClick={() => { handleSelectStudent(s); setSearchQuery("") }}
-                      className="w-full text-left px-4 py-2.5 hover:bg-indigo-50 text-sm border-b border-gray-50 last:border-0 transition-colors">
-                      <span className="font-semibold text-gray-800">{s.name}</span>
-                      <span className="text-xs text-gray-400 ml-2">{s.student_id}</span>
-                      {s.phone && <span className="text-xs text-gray-400 ml-2">• {s.phone}</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {mode === "existing" && selectedStudent && (
-            <div className="flex-1 flex items-center justify-between px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
-              <div>
-                <span className="text-sm font-bold text-indigo-800">{selectedStudent.name}</span>
-                <span className="text-xs text-indigo-500 ml-2">{selectedStudent.student_id}</span>
-                {selectedStudent.phone && <span className="text-xs text-gray-400 ml-2">• {selectedStudent.phone}</span>}
+            {mode === "existing" && !selectedStudent && (
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search name, ID, phone..."
+                  className="w-full pl-9 pr-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 bg-white shadow-2xs" autoFocus />
+                {filtered.length > 0 && (
+                  <div className="absolute z-30 top-full left-0 right-0 mt-1.5 bg-white rounded-xl border border-slate-200 shadow-xl max-h-52 overflow-y-auto divide-y divide-slate-100">
+                    {filtered.map(s => (
+                      <button type="button" key={s.id} onClick={() => { handleSelectStudent(s); setSearchQuery("") }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-amber-50/50 text-sm transition-colors cursor-pointer">
+                        <span className="font-bold text-slate-900">{s.name}</span>
+                        <span className="text-xs text-amber-600 font-mono font-bold ml-2">{s.student_id}</span>
+                        {s.phone && <span className="text-xs text-slate-500 ml-2">• {s.phone}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <button type="button" onClick={() => handleSelectStudent(null)} className="text-red-400 hover:text-red-600 text-sm font-bold ml-2 transition-colors">✕</button>
-            </div>
-          )}
+            )}
+
+            {mode === "existing" && selectedStudent && (
+              <div className="flex-1 flex items-center justify-between px-3.5 py-2 bg-amber-50 rounded-xl border border-amber-200">
+                <div>
+                  <span className="text-sm font-bold text-slate-900">{selectedStudent.name}</span>
+                  <span className="text-xs text-amber-700 font-mono font-bold ml-2">{selectedStudent.student_id}</span>
+                  {selectedStudent.phone && <span className="text-xs text-slate-500 ml-2">• {selectedStudent.phone}</span>}
+                </div>
+                <button type="button" onClick={() => handleSelectStudent(null)} className="text-rose-600 hover:text-rose-700 text-sm font-bold ml-2 transition-colors cursor-pointer">✕</button>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleStartNewEnrollment}
+            className="px-3.5 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-xl transition-all flex items-center gap-1.5 cursor-pointer border border-slate-200 shadow-2xs shrink-0"
+            title="ফর্ম সম্পূর্ণ পরিষ্কার করে নতুন ভর্তি শুরু করুন"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+            <span>Clean Form (নতুন পরিষ্কার ফর্ম)</span>
+          </button>
         </div>
 
         {/* Existing student — missing info prompt */}
         {mode === "existing" && selectedStudent && missingFields.length > 0 && (
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-200 px-4 py-3 shadow-sm">
-            <p className="text-xs font-semibold text-amber-700 flex items-center gap-1.5 mb-2"><AlertCircle className="w-3.5 h-3.5" /> Missing information — please fill in:</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+          <div className="bg-amber-50 rounded-2xl border border-amber-200 px-5 py-4 shadow-sm">
+            <p className="text-xs font-bold text-amber-800 flex items-center gap-1.5 mb-2.5"><AlertCircle className="w-4 h-4 text-amber-600" /> Missing information — please fill in:</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {missingFields.includes("guardian_name") && (
                 <div><label className={labelCls}>Guardian Name</label><input value={existingFix.guardian_name} onChange={e => setExistingFix(f => ({...f, guardian_name: e.target.value}))} className={ic} placeholder="Guardian name" /></div>
               )}
               {missingFields.includes("guardian_phone") && (
-                <div><label className={`${labelCls} text-red-500`}>Guardian Phone *</label><input required value={existingFix.guardian_phone} onChange={e => setExistingFix(f => ({...f, guardian_phone: e.target.value}))} className={`${ic} border-red-200 focus:ring-red-400`} placeholder="01..." /></div>
+                <div><label className={`${labelCls} text-rose-600`}>Guardian Phone *</label><input required value={existingFix.guardian_phone} onChange={e => setExistingFix(f => ({...f, guardian_phone: e.target.value}))} className={`${ic} border-rose-300 focus:border-rose-500 focus:ring-rose-500/20`} placeholder="01..." /></div>
               )}
               {missingFields.includes("address") && (
                 <div><label className={labelCls}>Address</label><input value={existingFix.address} onChange={e => setExistingFix(f => ({...f, address: e.target.value}))} className={ic} /></div>
@@ -609,24 +1542,45 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
 
         {/* New student form */}
         {mode === "new" && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-4 space-y-3">
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5 space-y-5">
             {/* Personal */}
-            <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Personal Info</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-              <div className="sm:col-span-2"><label className={labelCls}>Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
-              <div><label className={labelCls}>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-              <div><label className={labelCls}>Email</label><input type="email" value={form.email} onChange={e => update("email", e.target.value)} className={ic} placeholder="Optional" /></div>
-              <div><label className={labelCls}>Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={ic}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
-              <div><label className={labelCls}>Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => update("date_of_birth", e.target.value)} className={ic} /></div>
-              <div><label className={labelCls}>Class</label><input value={form.class_level} onChange={e => update("class_level", e.target.value)} className={ic} placeholder="HSC 2025" /></div>
+            <div>
+              <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span> Personal Info (ব্যক্তিগত তথ্য)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2"><label className={labelCls}>Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
+                <div><label className={labelCls}>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3">
+                {effectiveBranches.length > 0 && (
+                  <div>
+                    <label className={labelCls}>Branch / Campus</label>
+                    <select
+                      value={selectedBranchId}
+                      onChange={e => handleBranchChange(e.target.value)}
+                      className={ic}
+                    >
+                      <option value="">Default / All</option>
+                      {effectiveBranches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div><label className={labelCls}>Email</label><input type="email" value={form.email} onChange={e => update("email", e.target.value)} className={ic} placeholder="Optional" /></div>
+                <div><label className={labelCls}>Gender</label><select value={form.gender} onChange={e => update("gender", e.target.value)} className={ic}><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option></select></div>
+                <div><label className={labelCls}>Date of Birth</label><input type="date" value={form.date_of_birth} onChange={e => update("date_of_birth", e.target.value)} className={ic} /></div>
+                <div><label className={labelCls}>Class</label><input value={form.class_level} onChange={e => update("class_level", e.target.value)} className={ic} placeholder="HSC 2025" /></div>
+              </div>
             </div>
 
             {/* Guardian */}
-            <div className="pt-2 border-t border-gray-100">
-              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-2">Guardian</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Guardian Info (অভিভাবক তথ্য)
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div><label className={labelCls}>Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={ic} /></div>
                 <div><label className={labelCls}>Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={ic} placeholder="01..." /></div>
                 <div><label className={labelCls}>Relation</label><select value={form.guardian_relation} onChange={e => update("guardian_relation", e.target.value)} className={ic}><option>Parent</option><option>Father</option><option>Mother</option><option>Uncle</option><option>Other</option></select></div>
@@ -635,208 +1589,949 @@ export default function NewStudentForm({ batches, students }: { batches: Batch[]
             </div>
 
             {/* Account */}
-            <div className="pt-2 border-t border-gray-100">
-              <p className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-2 flex items-center gap-1"><Lock className="w-3 h-3" /> Login Account</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            <div className="pt-4 border-t border-slate-100">
+              <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-indigo-500"></span> <Lock className="w-3.5 h-3.5 text-indigo-600" /> Student Login Account
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div><label className={labelCls}>School / College</label><input value={form.school_college} onChange={e => update("school_college", e.target.value)} className={ic} /></div>
                 <div><label className={labelCls}>Referral Name / Code</label><input value={form.referred_by_code} onChange={e => update("referred_by_code", e.target.value)} className={ic} placeholder="Referrer name or code (optional)" /></div>
                 <div><label className={labelCls}>Password *</label><input type="password" required value={form.password} onChange={e => update("password", e.target.value)} className={ic} placeholder="Min 6 chars" minLength={6} /></div>
-                <div><label className={labelCls}>Confirm Password *</label><input type="password" required value={form.confirmPassword} onChange={e => update("confirmPassword", e.target.value)} className={`${ic} ${form.confirmPassword && form.password !== form.confirmPassword ? "border-red-300 focus:ring-red-400" : ""}`} placeholder="Re-enter" />
-                  {form.confirmPassword && form.password !== form.confirmPassword && <p className="text-[10px] text-red-500 mt-0.5">Passwords don&apos;t match</p>}
-                  {form.confirmPassword && form.password === form.confirmPassword && form.password.length >= 6 && <p className="text-[10px] text-emerald-500 mt-0.5">✓ Match</p>}
+                <div><label className={labelCls}>Confirm Password *</label><input type="password" required value={form.confirmPassword} onChange={e => update("confirmPassword", e.target.value)} className={`${ic} ${form.confirmPassword && form.password !== form.confirmPassword ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`} placeholder="Re-enter" />
+                  {form.confirmPassword && form.password !== form.confirmPassword && <p className="text-[10px] text-rose-600 font-semibold mt-1">Passwords don&apos;t match</p>}
+                  {form.confirmPassword && form.password === form.confirmPassword && form.password.length >= 6 && <p className="text-[10px] text-emerald-600 font-semibold mt-1">✓ Match</p>}
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Branch Selection */}
+        {effectiveBranches.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-4">
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Landmark className="w-4 h-4 text-amber-600" /> Select Branch (শাখা নির্বাচন) *
+              </p>
+              <span className="text-[11px] text-slate-500 font-medium">নির্ধারিত শাখার ব্যাচসমূহ দেখতে ক্লিক করুন</span>
+            </div>
+            <div className="mb-2.5">
+              <select
+                value={selectedBranchId}
+                onChange={e => handleBranchChange(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-bold text-slate-800 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/20"
+              >
+                <option value="">-- All Branches (সকল শাখা) --</option>
+                {effectiveBranches.map(b => (
+                  <option key={b.id} value={b.id}>
+                    🏛️ {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {effectiveBranches.map(b => {
+                const isSel = selectedBranchId === b.id
+                return (
+                  <button
+                    key={b.id}
+                    type="button"
+                    onClick={() => handleBranchChange(b.id)}
+                    className={`px-3 py-2.5 rounded-xl border text-xs font-bold transition-all text-left truncate flex items-center justify-between cursor-pointer ${
+                      isSel
+                        ? "bg-amber-600 text-white border-amber-700 shadow-xs ring-2 ring-amber-300"
+                        : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="truncate">{b.name}</span>
+                    {isSel && <Check className="w-3.5 h-3.5 text-white shrink-0 ml-1" />}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
         {/* Batch selection */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-          <p className="text-xs font-bold text-gray-600 mb-2 flex items-center gap-1.5"><BookOpen className="w-3.5 h-3.5 text-indigo-500" /> Select Batch *</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {batches.map(b => {
-              const isEnrolled = enrolledBatchIds.includes(b.id)
-              const sel = form.batch_id === b.id
-              const full = b.current_seats >= b.max_seats
-              const isClosed = b.status === "admission_closed"
-              const isFinished = b.status === "finished"
-              const disabled = full || isEnrolled || isClosed || isFinished
-
-              return (
-                <button
-                  type="button"
-                  key={b.id}
-                  disabled={disabled}
-                  onClick={() => {
-                    if (disabled) return
-                    update("batch_id", sel ? "" : b.id)
-                    if (!sel) setPaidAmount("")
-                  }}
-                  className={`px-3 py-2.5 rounded-xl border text-left text-xs transition-all relative ${
-                    sel
-                      ? "border-indigo-400 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-md ring-1 ring-indigo-200"
-                      : isEnrolled
-                      ? "border-emerald-200 bg-emerald-50/60 opacity-80 cursor-not-allowed"
-                      : isClosed
-                      ? "border-amber-200 bg-amber-50/50 opacity-70 cursor-not-allowed"
-                      : isFinished
-                      ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
-                      : full
-                      ? "border-gray-100 opacity-40 cursor-not-allowed"
-                      : "border-gray-200 hover:border-indigo-200 hover:shadow-sm"
-                  }`}>
-                  {sel && <Check className="float-right w-4 h-4 text-indigo-600" />}
-                  {isEnrolled && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-300">
-                      ✓ Enrolled
-                    </span>
-                  )}
-                  {!isEnrolled && isClosed && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                      Closed
-                    </span>
-                  )}
-                  {!isEnrolled && isFinished && (
-                    <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-gray-100 text-gray-700 border border-gray-300">
-                      Finished
-                    </span>
-                  )}
-                  <p className={`font-bold text-[12px] ${isEnrolled ? "text-emerald-900" : isClosed ? "text-amber-900" : "text-gray-800"}`}>{b.name}</p>
-                  <p className="text-gray-400 text-[10px] mt-0.5">
-                    {isEnrolled
-                      ? "Already enrolled in this batch"
-                      : isClosed
-                      ? "Admission closed"
-                      : isFinished
-                      ? "Program completed"
-                      : `${b.current_seats}/${b.max_seats} seats • ${formatCurrency(b.monthly_fee)}/mo${b.admission_fee > 0 ? ` +${formatCurrency(b.admission_fee)}` : ""}`}
-                  </p>
-                </button>
-              )
-            })}
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-3">
+            <p className="text-xs font-black text-indigo-950 uppercase tracking-wider flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4 text-indigo-600" /> Select Batch (ব্যাচ নির্বাচন) *
+            </p>
+            <span className="text-[11px] text-slate-500 font-medium">
+              {branchFilteredBatches.length} available batch{branchFilteredBatches.length === 1 ? "" : "es"}
+            </span>
           </div>
+
+          {/* All Batches Full Warning Banner */}
+          {branchFilteredBatches.length > 0 && branchFilteredBatches.every(b => (b.current_seats || 0) >= b.max_seats || b.status === "admission_closed" || b.status === "finished") && (
+            <div className="mb-3.5 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2.5 text-rose-800 text-xs font-bold shadow-2xs animate-in fade-in duration-200">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>এই শাখার সকল ব্যাচের আসন পূর্ণ অথবা ভর্তি বন্ধ রয়েছে। নতুন শিক্ষার্থী ভর্তি করতে অনুগ্রহ করে নতুন ব্যাচ তৈরি করুন অথবা আসন সংখ্যা বাড়ান। (All batches in this branch are full)</span>
+            </div>
+          )}
+
+          {/* Dropdown Selector for Fast Batch Selection */}
+          <div className="mb-3.5">
+            <select
+              value={form.batch_id}
+              onChange={e => {
+                const nextId = e.target.value
+                const selectedB = allBatches.find(b => b.id === nextId)
+                if (selectedB && (selectedB.current_seats || 0) >= selectedB.max_seats) {
+                  toast.error(`ব্যাচ "${selectedB.name}" এর সকল আসন পূর্ণ (${selectedB.current_seats}/${selectedB.max_seats})!`)
+                  return
+                }
+                setForm(f => ({ ...f, batch_id: nextId }))
+                if (!nextId) setPaidAmount("")
+                if (selectedB?.branch_id && selectedB.branch_id !== selectedBranchId) {
+                  setSelectedBranchId(selectedB.branch_id)
+                }
+              }}
+              className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-white border border-slate-300 focus:border-amber-500 rounded-xl text-sm font-bold text-slate-900 cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
+            >
+              <option value="">-- Select from available batches ({branchFilteredBatches.filter(b => (b.current_seats || 0) < b.max_seats && b.status !== "admission_closed" && b.status !== "finished").length} open) --</option>
+              {branchFilteredBatches.map(b => {
+                const isEnrolled = enrolledBatchIds.includes(b.id)
+                const full = (b.current_seats || 0) >= b.max_seats
+                const isClosed = b.status === "admission_closed"
+                const isFinished = b.status === "finished"
+                const brName = effectiveBranches.find(br => br.id === b.branch_id)?.name
+                const seatInfo = b.max_seats ? ` [${b.current_seats || 0}/${b.max_seats} seats]` : ""
+                const statusText = isEnrolled 
+                  ? " (Already Enrolled)" 
+                  : isClosed 
+                  ? " (Closed)" 
+                  : isFinished 
+                  ? " (Finished)" 
+                  : full 
+                  ? " 🔴 (আসন পূর্ণ / FULL)" 
+                  : ""
+                return (
+                  <option key={b.id} value={b.id} disabled={full || isEnrolled || isClosed || isFinished}>
+                    {b.name} ({b.class_level || "All"}){brName ? ` • ${brName}` : ""}{seatInfo} — {formatCurrency(b.monthly_fee + (b.admission_fee || 0))}{statusText}
+                  </option>
+                )
+              })}
+            </select>
+          </div>
+
+          {branchFilteredBatches.length === 0 ? (
+            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 text-center">
+              <p className="text-xs font-bold text-slate-700">No batches currently found for this branch.</p>
+              <button
+                type="button"
+                onClick={() => setSelectedBranchId("")}
+                className="mt-2 text-xs font-bold text-amber-600 hover:underline cursor-pointer inline-flex items-center gap-1"
+              >
+                View all available batches across all branches →
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {branchFilteredBatches.map(b => {
+                const isEnrolled = enrolledBatchIds.includes(b.id)
+                const sel = form.batch_id === b.id
+                const full = (b.current_seats || 0) >= b.max_seats
+                const isClosed = b.status === "admission_closed"
+                const isFinished = b.status === "finished"
+                const disabled = full || isEnrolled || isClosed || isFinished
+                const branchObj = effectiveBranches.find(br => br.id === b.branch_id)
+
+                return (
+                  <button
+                    type="button"
+                    key={b.id}
+                    disabled={disabled}
+                    onClick={() => {
+                      if (full) {
+                        toast.error(`ব্যাচ "${b.name}" এর সকল আসন পূর্ণ (${b.current_seats}/${b.max_seats})! নতুন ভর্তি নেওয়া যাবে না।`)
+                        return
+                      }
+                      if (disabled) return
+                      update("batch_id", sel ? "" : b.id)
+                      if (!sel) setPaidAmount("")
+                      if (b.branch_id && b.branch_id !== selectedBranchId) {
+                        setSelectedBranchId(b.branch_id)
+                      }
+                    }}
+                    className={`px-3.5 py-3 rounded-xl border text-left text-xs transition-all relative cursor-pointer ${
+                      sel
+                        ? "border-amber-500 bg-amber-50/80 shadow-sm ring-2 ring-amber-500/20"
+                        : isEnrolled
+                        ? "border-emerald-200 bg-emerald-50/50 opacity-70 cursor-not-allowed"
+                        : isClosed
+                        ? "border-amber-200 bg-amber-50/50 opacity-60 cursor-not-allowed"
+                        : isFinished
+                        ? "border-slate-200 bg-slate-50 opacity-50 cursor-not-allowed"
+                        : full
+                        ? "border-rose-300 bg-rose-50/60 opacity-80 cursor-not-allowed"
+                        : "border-slate-200 bg-slate-50/60 hover:border-amber-400 hover:bg-amber-50/40"
+                    }`}>
+                    {sel && <Check className="float-right w-4 h-4 text-amber-600" />}
+                    {isEnrolled && (
+                      <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
+                        ✓ Enrolled
+                      </span>
+                    )}
+                    {!isEnrolled && isClosed && (
+                      <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                        Closed
+                      </span>
+                    )}
+                    {!isEnrolled && isFinished && (
+                      <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                        Finished
+                      </span>
+                    )}
+                    {!isEnrolled && !isClosed && !isFinished && full && (
+                      <span className="float-right px-1.5 py-0.5 rounded-md text-[9px] font-black bg-rose-100 text-rose-700 border border-rose-300 shadow-2xs">
+                        🔴 Full ({b.current_seats}/{b.max_seats})
+                      </span>
+                    )}
+                    <p className={`font-bold text-[13px] ${isEnrolled ? "text-emerald-700" : isClosed ? "text-amber-800" : "text-slate-900"}`}>{b.name}</p>
+                    
+                    {/* Branch & Classroom Badges */}
+                    {(branchObj || b.classroom) && (
+                      <div className="flex flex-wrap items-center gap-1.5 my-1">
+                        {branchObj && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-100/70 text-amber-900 px-1.5 py-0.5 rounded">
+                            <Landmark className="w-2.5 h-2.5" /> {branchObj.name}
+                          </span>
+                        )}
+                        {b.classroom && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-slate-200/80 text-slate-700 px-1.5 py-0.5 rounded">
+                            <DoorOpen className="w-2.5 h-2.5 text-slate-500" /> {b.classroom}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    <p className="text-slate-500 text-[11px] mt-0.5">
+                      {isEnrolled
+                        ? "Already enrolled in this batch"
+                        : isClosed
+                        ? "Admission closed"
+                        : isFinished
+                        ? "Program completed"
+                        : `${b.current_seats}/${b.max_seats} seats • ${formatCurrency(b.monthly_fee)}/mo${b.admission_fee > 0 ? ` +${formatCurrency(b.admission_fee)}` : ""}`}
+                    </p>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Payment */}
         {batch && (mode === "new" || selectedStudent) && (
-          <div className="bg-gradient-to-r from-white to-indigo-50/30 rounded-2xl border border-gray-100 shadow-sm px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs mb-3">
-              <CreditCard className="w-4 h-4 text-indigo-500 flex-shrink-0" />
-              <span className="text-gray-500">Monthly: <b className="text-gray-700">{formatCurrency(batch.monthly_fee)}</b></span>
-              <span className="text-gray-500">Admission: <b className="text-gray-700">{formatCurrency(batch.admission_fee)}</b></span>
-              <span className="sm:ml-auto text-indigo-700 font-extrabold text-sm w-full sm:w-auto text-right">Total: {formatCurrency(total)}</span>
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+              <CreditCard className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span className="text-slate-600">Monthly Fee: <b className="text-slate-900">{formatCurrency(batch.monthly_fee)}</b></span>
+              <span className="text-slate-600">Admission Fee: <b className="text-slate-900">{formatCurrency(batch.admission_fee)}</b></span>
+              <span className="sm:ml-auto text-amber-700 font-black text-sm w-full sm:w-auto text-right">Total Payable: {formatCurrency(total)}</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-              <div><label className={labelCls}>Paid (৳)</label><input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${ic} font-semibold`} placeholder="0" min="0" /></div>
-              <div><label className={labelCls}>Due</label><div className={`px-3 py-2 rounded-lg text-sm font-bold text-center ${due > 0 ? "bg-red-50 text-red-600 border border-red-200" : "bg-emerald-50 text-emerald-600 border border-emerald-200"}`}>{formatCurrency(due)}</div></div>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className={labelCls}>Batch Roll (রোল নং) *</label>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5 text-amber-700" />
+                    ফিক্সড (Fixed)
+                  </span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    readOnly
+                    tabIndex={-1}
+                    value={batchRoll ? `রোল #${batchRoll}` : "হিসাব করা হচ্ছে..."}
+                    className={`${ic} font-mono font-black text-amber-950 bg-amber-100/60 border-amber-300 cursor-not-allowed select-none`}
+                    title="ব্যাচের পরবর্তী ক্রমিক রোল নম্বর (স্বয়ংক্রিয় নির্ধারিত ও অপরিবর্তনীয়)"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-200/80 px-1.5 py-0.5 rounded">
+                    <Sparkles className="w-3 h-3 text-amber-700" />
+                    <span>Auto #{batchRoll || 1}</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  পূর্ববর্তী সর্বোচ্চ রোলের পরবর্তী নম্বরটি স্বয়ংক্রিয়ভাবে নির্ধারিত।
+                </p>
+              </div>
+              <div><label className={labelCls}>Paid Amount (৳) *</label><input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${ic} font-bold text-slate-900`} placeholder="0" min="0" /></div>
+              <div><label className={labelCls}>Remaining Due</label><div className={`px-3.5 py-2.5 rounded-xl text-sm font-black text-center ${due > 0 ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{formatCurrency(due)}</div></div>
               <div><label className={labelCls}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={ic} /></div>
             </div>
           </div>
         )}
 
+        {/* Payment Guidance placeholder if no batch selected */}
+        {!batch && (mode === "new" || selectedStudent) && (
+          <div className="bg-white rounded-2xl border border-dashed border-amber-300/80 p-5 text-center shadow-2xs">
+            <CreditCard className="w-6 h-6 text-amber-500 mx-auto mb-2 opacity-75" />
+            <p className="text-xs font-bold text-slate-800">Select a batch from available batches above</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">
+              Once you select a batch, fee calculations and payment details will appear here to complete the next step.
+            </p>
+          </div>
+        )}
+
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 pt-1">
-          <button type="button" onClick={() => router.back()} className="py-2.5 border border-gray-200 text-gray-600 rounded-xl font-semibold hover:bg-gray-50 text-sm transition-colors">Cancel</button>
+        <div className="flex flex-col sm:flex-row gap-3 pt-2">
+          <button type="button" onClick={() => router.back()} className="py-2.5 px-6 border border-slate-300 text-slate-700 rounded-xl font-bold hover:bg-slate-100 text-sm transition-colors cursor-pointer">Cancel</button>
           <button type="submit" disabled={loading || !form.batch_id || (mode === "existing" && !selectedStudent) || (mode === "new" && form.password !== form.confirmPassword)}
-            className="flex-1 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-purple-700 disabled:opacity-40 flex items-center justify-center gap-2 text-sm shadow-lg shadow-indigo-200 transition-all">
-            {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : <><UserPlus className="w-4 h-4" /> {mode === "new" ? "Create & Enroll" : "Enroll Student"}</>}
+            className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-black disabled:opacity-40 flex items-center justify-center gap-2 text-sm shadow-md shadow-amber-500/25 transition-all cursor-pointer">
+            {loading ? <><Loader2 className="w-4 h-4 animate-spin text-white" /> Processing...</> : <><UserPlus className="w-4 h-4" /> {mode === "new" ? "Create & Enroll (ভর্তি সম্পন্ন করুন)" : "Enroll Student"}</>}
           </button>
         </div>
-      </form>
+        </form>
 
-      {/* Confirmation & Printable PDF Modal with QR Code */}
-      {receipt && (
-        <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white text-center relative">
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
-                <Check className="w-6 h-6 text-white" />
+        {/* Recent Enrollments Quick Access below Form */}
+        {enrollmentsList.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-amber-600" />
+                <h4 className="font-black text-slate-900 text-sm">Recent Enrollments (সাম্প্রতিক ভর্তির ইতিহাস)</h4>
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+                  Last {Math.min(5, enrollmentsList.length)}
+                </span>
               </div>
-              <h3 className="text-xl font-bold">Enrollment Confirmed!</h3>
-              <p className="text-xs text-indigo-100 mt-1">Ready to print, download PDF, or start next enrollment</p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleResequenceBatchRolls()}
+                  disabled={resequencing}
+                  className="text-xs font-bold text-slate-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer transition-colors px-2 py-1 rounded-lg border border-slate-200 hover:border-amber-300 hover:bg-amber-50"
+                  title="ব্যাচের রোল নম্বর ১, ২, ৩... ক্রমানুসারে ধারাবাহিক করুন"
+                >
+                  <RefreshCw className={`w-3 h-3 text-amber-600 ${resequencing ? "animate-spin" : ""}`} />
+                  <span>{resequencing ? "Syncing..." : "Sync Rolls (রোল সিঙ্ক)"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("history")}
+                  className="text-xs font-bold text-amber-600 hover:text-amber-700 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  View All History ({enrollmentsList.length}) <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            {/* Printable preview card */}
-            <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
-              <div ref={receiptRef} className="border border-indigo-100 rounded-2xl p-4 sm:p-5 bg-slate-50 space-y-3">
-                <div className="text-center border-b border-dashed border-gray-300 pb-3">
-                  <h4 className="font-extrabold text-indigo-900 text-base">MedhaShiree Coaching</h4>
-                  <p className="text-[11px] text-gray-500">Official Enrollment & Clearance Receipt</p>
-                  <span className="inline-block bg-indigo-100 text-indigo-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full mt-1">
-                    ID: {receipt.student_id}
-                  </span>
-                </div>
+            <div className="divide-y divide-slate-100">
+              {enrollmentsList.slice(0, 5).map((enr: any) => {
+                const student = (enr.student && enr.student.name)
+                  ? enr.student
+                  : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+                const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+                const matchingPayment = paymentsList.find(p => 
+                  (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+                  (p.batch_id === enr.batch_id || !p.batch_id)
+                )
+                const matchingDue = duesList.find(d => 
+                  (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+                  (d.batch_id === enr.batch_id || !d.batch_id)
+                )
+                const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+                const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+                const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+                const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
 
-                <div className="space-y-1.5 text-xs">
-                  <div className="flex justify-between"><span className="text-gray-500">Student Name:</span><span className="font-semibold text-gray-800">{receipt.student_name}</span></div>
-                  {receipt.student_phone && <div className="flex justify-between"><span className="text-gray-500">Phone:</span><span className="font-medium text-gray-700">{receipt.student_phone}</span></div>}
-                  {receipt.guardian_phone && <div className="flex justify-between"><span className="text-gray-500">Guardian Contact:</span><span className="font-medium text-gray-700">{receipt.guardian_phone}</span></div>}
-                  <div className="flex justify-between"><span className="text-gray-500">Batch Enrolled:</span><span className="font-semibold text-indigo-700">{receipt.batch_name}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Date:</span><span className="text-gray-700">{receipt.date}</span></div>
-                </div>
-
-                {/* Account credentials box */}
-                {receipt.password && (
-                  <div className="bg-indigo-50/80 border border-indigo-100 rounded-xl p-2.5 text-xs space-y-1">
-                    <div className="flex justify-between"><span className="text-indigo-600 font-medium">Login User ID:</span><span className="font-bold text-indigo-900">{receipt.student_id}</span></div>
-                    <div className="flex justify-between"><span className="text-indigo-600 font-medium">Password:</span><span className="font-mono font-bold text-indigo-900">{receipt.password}</span></div>
-                  </div>
-                )}
-
-                <div className="border-t border-dashed border-gray-300 pt-3 space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-gray-500">Total Program Fee:</span><span className="font-semibold">{formatCurrency(receipt.total_fee)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Amount Paid:</span><span className="font-bold text-emerald-600">{formatCurrency(receipt.paid_amount)}</span></div>
-                  <div className="flex justify-between text-sm font-extrabold pt-1">
-                    <span>Due Remaining:</span>
-                    <span className={receipt.due_amount > 0 ? "text-red-600" : "text-emerald-600"}>{formatCurrency(receipt.due_amount)}</span>
-                  </div>
-                  {receipt.due_date && (
-                    <div className="flex justify-between text-[11px] text-amber-700 pt-0.5">
-                      <span>Due Date:</span><span>{receipt.due_date}</span>
+                return (
+                  <div key={enr.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-slate-900">{student.name || (enr.student_id && !enr.student_id.includes("-") ? "Student" : enr.student_id) || "Student"}</span>
+                        <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                          {student.student_id || enr.student_id || "N/A"}
+                        </span>
+                        {roll != null && (
+                          <span className="text-xs font-mono font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                            রোল #{roll}
+                          </span>
+                        )}
+                        <span className="text-xs font-semibold text-slate-600">• {b.name || "Batch"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                        <span>{formatDate(enr.created_at)}</span>
+                        <span>• Paid: <b className="text-emerald-600">{formatCurrency(paidAmt)}</b></span>
+                        {dueAmt > 0 && <span>• Due: <b className="text-rose-600">{formatCurrency(dueAmt)}</b></span>}
+                      </div>
                     </div>
-                  )}
-                </div>
-
-                {/* QR Code section */}
-                <div className="pt-2 border-t border-dashed border-gray-300 flex items-center justify-between">
-                  <div>
-                    <p className="text-[11px] font-bold text-gray-700">Verification QR</p>
-                    <p className="text-[10px] text-gray-400">Scan for student credentials</p>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cardData = getHistoryIdCardData(enr)
+                          setHistoryIdCardStudent(cardData)
+                        }}
+                        className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="View & Print ID Card"
+                      >
+                        <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>ID Card</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePrintFromHistory(enr)}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Print Admission Slip"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Print</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSavePDFFromHistory(enr)}
+                        className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                        title="Download PDF"
+                      >
+                        <Download className="w-3.5 h-3.5 text-amber-600" />
+                        <span>PDF</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePreviewReceipt(enr)}
+                        className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg text-xs transition-colors cursor-pointer"
+                        title="View Details"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(receipt.qr_data)}`}
-                    alt="QR Verification"
-                    className="w-16 h-16 border border-gray-200 rounded-lg p-0.5 bg-white"
-                  />
-                </div>
-              </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+      )}
 
-              {/* Modal Buttons: Print, Save, New Enrollment */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 pt-1">
-                <button
-                  type="button"
-                  onClick={handlePrint}
-                  className="py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 flex items-center justify-center gap-2 text-sm shadow-md shadow-indigo-100 transition-all">
-                  <Printer className="w-4 h-4" /> Print Receipt
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSavePDF}
-                  className="py-2.5 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 flex items-center justify-center gap-2 text-sm shadow-md shadow-emerald-100 transition-all">
-                  <Download className="w-4 h-4" /> Save PDF
-                </button>
-              </div>
+      {/* History Tab View */}
+      {activeTab === "history" && (
+        <div className="space-y-4">
+          {/* Summary Stats Cards */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <p className="text-[11px] font-bold text-slate-500 uppercase">Total Enrolled</p>
+              <p className="text-xl font-black text-slate-900 mt-0.5">{historyStats.totalEnrolled}</p>
+            </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <p className="text-[11px] font-bold text-emerald-600 uppercase">Total Collection</p>
+              <p className="text-xl font-black text-emerald-700 mt-0.5">{formatCurrency(historyStats.totalPaid)}</p>
+            </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <p className="text-[11px] font-bold text-rose-600 uppercase">Outstanding Due</p>
+              <p className="text-xl font-black text-rose-700 mt-0.5">{formatCurrency(historyStats.totalDue)}</p>
+            </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+              <p className="text-[11px] font-bold text-indigo-600 uppercase">Fully Paid</p>
+              <p className="text-xl font-black text-indigo-700 mt-0.5">{historyStats.paidCount}</p>
+            </div>
+          </div>
 
+          {/* Search & Filter Controls */}
+          <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={historySearchQuery}
+                  onChange={e => setHistorySearchQuery(e.target.value)}
+                  placeholder="Search student name, ID (MS-...), phone, guardian phone, batch..."
+                  className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 bg-white shadow-2xs"
+                />
+              </div>
               <button
                 type="button"
-                onClick={resetForm}
-                className="w-full py-2.5 border border-indigo-200 text-indigo-700 rounded-xl font-semibold hover:bg-indigo-50 text-sm flex items-center justify-center gap-2 transition-colors">
-                <RefreshCw className="w-4 h-4" /> Enroll Another Student
+                onClick={handleStartNewEnrollment}
+                className="px-3.5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+                title="নতুন শিক্ষার্থী ভর্তি ফর্ম খুলুন"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span>New Enrollment (নতুন ভর্তি)</span>
               </button>
+              <button
+                type="button"
+                onClick={fetchHistory}
+                disabled={historyLoading}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                title="Refresh History from Database"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${historyLoading ? "animate-spin text-amber-600" : ""}`} />
+                <span>Refresh</span>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap gap-2 items-center text-xs">
+              {/* Branch filter */}
+              <select
+                value={historyBranchFilter}
+                onChange={e => setHistoryBranchFilter(e.target.value)}
+                className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="all">All Branches (সকল শাখা)</option>
+                {effectiveBranches.map(br => (
+                  <option key={br.id} value={br.id}>{br.name}</option>
+                ))}
+              </select>
+
+              {/* Batch filter */}
+              <select
+                value={historyBatchFilter}
+                onChange={e => setHistoryBatchFilter(e.target.value)}
+                className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="all">All Batches (সকল ব্যাচ)</option>
+                {allBatches.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+
+              {/* Status filter */}
+              <select
+                value={historyStatusFilter}
+                onChange={e => setHistoryStatusFilter(e.target.value as any)}
+                className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-amber-500 cursor-pointer"
+              >
+                <option value="all">All Payment Status</option>
+                <option value="paid">✓ Fully Paid</option>
+                <option value="due">⏳ Has Due</option>
+              </select>
+
+              <span className="text-slate-400 ml-auto font-medium">
+                Showing {filteredEnrollments.length} enrolled students
+              </span>
+            </div>
+          </div>
+
+          {/* Table / Cards */}
+          {filteredEnrollments.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
+              <UserPlus className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="font-bold text-slate-700 text-sm">No enrollment records found</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {historySearchQuery ? "Try a different search keyword or clear filters." : "Students enrolled in batches will appear here."}
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="px-3 py-3 text-center w-16">Roll</th>
+                      <th className="px-4 py-3">Student Info</th>
+                      <th className="px-4 py-3">Batch & Campus</th>
+                      <th className="px-4 py-3">Enrolled Date</th>
+                      <th className="px-4 py-3">Payment Summary</th>
+                      <th className="px-4 py-3 text-right">Actions (Print / PDF)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredEnrollments.map((enr: any) => {
+                      const student = (enr.student && enr.student.name)
+                        ? enr.student
+                        : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+                      const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+                      const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+                      const matchingPayment = paymentsList.find(p => 
+                        (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+                        (p.batch_id === enr.batch_id || !p.batch_id)
+                      )
+                      const matchingDue = duesList.find(d => 
+                        (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+                        (d.batch_id === enr.batch_id || !d.batch_id)
+                      )
+                      const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+                      const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+                      const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+                      const isPaid = totalFee > 0 ? paidAmt >= totalFee : true
+                      const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
+
+                      return (
+                        <tr key={enr.id} className="hover:bg-amber-50/30 transition-colors">
+                          <td className="px-3 py-3.5 text-center">
+                            {roll != null ? (
+                              <span className="inline-flex items-center justify-center font-mono font-bold text-xs bg-amber-50 text-amber-800 border border-amber-300 rounded-lg px-2 py-0.5">
+                                #{roll}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400 font-mono">-</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-slate-900 text-sm">{student.name || (enr.student_id && !enr.student_id.includes("-") ? "Student" : enr.student_id) || "Student"}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className="font-mono text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                {student.student_id || enr.student_id || "N/A"}
+                              </span>
+                              {student.phone && <span className="text-[11px] text-slate-500 font-medium">📞 {student.phone}</span>}
+                            </div>
+                            {student.guardian_phone && (
+                              <div className="text-[10px] text-slate-400 mt-0.5">
+                                Guardian: {student.guardian_phone} {student.guardian_name ? `(${student.guardian_name})` : ""}
+                              </div>
+                            )}
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-slate-800">{b.name || "Enrolled Batch"}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap text-[10px]">
+                              {branchObj && (
+                                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-semibold border border-slate-200">
+                                  🏢 {branchObj.name}
+                                </span>
+                              )}
+                              {b.classroom && (
+                                <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
+                                  🚪 {b.classroom}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3.5 whitespace-nowrap text-slate-600">
+                            <div className="font-medium text-slate-900">{formatDate(enr.created_at)}</div>
+                            <div className="text-[10px] text-slate-400">{formatDateTime(enr.created_at).split(",")[1] || ""}</div>
+                          </td>
+
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900">Total: {formatCurrency(totalFee)}</span>
+                              {isPaid ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md">
+                                  ✓ Paid
+                                </span>
+                              ) : paidAmt > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                                  ⏳ Partial
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-1.5 py-0.5 rounded-md">
+                                  ✕ Unpaid
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                              <span className="text-emerald-600 font-semibold">Paid: {formatCurrency(paidAmt)}</span>
+                              {dueAmt > 0 && <span className="text-rose-600 font-semibold">• Due: {formatCurrency(dueAmt)}</span>}
+                            </div>
+                          </td>
+
+                          <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => setHistoryIdCardStudent(getHistoryIdCardData(enr))}
+                                className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                                title="View & Print Student ID Card"
+                              >
+                                <span>🪪 ID Card</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePrintFromHistory(enr)}
+                                className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                                title="Print Admission & Payment Slip"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                                <span>Slip</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSavePDFFromHistory(enr)}
+                                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                                title="Download Receipt PDF"
+                              >
+                                <Download className="w-3.5 h-3.5 text-amber-600" />
+                                <span>PDF</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewReceipt(enr)}
+                                className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-xl transition-colors cursor-pointer"
+                                title="Preview Full Slip"
+                              >
+                                <Eye className="w-4 h-4" />
+                              </button>
+                              {student.id && (
+                                <Link
+                                  href={`/dashboard/owner/students/${student.id}`}
+                                  className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"
+                                  title="View Student Profile"
+                                >
+                                  <ExternalLink className="w-4 h-4" />
+                                </Link>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Confirmation & Printable PDF Modal with QR Code & ID Card Tab */}
+      {receipt && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-3 sm:p-4">
+          <div className="bg-white rounded-3xl w-full max-w-xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[94vh] flex flex-col">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-amber-500 via-amber-600 to-indigo-600 p-5 text-white text-center relative shrink-0">
+              <button 
+                type="button" 
+                onClick={handleStartNewEnrollment}
+                className="absolute top-4 left-4 bg-white/20 hover:bg-white/30 text-white border border-white/30 text-xs font-bold px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer shadow-xs active:scale-95"
+                title="নতুন পরিষ্কার ভর্তি ফর্ম খুলুন (Start New Enrollment)"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">New Enrollment</span>
+                <span className="sm:hidden">New</span>
+              </button>
+              <button 
+                type="button" 
+                onClick={() => { resetForm(); setReceipt(null); }} 
+                className="absolute top-4 right-4 text-white/80 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="w-11 h-11 bg-white/20 backdrop-blur-xs rounded-2xl flex items-center justify-center mx-auto mb-2 border border-white/20">
+                <Check className="w-6 h-6 text-white font-black" />
+              </div>
+              <h3 className="text-xl font-black">ভর্তি সফলভাবে সম্পন্ন হয়েছে!</h3>
+              <p className="text-xs text-amber-100 font-medium mt-0.5">Admission Memo & Student ID Card Generated</p>
+
+              {/* Tab Switcher */}
+              <div className="flex items-center justify-center gap-2 mt-3 bg-black/20 p-1 rounded-xl max-w-sm mx-auto backdrop-blur-xs border border-white/20">
+                <button
+                  type="button"
+                  onClick={() => setModalTab("receipt")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    modalTab === "receipt" ? "bg-white text-slate-900 shadow-sm" : "text-white/80 hover:text-white"
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5 text-amber-600" />
+                  <span>📄 ভর্তি রশিদ (Slip)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setModalTab("idcard")}
+                  className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    modalTab === "idcard" ? "bg-white text-indigo-900 shadow-sm" : "text-white/80 hover:text-white"
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>🪪 আইডি কার্ড (ID Card)</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 bg-slate-50/50 min-h-0">
+              {modalTab === "receipt" ? (
+                /* Printable preview slip */
+                <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-white space-y-3 shadow-xs">
+                  <div className="text-center border-b border-dashed border-slate-300 pb-3">
+                    <h4 className="font-black text-indigo-950 text-base">MedhaShiree Coaching</h4>
+                    <p className="text-[11px] text-slate-500">Official Enrollment & Clearance Receipt</p>
+                    <div className="flex items-center justify-center gap-2 mt-1">
+                      <span className="inline-block bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full font-mono">
+                        ID: {receipt.student_id}
+                      </span>
+                      {receipt.batch_roll != null && (
+                        <span className="inline-block bg-indigo-100 text-indigo-900 border border-indigo-300 text-[10px] font-black px-2.5 py-0.5 rounded-full font-mono">
+                          রোল #{receipt.batch_roll}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-500">Student Name:</span><span className="font-bold text-slate-900">{receipt.student_name}</span></div>
+                    {receipt.student_phone && <div className="flex justify-between"><span className="text-slate-500">Phone:</span><span className="font-medium text-slate-700">{receipt.student_phone}</span></div>}
+                    {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-500">Guardian Contact:</span><span className="font-medium text-slate-700">{receipt.guardian_phone}</span></div>}
+                    <div className="flex justify-between"><span className="text-slate-500">Batch Enrolled:</span><span className="font-bold text-indigo-700">{receipt.batch_name}</span></div>
+                    {receipt.branch_name && <div className="flex justify-between"><span className="text-slate-500">Campus/Branch:</span><span className="font-semibold text-slate-700">{receipt.branch_name}</span></div>}
+                    <div className="flex justify-between"><span className="text-slate-500">Date:</span><span className="text-slate-700">{receipt.date}</span></div>
+                  </div>
+
+                  {/* Account credentials box */}
+                  {receipt.password && (
+                    <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-2.5 text-xs space-y-1">
+                      <div className="flex justify-between"><span className="text-indigo-800 font-medium">Login User ID:</span><span className="font-bold text-slate-900">{receipt.student_id}</span></div>
+                      <div className="flex justify-between"><span className="text-indigo-800 font-medium">Password:</span><span className="font-mono font-bold text-indigo-900">{receipt.password}</span></div>
+                    </div>
+                  )}
+
+                  <div className="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-500">Total Program Fee:</span><span className="font-bold text-slate-900">{formatCurrency(receipt.total_fee)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Amount Paid:</span><span className="font-bold text-emerald-700">{formatCurrency(receipt.paid_amount)}</span></div>
+                    <div className="flex justify-between text-sm font-black pt-1">
+                      <span className="text-slate-700">Due Remaining:</span>
+                      <span className={receipt.due_amount > 0 ? "text-rose-600" : "text-emerald-700"}>{formatCurrency(receipt.due_amount)}</span>
+                    </div>
+                    {receipt.due_date && (
+                      <div className="flex justify-between text-[11px] text-amber-700 pt-0.5 font-semibold">
+                        <span>Due Date:</span><span>{receipt.due_date}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* QR Code section */}
+                  <div className="pt-2 border-t border-dashed border-slate-300 flex items-center justify-between">
+                    <div>
+                      <p className="text-[11px] font-bold text-slate-800">Verification QR</p>
+                      <p className="text-[10px] text-slate-500">Scan to verify student admission status</p>
+                    </div>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(receipt.qr_data)}`}
+                      alt="QR Verification"
+                      className="w-16 h-16 border border-slate-200 rounded-lg p-0.5 bg-white"
+                    />
+                  </div>
+                </div>
+              ) : (
+                /* ID Card Preview */
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Front Card */}
+                    <div className="bg-white rounded-2xl border border-indigo-200 shadow-md overflow-hidden flex flex-col justify-between p-3.5 relative min-h-[220px]">
+                      <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-amber-500 via-indigo-600 to-violet-600" />
+                      <div className="text-center pt-1 border-b border-slate-100 pb-2">
+                        <h5 className="font-black text-xs text-indigo-950 uppercase tracking-wider">MEDHASHIREE COACHING</h5>
+                        <p className="text-[9px] text-slate-500">Official Student Identity Card</p>
+                      </div>
+
+                      <div className="flex items-center gap-3 py-2">
+                        <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center font-black text-xl shadow-md shrink-0">
+                          {receipt.student_name ? receipt.student_name.charAt(0) : "S"}
+                        </div>
+                        <div className="space-y-0.5 min-w-0">
+                          <h4 className="font-black text-slate-900 text-xs truncate">{receipt.student_name}</h4>
+                          <p className="text-[10px] font-mono font-bold text-indigo-600">{receipt.student_id}</p>
+                          <div className="inline-block bg-amber-100 text-amber-900 border border-amber-300 font-bold font-mono text-[10px] px-1.5 py-0.2 rounded-md">
+                            রোল: #{receipt.batch_roll || 1}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 text-[10px] border-t border-slate-100 pt-2">
+                        <div className="flex justify-between"><span className="text-slate-400">Batch:</span><span className="font-bold text-slate-800 truncate max-w-[130px]">{receipt.batch_name}</span></div>
+                        {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-400">Guardian:</span><span className="font-mono text-slate-700">{receipt.guardian_phone}</span></div>}
+                      </div>
+
+                      <div className="bg-slate-50 rounded-lg p-1 text-center text-[9px] font-bold text-slate-600 mt-2">
+                        VALID SESSION: {new Date().getFullYear()}
+                      </div>
+                    </div>
+
+                    {/* Back Card */}
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden flex flex-col justify-between p-3.5 relative min-h-[220px]">
+                      <div className="text-center border-b border-slate-100 pb-1.5">
+                        <h6 className="font-black text-[11px] text-slate-800">TERMS & INSTRUCTIONS</h6>
+                      </div>
+
+                      <div className="space-y-1 text-[9px] text-slate-600 py-1">
+                        <p>1. Carry this card during all classes and exams.</p>
+                        <p>2. Non-transferable & property of MedhaShiree.</p>
+                        <p>3. If found, please return to coaching office.</p>
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+                        <img
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(`ID:${receipt.student_id}|Name:${receipt.student_name}|Batch:${receipt.batch_name}|Roll:${receipt.batch_roll || 1}`)}`}
+                          alt="QR"
+                          className="w-12 h-12 border border-slate-200 rounded-md p-0.5 bg-white"
+                        />
+                        <div className="text-right">
+                          <p className="text-[8px] text-slate-400">Authorized Signature</p>
+                          <div className="font-serif italic font-bold text-xs text-indigo-900 mt-1">Authority</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sticky Action Footer - Always visible at bottom */}
+            <div className="p-3.5 sm:p-4 bg-white border-t border-slate-200 shrink-0 space-y-2.5 shadow-lg">
+              {/* Primary Action Button: New Enrollment */}
+              <button
+                type="button"
+                onClick={handleStartNewEnrollment}
+                className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-black text-sm shadow-md shadow-emerald-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>➕ New Enrollment (নতুন পরিষ্কার ফর্ম)</span>
+              </button>
+
+              {/* Print buttons */}
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrint()}
+                  className="py-2.5 px-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-all cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> 
+                  <span>প্রিন্ট রসিদ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintIdCard()}
+                  className="py-2.5 px-2 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-all cursor-pointer"
+                >
+                  <span>🪪 প্রিন্ট আইডি কার্ড</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePrintBoth()}
+                  className="py-2.5 px-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl font-bold flex items-center justify-center gap-1.5 text-xs shadow-xs transition-all cursor-pointer"
+                  title="Print both Admission Memo and Student ID Card in one document"
+                >
+                  <span>📑 উভয়ই প্রিন্ট</span>
+                </button>
+              </div>
+
+              {/* PDF and Close actions */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => modalTab === "idcard" ? handleDownloadIdCard() : handleSavePDF()}
+                  className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 rounded-xl font-semibold flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer"
+                >
+                  <Download className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>{modalTab === "idcard" ? "আইডি কার্ড PDF" : "রসিদ PDF সেভ"}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { resetForm(); setReceipt(null); }}
+                  className="py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-semibold flex items-center justify-center gap-1.5 text-xs transition-all cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>বন্ধ করুন (Close)</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
+      )}
+
+      {/* History ID Card Modal */}
+      {historyIdCardStudent && (
+        <StudentIdCardModal
+          isOpen={!!historyIdCardStudent}
+          onClose={() => setHistoryIdCardStudent(null)}
+          cardData={historyIdCardStudent}
+        />
       )}
     </>
   )

@@ -171,8 +171,8 @@ export default function SignupPage() {
         <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] bg-violet-500/20 rounded-full blur-[80px]" />
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 bg-white/10 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/10">
-              <GraduationCap className="w-6 h-6 text-white" />
+            <div className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center border border-white/20 bg-white">
+              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             <span className="text-2xl font-bold text-white tracking-tight">Medha<span className="text-indigo-300">Shiree</span></span>
           </div>
@@ -206,8 +206,8 @@ export default function SignupPage() {
       <div className="flex-1 flex items-center justify-center bg-slate-50 p-6 sm:p-8 lg:p-12">
         <div className="w-full max-w-[420px] space-y-6">
           <div className="lg:hidden text-center mb-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl mb-3">
-              <GraduationCap className="w-6 h-6 text-white" />
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full overflow-hidden mb-3 border border-indigo-200 bg-white shadow-sm">
+              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiree</span></h1>
           </div>

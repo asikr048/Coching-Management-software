@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, useMemo, Suspense } from "react"
 import { useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
@@ -10,12 +10,18 @@ import {
   GraduationCap, Loader2, CheckCircle, ArrowRight, ArrowLeft,
   Copy, Check, User, Phone, Mail, Calendar, BookOpen, MapPin,
   Users, Lock, Clock, Sparkles, Video, AlertCircle,
-  Eye, EyeOff, LogIn, UserCheck, KeyRound
+  Eye, EyeOff, LogIn, UserCheck, KeyRound, Landmark, DoorOpen
 } from "lucide-react"
+import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
 
 interface Batch {
   id: string
   name: string
+  branch_id?: string | null
+  origin_branch_id?: string | null
+  origin_batch_id?: string | null
+  branch_seats?: Record<string, any> | null
+  classroom?: string | null
   subject: string | null
   class_level: string | null
   monthly_fee: number | null
@@ -65,6 +71,8 @@ function EnrollContent() {
   const [step, setStep] = useState<"admission" | "payment" | "success">("admission")
   const [loadingData, setLoadingData] = useState(true)
   const [submitting, setSubmitting] = useState(false)
+  const [branches, setBranches] = useState<{ id: string; name: string; address?: string }[]>([])
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("")
   const [batches, setBatches] = useState<Batch[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedBatchId, setSelectedBatchId] = useState<string>(batchIdParam)
@@ -78,6 +86,7 @@ function EnrollContent() {
     name: "",
     phone: "",
     email: "",
+    branch_id: "",
     gender: "male",
     date_of_birth: "",
     class_level: "",
@@ -115,6 +124,31 @@ function EnrollContent() {
   const [submittedPaidAmount, setSubmittedPaidAmount] = useState<number>(0)
   const [submittedDueAmount, setSubmittedDueAmount] = useState<number>(0)
 
+  // Unified enrollment detection across batches and courses
+  const [userEnrollments, setUserEnrollments] = useState<UserEnrollmentsState>(() => getCachedUserEnrollments())
+
+  // Refresh user enrollments whenever current user changes
+  useEffect(() => {
+    async function refreshEnrollments() {
+      try {
+        const res = await getUserEnrollments()
+        setUserEnrollments(res)
+      } catch (err) {
+        console.warn("Could not fetch user enrollments:", err)
+      }
+    }
+    refreshEnrollments()
+  }, [currentUser])
+
+  // Computed enrolled / pending states for currently selected program
+  const isTargetEnrolled = enrollType === "batch"
+    ? Boolean(selectedBatchId && (userEnrollments.enrolledBatchIds.has(selectedBatchId) || alreadyEnrolled))
+    : Boolean(selectedCourseId && (userEnrollments.enrolledCourseIds.has(selectedCourseId) || alreadyEnrolled))
+
+  const isTargetPending = enrollType === "batch"
+    ? Boolean(selectedBatchId && (userEnrollments.pendingBatchIds.has(selectedBatchId) || existingPending))
+    : Boolean(selectedCourseId && (userEnrollments.pendingCourseIds.has(selectedCourseId) || existingPending))
+
   // Copy helpers
   const [copiedPhone, setCopiedPhone] = useState(false)
   const [copiedAmount, setCopiedAmount] = useState(false)
@@ -146,6 +180,7 @@ function EnrollContent() {
           name: student.name || prev.name,
           phone: student.phone || prev.phone,
           email: student.email || prev.email,
+          branch_id: student.branch_id || prev.branch_id,
           gender: student.gender || prev.gender,
           date_of_birth: student.date_of_birth || prev.date_of_birth,
           class_level: student.class_level || prev.class_level,
@@ -156,6 +191,9 @@ function EnrollContent() {
           guardian_relation: student.guardian_relation || prev.guardian_relation,
           referred_by_code: student.referred_by_code || prev.referred_by_code,
         }))
+        if (student.branch_id) {
+          setSelectedBranchId(student.branch_id)
+        }
         if (student.student_id) setSubmittedStudentId(student.student_id)
         if (student.id) setSubmittedStudentDbId(student.id)
 
@@ -296,20 +334,66 @@ function EnrollContent() {
     async function loadData() {
       setLoadingData(true)
       try {
-        // 1. Fetch active batches
-        const { data: batchList, error: batchErr } = await supabase
-          .from("batches")
-          .select("id, name, subject, class_level, monthly_fee, admission_fee, schedule_days, schedule_time, description, max_seats, current_seats, status")
-          .eq("is_active", true)
+        // 0. Fetch active branches
+        const { data: branchList } = await supabase
+          .from("branches")
+          .select("id, name, address")
           .order("name")
 
-        if (!batchErr && batchList) {
-          setBatches(batchList)
-          if (batchIdParam && batchList.some(b => b.id === batchIdParam)) {
-            setSelectedBatchId(batchIdParam)
-          } else if (batchList.length > 0 && !selectedBatchId) {
-            setSelectedBatchId(batchList[0].id)
+        if (branchList && branchList.length > 0) {
+          setBranches(branchList)
+        }
+
+        // 1. Fetch active batches
+        let loadedBatches: Batch[] = []
+        try {
+          const { data: fullList, error: fullErr } = await supabase
+            .from("batches")
+            .select("*")
+            .order("name")
+
+          if (!fullErr && fullList && fullList.length > 0) {
+            loadedBatches = fullList.filter((b: any) => b.is_active !== false && b.status !== "finished")
           }
+        } catch {}
+
+        if (loadedBatches.length === 0) {
+          try {
+            const { data: fallbackList, error: fallbackErr } = await supabase
+              .from("batches")
+              .select("id, name, branch_id, classroom, subject, class_level, monthly_fee, admission_fee, schedule_days, schedule_time, description, max_seats, current_seats, status")
+              .order("name")
+
+            if (!fallbackErr && fallbackList && fallbackList.length > 0) {
+              loadedBatches = fallbackList.filter((b: any) => b.is_active !== false && b.status !== "finished")
+            }
+          } catch {}
+        }
+
+        if (loadedBatches.length > 0) {
+          setBatches(loadedBatches)
+
+          let initialBatch: Batch | undefined
+          if (batchIdParam && loadedBatches.some(b => b.id === batchIdParam)) {
+            initialBatch = loadedBatches.find(b => b.id === batchIdParam)
+          } else {
+            initialBatch = loadedBatches[0]
+          }
+
+          if (initialBatch) {
+            setSelectedBatchId(initialBatch.id)
+            const targetBranch = initialBatch.branch_id || (initialBatch as any).origin_branch_id
+            if (targetBranch) {
+              setSelectedBranchId(targetBranch)
+              setForm(prev => ({ ...prev, branch_id: targetBranch }))
+            } else if (branchList && branchList.length > 0) {
+              setSelectedBranchId(branchList[0].id)
+              setForm(prev => ({ ...prev, branch_id: branchList[0].id }))
+            }
+          }
+        } else if (branchList && branchList.length > 0 && !selectedBranchId) {
+          setSelectedBranchId(branchList[0].id)
+          setForm(prev => ({ ...prev, branch_id: branchList[0].id }))
         }
 
         // 2. Fetch published courses
@@ -400,8 +484,60 @@ function EnrollContent() {
     loadData()
   }, [batchIdParam, courseIdParam, enrollType])
 
+  // Batches filtered by selected branch
+  const branchFilteredBatches = useMemo(() => {
+    if (!batches || batches.length === 0) return []
+    if (!selectedBranchId) return batches
+
+    // 1. Exact match by branch_id, origin_branch_id, or branch_seats allocation
+    const exactMatches = batches.filter(b => {
+      if (b.branch_id === selectedBranchId) return true
+      if ((b as any).origin_branch_id === selectedBranchId) return true
+      if (b.branch_seats && typeof b.branch_seats === "object" && b.branch_seats[selectedBranchId] !== undefined) return true
+      return false
+    })
+
+    // 2. Global batches available across all branches (no branch specified)
+    const globalBatches = batches.filter(b => !b.branch_id && !(b as any).origin_branch_id)
+
+    const matches = [...exactMatches, ...globalBatches.filter(gb => !exactMatches.some(m => m.id === gb.id))]
+
+    // 3. Fallback: If no batches are specifically assigned to this branch, return all active batches so the dropdown is NEVER empty or blank!
+    return matches.length > 0 ? matches : batches
+  }, [batches, selectedBranchId])
+
+  // Explicit branch change handler that synchronizes selected batch immediately
+  function handleBranchChange(newBranchId: string) {
+    setSelectedBranchId(newBranchId)
+    updateForm("branch_id", newBranchId)
+
+    const matches = batches.filter(b => 
+      b.branch_id === newBranchId || 
+      (b as any).origin_branch_id === newBranchId || 
+      (b.branch_seats && typeof b.branch_seats === "object" && b.branch_seats[newBranchId] !== undefined) ||
+      !b.branch_id
+    )
+
+    if (matches.length > 0) {
+      const openBatch = matches.find(b => b.status !== "admission_closed" && b.status !== "finished") || matches[0]
+      setSelectedBatchId(openBatch.id)
+    } else if (batches.length > 0) {
+      setSelectedBatchId(batches[0].id)
+    }
+  }
+
+  // Synchronize selected batch when branchFilteredBatches changes
+  useEffect(() => {
+    if (enrollType === "batch" && batches.length > 0) {
+      const isCurrentValid = branchFilteredBatches.some(b => b.id === selectedBatchId)
+      if (!isCurrentValid && branchFilteredBatches.length > 0) {
+        setSelectedBatchId(branchFilteredBatches[0].id)
+      }
+    }
+  }, [selectedBranchId, branchFilteredBatches, enrollType, batches, selectedBatchId])
+
   // Current selected batch or course
-  const selectedBatch = batches.find(b => b.id === selectedBatchId) || batches[0]
+  const selectedBatch = batches.find(b => b.id === selectedBatchId) || branchFilteredBatches[0] || batches[0]
   const selectedCourse = courses.find(c => c.id === selectedCourseId) || courses[0]
 
   const isCourse = enrollType === "course"
@@ -422,6 +558,11 @@ function EnrollContent() {
   function handleProceedToPayment(e: React.FormEvent) {
     e.preventDefault()
 
+    if (isTargetEnrolled) {
+      toast.error(`You are already enrolled in this ${isCourse ? "course" : "batch"}! Please access it from your student dashboard.`)
+      return
+    }
+
     if (isCourse) {
       if (!selectedCourse) {
         toast.error("Please select a course to enroll in")
@@ -440,6 +581,11 @@ function EnrollContent() {
         toast.error("Please select a batch to enroll in")
         return
       }
+      const isClosed = selectedBatch.status === "admission_closed" || selectedBatch.status === "finished"
+      if (isClosed) {
+        toast.error("Admission for this batch is currently closed. Please select an open batch.")
+        return
+      }
       if (!form.name.trim()) {
         toast.error("Please enter your full name")
         return
@@ -451,6 +597,11 @@ function EnrollContent() {
       if (!form.guardian_phone.trim() || form.guardian_phone.trim().length < 11) {
         toast.error("Please enter a valid 11-digit guardian phone number (01XXXXXXXXX)")
         return
+      }
+      if (branches.length > 0 && !selectedBranchId) {
+        const autoBranch = selectedBatch?.branch_id || (selectedBatch as any)?.origin_branch_id || branches[0].id
+        setSelectedBranchId(autoBranch)
+        updateForm("branch_id", autoBranch)
       }
     }
 
@@ -488,6 +639,11 @@ function EnrollContent() {
   async function handleSubmitPayment(e: React.FormEvent) {
     e.preventDefault()
 
+    if (isTargetEnrolled) {
+      toast.error(`You are already enrolled in this ${isCourse ? "course" : "batch"}!`)
+      return
+    }
+
     if (!paymentMethod) {
       toast.error("Please select a payment method (bKash, Nagad, Rocket, or Upay)")
       return
@@ -513,6 +669,7 @@ function EnrollContent() {
         body: JSON.stringify({
           form,
           batchId: selectedBatch?.id || null,
+          branchId: selectedBranchId || form.branch_id || selectedBatch?.branch_id || (selectedBatch as any)?.origin_branch_id || null,
           courseId: selectedCourse?.id || null,
           isCourse,
           paidAmount: actualPaidAmount,
@@ -547,23 +704,14 @@ function EnrollContent() {
       setSubmittedPaidAmount(actualPaidAmount)
       setSubmittedDueAmount(dueAmount)
 
-      if (data.alreadyEnrolled) {
-        setAlreadyEnrolled(true)
-        setStep("success")
-        toast.info(data.message || "You are already enrolled!")
-        return
-      }
-
-      if (data.existingPending) {
-        setExistingPending(true)
-        setStep("success")
-        toast.info(data.message || "You already have a pending payment submitted!")
-        return
-      }
-
+      setAlreadyEnrolled(false)
       window.scrollTo({ top: 0, behavior: "smooth" })
       setStep("success")
-      toast.success("Payment submitted successfully! Admin will verify and activate your access.")
+      toast.success(
+        dueAmount > 0
+          ? `Payment of ৳${actualPaidAmount} submitted! Remaining due ৳${dueAmount} will be recorded.`
+          : "Payment submitted successfully! Admin will verify and activate your access."
+      )
     } catch (err: unknown) {
       console.error("Submission error:", err)
       toast.error(err instanceof Error ? err.message : "Failed to submit payment. Please try again.")
@@ -619,8 +767,8 @@ function EnrollContent() {
           {/* Logo */}
           <div className="flex justify-center mb-8">
             <Link href="/" className="inline-flex items-center gap-2.5">
-              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-cyan-500 rounded-xl flex items-center justify-center shadow-lg shadow-cyan-500/20">
-                <GraduationCap className="w-6 h-6 text-white" />
+              <div className="w-10 h-10 rounded-full border border-cyan-400/40 overflow-hidden flex items-center justify-center bg-white shadow-lg shadow-cyan-500/20">
+                <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
               </div>
               <span className="text-2xl font-black bg-gradient-to-r from-white via-indigo-200 to-cyan-400 bg-clip-text text-transparent">
                 MedhaShiree
@@ -680,6 +828,20 @@ function EnrollContent() {
                 <span className="text-gray-400">{isCourse ? "Enrolled Course" : "Batch"}</span>
                 <span className="font-semibold text-cyan-300">{itemName}</span>
               </div>
+              {!isCourse && selectedBatch?.branch_id && (
+                <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
+                  <span className="text-gray-400">Branch</span>
+                  <span className="font-semibold text-white">
+                    {branches.find(b => b.id === selectedBatch.branch_id)?.name || "Main Branch"}
+                  </span>
+                </div>
+              )}
+              {!isCourse && selectedBatch?.classroom && (
+                <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
+                  <span className="text-gray-400">Classroom / Lab</span>
+                  <span className="font-semibold text-white">{selectedBatch.classroom}</span>
+                </div>
+              )}
               <div className="flex justify-between py-1 border-b border-[#1c2c4a]">
                 <span className="text-gray-400">Total Program Fee</span>
                 <span className="font-bold text-gray-200">{formatCurrency(totalAmount)}</span>
@@ -1090,22 +1252,50 @@ function EnrollContent() {
                 </div>
 
                 {/* Submit Payment Button */}
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full py-4 rounded-xl bg-[#00ffff] hover:bg-[#1fe6f7] active:bg-[#00d0e0] text-black font-extrabold text-base tracking-wide transition-all shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader2 className="w-5 h-5 animate-spin text-black" />
-                      Submitting Payment...
-                    </>
-                  ) : (
-                    <>
-                      Submit Payment (৳{actualPaidAmount}) ✓
-                    </>
-                  )}
-                </button>
+                {isTargetEnrolled ? (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-center text-xs font-bold text-emerald-300">
+                      You are already enrolled in this {isCourse ? "course" : "batch"}.
+                    </div>
+                    <Link
+                      href={isCourse ? `/student/course/${selectedCourseId}` : `/student/batch/${selectedBatchId}`}
+                      className="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-base tracking-wide transition-all shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <CheckCircle className="w-5 h-5" />
+                      <span>Already Enrolled — Go to Classroom</span>
+                    </Link>
+                  </div>
+                ) : isTargetPending ? (
+                  <div className="space-y-3">
+                    <div className="p-3 bg-amber-500/20 border border-amber-500/40 rounded-xl text-center text-xs font-bold text-amber-300">
+                      Payment for this {isCourse ? "course" : "batch"} is already submitted and pending review.
+                    </div>
+                    <Link
+                      href="/student/profile"
+                      className="w-full py-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-base tracking-wide transition-all shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Clock className="w-5 h-5" />
+                      <span>Pending Approval — View in Profile</span>
+                    </Link>
+                  </div>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="w-full py-4 rounded-xl bg-[#00ffff] hover:bg-[#1fe6f7] active:bg-[#00d0e0] text-black font-extrabold text-base tracking-wide transition-all shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin text-black" />
+                        Submitting Payment...
+                      </>
+                    ) : (
+                      <>
+                        Submit Payment (৳{actualPaidAmount}) ✓
+                      </>
+                    )}
+                  </button>
+                )}
 
                 {/* Cancel link */}
                 <div className="text-center pt-1">
@@ -1139,8 +1329,8 @@ function EnrollContent() {
       <nav className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-0 z-30 shadow-xs">
         <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-violet-600 rounded-xl flex items-center justify-center shadow-md shadow-indigo-200">
-              <GraduationCap className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-full border border-indigo-200 overflow-hidden flex items-center justify-center bg-white shadow-xs flex-shrink-0">
+              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
             </div>
             <span className="text-xl font-black bg-gradient-to-r from-indigo-700 to-violet-700 bg-clip-text text-transparent">
               MedhaShiree
@@ -1209,6 +1399,57 @@ function EnrollContent() {
           
           {/* Program Selection Card */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            {/* Branch Selection for Batches */}
+            {!isCourse && branches.length > 0 && (
+              <div className="pb-4 mb-4 border-b border-gray-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5">
+                  <label className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Landmark className="w-4 h-4 text-indigo-600" />
+                    Select Branch (শাখা নির্বাচন করুন) *
+                  </label>
+                  <span className="text-[11px] text-gray-500 font-medium">নির্দিষ্ট শাখার ব্যাচ ও ক্লাসরুম দেখতে সিলেক্ট করুন</span>
+                </div>
+
+                {/* Dropdown Selector for Branch */}
+                <div className="mb-2.5">
+                  <select
+                    value={selectedBranchId}
+                    onChange={e => handleBranchChange(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-gray-50 hover:bg-white border border-indigo-200 focus:border-indigo-500 rounded-xl text-sm font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition-all cursor-pointer"
+                  >
+                    <option value="" disabled>-- Select Campus / Branch (শাখা বেছে নিন) --</option>
+                    {branches.map(br => (
+                      <option key={br.id} value={br.id}>
+                        🏛️ {br.name} {br.address ? `(${br.address})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Quick Clickable Buttons */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {branches.map(br => {
+                    const isSel = selectedBranchId === br.id
+                    return (
+                      <button
+                        key={br.id}
+                        type="button"
+                        onClick={() => handleBranchChange(br.id)}
+                        className={`px-3 py-2.5 rounded-xl text-xs font-bold border transition-all text-left truncate flex items-center justify-between cursor-pointer ${
+                          isSel
+                            ? "bg-indigo-600 text-white border-indigo-700 shadow-xs ring-2 ring-indigo-300"
+                            : "bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <span className="truncate">{br.name}</span>
+                        {isSel && <Check className="w-3.5 h-3.5 text-white shrink-0 ml-1" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isCourse ? "bg-purple-50 text-purple-600" : "bg-indigo-50 text-indigo-600"}`}>
@@ -1225,7 +1466,7 @@ function EnrollContent() {
               </div>
 
               {/* Selector Dropdown */}
-              <div className="sm:w-72">
+              <div className="sm:w-80">
                 {isCourse ? (
                   <select
                     value={selectedCourseId}
@@ -1241,16 +1482,47 @@ function EnrollContent() {
                 ) : (
                   <select
                     value={selectedBatchId}
-                    onChange={e => setSelectedBatchId(e.target.value)}
+                    onChange={e => {
+                      const nextId = e.target.value
+                      setSelectedBatchId(nextId)
+                      const batchObj = batches.find(b => b.id === nextId)
+                      if (batchObj?.branch_id && batchObj.branch_id !== selectedBranchId) {
+                        setSelectedBranchId(batchObj.branch_id)
+                        updateForm("branch_id", batchObj.branch_id)
+                      }
+                    }}
                     className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
                   >
-                    {batches.map(b => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.class_level || "All"})
-                      </option>
-                    ))}
+                    {branchFilteredBatches.length === 0 ? (
+                      <option value="" disabled>No batches available</option>
+                    ) : (
+                      branchFilteredBatches.map(b => {
+                        const isClosed = b.status === "admission_closed" || b.status === "finished"
+                        const branchName = branches.find(br => br.id === b.branch_id)?.name || 
+                          ((b as any).origin_branch_id ? branches.find(br => br.id === (b as any).origin_branch_id)?.name : null)
+                        const seatInfo = b.max_seats ? ` (${b.current_seats || 0}/${b.max_seats} seats)` : ""
+                        return (
+                          <option key={b.id} value={b.id}>
+                            {b.name} ({b.class_level || "All"}){branchName ? ` [${branchName}]` : ""}{seatInfo}{isClosed ? " — [Admission Closed]" : ""}
+                          </option>
+                        )
+                      })
+                    )}
                   </select>
                 )}
+                {!isCourse && (() => {
+                  const sel = batches.find(b => b.id === selectedBatchId)
+                  const isClosed = sel && (sel.status === "admission_closed" || sel.status === "finished")
+                  if (isClosed) {
+                    return (
+                      <div className="mt-2.5 p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2 text-xs font-bold text-amber-800">
+                        <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                        Admission for this batch is currently closed. New admissions cannot be submitted for this batch.
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
               </div>
             </div>
 
@@ -1275,7 +1547,28 @@ function EnrollContent() {
                   <p className="text-xs text-gray-500 mt-0.5">
                     {selectedBatch.class_level || "All Levels"} • {selectedBatch.subject || "General"}
                     {selectedBatch.schedule_days ? ` • ${selectedBatch.schedule_days}` : ""}
+                    {selectedBatch.schedule_time ? ` (${selectedBatch.schedule_time})` : ""}
                   </p>
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    {selectedBatch.branch_id && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-white text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-200">
+                        <Landmark className="w-3 h-3" />
+                        {branches.find(b => b.id === selectedBatch.branch_id)?.name || "Branch"}
+                      </span>
+                    )}
+                    {selectedBatch.classroom && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-white text-slate-700 px-2 py-0.5 rounded-md border border-slate-200">
+                        <DoorOpen className="w-3 h-3 text-slate-500" />
+                        Classroom: {selectedBatch.classroom}
+                      </span>
+                    )}
+                    {typeof selectedBatch.current_seats === "number" && typeof selectedBatch.max_seats === "number" && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 bg-white px-2 py-0.5 rounded-md border border-slate-200">
+                        <Users className="w-3 h-3 text-slate-500" />
+                        {selectedBatch.current_seats} / {selectedBatch.max_seats} Seats filled
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="text-right">
                   <p className="text-xs text-gray-500 uppercase font-bold tracking-wider">Total Payable</p>
@@ -1284,6 +1577,63 @@ function EnrollContent() {
                     <p className="text-[11px] text-gray-400">Monthly ৳{batchMonthlyFee} + Admission ৳{batchAdmissionFee}</p>
                   )}
                 </div>
+              </div>
+            ) : null}
+
+            {/* Prominent Enrollment / Pending Status Banner */}
+            {isTargetEnrolled ? (
+              <div className="mt-4 p-4 sm:p-5 bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-emerald-600/20">
+                    <CheckCircle className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-emerald-900 flex items-center gap-1.5">
+                      Already Enrolled! (ভর্তি সম্পন্ন)
+                    </h4>
+                    <p className="text-xs text-emerald-700 mt-0.5">
+                      You are already enrolled in this {isCourse ? "course" : "batch"}. Duplicate enrollment is not permitted.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <Link
+                    href={isCourse ? `/student/course/${selectedCourseId}` : `/student/batch/${selectedBatchId}`}
+                    className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-200 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <GraduationCap className="w-4 h-4" />
+                    <span>Go to Classroom</span>
+                  </Link>
+                  <Link
+                    href="/student/profile"
+                    className="px-3.5 py-2.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-semibold transition-colors"
+                  >
+                    My Profile
+                  </Link>
+                </div>
+              </div>
+            ) : isTargetPending ? (
+              <div className="mt-4 p-4 sm:p-5 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-300 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm animate-in fade-in">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0 shadow-md shadow-amber-500/20">
+                    <Clock className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-bold text-amber-900 flex items-center gap-1.5">
+                      Payment Pending Approval! (অপেক্ষমাণ)
+                    </h4>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      Your payment submission for this {isCourse ? "course" : "batch"} is currently being reviewed by administration.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/student/profile"
+                  className="w-full sm:w-auto px-4 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-amber-200 flex items-center justify-center gap-1.5"
+                >
+                  <User className="w-4 h-4" />
+                  <span>Check Status in Profile</span>
+                </Link>
               </div>
             ) : null}
           </div>
@@ -1566,6 +1916,27 @@ function EnrollContent() {
                     />
                   </div>
                 </div>
+
+                {branches.length > 0 && (
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>Campus / Branch (শাখা)</label>
+                    <div className="relative">
+                      <Landmark className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <select
+                        value={selectedBranchId || form.branch_id || ""}
+                        onChange={e => handleBranchChange(e.target.value)}
+                        className={`${inputClass} pl-10 cursor-pointer font-medium`}
+                      >
+                        <option value="">Online / Main Campus (All Branches)</option>
+                        {branches.map(br => (
+                          <option key={br.id} value={br.id}>
+                            {br.name} {br.address ? `— ${br.address}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               /* If BATCH: Full student information */
@@ -1583,6 +1954,28 @@ function EnrollContent() {
                     />
                   </div>
                 </div>
+
+                {branches.length > 0 && (
+                  <div>
+                    <label className={labelClass}>Campus / Branch (শাখা) <span className="text-red-500">*</span></label>
+                    <div className="relative">
+                      <Landmark className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <select
+                        required
+                        value={selectedBranchId || form.branch_id || ""}
+                        onChange={e => handleBranchChange(e.target.value)}
+                        className={`${inputClass} pl-10 cursor-pointer font-medium`}
+                      >
+                        <option value="" disabled>Select Campus / Branch</option>
+                        {branches.map(br => (
+                          <option key={br.id} value={br.id}>
+                            {br.name} {br.address ? `— ${br.address}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className={labelClass}>Phone Number <span className="text-red-500">*</span></label>
@@ -1747,18 +2140,50 @@ function EnrollContent() {
             </div>
           )}
 
-          {/* Action Button: Proceed to Payment */}
+          {/* Action Button: Proceed to Payment or Enter Classroom */}
           <div className="pt-2">
-            <button
-              type="submit"
-              className="w-full py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-lg rounded-2xl shadow-xl shadow-indigo-300/40 hover:shadow-indigo-400/50 transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99]"
-            >
-              <span>Proceed to Payment</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
-            <p className="text-center text-xs text-gray-400 mt-3">
-              You will be redirected to the payment screen to send fee via bKash, Nagad, Rocket, or Upay.
-            </p>
+            {isTargetEnrolled ? (
+              <div className="space-y-3">
+                <Link
+                  href={isCourse ? `/student/course/${selectedCourseId}` : `/student/batch/${selectedBatchId}`}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-lg rounded-2xl shadow-xl shadow-emerald-200 hover:shadow-emerald-300 transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99]"
+                >
+                  <CheckCircle className="w-5 h-5" />
+                  <span>Already Enrolled — Go to Classroom (ভর্তি সম্পন্ন)</span>
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+                <p className="text-center text-xs text-emerald-700 font-medium">
+                  You are already enrolled in this {isCourse ? "course" : "batch"}. Click above to enter your classroom directly.
+                </p>
+              </div>
+            ) : isTargetPending ? (
+              <div className="space-y-3">
+                <Link
+                  href="/student/profile"
+                  className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-lg rounded-2xl shadow-xl shadow-amber-200 hover:shadow-amber-300 transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99]"
+                >
+                  <Clock className="w-5 h-5" />
+                  <span>Payment Pending Approval — View in Profile</span>
+                  <ArrowRight className="w-5 h-5" />
+                </Link>
+                <p className="text-center text-xs text-amber-700 font-medium">
+                  Your payment submission is pending verification. Please wait for admin approval.
+                </p>
+              </div>
+            ) : (
+              <>
+                <button
+                  type="submit"
+                  className="w-full py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-700 hover:to-purple-700 text-white font-extrabold text-lg rounded-2xl shadow-xl shadow-indigo-300/40 hover:shadow-indigo-400/50 transition-all flex items-center justify-center gap-3 cursor-pointer active:scale-[0.99]"
+                >
+                  <span>Proceed to Payment</span>
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+                <p className="text-center text-xs text-gray-400 mt-3">
+                  You will be redirected to the payment screen to send fee via bKash, Nagad, Rocket, or Upay.
+                </p>
+              </>
+            )}
           </div>
 
         </form>
