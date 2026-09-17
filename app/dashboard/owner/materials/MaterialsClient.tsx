@@ -147,26 +147,38 @@ export default function MaterialsClient({
 
   useEffect(() => {
     try {
-      const localStr = localStorage.getItem("medhashiree_material_issues")
-      if (localStr) {
-        const localIssues = JSON.parse(localStr)
-        if (Array.isArray(localIssues) && localIssues.length > 0) {
-          const map = new Map<string, MaterialIssue>()
-          // 1. Add local stored items first
-          localIssues.forEach((li: any) => {
-            if (li.material_id && li.student_id) {
-              map.set(`${li.material_id}::${li.student_id}`, li)
-            }
-          })
-          // 2. Authoritative server issues take precedence / update IDs
-          initialIssues.forEach((si: any) => {
-            if (si.material_id && si.student_id) {
-              map.set(`${si.material_id}::${si.student_id}`, si)
-            }
-          })
-          setIssues(Array.from(map.values()))
-          return
+      const localStr = typeof window !== "undefined" ? localStorage.getItem("medhashiree_material_issues") : null
+      const localIssues = localStr ? JSON.parse(localStr) : []
+      const map = new Map<string, MaterialIssue>()
+
+      // 1. Current in-memory issues (includes just-distributed items)
+      issues.forEach((cur: any) => {
+        if (cur.material_id && cur.student_id) {
+          map.set(`${cur.material_id}::${cur.student_id}`, cur)
         }
+      })
+
+      // 2. Add localStorage items
+      if (Array.isArray(localIssues)) {
+        localIssues.forEach((li: any) => {
+          if (li.material_id && li.student_id) {
+            map.set(`${li.material_id}::${li.student_id}`, li)
+          }
+        })
+      }
+
+      // 3. Authoritative server issues take precedence / update IDs
+      if (Array.isArray(initialIssues)) {
+        initialIssues.forEach((si: any) => {
+          if (si.material_id && si.student_id) {
+            map.set(`${si.material_id}::${si.student_id}`, si)
+          }
+        })
+      }
+
+      if (map.size > 0) {
+        setIssues(Array.from(map.values()))
+        return
       }
     } catch {}
     setIssues(initialIssues)
@@ -486,6 +498,7 @@ export default function MaterialsClient({
   // ==========================================
   const [distributeMode, setDistributeMode] = useState<"batch" | "search">("batch")
   const [distributeSelectedBatchIds, setDistributeSelectedBatchIds] = useState<string[]>([])
+  const [distributeBatchSearchQuery, setDistributeBatchSearchQuery] = useState("")
   const [distributeSearchStudentQuery, setDistributeSearchStudentQuery] = useState("")
   const [distributeSelectedStudentIds, setDistributeSelectedStudentIds] = useState<Set<string>>(new Set())
   const [distributeNotes, setDistributeNotes] = useState("")
@@ -501,6 +514,7 @@ export default function MaterialsClient({
       : (target?.batch_id ? [target.batch_id] : (batches[0] ? [batches[0].id] : []))
 
     setDistributeSelectedBatchIds(initialBatches)
+    setDistributeBatchSearchQuery("")
     setDistributeSearchStudentQuery("")
     setDistributeSelectedStudentIds(new Set())
     setDistributeNotes("")
@@ -548,6 +562,30 @@ export default function MaterialsClient({
     return list
   }, [students, distributeSelectedBatchIds])
 
+  // Search filtered students for batch mode (by name, roll, student ID, phone)
+  const filteredBatchStudents = useMemo(() => {
+    const q = distributeBatchSearchQuery.trim().toLowerCase()
+    if (!q) return batchStudents
+
+    return batchStudents.filter(s => {
+      const nameMatch = (s.name || "").toLowerCase().includes(q)
+      const idMatch = (s.student_id || "").toLowerCase().includes(q)
+      const phoneMatch = (s.phone && s.phone.includes(q)) || (s.guardian_phone && s.guardian_phone.includes(q))
+      
+      const enr = s.enrollments?.find(e => distributeSelectedBatchIds.includes(e.batch_id))
+      const rollVal = enr?.roll_no != null && String(enr.roll_no).trim() !== "" 
+        ? String(enr.roll_no).trim() 
+        : String(s.roll_no || s.batch_roll || "").trim()
+      
+      const rollMatch = rollVal === q ||
+        `roll ${rollVal}`.toLowerCase().includes(q) ||
+        `roll #${rollVal}`.toLowerCase().includes(q) ||
+        rollVal.includes(q)
+
+      return nameMatch || idMatch || phoneMatch || rollMatch
+    })
+  }, [batchStudents, distributeBatchSearchQuery, distributeSelectedBatchIds])
+
   // Search filtered students for search mode
   const searchStudents = useMemo(() => {
     const q = distributeSearchStudentQuery.trim().toLowerCase()
@@ -555,9 +593,9 @@ export default function MaterialsClient({
     return students.filter(s => {
       const nameMatch = s.name.toLowerCase().includes(q)
       const idMatch = s.student_id.toLowerCase().includes(q)
-      const phoneMatch = s.phone && s.phone.includes(q)
+      const phoneMatch = (s.phone && s.phone.includes(q)) || (s.guardian_phone && s.guardian_phone.includes(q))
       const rollStr = String(s.roll_no || s.batch_roll || "")
-      const rollMatch = rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q)
+      const rollMatch = rollStr === q || `roll ${rollStr}`.toLowerCase().includes(q) || `roll #${rollStr}`.toLowerCase().includes(q) || rollStr.includes(q)
       return nameMatch || idMatch || phoneMatch || rollMatch
     }).slice(0, 40)
   }, [students, distributeSearchStudentQuery])
@@ -582,7 +620,7 @@ export default function MaterialsClient({
 
   // Select all eligible in current view
   const handleSelectAllEligible = () => {
-    const currentList = distributeMode === "batch" ? batchStudents : searchStudents
+    const currentList = distributeMode === "batch" ? filteredBatchStudents : searchStudents
     const eligible = currentList.filter(s => !alreadyIssuedStudentIds.has(s.id))
     
     if (distributeSelectedStudentIds.size === eligible.length && eligible.length > 0) {
@@ -620,12 +658,17 @@ export default function MaterialsClient({
     const newIssues: MaterialIssue[] = []
     const nowIso = new Date().toISOString()
 
+    const studentBatchMap: Record<string, string> = {}
     distributeSelectedStudentIds.forEach(stId => {
       const studentObj = students.find(s => s.id === stId)
       // Find matching batch among selected batches
       const enrolledBatchId = studentObj?.enrollments?.find(
         e => distributeSelectedBatchIds.includes(e.batch_id)
       )?.batch_id || distributeSelectedBatchIds[0] || distributeMaterial.batch_id
+
+      if (enrolledBatchId) {
+        studentBatchMap[stId] = enrolledBatchId
+      }
 
       const batchObj = batches.find(b => b.id === enrolledBatchId)
 
@@ -669,6 +712,7 @@ export default function MaterialsClient({
           material_name: distributeMaterial.name,
           student_ids: Array.from(distributeSelectedStudentIds),
           batch_id: distributeSelectedBatchIds[0] || distributeMaterial.batch_id,
+          student_batch_map: studentBatchMap,
           issued_by: currentStaff.id,
           notes: distributeNotes.trim() || undefined
         })
@@ -1629,8 +1673,12 @@ export default function MaterialsClient({
                     const found = materials.find(m => m.id === e.target.value)
                     setDistributeMaterial(found || null)
                     setDistributeSelectedStudentIds(new Set())
-                    if (found?.batch_ids && found.batch_ids.length > 0) {
-                      setDistributeSelectedBatchIds(found.batch_ids)
+                    if (distributeSelectedBatchIds.length === 0) {
+                      if (found?.batch_ids && found.batch_ids.length > 0) {
+                        setDistributeSelectedBatchIds(found.batch_ids)
+                      } else if (found?.batch_id) {
+                        setDistributeSelectedBatchIds([found.batch_id])
+                      }
                     }
                   }}
                   className="w-full px-3 py-2 text-sm bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100"
@@ -1726,9 +1774,30 @@ export default function MaterialsClient({
                     </div>
                   </div>
 
+                  {/* Search within batch students */}
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      value={distributeBatchSearchQuery}
+                      onChange={e => setDistributeBatchSearchQuery(e.target.value)}
+                      placeholder="Search batch students by roll (e.g. 2 or Roll #2), name, ID, or phone..."
+                      className="w-full pl-9 pr-8 py-2 text-xs bg-slate-950 border border-slate-700 rounded-xl focus:outline-none focus:border-amber-400 text-slate-100 placeholder:text-slate-500"
+                    />
+                    {distributeBatchSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setDistributeBatchSearchQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-white"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
                   <div className="flex items-center justify-between pt-1">
                     <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Students in Selected Batches ({batchStudents.length})
+                      Students in Selected Batches ({filteredBatchStudents.length}
+                      {distributeBatchSearchQuery ? ` matching / ${batchStudents.length} total` : ""})
                     </span>
                     <button
                       type="button"
@@ -1740,14 +1809,16 @@ export default function MaterialsClient({
                   </div>
 
                   <div className="max-h-56 overflow-y-auto border border-slate-800 rounded-xl divide-y divide-slate-800/80 bg-slate-950">
-                    {batchStudents.length === 0 ? (
+                    {filteredBatchStudents.length === 0 ? (
                       <p className="p-6 text-center text-xs text-slate-500">
                         {distributeSelectedBatchIds.length === 0 
                           ? "Please select at least one batch above." 
+                          : distributeBatchSearchQuery
+                          ? `No student matching "${distributeBatchSearchQuery}" found in selected batches.`
                           : "No active students enrolled in the selected batches."}
                       </p>
                     ) : (
-                      batchStudents.map(student => {
+                      filteredBatchStudents.map(student => {
                         const alreadyIssued = alreadyIssuedStudentIds.has(student.id)
                         const isSelected = distributeSelectedStudentIds.has(student.id)
                         const studentBatchNames = student.enrollments?.map(e => e.batch?.name).filter(Boolean).join(", ")

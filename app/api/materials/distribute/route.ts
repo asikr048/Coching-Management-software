@@ -9,6 +9,7 @@ export async function POST(req: NextRequest) {
       student_ids = [],
       student_id,
       batch_id,
+      student_batch_map = {},
       issued_by,
       notes = "Distributed via Admin Panel",
       return_due_date,
@@ -121,6 +122,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Also verify any student-specific batch IDs provided in student_batch_map
+    const verifiedStudentBatchMap: Record<string, string> = {}
+    if (student_batch_map && typeof student_batch_map === "object") {
+      const distinctMapBatchIds = Array.from(new Set(Object.values(student_batch_map)))
+        .map(v => String(v).trim())
+        .filter(v => uuidRegex.test(v))
+
+      if (distinctMapBatchIds.length > 0) {
+        const { data: mapBatchRows } = await admin
+          .from("batches")
+          .select("id")
+          .in("id", distinctMapBatchIds)
+        const validBatchIdSet = new Set((mapBatchRows || []).map(b => b.id))
+
+        Object.entries(student_batch_map).forEach(([sId, bId]) => {
+          const strBId = String(bId).trim()
+          if (validBatchIdSet.has(strBId)) {
+            verifiedStudentBatchMap[sId] = strBId
+          }
+        })
+      }
+    }
+
     // 5. Sanitize return_due_date
     let validDueDate: string | null = null
     if (return_due_date && typeof return_due_date === "string" && return_due_date.trim() !== "") {
@@ -193,7 +217,7 @@ export async function POST(req: NextRequest) {
     const rowsToInsert = studentsToIssue.map(stId => ({
       material_id: targetMaterial.id,
       student_id: stId,
-      batch_id: verifiedBatchId,
+      batch_id: verifiedStudentBatchMap[stId] || verifiedBatchId,
       issued_by: verifiedIssuedBy,
       issued_at: nowIso,
       status: "issued",
@@ -216,7 +240,7 @@ export async function POST(req: NextRequest) {
       const rowsWithoutStatus = studentsToIssue.map(stId => ({
         material_id: targetMaterial.id,
         student_id: stId,
-        batch_id: verifiedBatchId,
+        batch_id: verifiedStudentBatchMap[stId] || verifiedBatchId,
         issued_by: verifiedIssuedBy,
         issued_at: nowIso,
         notes: notes || "Distributed via Admin Panel",
