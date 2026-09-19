@@ -1223,12 +1223,30 @@ export default function StudentProfilePage() {
                           )}
                         </p>
                       </div>
-                      <button
-                        onClick={() => { setPayingDue(due); setActiveModal(null); setPayMethod('bkash'); setSenderNumber(''); setTransactionId(''); setReferralName(''); setReferralReason('') }}
-                        className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors cursor-pointer"
-                      >
-                        Pay Now
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <AdmissionSlipTrigger
+                          student={{
+                            ...studentData,
+                            id: studentData?.id || profile?.id,
+                            student_id: profile?.user_id || studentData?.student_id,
+                            name: profile?.name || studentData?.name,
+                            phone: profile?.phone || studentData?.phone,
+                            guardian_name: studentData?.guardian_name,
+                            guardian_phone: studentData?.guardian_phone,
+                          }}
+                          batch={due.batch || enrollments.find(e => e.batch_id === due.batch_id)?.batch}
+                          enrollment={enrollments.find(e => e.batch_id === due.batch_id)}
+                          due={due}
+                          buttonVariant="badge"
+                          buttonText="🧾 Slip"
+                        />
+                        <button
+                          onClick={() => { setPayingDue(due); setActiveModal(null); setPayMethod('bkash'); setSenderNumber(''); setTransactionId(''); setReferralName(''); setReferralReason('') }}
+                          className="flex-shrink-0 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors cursor-pointer"
+                        >
+                          Pay Now
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
@@ -1250,9 +1268,27 @@ export default function StudentProfilePage() {
                         Total Fee: <span className="font-semibold text-gray-700">{formatCurrency(due.due_amount)}</span> • Paid: <span className="font-semibold text-emerald-700">{formatCurrency(due.paid_amount || due.due_amount)}</span>
                       </p>
                     </div>
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
-                      {due.status === "waived" ? "Waived" : "✓ Settled"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <AdmissionSlipTrigger
+                        student={{
+                          ...studentData,
+                          id: studentData?.id || profile?.id,
+                          student_id: profile?.user_id || studentData?.student_id,
+                          name: profile?.name || studentData?.name,
+                          phone: profile?.phone || studentData?.phone,
+                          guardian_name: studentData?.guardian_name,
+                          guardian_phone: studentData?.guardian_phone,
+                        }}
+                        batch={due.batch || enrollments.find(e => e.batch_id === due.batch_id)?.batch}
+                        enrollment={enrollments.find(e => e.batch_id === due.batch_id)}
+                        due={due}
+                        buttonVariant="badge"
+                        buttonText="🧾 Slip"
+                      />
+                      <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        {due.status === "waived" ? "Waived" : "✓ Settled"}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>

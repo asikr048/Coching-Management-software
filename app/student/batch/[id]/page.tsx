@@ -1497,6 +1497,14 @@ export default function StudentBatchDetailPage() {
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700 capitalize border border-rose-200">
                         {due.status}
                       </span>
+                      <AdmissionSlipTrigger
+                        student={student}
+                        batch={batch}
+                        enrollment={enrollment}
+                        due={due}
+                        buttonVariant="badge"
+                        buttonText="🧾 Slip"
+                      />
                       <button
                         onClick={() => { setPayingDue(due); setPayMethod('bkash'); setSenderNumber(''); setTransactionId('') }}
                         className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors shadow-sm"
@@ -1531,6 +1539,7 @@ export default function StudentBatchDetailPage() {
                       <th className="px-6 py-4 font-medium">Method</th>
                       <th className="px-6 py-4 font-medium">Receipt No</th>
                       <th className="px-6 py-4 font-medium">Status</th>
+                      <th className="px-6 py-4 font-medium text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -1577,6 +1586,16 @@ export default function StudentBatchDetailPage() {
                           }`}>
                             {payment.status || 'completed'}
                           </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <AdmissionSlipTrigger
+                            student={student}
+                            batch={batch}
+                            enrollment={enrollment}
+                            payment={payment}
+                            buttonVariant="badge"
+                            buttonText="🧾 Slip"
+                          />
                         </td>
                       </tr>
                     ))}

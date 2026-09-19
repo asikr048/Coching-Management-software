@@ -210,7 +210,8 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                 <th className="px-3 py-2.5">Paid Amount</th>
                 <th className="px-3 py-2.5">Remaining Due</th>
                 <th className="px-3 py-2.5">Due Date</th>
-                <th className="px-3 py-2.5 text-right">Status</th>
+                <th className="px-3 py-2.5">Status</th>
+                <th className="px-3 py-2.5 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -225,7 +226,7 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                     <td className="px-3 py-2.5 text-sm font-bold text-emerald-600">{formatCurrency(d.paid_amount || 0)}</td>
                     <td className="px-3 py-2.5 text-sm font-black text-rose-600">{formatCurrency(remaining)}</td>
                     <td className="px-3 py-2.5 text-xs text-slate-600">{formatDate(d.due_date)}</td>
-                    <td className="px-3 py-2.5 text-right">
+                    <td className="px-3 py-2.5">
                       <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
                         isSettled
                           ? "bg-emerald-100 text-emerald-800 border-emerald-300"
@@ -238,12 +239,22 @@ export default async function StudentDetailPage({ params }: { params: Promise<{ 
                         {isSettled ? "Settled / Paid" : d.status === "partial" ? "Partial Due" : d.status}
                       </span>
                     </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <AdmissionSlipTrigger
+                        student={student}
+                        batch={d.batch}
+                        enrollment={enrollments.data?.find((e: any) => e.batch_id === d.batch_id)}
+                        due={d}
+                        buttonVariant="badge"
+                        buttonText="🧾 Slip"
+                      />
+                    </td>
                   </tr>
                 )
               })}
               {duesList.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-slate-500 text-sm">No fee dues on record</td>
+                  <td colSpan={8} className="text-center py-8 text-slate-500 text-sm">No fee dues on record</td>
                 </tr>
               )}
             </tbody>

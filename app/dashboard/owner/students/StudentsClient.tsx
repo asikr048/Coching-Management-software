@@ -16,6 +16,8 @@ import { checkFinancialAccess } from "@/lib/financial-access"
 import { toast } from "sonner"
 import type { Student } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
+import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
+import AdmissionSlipTrigger from "@/components/id-card/AdmissionSlipTrigger"
 
 interface Batch { id: string; name: string }
 interface DueData { 
@@ -1350,6 +1352,32 @@ export default function StudentsClient({
                               <Link href={`/dashboard/owner/students/${student.id}/edit`} className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-800 hover:text-amber-400 transition-colors">
                                 <Edit className="w-4 h-4" /> Edit Details
                               </Link>
+
+                              {/* Student ID Card & Admission Slip */}
+                              <div className="h-px bg-slate-800 my-1"></div>
+                              <div className="px-4 py-1.5 flex flex-col gap-1.5">
+                                <StudentIdCardTrigger
+                                  student={{
+                                    ...student,
+                                    roll_no: student.roll_no || student.batch_roll || student.enrollments?.[0]?.roll_no,
+                                    batch_roll: student.roll_no || student.batch_roll || student.enrollments?.[0]?.roll_no,
+                                  }}
+                                  batchName={student.enrollments?.[0]?.batch?.name}
+                                  rollNo={student.roll_no || student.batch_roll || student.enrollments?.[0]?.roll_no}
+                                  buttonVariant="outline"
+                                  buttonText="🪪 ID Card"
+                                  className="w-full justify-start text-xs font-semibold !py-1.5 !px-2.5"
+                                />
+                                <AdmissionSlipTrigger
+                                  student={student}
+                                  batch={student.enrollments?.[0]?.batch}
+                                  enrollment={student.enrollments?.[0]}
+                                  due={localDueData?.find((d: any) => d.student_id === student.id || d.student_id === student.student_id)}
+                                  buttonVariant="outline"
+                                  buttonText="🧾 Admission Slip"
+                                  className="w-full justify-start text-xs font-semibold !py-1.5 !px-2.5"
+                                />
+                              </div>
 
                               {/* Send SMS for single student via SMS gateway */}
                               <button 
