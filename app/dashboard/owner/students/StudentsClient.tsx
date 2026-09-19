@@ -18,6 +18,7 @@ import type { Student } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
 import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
 import AdmissionSlipTrigger from "@/components/id-card/AdmissionSlipTrigger"
+import BulkDataExportModal from "@/components/export/BulkDataExportModal"
 
 interface Batch { id: string; name: string }
 interface DueData { 
@@ -87,6 +88,7 @@ export default function StudentsClient({
   const [localStudents, setLocalStudents] = useState(students)
   const [localBatches, setLocalBatches] = useState(batches)
   const [loadingFresh, setLoadingFresh] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
 
   const fetchStudentsClient = async () => {
     setLoadingFresh(true)
@@ -359,7 +361,7 @@ export default function StudentsClient({
     })
   }, [localStudents, localDueData, examData])
 
-  const { selectedBranchId } = useBranch()
+  const { selectedBranchId, branches: contextBranches = [] } = useBranch()
 
   const filteredAndSorted = useMemo(() => {
     const pq = parseRollQuery(query)
@@ -1091,6 +1093,16 @@ export default function StudentsClient({
               <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
               <span className="hidden sm:inline">Bulk CSV</span>
             </Link>
+
+            <button
+              type="button"
+              onClick={() => setShowExportModal(true)}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border text-sm font-semibold transition-all bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-800 shadow-2xs cursor-pointer"
+              title="Export students, enrollments, staff, batches and branches data securely as CSV"
+            >
+              <Download className="w-4 h-4 text-indigo-600" />
+              <span className="hidden sm:inline">Export CSV</span>
+            </button>
 
             <button 
               type="button"
@@ -2499,6 +2511,13 @@ export default function StudentsClient({
           </div>
         </div>
       )}
+
+      <BulkDataExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        branches={contextBranches}
+        initialBranchId={selectedBranchId}
+      />
     </div>
   )
 }

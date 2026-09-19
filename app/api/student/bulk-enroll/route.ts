@@ -18,6 +18,11 @@ interface StudentImportPayload {
   gender?: "male" | "female" | "other"
   class_level?: string
   email?: string
+  student_id?: string
+  roll_no?: number | string
+  qr_code?: string
+  date_of_birth?: string
+  guardian_relation?: string
 }
 
 function normalizeBDPhone(raw: string): string {
@@ -267,9 +272,10 @@ export async function POST(req: NextRequest) {
       nextStudentSeq++
       nextRollSeq++
 
-      const studentIdStr = `MS-${String(nextStudentSeq).padStart(5, "0")}`
+      // Support re-import of exported CSV or auto-generate
+      const studentIdStr = (row.student_id && String(row.student_id).trim()) || `MS-${String(nextStudentSeq).padStart(5, "0")}`
       const studentEmail = (row.email || "").trim() || `${studentIdStr.toLowerCase()}@medhashiree.local`
-      const assignedRoll = nextRollSeq
+      const assignedRoll = (row.roll_no && Number(row.roll_no) > 0) ? Number(row.roll_no) : nextRollSeq
 
       // A. Create or update auth user via Supabase Admin Auth
       let authUserId: string | null = null
@@ -321,7 +327,7 @@ export async function POST(req: NextRequest) {
 
       // C. Insert student record into students table
       const admissionDateStr = today.toISOString().split("T")[0]
-      const studentQr = generateStudentQrCode({
+      const studentQr = (row.qr_code && String(row.qr_code).trim()) || generateStudentQrCode({
         studentId: studentIdStr,
         admissionDate: admissionDateStr,
         rollNo: assignedRoll,
@@ -335,9 +341,10 @@ export async function POST(req: NextRequest) {
         phone: effectiveStudentPhone || null,
         email: studentEmail,
         gender: gender,
+        date_of_birth: row.date_of_birth || null,
         guardian_name: guardianName || null,
         guardian_phone: effectiveGuardianPhone,
-        guardian_relation: "Parent",
+        guardian_relation: row.guardian_relation || "Parent",
         address: address || null,
         school_college: school || null,
         class_level: classLevel || null,

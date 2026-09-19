@@ -24,6 +24,7 @@ import {
   printAdmissionSlip,
   printStudentIdCard
 } from "@/lib/id-card-generator"
+import BulkDataExportModal from "@/components/export/BulkDataExportModal"
 
 interface Batch {
   id: string
@@ -58,6 +59,13 @@ interface ParsedStudent {
   gender?: "male" | "female" | "other"
   class_level?: string
   email?: string
+  student_id?: string
+  roll_no?: number | string
+  batch_name?: string
+  branch_name?: string
+  qr_code?: string
+  date_of_birth?: string
+  guardian_relation?: string
   isValid: boolean
   errors: string[]
 }
@@ -233,6 +241,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
   const [fileName, setFileName] = useState<string>("")
   const [parsedStudents, setParsedStudents] = useState<ParsedStudent[]>([])
   const [isDragging, setIsDragging] = useState<boolean>(false)
+  const [showExportModal, setShowExportModal] = useState<boolean>(false)
 
   // Submission & Results state
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
@@ -359,12 +368,19 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       school_college: -1,
       gender: -1,
       class_level: -1,
-      email: -1
+      email: -1,
+      student_id: -1,
+      roll_no: -1,
+      batch_name: -1,
+      branch_name: -1,
+      qr_code: -1,
+      date_of_birth: -1,
+      guardian_relation: -1,
     }
 
     rawHeaders.forEach((h, idx) => {
       const ch = cleanHeader(h)
-      if (/^(name|studentname|নাম|শিক্ষার্থীরনাম)$/.test(ch)) {
+      if (/^(name|studentname|fullname|নাম|শিক্ষার্থীরনাম)$/.test(ch)) {
         if (colIndex.name === -1) colIndex.name = idx
       }
       else if (/^(due|dueamount|monthlydue|fee|বকেয়া|বকেযাটাকা|ফি|মাসিকবকেয়া)$/.test(ch)) {
@@ -393,6 +409,27 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       }
       else if (/^(email|studentemail|ইমেইল)$/.test(ch)) {
         if (colIndex.email === -1) colIndex.email = idx
+      }
+      else if (/^(studentid|id|আইডি|স্টুডেন্টআইডি)$/.test(ch)) {
+        if (colIndex.student_id === -1) colIndex.student_id = idx
+      }
+      else if (/^(roll|rollno|batchroll|রোল|রোলনম্বর)$/.test(ch)) {
+        if (colIndex.roll_no === -1) colIndex.roll_no = idx
+      }
+      else if (/^(batch|batchname|ব্যাচ|ব্যাচেরনাম)$/.test(ch)) {
+        if (colIndex.batch_name === -1) colIndex.batch_name = idx
+      }
+      else if (/^(branch|branchname|শাখা|শাখারনাম)$/.test(ch)) {
+        if (colIndex.branch_name === -1) colIndex.branch_name = idx
+      }
+      else if (/^(qrcode|qr|কিউআর|কিউআরকোড)$/.test(ch)) {
+        if (colIndex.qr_code === -1) colIndex.qr_code = idx
+      }
+      else if (/^(dob|dateofbirth|birthdate|জন্মতারিখ)$/.test(ch)) {
+        if (colIndex.date_of_birth === -1) colIndex.date_of_birth = idx
+      }
+      else if (/^(guardianrelation|relation|সম্পর্ক)$/.test(ch)) {
+        if (colIndex.guardian_relation === -1) colIndex.guardian_relation = idx
       }
     })
 
@@ -530,6 +567,14 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       else if ((guardianPhone || studentPhone).replace(/[^0-9]/g, "").length < 10) errors.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
       else if (/00000$/.test((guardianPhone || studentPhone).replace(/[^0-9]/g, ""))) errors.push("এক্সেলে নম্বর বিকৃত হয়ে শূন্য হয়েছে (Excel rounded to zeros)")
 
+      const studentId = colIndex.student_id >= 0 && cells[colIndex.student_id] ? cells[colIndex.student_id].replace(/^["']|["']$/g, "").trim() : undefined
+      const rollNo = colIndex.roll_no >= 0 && cells[colIndex.roll_no] ? cells[colIndex.roll_no].replace(/^["'#]|["']$/g, "").trim() : undefined
+      const batchName = colIndex.batch_name >= 0 && cells[colIndex.batch_name] ? cells[colIndex.batch_name].replace(/^["']|["']$/g, "").trim() : undefined
+      const branchName = colIndex.branch_name >= 0 && cells[colIndex.branch_name] ? cells[colIndex.branch_name].replace(/^["']|["']$/g, "").trim() : undefined
+      const qrCode = colIndex.qr_code >= 0 && cells[colIndex.qr_code] ? cells[colIndex.qr_code].replace(/^["']|["']$/g, "").trim() : undefined
+      const dob = colIndex.date_of_birth >= 0 && cells[colIndex.date_of_birth] ? cells[colIndex.date_of_birth].replace(/^["']|["']$/g, "").trim() : undefined
+      const relation = colIndex.guardian_relation >= 0 && cells[colIndex.guardian_relation] ? cells[colIndex.guardian_relation].replace(/^["']|["']$/g, "").trim() : undefined
+
       students.push({
         id: `stu_${i}_${Date.now().toString(36)}`,
         name,
@@ -542,6 +587,13 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
         gender,
         class_level: classLevel,
         email,
+        student_id: studentId,
+        roll_no: rollNo,
+        batch_name: batchName,
+        branch_name: branchName,
+        qr_code: qrCode,
+        date_of_birth: dob,
+        guardian_relation: relation,
         isValid: errors.length === 0,
         errors
       })
@@ -676,7 +728,12 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
           school_college: s.school_college?.trim() || "",
           gender: s.gender || "male",
           class_level: s.class_level || selectedBatch?.class_level || "",
-          email: s.email?.trim() || ""
+          email: s.email?.trim() || "",
+          student_id: s.student_id?.trim() || undefined,
+          roll_no: s.roll_no ? Number(s.roll_no) : undefined,
+          qr_code: s.qr_code?.trim() || undefined,
+          date_of_birth: s.date_of_birth?.trim() || undefined,
+          guardian_relation: s.guardian_relation?.trim() || undefined,
         }))
       }
 
@@ -1019,14 +1076,24 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleDownloadSampleCSV}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
-          >
-            <Download className="w-4 h-4" />
-            <span>নমুনা CSV ডাউনলোড করুন (Download Sample with Due)</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDownloadSampleCSV}
+              className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>নমুনা CSV ফরম্যাট</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowExportModal(true)}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-indigo-600 via-indigo-700 to-purple-700 hover:from-indigo-700 hover:to-purple-800 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-indigo-600/20 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-indigo-200" />
+              <span>📥 সম্পূর্ণ ডেটা এক্সপোর্ট (Export CSVs)</span>
+            </button>
+          </div>
         </div>
 
         {/* Format Explanation Table */}
@@ -1400,6 +1467,13 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
           )}
         </button>
       </div>
+
+      <BulkDataExportModal
+        isOpen={showExportModal}
+        onClose={() => setShowExportModal(false)}
+        branches={effectiveBranches}
+        initialBranchId={selectedBranchId}
+      />
     </div>
   )
 }
