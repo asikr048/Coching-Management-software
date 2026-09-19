@@ -33,6 +33,7 @@ export default async function NoticesPage() {
   let customRolesMap: Record<string, string> = {}
   let noticeBranchAssignments: Record<string, string[]> = {}
   let noticeDatesMap: Record<string, string> = {}
+  let noticeAudiencesMap: Record<string, string> = {}
   let noticesSeeded = false
 
   try {
@@ -44,6 +45,7 @@ export default async function NoticesPage() {
         "staff_custom_roles",
         "notice_branch_assignments",
         "notice_dates",
+        "notice_audiences",
         "notices_seeded",
       ])
 
@@ -60,6 +62,9 @@ export default async function NoticesPage() {
         }
         if (row.key === "notice_dates" && row.value) {
           try { noticeDatesMap = JSON.parse(row.value) } catch {}
+        }
+        if (row.key === "notice_audiences" && row.value) {
+          try { noticeAudiencesMap = JSON.parse(row.value) } catch {}
         }
         if (row.key === "notices_seeded" && row.value === "true") {
           noticesSeeded = true
@@ -178,6 +183,7 @@ export default async function NoticesPage() {
 
     return {
       ...notice,
+      target_audience: notice.target_audience || noticeAudiencesMap[notice.id] || "all",
       notice_date: effectiveNoticeDate,
       branch_id: notice.branch_id || (assignedBranchIds[0] || null),
       branch_ids: assignedBranchIds,

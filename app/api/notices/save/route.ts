@@ -46,6 +46,12 @@ async function saveNoticeAdaptive(
       continue
     }
 
+    // Strip target_audience if not supported
+    if (errMsg.includes("target_audience") && "target_audience" in currentPayload) {
+      delete currentPayload.target_audience
+      continue
+    }
+
     // If general schema error (e.g. PGRST204 or 42703), peel off non-core columns in order
     if ("branch_ids" in currentPayload) {
       delete currentPayload.branch_ids
@@ -57,6 +63,10 @@ async function saveNoticeAdaptive(
     }
     if ("notice_date" in currentPayload) {
       delete currentPayload.notice_date
+      continue
+    }
+    if ("target_audience" in currentPayload) {
+      delete currentPayload.target_audience
       continue
     }
 
@@ -79,6 +89,7 @@ export async function POST(req: NextRequest) {
       branch_ids = [],
       notice_date,
       is_active = true,
+      target_audience = "all",
     } = body
 
     if (!title || !title.trim()) {
@@ -118,6 +129,7 @@ export async function POST(req: NextRequest) {
     let branchAssignmentsMap: Record<string, string[]> = {}
     let noticeBranchAssignments: Record<string, string[]> = {}
     let noticeDatesMap: Record<string, string> = {}
+    let noticeAudiencesMap: Record<string, string> = {}
 
     try {
       const { data: settingRows } = await admin
@@ -128,6 +140,7 @@ export async function POST(req: NextRequest) {
           "staff_branch_assignments",
           "notice_branch_assignments",
           "notice_dates",
+          "notice_audiences",
         ])
 
       if (settingRows) {
@@ -143,6 +156,9 @@ export async function POST(req: NextRequest) {
           }
           if (row.key === "notice_dates" && row.value) {
             try { noticeDatesMap = JSON.parse(row.value) } catch {}
+          }
+          if (row.key === "notice_audiences" && row.value) {
+            try { noticeAudiencesMap = JSON.parse(row.value) } catch {}
           }
         })
       }
@@ -261,16 +277,18 @@ export async function POST(req: NextRequest) {
       branch_id: primaryBranchId,
       branch_ids: requestedIsGlobal ? [] : requestedBranchIds,
       notice_date: effectiveNoticeDate,
+      target_audience: target_audience || "all",
       is_active: !!is_active,
     }
 
     // Save with adaptive column pruning fallback
     const savedNotice = await saveNoticeAdaptive(admin, id, fullPayload)
 
-    // 6. Update notice_branch_assignments and notice_dates in site_settings for guaranteed persistence
+    // 6. Update notice_branch_assignments, notice_dates, and notice_audiences in site_settings for guaranteed persistence
     try {
       noticeBranchAssignments[savedNotice.id] = requestedIsGlobal ? [] : requestedBranchIds
       noticeDatesMap[savedNotice.id] = effectiveNoticeDate
+      noticeAudiencesMap[savedNotice.id] = target_audience || "all"
 
       await Promise.all([
         admin.from("site_settings").upsert(
@@ -289,18 +307,27 @@ export async function POST(req: NextRequest) {
           },
           { onConflict: "key" }
         ),
+        admin.from("site_settings").upsert(
+          {
+            key: "notice_audiences",
+            value: JSON.stringify(noticeAudiencesMap),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "key" }
+        ),
       ])
     } catch (settingErr) {
       console.warn("Could not persist notice metadata in site_settings:", settingErr)
     }
 
-    // 7. Enrich saved notice with branch metadata
+    // 7. Enrich saved notice with branch metadata and audience
     const { data: allBranches } = await admin.from("branches").select("id, name")
     const branchesMap = new Map((allBranches || []).map((b: any) => [b.id, b.name]))
 
     const finalBranchIds = requestedIsGlobal ? [] : requestedBranchIds
     const enrichedNotice = {
       ...savedNotice,
+      target_audience: savedNotice.target_audience || target_audience || "all",
       notice_date: savedNotice.notice_date || effectiveNoticeDate,
       branch_id: primaryBranchId,
       branch_ids: finalBranchIds,

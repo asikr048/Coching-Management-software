@@ -1,11 +1,11 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { toast } from "sonner"
 import {
   Bell, Plus, Pencil, Trash2, Check, X, Loader2, Eye, EyeOff,
   Calendar, Landmark, Search, Sparkles, ExternalLink, RefreshCw, AlertCircle,
-  ShieldAlert, CheckSquare, Square, Lock, Globe
+  ShieldAlert, CheckSquare, Square, Lock, Globe, GraduationCap, User
 } from "lucide-react"
 import Link from "next/link"
 import type { Branch } from "@/lib/supabase/types"
@@ -16,6 +16,7 @@ export interface Notice {
   content: string
   is_active: boolean
   created_at: string
+  target_audience?: "all" | "student" | "admin"
   notice_date?: string | null
   branch_id?: string | null
   branch_ids?: string[]
@@ -47,6 +48,7 @@ export default function NoticesClient({
   const [notices, setNotices] = useState<Notice[]>(initialNotices)
   const [search, setSearch] = useState("")
   const [selectedBranch, setSelectedBranch] = useState<string>("all")
+  const [selectedAudience, setSelectedAudience] = useState<string>("all")
   const [showModal, setShowModal] = useState(false)
   const [editingNotice, setEditingNotice] = useState<Notice | null>(null)
   const [loading, setLoading] = useState(false)
@@ -61,7 +63,18 @@ export default function NoticesClient({
     selected_branch_ids: [] as string[],
     notice_date: new Date().toISOString().split("T")[0],
     is_active: true,
+    target_audience: "all" as "all" | "student" | "admin",
   })
+
+  // Auto-open modal if URL query param action=new or create=true
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get("action") === "new" || params.get("create") === "true") {
+        openCreate()
+      }
+    }
+  }, [])
 
   // Check if current user has permission to edit/delete a given notice
   function canManageNotice(notice: Notice): boolean {
@@ -92,6 +105,12 @@ export default function NoticesClient({
 
       if (!matchSearch) return false
 
+      if (selectedAudience !== "all") {
+        const aud = n.target_audience || "all"
+        if (selectedAudience === "student" && aud !== "student" && aud !== "all") return false
+        if (selectedAudience === "admin" && aud !== "admin" && aud !== "all") return false
+      }
+
       if (selectedBranch === "all") return true
 
       const isNoticeGlobal =
@@ -109,7 +128,7 @@ export default function NoticesClient({
 
       return belongsToBranch || isNoticeGlobal
     })
-  }, [notices, search, selectedBranch])
+  }, [notices, search, selectedBranch, selectedAudience])
 
   const activeCount = notices.filter(n => n.is_active).length
 
@@ -125,6 +144,7 @@ export default function NoticesClient({
         : [],
       notice_date: new Date().toISOString().split("T")[0],
       is_active: true,
+      target_audience: "all",
     })
     setShowModal(true)
   }
@@ -157,6 +177,7 @@ export default function NoticesClient({
         notice.notice_date ||
         (notice.created_at ? notice.created_at.split("T")[0] : new Date().toISOString().split("T")[0]),
       is_active: notice.is_active ?? true,
+      target_audience: notice.target_audience || "all",
     })
     setShowModal(true)
   }
@@ -233,6 +254,7 @@ export default function NoticesClient({
         branch_ids: form.is_global ? [] : form.selected_branch_ids,
         notice_date: form.notice_date || new Date().toISOString().split("T")[0],
         is_active: form.is_active,
+        target_audience: form.target_audience || "all",
       }
 
       const res = await fetch("/api/notices/save", {
@@ -489,21 +511,36 @@ export default function NoticesClient({
           />
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <span className="text-xs font-bold text-slate-500 flex-shrink-0">Filter Branch:</span>
-          <select
-            value={selectedBranch}
-            onChange={e => setSelectedBranch(e.target.value)}
-            className="px-3 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500 w-full sm:w-auto"
-          >
-            <option value="all">All Branches & Global ({notices.length})</option>
-            <option value="global">🌐 Global Only (All Branches)</option>
-            {branches.map(b => (
-              <option key={b.id} value={b.id}>
-                📍 {b.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-500 flex-shrink-0">প্রাপক:</span>
+            <select
+              value={selectedAudience}
+              onChange={e => setSelectedAudience(e.target.value)}
+              className="px-2.5 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-800 font-bold focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="all">সব নোটিশ ({notices.length})</option>
+              <option value="student">🎓 শিক্ষার্থী নোটিশ</option>
+              <option value="admin">🛡️ অ্যাডমিন নোটিশ</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs font-bold text-slate-500 flex-shrink-0">শাখা:</span>
+            <select
+              value={selectedBranch}
+              onChange={e => setSelectedBranch(e.target.value)}
+              className="px-2.5 py-1.5 text-xs sm:text-sm border border-slate-200 rounded-xl bg-slate-50 text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="all">সকল শাখা ও গ্লোবাল</option>
+              <option value="global">🌐 Global Only</option>
+              {branches.map(b => (
+                <option key={b.id} value={b.id}>
+                  📍 {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -574,6 +611,21 @@ export default function NoticesClient({
                       {notice.notice_date ||
                         (notice.created_at ? new Date(notice.created_at).toLocaleDateString("en-GB") : "")}
                     </span>
+
+                    {/* Audience Badge */}
+                    {notice.target_audience === "admin" ? (
+                      <span className="text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <ShieldAlert className="w-3 h-3 text-purple-600" /> 🛡️ অ্যাডমিন নোটিশ
+                      </span>
+                    ) : notice.target_audience === "student" ? (
+                      <span className="text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <GraduationCap className="w-3 h-3 text-blue-600" /> 🎓 শিক্ষার্থী নোটিশ
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                        <Globe className="w-3 h-3 text-emerald-600" /> 🌐 সর্বজনীন
+                      </span>
+                    )}
 
                     {/* Branch Badges */}
                     {isGlobal ? (
@@ -753,6 +805,63 @@ export default function NoticesClient({
                   placeholder="নোটিশের বিস্তারিত বার্তা এখানে লিখুন..."
                   className="w-full px-3.5 py-2.5 text-xs sm:text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                 />
+              </div>
+
+              {/* TARGET AUDIENCE SELECTION */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2.5">
+                <label className="block text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <User className="w-4 h-4 text-indigo-600" />
+                  নোটিশের প্রাপক / টার্গেট অডিয়েন্স (Target Audience) *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, target_audience: "all" })}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      form.target_audience === "all"
+                        ? "bg-emerald-50 border-emerald-400 text-emerald-950 font-bold ring-2 ring-emerald-500/20"
+                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-xs font-bold flex items-center gap-1.5 text-emerald-700">
+                      <Globe className="w-3.5 h-3.5" />
+                      সকলের জন্য (All)
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">শিক্ষার্থী ও অ্যাডমিন উভয়ের নোটিশে যাবে</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, target_audience: "student" })}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      form.target_audience === "student"
+                        ? "bg-blue-50 border-blue-400 text-blue-950 font-bold ring-2 ring-blue-500/20"
+                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-xs font-bold flex items-center gap-1.5 text-blue-700">
+                      <GraduationCap className="w-3.5 h-3.5" />
+                      শিক্ষার্থী নোটিশ
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">শুধুমাত্র শিক্ষার্থীদের নোটিশ বোর্ডে যাবে</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, target_audience: "admin" })}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      form.target_audience === "admin"
+                        ? "bg-purple-50 border-purple-400 text-purple-950 font-bold ring-2 ring-purple-500/20"
+                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="text-xs font-bold flex items-center gap-1.5 text-purple-700">
+                      <ShieldAlert className="w-3.5 h-3.5" />
+                      অ্যাডমিন নোটিশ
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">শুধুমাত্র অ্যাডমিন/স্টাফদের জন্য</p>
+                  </button>
+                </div>
               </div>
 
               {/* BRANCH SELECTION (MARK SELECT) */}

@@ -6,6 +6,7 @@ import { Bell, LogOut, User, ChevronDown, Menu, Landmark, Building2, Check, Spar
 import type { Staff } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
 import { cn } from "@/lib/utils"
+import NotificationDropdown from "./NotificationDropdown"
 
 interface Props {
   user: Staff
@@ -183,13 +184,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
           </div>
         )}
 
-        <button
-          className="relative p-1.5 sm:p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
-          aria-label="Notifications"
-        >
-          <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-amber-500 rounded-full animate-pulse shadow-xs shadow-amber-400"></span>
-        </button>
+        <NotificationDropdown />
 
         <div className="relative">
           <button

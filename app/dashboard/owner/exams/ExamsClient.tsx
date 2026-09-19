@@ -5,7 +5,8 @@ import { toast } from "sonner"
 import { 
   Plus, X, Loader2, FileText, Trophy, Clock, CheckCircle, GripVertical, 
   Trash2, Edit2, PlayCircle, Eye, Globe, MessageSquare, Landmark, Building2, BookOpen,
-  Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle, Search, ExternalLink, Filter
+  Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle, Search, ExternalLink, Filter,
+  Check, RefreshCw
 } from "lucide-react"
 import { formatDate, cn, extractWeeklyScheduleFromNote, cleanWeeklyScheduleFromNote } from "@/lib/utils"
 import Link from "next/link"
@@ -146,6 +147,9 @@ export default function ExamsClient({
     exam_schedule_type: "one_time" as "one_time" | "weekly",
     recurring_days: [] as string[],
     publish_to_notice: false,
+    notice_title: "",
+    notice_content: "",
+    is_notice_customized: false,
     exam_type: "written", 
     subject: "", 
     total_marks: "100", 
@@ -157,6 +161,65 @@ export default function ExamsClient({
     result_note: ""
   })
   function update(f: string, v: any) { setForm(x => ({ ...x, [f]: v })) }
+
+  function getGeneratedNoticePreview(currentForm: typeof form, currentWeekly: typeof weeklySchedule) {
+    let dateText = currentForm.exam_date || "শীঘ্রই জানানো হবে"
+    let scheduleBreakdown = ""
+    
+    if (currentForm.exam_schedule_type === "weekly") {
+      const lines: string[] = []
+      WEEK_DAYS.forEach(day => {
+        const config = (currentWeekly as any)[day.id]
+        if (config?.selected) {
+          const subj = config.subject ? ` [${config.subject}]` : ""
+          lines.push(`  • ${day.bn}: ${config.exam_name || "পরীক্ষা"}${subj} (পূর্ণমান: ${config.total_marks || 50}, পাস নম্বর: ${config.pass_marks || 20})`)
+        }
+      })
+      if (lines.length > 0) {
+        dateText = "প্রতি সপ্তাহে নির্ধারিত দিনসমূহে"
+        scheduleBreakdown = `\n\n📅 সাপ্তাহিক পরীক্ষার সূচি ও মানবণ্টন:\n` + lines.join("\n")
+      }
+    }
+
+    const title = currentForm.title.trim() || (currentForm.exam_schedule_type === "weekly" ? "সাপ্তাহিক মূল্যায়ন পরীক্ষা" : "মাসিক মূল্যায়ন পরীক্ষা")
+    const subject = currentForm.subject.trim() || "সাধারণ / নির্ধারিত বিষয়"
+
+    // Batch names summary
+    let targetBatchNames = "সকল ব্যাচ"
+    if (currentForm.batch_ids && currentForm.batch_ids.length > 0) {
+      const bNames = batches.filter(b => currentForm.batch_ids.includes(b.id)).map(b => b.name)
+      if (bNames.length > 0) targetBatchNames = bNames.join(", ")
+    } else if (currentForm.batch_id) {
+      const b = batches.find(x => x.id === currentForm.batch_id)
+      if (b) targetBatchNames = b.name
+    }
+
+    const noticeTitle = `📋 পরীক্ষার রুটিন নোটিশ: ${title}`
+    const noticeContent = `মেধাশিরী কোচিংয়ের সংশ্লিষ্ট শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, নিম্নোক্ত সূচি অনুযায়ী পরীক্ষা অনুষ্ঠিত হবে:
+
+📌 পরীক্ষার নাম: ${title}
+📚 বিষয়: ${subject}
+📅 পরীক্ষার সময়/তারিখ: ${dateText}${scheduleBreakdown}
+🎯 টার্গেট ব্যাচ: ${targetBatchNames}
+
+সকল শিক্ষার্থীকে যথাসময়ে উপস্থিত হয়ে পরীক্ষায় অংশগ্রহণের জন্য বিশেষ নির্দেশ দেওয়া যাচ্ছে। কোনো প্রকার অনুপস্থিতি গ্রহণযোগ্য হবে না।`
+
+    return { noticeTitle, noticeContent }
+  }
+
+  function togglePublishToNotice(checked: boolean) {
+    if (checked) {
+      const { noticeTitle, noticeContent } = getGeneratedNoticePreview(form, weeklySchedule)
+      setForm(prev => ({
+        ...prev,
+        publish_to_notice: true,
+        notice_title: prev.is_notice_customized && prev.notice_title ? prev.notice_title : noticeTitle,
+        notice_content: prev.is_notice_customized && prev.notice_content ? prev.notice_content : noticeContent,
+      }))
+    } else {
+      update("publish_to_notice", false)
+    }
+  }
 
   function resetForm() {
     setEditingExam(null)
@@ -171,6 +234,9 @@ export default function ExamsClient({
       exam_schedule_type: "one_time",
       recurring_days: [],
       publish_to_notice: false,
+      notice_title: "",
+      notice_content: "",
+      is_notice_customized: false,
       exam_type: "written", 
       subject: "", 
       total_marks: "100", 
@@ -699,6 +765,9 @@ export default function ExamsClient({
       exam_schedule_type: isWeekly ? "weekly" : "one_time",
       recurring_days: Array.isArray(recDays) ? recDays : [],
       publish_to_notice: false,
+      notice_title: "",
+      notice_content: "",
+      is_notice_customized: false,
       exam_type: exam.exam_type || "written",
       subject: exam.subject || "",
       total_marks: String(exam.total_marks || "100"),
@@ -1048,7 +1117,11 @@ export default function ExamsClient({
           const nRes = await fetch(`/api/exams/${newExam.id}/publish-notice`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: "schedule" }),
+            body: JSON.stringify({ 
+              type: "schedule",
+              custom_title: form.notice_title?.trim() || undefined,
+              custom_content: form.notice_content?.trim() || undefined,
+            }),
           })
           if (nRes.ok) {
             noticePublished = true
@@ -2154,7 +2227,7 @@ export default function ExamsClient({
                         type="checkbox"
                         id="publish_to_notice_weekly"
                         checked={form.publish_to_notice}
-                        onChange={e => update("publish_to_notice", e.target.checked)}
+                        onChange={e => togglePublishToNotice(e.target.checked)}
                         className="w-4 h-4 mt-0.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
                       />
                       <label htmlFor="publish_to_notice_weekly" className="cursor-pointer select-none">
@@ -2206,7 +2279,7 @@ export default function ExamsClient({
                         type="checkbox"
                         id="publish_to_notice_one_time"
                         checked={form.publish_to_notice}
-                        onChange={e => update("publish_to_notice", e.target.checked)}
+                        onChange={e => togglePublishToNotice(e.target.checked)}
                         className="w-4 h-4 mt-0.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
                       />
                       <label htmlFor="publish_to_notice_one_time" className="cursor-pointer select-none">
@@ -2218,6 +2291,76 @@ export default function ExamsClient({
                           টিক দেওয়া থাকলে পরীক্ষা তৈরির সাথে সাথেই কোচিংয়ের নোটিশ বোর্ডে এই পরীক্ষার সম্পূর্ণ সূচি নোটিশ আকারে স্বয়ংক্রিয়ভাবে প্রকাশিত হবে।
                         </p>
                       </label>
+                    </div>
+                  </div>
+                )}
+
+                {/* Live Editable Notice Preview Box */}
+                {form.publish_to_notice && (
+                  <div className="bg-amber-50/60 border-2 border-amber-300 rounded-2xl p-4 space-y-3 shadow-xs animate-in fade-in zoom-in-95 duration-100">
+                    <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-lg bg-amber-200 text-amber-900 flex items-center justify-center font-black text-xs">
+                          <Eye className="w-3.5 h-3.5" />
+                        </div>
+                        <div>
+                          <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                            নোটিশ প্রিভিউ ও সম্পাদনা (Notice Preview - Live Editable)
+                          </h4>
+                          <p className="text-[10px] text-slate-500">
+                            পরীক্ষা তৈরি হলে এই নোটিশটি স্বয়ংক্রিয়ভাবে প্রকাশিত হবে। আপনি চাইলে নিচে সরাসরি এডিট করতে পারেন:
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const { noticeTitle, noticeContent } = getGeneratedNoticePreview(form, weeklySchedule)
+                          setForm(prev => ({
+                            ...prev,
+                            notice_title: noticeTitle,
+                            notice_content: noticeContent,
+                            is_notice_customized: false,
+                          }))
+                          toast.info("ডিফল্ট পরীক্ষার রুটিন নোটিশ রিলোড হয়েছে")
+                        }}
+                        className="text-[11px] font-bold text-amber-800 hover:text-amber-950 flex items-center gap-1 bg-amber-100 hover:bg-amber-200 px-2 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
+                        title="পরীক্ষার বর্তমান তথ্য অনুযায়ী ডিফল্ট নোটিশ রিলোড করুন"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        টেমপ্লেট রিলোড
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        নোটিশ শিরোনাম (Notice Title) *
+                      </label>
+                      <input
+                        type="text"
+                        value={form.notice_title}
+                        onChange={e => setForm(prev => ({ ...prev, notice_title: e.target.value, is_notice_customized: true }))}
+                        placeholder="নোটিশের শিরোনাম..."
+                        className="w-full px-3 py-2 text-xs border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white font-bold text-slate-900"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                        নোটিশের বিবরণ / রুটিন বার্তা (Notice Content) *
+                      </label>
+                      <textarea
+                        rows={5}
+                        value={form.notice_content}
+                        onChange={e => setForm(prev => ({ ...prev, notice_content: e.target.value, is_notice_customized: true }))}
+                        placeholder="নোটিশের বিস্তারিত বার্তা..."
+                        className="w-full px-3 py-2 text-xs border border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white text-slate-800 font-mono leading-relaxed"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-medium">
+                      <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>এই নোটিশটি সরাসরি নোটিশ বোর্ডে ও শিক্ষার্থীদের অ্যাকাউন্টে প্রকাশিত হবে।</span>
                     </div>
                   </div>
                 )}

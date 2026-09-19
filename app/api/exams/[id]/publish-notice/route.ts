@@ -24,7 +24,15 @@ export async function POST(
     }
 
     const body = await req.json().catch(() => ({}))
-    const { type = "schedule", day, session_date, day_exam_name, day_total_marks } = body
+    const {
+      type = "schedule",
+      day,
+      session_date,
+      day_exam_name,
+      day_total_marks,
+      custom_title,
+      custom_content,
+    } = body
 
     const admin = createAdminClient()
 
@@ -238,8 +246,8 @@ export async function POST(
         }
       }
 
-      noticeTitle = `📋 পরীক্ষার রুটিন নোটিশ: ${exam.title}`
-      noticeContent = `মেধাশিরী কোচিংয়ের সংশ্লিষ্ট শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, নিম্নোক্ত সূচি অনুযায়ী পরীক্ষা অনুষ্ঠিত হবে:
+      noticeTitle = custom_title?.trim() || `📋 পরীক্ষার রুটিন নোটিশ: ${exam.title}`
+      noticeContent = custom_content?.trim() || `মেধাশিরী কোচিংয়ের সংশ্লিষ্ট শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, নিম্নোক্ত সূচি অনুযায়ী পরীক্ষা অনুষ্ঠিত হবে:
 
 📌 পরীক্ষার নাম: ${exam.title}
 📚 বিষয়: ${exam.subject || "সাধারণ"}
@@ -249,7 +257,7 @@ export async function POST(
 সকল শিক্ষার্থীকে যথাসময়ে উপস্থিত হয়ে পরীক্ষায় অংশগ্রহণের জন্য বিশেষ নির্দেশ দেওয়া যাচ্ছে। কোনো প্রকার অনুপস্থিতি গ্রহণযোগ্য হবে না।`
     }
 
-    // Insert notice
+    // Insert notice with target_audience = student
     const noticePayload: any = {
       title: noticeTitle,
       content: noticeContent,
@@ -258,6 +266,7 @@ export async function POST(
       notice_date: new Date().toISOString().split("T")[0],
       branch_id: exam.branch_id || null,
       branch_ids: exam.branch_id ? [exam.branch_id] : [],
+      target_audience: "student",
     }
 
     let { data: savedNotice, error: noticeErr } = await admin
@@ -267,10 +276,11 @@ export async function POST(
       .maybeSingle()
 
     if (noticeErr) {
-      // Fallback if branch_id / branch_ids don't exist
+      // Fallback if branch_id / branch_ids / target_audience don't exist
       delete noticePayload.branch_ids
       delete noticePayload.branch_id
       delete noticePayload.notice_date
+      delete noticePayload.target_audience
       const { data: fbNotice, error: fbErr } = await admin
         .from("notices")
         .insert([noticePayload])
@@ -278,6 +288,30 @@ export async function POST(
         .maybeSingle()
       if (fbErr) throw fbErr
       savedNotice = fbNotice
+    }
+
+    if (savedNotice) {
+      // Persist audience in site_settings
+      try {
+        const { data: sRow } = await admin
+          .from("site_settings")
+          .select("value")
+          .eq("key", "notice_audiences")
+          .maybeSingle()
+        let audMap: Record<string, string> = {}
+        if (sRow?.value) {
+          try { audMap = JSON.parse(sRow.value) } catch {}
+        }
+        audMap[savedNotice.id] = "student"
+        await admin.from("site_settings").upsert(
+          {
+            key: "notice_audiences",
+            value: JSON.stringify(audMap),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "key" }
+        )
+      } catch {}
     }
 
     if (savedNotice && type === "schedule") {
