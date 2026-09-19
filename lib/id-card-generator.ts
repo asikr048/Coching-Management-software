@@ -1003,3 +1003,584 @@ export async function downloadAdmissionSlipPDF(target: AdmissionSlipData) {
     console.error("Failed to generate PDF:", e)
   }
 }
+
+/**
+ * Print all admission slips in a bulk printable layout with automatic page breaks
+ */
+export function printBulkAdmissionSlips(targets: AdmissionSlipData[]) {
+  if (!targets || targets.length === 0) return
+
+  const win = window.open("", "_blank", "width=850,height=900")
+  if (!win) return
+
+  const slipsHtml = targets.map((target, idx) => {
+    const rollStr = target.batch_roll != null && String(target.batch_roll).trim() !== "" ? String(target.batch_roll) : String(idx + 1).padStart(2, "0")
+    const qrData = target.qr_data || `Student ID: ${target.student_id} | Name: ${target.student_name} | Batch: ${target.batch_name} | Roll: #${rollStr} | Fee: ${target.total_fee} | Paid: ${target.paid_amount}`
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrData)}`
+
+    return `
+    <div class="slip-page">
+      <div class="slip-container">
+        <div class="header">
+          <h1>MedhaShiree Coaching</h1>
+          <p>Enrollment & Fee Confirmation Slip (ভর্তি ও মানি রসিদ)</p>
+          <span class="badge">Official Admission Copy • #${rollStr}</span>
+        </div>
+        
+        <div class="section-title">Student Information (শিক্ষার্থীর তথ্য)</div>
+        <div class="row"><span class="label">Student ID:</span><span class="value">${target.student_id}</span></div>
+        <div class="row"><span class="label">Full Name:</span><span class="value">${target.student_name}</span></div>
+        <div class="row"><span class="label">Batch Roll No:</span><span class="value" style="color: #dc2626; font-weight: 800;">#${rollStr}</span></div>
+        ${target.student_phone ? `<div class="row"><span class="label">Phone:</span><span class="value">${target.student_phone}</span></div>` : ''}
+        ${target.guardian_name ? `<div class="row"><span class="label">Guardian:</span><span class="value">${target.guardian_name}</span></div>` : ''}
+        ${target.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${target.guardian_phone}</span></div>` : ''}
+        ${target.branch_name ? `<div class="row"><span class="label">Branch:</span><span class="value">${target.branch_name}</span></div>` : ''}
+
+        ${target.password ? `
+        <div class="cred-box">
+          <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Student Portal Login ID:</span><span class="value">${target.student_id}</span></div>
+          <div class="row"><span class="label" style="color: #4338ca; font-weight: 600;">Account Password:</span><span class="value font-mono" style="color: #4338ca;">${target.password}</span></div>
+        </div>
+        ` : ''}
+
+        <div class="section-title">Enrolled Program (ভর্তিকৃত ব্যাচ)</div>
+        <div class="row"><span class="label">Batch Name:</span><span class="value">${target.batch_name}</span></div>
+        <div class="row"><span class="label">Subject/Class:</span><span class="value">${target.subject || "General"}</span></div>
+        <div class="row"><span class="label">Enrollment Date:</span><span class="value">${target.date}</span></div>
+
+        <div class="section-title">Payment Breakdown (ফি বিবরণ)</div>
+        <div class="summary-box">
+          <div class="row"><span class="label">Total Fee:</span><span class="value">৳${(target.total_fee || 0).toLocaleString("en-BD")}</span></div>
+          <div class="row"><span class="label">Paid Amount:</span><span class="value paid-text">৳${(target.paid_amount || 0).toLocaleString("en-BD")}</span></div>
+          <div class="total-row"><span class="label">Due Amount:</span><span class="value ${target.due_amount > 0 ? 'due-text' : 'paid-text'}">৳${(target.due_amount || 0).toLocaleString("en-BD")}</span></div>
+          ${target.due_date ? `<div class="row"><span class="label">Due Date:</span><span class="value due-text">${target.due_date}</span></div>` : ''}
+          <div class="row" style="margin-top: 5px; font-size: 11px; color: #64748b;"><span class="label">Receipt Ref:</span><span>${target.receipt_number}</span></div>
+        </div>
+
+        <div class="qr-container">
+          <div>
+            <p style="margin: 0; font-size: 11px; font-weight: bold; color: #334155;">Verification QR Code</p>
+            <p style="margin: 3px 0 0; font-size: 10px; color: #64748b;">Scan to verify student admission status</p>
+          </div>
+          <img src="${qrUrl}" width="80" height="80" alt="Student QR Code" style="border-radius: 6px; border: 1px solid #cbd5e1;" />
+        </div>
+
+        <div class="footer">
+          <p>Please keep this document safe for institutional records.</p>
+          <p>MedhaShiree Coaching • Empowering Modern Education</p>
+        </div>
+      </div>
+    </div>`
+  }).join("\n")
+
+  win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Bulk Admission Slips (${targets.length} Students)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #1e293b; background: #f1f5f9; padding: 20px; }
+    .print-bar {
+      position: sticky; top: 0; z-index: 100;
+      background: #ffffff; padding: 14px 20px; margin-bottom: 24px;
+      border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .print-btn {
+      background: linear-gradient(135deg, #4f46e5, #4338ca);
+      color: #fff; border: none; padding: 10px 24px; border-radius: 8px;
+      font-weight: 700; font-size: 14px; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+    .slip-page {
+      page-break-after: always;
+      display: flex; justify-content: center;
+      margin-bottom: 30px;
+    }
+    .slip-container {
+      background: #ffffff; padding: 25px; max-width: 520px; width: 100%;
+      border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+      border: 1px solid #e2e8f0;
+    }
+    .header { text-align: center; border-bottom: 2px solid #4f46e5; padding-bottom: 12px; margin-bottom: 15px; }
+    .header h1 { margin: 0; font-size: 22px; color: #4338ca; text-transform: uppercase; letter-spacing: 1px; }
+    .header p { margin: 3px 0; font-size: 12px; color: #64748b; }
+    .badge { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 3px 10px; border-radius: 9999px; font-weight: bold; font-size: 11px; margin-top: 5px; }
+    .section-title { font-size: 12px; font-weight: bold; text-transform: uppercase; color: #4f46e5; margin: 14px 0 6px; border-bottom: 1px dashed #cbd5e1; padding-bottom: 3px; }
+    .row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+    .label { color: #64748b; }
+    .value { font-weight: 600; color: #0f172a; text-align: right; }
+    .summary-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; margin-top: 10px; }
+    .total-row { display: flex; justify-content: space-between; font-size: 15px; font-weight: bold; padding: 6px 0; }
+    .due-text { color: #dc2626; }
+    .paid-text { color: #16a34a; }
+    .cred-box { background: #eef2ff; border: 1.5px solid #c7d2fe; border-radius: 8px; padding: 8px 12px; margin: 12px 0; }
+    .qr-container { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px dashed #cbd5e1; margin-top: 12px; }
+    .footer { text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+    @media print {
+      body { padding: 0; background: transparent; }
+      .print-bar { display: none; }
+      .slip-page { margin-bottom: 0; page-break-after: always; height: 100vh; display: flex; align-items: center; }
+      .slip-container { box-shadow: none; border: none; padding: 15px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar">
+    <div>
+      <h2 style="font-size: 16px; font-weight: 700; color: #0f172a;">Bulk Admission Slips</h2>
+      <p style="font-size: 13px; color: #64748b;">Ready to print ${targets.length} student slips</p>
+    </div>
+    <button class="print-btn" onclick="window.print()">🖨️ Print All Slips (${targets.length})</button>
+  </div>
+  ${slipsHtml}
+</body>
+</html>`)
+  win.document.close()
+  win.focus()
+  setTimeout(() => { win.print() }, 400)
+}
+
+/**
+ * Print multiple student ID cards in a clean multi-card printable layout
+ */
+export function printBulkStudentIdCards(cards: StudentIdCardData[]) {
+  if (!cards || cards.length === 0) return
+
+  const win = window.open("", "_blank", "width=900,height=900")
+  if (!win) return
+
+  const cardsHtml = cards.map((card, idx) => {
+    const rollStr = card.batch_roll != null && String(card.batch_roll).trim() !== "" ? String(card.batch_roll) : String(idx + 1).padStart(2, "0")
+    const qrData = card.qr_data || `MEDHASHIREE-ID:${card.student_id}|ROLL:${rollStr}|BATCH:${card.batch_name}|NAME:${card.student_name}`
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`
+    const initial = card.student_name ? card.student_name.charAt(0).toUpperCase() : "S"
+
+    return `
+    <div class="id-card-wrap">
+      <div class="id-card">
+        <div class="id-header">
+          <div class="id-logo-text">MEDHASHIREE</div>
+          <div class="id-sublogo">ACADEMIC COACHING SYSTEM</div>
+          <div class="id-tagline">STUDENT IDENTITY CARD</div>
+        </div>
+
+        <div class="id-body">
+          <div class="avatar-wrap">
+            ${card.avatar_url ? `
+              <img class="avatar" src="${card.avatar_url}" alt="${card.student_name}" style="object-fit: cover;" />
+            ` : `
+              <div class="avatar">${initial}</div>
+            `}
+            <div class="id-roll-badge">ROLL #${rollStr}</div>
+          </div>
+
+          <div class="id-name">${card.student_name}</div>
+          <div class="id-student-code">${card.student_id}</div>
+
+          <div class="id-details-box">
+            <div class="id-info-row">
+              <span class="id-lbl">Program:</span>
+              <span class="id-val">${card.batch_name}</span>
+            </div>
+            ${card.subject ? `
+            <div class="id-info-row">
+              <span class="id-lbl">Subject:</span>
+              <span class="id-val">${card.subject}</span>
+            </div>
+            ` : ''}
+            ${card.guardian_phone ? `
+            <div class="id-info-row">
+              <span class="id-lbl">Emergency:</span>
+              <span class="id-val">${card.guardian_phone}</span>
+            </div>
+            ` : ''}
+            ${card.branch_name ? `
+            <div class="id-info-row">
+              <span class="id-lbl">Branch:</span>
+              <span class="id-val">${card.branch_name}</span>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <div class="id-footer">
+          <div>
+            <div class="id-validity-lbl">ACADEMIC SESSION</div>
+            <div class="id-validity-val">ACTIVE STUDENT</div>
+          </div>
+          <img class="id-qr" src="${qrUrl}" alt="Student QR" />
+        </div>
+      </div>
+    </div>`
+  }).join("\n")
+
+  win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Bulk Student ID Cards (${cards.length} Cards)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif; background: #f1f5f9; color: #0f172a; padding: 20px; }
+    .print-bar {
+      position: sticky; top: 0; z-index: 100;
+      background: #ffffff; padding: 14px 20px; margin-bottom: 24px;
+      border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .print-btn {
+      background: linear-gradient(135deg, #4f46e5, #4338ca);
+      color: #fff; border: none; padding: 10px 24px; border-radius: 8px;
+      font-weight: 700; font-size: 14px; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+    .cards-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      justify-content: center;
+    }
+    .id-card-wrap {
+      page-break-inside: avoid;
+    }
+    .id-card {
+      width: 320px; height: 480px; background: #ffffff; border-radius: 20px;
+      overflow: hidden; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      position: relative; display: flex; flex-direction: column;
+      border: 1px solid #e2e8f0;
+    }
+    .id-header {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+      color: #ffffff; padding: 16px 14px 14px; text-align: center; position: relative;
+    }
+    .id-header::after {
+      content: ""; position: absolute; bottom: -10px; left: 0; right: 0;
+      height: 20px; background: #ffffff; border-radius: 20px 20px 0 0;
+    }
+    .id-logo-text { font-size: 16px; font-weight: 900; letter-spacing: 0.5px; color: #fbbf24; text-transform: uppercase; }
+    .id-sublogo { font-size: 10px; color: #c7d2fe; letter-spacing: 0.3px; margin-top: 2px; font-weight: 500; }
+    .id-tagline { display: inline-block; background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.25); font-size: 9px; font-weight: 700; color: #ffffff; padding: 2px 8px; border-radius: 9999px; margin-top: 5px; text-transform: uppercase; }
+    .id-body { flex: 1; padding: 6px 18px 12px; display: flex; flex-direction: column; align-items: center; z-index: 2; }
+    .avatar-wrap { position: relative; margin-top: 2px; margin-bottom: 8px; }
+    .avatar { width: 78px; height: 78px; border-radius: 50%; background: linear-gradient(135deg, #f59e0b, #d97706); color: #ffffff; font-size: 32px; font-weight: 900; display: flex; align-items: center; justify-content: center; border: 3px solid #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.12); }
+    .id-roll-badge { position: absolute; bottom: -4px; right: -4px; background: #dc2626; color: #ffffff; font-size: 10px; font-weight: 900; padding: 2px 7px; border-radius: 9999px; border: 2px solid #ffffff; }
+    .id-name { font-size: 15px; font-weight: 800; color: #0f172a; text-align: center; margin-top: 2px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .id-student-code { font-size: 12px; font-weight: 800; color: #4f46e5; letter-spacing: 0.5px; margin-top: 1px; }
+    .id-details-box { width: 100%; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+    .id-info-row { display: flex; justify-content: space-between; font-size: 11px; }
+    .id-lbl { color: #64748b; font-weight: 500; }
+    .id-val { color: #0f172a; font-weight: 700; text-align: right; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .id-footer { background: #1e1b4b; color: #ffffff; padding: 10px 18px; display: flex; justify-content: space-between; align-items: center; border-radius: 0 0 20px 20px; }
+    .id-validity-lbl { font-size: 8px; color: #94a3b8; font-weight: 700; text-transform: uppercase; }
+    .id-validity-val { font-size: 11px; font-weight: 800; color: #fbbf24; }
+    .id-qr { width: 44px; height: 44px; background: #ffffff; padding: 2px; border-radius: 6px; }
+    @media print {
+      body { padding: 10px; background: transparent; }
+      .print-bar { display: none; }
+      .cards-grid { gap: 16px; justify-content: flex-start; }
+      .id-card { box-shadow: none; border: 1px dashed #94a3b8; }
+    }
+  </style>
+</head>
+<body>
+  <div class="print-bar">
+    <div>
+      <h2 style="font-size: 16px; font-weight: 700; color: #0f172a;">Bulk Student ID Cards</h2>
+      <p style="font-size: 13px; color: #64748b;">Ready to print ${cards.length} ID cards (CR80 standard)</p>
+    </div>
+    <button class="print-btn" onclick="window.print()">🖨️ Print All ID Cards (${cards.length})</button>
+  </div>
+  <div class="cards-grid">
+    ${cardsHtml}
+  </div>
+</body>
+</html>`)
+  win.document.close()
+  win.focus()
+  setTimeout(() => { win.print() }, 400)
+}
+
+/**
+ * Download a combined multi-page PDF of all admission slips
+ */
+export async function downloadBulkAdmissionSlipsPDF(targets: AdmissionSlipData[]) {
+  if (!targets || targets.length === 0) return
+  try {
+    const { jsPDF } = await import("jspdf")
+    const doc = new jsPDF({ unit: "mm", format: [105, 148] }) // A6 size receipt per page
+
+    targets.forEach((target, index) => {
+      if (index > 0) {
+        doc.addPage([105, 148])
+      }
+
+      const rollStr = target.batch_roll != null && String(target.batch_roll).trim() !== "" ? String(target.batch_roll) : String(index + 1).padStart(2, "0")
+
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(14)
+      doc.setTextColor(67, 56, 202)
+      doc.text("MedhaShiree Coaching", 52.5, 12, { align: "center" })
+
+      doc.setFontSize(8)
+      doc.setTextColor(100, 116, 139)
+      doc.setFont("helvetica", "normal")
+      doc.text("Admission & Fee Confirmation Slip", 52.5, 17, { align: "center" })
+
+      doc.setDrawColor(203, 213, 225)
+      doc.line(10, 20, 95, 20)
+
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      doc.setTextColor(15, 23, 42)
+      doc.text("Student Information", 10, 26)
+
+      doc.setFontSize(7.5)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+
+      doc.text("Student ID:", 10, 31)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(67, 56, 202)
+      doc.text(target.student_id, 95, 31, { align: "right" })
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+      doc.text("Full Name:", 10, 36)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(15, 23, 42)
+      doc.text(target.student_name, 95, 36, { align: "right" })
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+      doc.text("Batch Roll No:", 10, 41)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(220, 38, 38)
+      doc.text(`#${rollStr}`, 95, 41, { align: "right" })
+
+      let y = 46
+      if (target.student_phone) {
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(71, 85, 105)
+        doc.text("Phone:", 10, y)
+        doc.setTextColor(15, 23, 42)
+        doc.text(target.student_phone, 95, y, { align: "right" })
+        y += 5
+      }
+
+      if (target.guardian_phone) {
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(71, 85, 105)
+        doc.text("Guardian:", 10, y)
+        doc.setTextColor(15, 23, 42)
+        doc.text(target.guardian_phone, 95, y, { align: "right" })
+        y += 5
+      }
+
+      if (target.password) {
+        doc.setFillColor(238, 242, 255)
+        doc.roundedRect(10, y, 85, 8, 1.5, 1.5, "F")
+        doc.setFont("helvetica", "bold")
+        doc.setFontSize(7)
+        doc.setTextColor(67, 56, 202)
+        doc.text(`Login Password: ${target.password}`, 52.5, y + 5.2, { align: "center" })
+        y += 11
+      } else {
+        doc.line(10, y, 95, y)
+        y += 5
+      }
+
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      doc.setTextColor(15, 23, 42)
+      doc.text("Enrolled Program", 10, y)
+      y += 5
+
+      doc.setFontSize(7.5)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+      doc.text("Batch Name:", 10, y)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(15, 23, 42)
+      doc.text(target.batch_name, 95, y, { align: "right" })
+      y += 5
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+      doc.text("Date:", 10, y)
+      doc.text(target.date, 95, y, { align: "right" })
+      y += 5
+
+      doc.line(10, y, 95, y)
+      y += 5
+
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(9)
+      doc.setTextColor(15, 23, 42)
+      doc.text("Fee Details", 10, y)
+      y += 5
+
+      doc.setFontSize(7.5)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+      doc.text("Total Payable:", 10, y)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(15, 23, 42)
+      doc.text(`Tk ${(target.total_fee || 0).toLocaleString("en-BD")}`, 95, y, { align: "right" })
+      y += 5
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+      doc.text("Paid Amount:", 10, y)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(22, 163, 74)
+      doc.text(`Tk ${(target.paid_amount || 0).toLocaleString("en-BD")}`, 95, y, { align: "right" })
+      y += 5
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(71, 85, 105)
+      doc.text("Remaining Due:", 10, y)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(target.due_amount > 0 ? 220 : 22, target.due_amount > 0 ? 38 : 163, target.due_amount > 0 ? 38 : 74)
+      doc.text(`Tk ${(target.due_amount || 0).toLocaleString("en-BD")}`, 95, y, { align: "right" })
+      y += 6
+
+      doc.setFillColor(241, 245, 249)
+      doc.roundedRect(10, y, 85, 9, 2, 2, "F")
+      doc.setFontSize(6.5)
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(100, 116, 139)
+      doc.text(`Receipt Reference: ${target.receipt_number}`, 52.5, y + 5.5, { align: "center" })
+    })
+
+    doc.save(`Bulk_Admission_Slips_${Date.now()}.pdf`)
+  } catch (e) {
+    console.error("Failed to generate bulk PDF:", e)
+  }
+}
+
+/**
+ * Download a combined PDF of all student ID cards
+ */
+export async function downloadBulkStudentIdCardsPDF(cards: StudentIdCardData[]) {
+  if (!cards || cards.length === 0) return
+  try {
+    const { jsPDF } = await import("jspdf")
+    const doc = new jsPDF({ unit: "mm", format: "a4" }) // A4 size sheet
+
+    // Standard card size in mm: 85.6mm x 54mm (landscape) or 54mm x 85.6mm (portrait)
+    const cardW = 60
+    const cardH = 90
+    const startX = 20
+    const startY = 15
+    const gapX = 10
+    const gapY = 10
+    const cols = 3
+    const rows = 3
+    const cardsPerPage = cols * rows
+
+    cards.forEach((card, index) => {
+      const pageIndex = Math.floor(index / cardsPerPage)
+      const slotIndex = index % cardsPerPage
+      if (index > 0 && slotIndex === 0) {
+        doc.addPage("a4")
+      }
+
+      const col = slotIndex % cols
+      const row = Math.floor(slotIndex / cols)
+      const x = startX + col * (cardW + gapX)
+      const y = startY + row * (cardH + gapY)
+      const rollStr = card.batch_roll != null && String(card.batch_roll).trim() !== "" ? String(card.batch_roll) : String(index + 1).padStart(2, "0")
+
+      // Card border & background
+      doc.setFillColor(255, 255, 255)
+      doc.setDrawColor(203, 213, 225)
+      doc.roundedRect(x, y, cardW, cardH, 3, 3, "FD")
+
+      // Header background
+      doc.setFillColor(30, 27, 75)
+      doc.roundedRect(x, y, cardW, 18, 3, 3, "F")
+      // Rect to square bottom corners of header
+      doc.rect(x, y + 12, cardW, 6, "F")
+
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(8)
+      doc.setTextColor(251, 191, 36)
+      doc.text("MEDHASHIREE", x + cardW / 2, y + 7, { align: "center" })
+
+      doc.setFontSize(5)
+      doc.setTextColor(199, 210, 254)
+      doc.text("STUDENT IDENTITY CARD", x + cardW / 2, y + 11, { align: "center" })
+
+      // Roll badge
+      doc.setFillColor(220, 38, 38)
+      doc.roundedRect(x + cardW / 2 - 9, y + 14, 18, 4, 2, 2, "F")
+      doc.setFontSize(5)
+      doc.setTextColor(255, 255, 255)
+      doc.text(`ROLL #${rollStr}`, x + cardW / 2, y + 17, { align: "center" })
+
+      // Student name
+      doc.setFont("helvetica", "bold")
+      doc.setFontSize(8)
+      doc.setTextColor(15, 23, 42)
+      doc.text(card.student_name.slice(0, 24), x + cardW / 2, y + 25, { align: "center" })
+
+      // Student ID
+      doc.setFontSize(6.5)
+      doc.setTextColor(79, 70, 229)
+      doc.text(card.student_id, x + cardW / 2, y + 29, { align: "center" })
+
+      // Details box
+      doc.setFillColor(248, 250, 252)
+      doc.setDrawColor(226, 232, 240)
+      doc.roundedRect(x + 4, y + 33, cardW - 8, 35, 2, 2, "FD")
+
+      doc.setFontSize(5.5)
+      doc.setTextColor(100, 116, 139)
+      doc.setFont("helvetica", "normal")
+      doc.text("Program:", x + 6, y + 39)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(15, 23, 42)
+      doc.text(card.batch_name.slice(0, 18), x + cardW - 6, y + 39, { align: "right" })
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(100, 116, 139)
+      doc.text("Subject:", x + 6, y + 46)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(15, 23, 42)
+      doc.text((card.subject || "General").slice(0, 18), x + cardW - 6, y + 46, { align: "right" })
+
+      doc.setFont("helvetica", "normal")
+      doc.setTextColor(100, 116, 139)
+      doc.text("Emergency:", x + 6, y + 53)
+      doc.setFont("helvetica", "bold")
+      doc.setTextColor(15, 23, 42)
+      doc.text(card.guardian_phone || card.student_phone || "N/A", x + cardW - 6, y + 53, { align: "right" })
+
+      if (card.branch_name) {
+        doc.setFont("helvetica", "normal")
+        doc.setTextColor(100, 116, 139)
+        doc.text("Branch:", x + 6, y + 60)
+        doc.setFont("helvetica", "bold")
+        doc.setTextColor(15, 23, 42)
+        doc.text(card.branch_name.slice(0, 18), x + cardW - 6, y + 60, { align: "right" })
+      }
+
+      // Card footer
+      doc.setFillColor(30, 27, 75)
+      doc.roundedRect(x, y + cardH - 12, cardW, 12, 3, 3, "F")
+      doc.rect(x, y + cardH - 12, cardW, 5, "F")
+
+      doc.setFontSize(5)
+      doc.setTextColor(251, 191, 36)
+      doc.setFont("helvetica", "bold")
+      doc.text("MEDHASHIREE COACHING SYSTEM", x + cardW / 2, y + cardH - 5, { align: "center" })
+    })
+
+    doc.save(`Bulk_Student_ID_Cards_${Date.now()}.pdf`)
+  } catch (e) {
+    console.error("Failed to generate bulk ID cards PDF:", e)
+  }
+}
+

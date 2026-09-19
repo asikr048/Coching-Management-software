@@ -5,7 +5,7 @@ import {
   Search, Download, Eye, Edit, Trash2, MessageSquare, MoreVertical, 
   Calendar, DollarSign, CheckCircle2, ChevronDown, X, ShieldAlert, 
   ShieldCheck, Clock, AlertTriangle, Lock, Unlock, Check, UserCheck, 
-  Layers, ArrowRight, RefreshCw, Send,
+  Layers, ArrowRight, RefreshCw, Send, FileSpreadsheet,
   CreditCard, Receipt, Loader2, AlertCircle, CheckCircle, ChevronUp
 } from "lucide-react"
 import Link from "next/link"
@@ -1086,6 +1086,15 @@ export default function StudentsClient({
           </div>
 
           <div className="flex items-center gap-2 w-full lg:w-auto">
+            <Link
+              href="/dashboard/owner/students/bulk-enroll"
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl border text-sm font-semibold transition-all bg-emerald-50 hover:bg-emerald-100 border-emerald-200 text-emerald-800 shadow-2xs cursor-pointer"
+              title="Bulk enroll students by CSV"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+              <span className="hidden sm:inline">Bulk CSV</span>
+            </Link>
+
             <button 
               type="button"
               onClick={() => fetchStudentsClient()}

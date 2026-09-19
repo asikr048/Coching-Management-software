@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import StudentsClient from "../../owner/students/StudentsClient"
+import Link from "next/link"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -141,7 +142,26 @@ export default async function ReceptionStudentsPage() {
 
   return (
     <div className="space-y-6">
-      <div><h2 className="text-2xl font-black text-slate-900 tracking-tight">Students</h2><p className="text-sm text-slate-500 mt-1">{students.length} total students</p></div>
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Students</h2>
+          <p className="text-sm text-slate-500 mt-1">{students.length} total students</p>
+        </div>
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/dashboard/reception/students/bulk-enroll"
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-200"
+          >
+            <span>+ Multi Enroll (CSV)</span>
+          </Link>
+          <Link
+            href="/dashboard/reception/enroll"
+            className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200"
+          >
+            + Add Student
+          </Link>
+        </div>
+      </div>
       <StudentsClient students={students} batches={batches} />
     </div>
   )

@@ -201,8 +201,11 @@ export default async function StudentsPage() {
           <h2 className="text-2xl font-bold text-gray-900">Students</h2>
           <p className="text-sm text-gray-500 mt-1">{students.length} total students</p>
         </div>
-        <div className="flex gap-3">
-          <Link href="/dashboard/owner/students/new" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200">
+        <div className="flex items-center gap-2.5">
+          <Link href="/dashboard/owner/students/bulk-enroll" className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm shadow-emerald-200">
+            <span>+ Multi Enroll (CSV)</span>
+          </Link>
+          <Link href="/dashboard/owner/students/new" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 transition-colors shadow-sm shadow-indigo-200">
             + Add Student
           </Link>
         </div>
