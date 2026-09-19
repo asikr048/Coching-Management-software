@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 import { 
   Upload, FileSpreadsheet, Download, CheckCircle2, AlertCircle, 
   Trash2, Key, Eye, EyeOff, Sparkles, Printer, FileText, 
@@ -33,9 +34,10 @@ interface Batch {
   class_level?: string
   max_seats: number
   current_seats: number
-  monthly_fee: number
-  admission_fee: number
+  monthly_fee?: number
+  admission_fee?: number
   status?: string
+  branch?: { id: string; name: string } | null
 }
 
 interface Branch {
@@ -48,6 +50,7 @@ interface ParsedStudent {
   id: string
   name: string
   guardian_phone: string
+  due_amount: number // Due for that student on this month
   guardian_name?: string
   phone?: string
   address?: string
@@ -60,18 +63,48 @@ interface ParsedStudent {
 }
 
 interface BulkEnrollClientProps {
-  batches: Batch[]
-  branches: Branch[]
+  initialBatches?: Batch[]
+  branches?: Branch[]
 }
 
-export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEnrollClientProps) {
+export default function BulkEnrollClient({ initialBatches = [], branches = [] }: BulkEnrollClientProps) {
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId: contextBranchId, branches: contextBranches } = useBranch()
 
+  const [allBatches, setAllBatches] = useState<Batch[]>(initialBatches)
+  const [loadingBatches, setLoadingBatches] = useState(false)
   const [financialAccess, setFinancialAccess] = useState<boolean | null>(null)
+
   useEffect(() => {
     checkFinancialAccess().then(({ hasAccess }) => setFinancialAccess(hasAccess))
   }, [])
+
+  // Client-side fallback fetch to ensure batches are always populated even if server cache/SSR was empty
+  useEffect(() => {
+    async function loadBatchesClient() {
+      setLoadingBatches(true)
+      try {
+        const { data, error } = await supabase
+          .from("batches")
+          .select("*, branch:branches(id, name)")
+          .order("name")
+
+        if (!error && data && data.length > 0) {
+          const active = data.filter((b: any) => b.is_active !== false && b.status !== "finished")
+          setAllBatches(active.length > 0 ? active : data)
+        }
+      } catch (err) {
+        console.warn("Client batches fetch notice:", err)
+      } finally {
+        setLoadingBatches(false)
+      }
+    }
+
+    if (initialBatches.length === 0) {
+      loadBatchesClient()
+    }
+  }, [supabase, initialBatches.length])
 
   const effectiveBranches = useMemo(() => {
     if (branches && branches.length > 0) return branches
@@ -79,40 +112,31 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
     return []
   }, [branches, contextBranches])
 
-  const [selectedBranchId, setSelectedBranchId] = useState<string>(() => {
-    if (contextBranchId && contextBranchId !== "all") return contextBranchId
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("medhashiree_admin_branch_id")
-      if (saved && saved !== "all") return saved
-    }
-    const mainB = effectiveBranches.find(b => /main|প্রধান/i.test(b.name))
-    return mainB?.id || effectiveBranches[0]?.id || ""
-  })
+  // Default to "all" branches so no batches are hidden by default!
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
 
-  // Filter batches by branch
+  // Filter batches by branch (or show all when "all" is selected)
   const filteredBatches = useMemo(() => {
-    if (!batches || batches.length === 0) return []
-    if (!selectedBranchId || selectedBranchId === "all") return batches
-    const matches = batches.filter(b => 
+    if (!allBatches || allBatches.length === 0) return []
+    if (!selectedBranchId || selectedBranchId === "all") return allBatches
+    const matches = allBatches.filter(b => 
       b.branch_id === selectedBranchId ||
       (b as any).origin_branch_id === selectedBranchId ||
       ((b as any).branch_seats && (b as any).branch_seats[selectedBranchId] !== undefined)
     )
-    const globalBatches = batches.filter(b => !b.branch_id && !(b as any).origin_branch_id)
-    const combined = [...matches, ...globalBatches.filter(g => !matches.some(e => e.id === g.id))]
-    return combined.length > 0 ? combined : batches
-  }, [batches, selectedBranchId])
+    return matches.length > 0 ? matches : allBatches
+  }, [allBatches, selectedBranchId])
 
-  // Batch selection & fee settings
+  // Selected batch ID
   const [selectedBatchId, setSelectedBatchId] = useState<string>("")
   const selectedBatch = useMemo(() => {
-    return batches.find(b => b.id === selectedBatchId)
-  }, [batches, selectedBatchId])
+    return allBatches.find(b => b.id === selectedBatchId)
+  }, [allBatches, selectedBatchId])
 
-  // Auto-select first open batch
+  // Auto-select first open batch if none selected
   useEffect(() => {
     if (filteredBatches.length > 0 && !selectedBatchId) {
-      const firstOpen = filteredBatches.find(b => (b.current_seats || 0) < b.max_seats)
+      const firstOpen = filteredBatches.find(b => (b.current_seats || 0) < (b.max_seats || 50))
       if (firstOpen) {
         setSelectedBatchId(firstOpen.id)
       } else {
@@ -120,33 +144,6 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
       }
     }
   }, [filteredBatches, selectedBatchId])
-
-  // Fee state
-  const [admissionFee, setAdmissionFee] = useState<number>(0)
-  const [monthlyFee, setMonthlyFee] = useState<number>(0)
-  const [paidAmount, setPaidAmount] = useState<string>("")
-  const [paymentMethod, setPaymentMethod] = useState<string>("cash")
-  const [dueDate, setDueDate] = useState<string>(() => {
-    const d = new Date()
-    d.setMonth(d.getMonth() + 1)
-    d.setDate(10)
-    return d.toISOString().split("T")[0]
-  })
-
-  // Sync fee inputs when batch changes
-  useEffect(() => {
-    if (selectedBatch) {
-      const adm = selectedBatch.admission_fee || 0
-      const mon = selectedBatch.monthly_fee || 0
-      setAdmissionFee(adm)
-      setMonthlyFee(mon)
-      setPaidAmount(String(adm + mon)) // default full paid
-    }
-  }, [selectedBatch])
-
-  const totalPayable = admissionFee + monthlyFee
-  const numericPaid = parseFloat(paidAmount) || 0
-  const remainingDue = Math.max(0, totalPayable - numericPaid)
 
   // Password & confirm password state
   const [password, setPassword] = useState<string>("student123")
@@ -176,17 +173,24 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
   // Calculate available seats
   const availableSeats = useMemo(() => {
     if (!selectedBatch) return 0
-    return Math.max(0, (selectedBatch.max_seats || 0) - (selectedBatch.current_seats || 0))
+    const max = selectedBatch.max_seats || 50
+    const cur = selectedBatch.current_seats || 0
+    return Math.max(0, max - cur)
   }, [selectedBatch])
 
-  // Download Sample CSV
+  // Total due sum across all parsed students
+  const totalParsedDue = useMemo(() => {
+    return parsedStudents.reduce((sum, s) => sum + (Number(s.due_amount) || 0), 0)
+  }, [parsedStudents])
+
+  // Download Sample CSV with "Due" column
   const handleDownloadSampleCSV = () => {
-    const headers = ["Name", "Guardian Phone", "Guardian Name", "Phone", "Address", "School / College", "Gender", "Class"]
+    const headers = ["Name", "Guardian Phone", "Due", "Guardian Name", "Phone", "Address", "School / College", "Gender", "Class"]
     const sampleRows = [
-      ["আবাব হোসেন", "01751380602", "শাকিলা খাতুন", "01751380602", "কামারপাড়া, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Male", selectedBatch?.class_level || "Class 10"],
-      ["তাযমীন", "01323077148", "বকুল মিয়া", "", "পার্ক মোড়, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Female", selectedBatch?.class_level || "Class 10"],
-      ["জান্নাতুল", "01314262623", "জিয়াদুল ইসলাম", "", "কামারপাড়া, রংপুর", "মুলাটোল মাদ্রাসা", "Female", selectedBatch?.class_level || "Class 10"],
-      ["Farhan Ahmed", "01712345678", "Rafiqul Islam", "01987654321", "Dhanmondi, Dhaka", "Dhaka Residential Model College", "Male", selectedBatch?.class_level || "Class 10"]
+      ["আবাব হোসেন", "01751380602", "1500", "শাকিলা খাতুন", "01751380602", "কামারপাড়া, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Male", selectedBatch?.class_level || "Class 10"],
+      ["তাযমীন", "01323077148", "1000", "বকুল মিয়া", "", "পার্ক মোড়, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Female", selectedBatch?.class_level || "Class 10"],
+      ["জান্নাতুল", "01314262623", "0", "জিয়াদুল ইসলাম", "", "কামারপাড়া, রংপুর", "মুলাটোল মাদ্রাসা", "Female", selectedBatch?.class_level || "Class 10"],
+      ["Farhan Ahmed", "01712345678", "2000", "Rafiqul Islam", "01987654321", "Dhanmondi, Dhaka", "Dhaka Residential Model College", "Male", selectedBatch?.class_level || "Class 10"]
     ]
 
     const csvContent = [
@@ -211,12 +215,11 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    toast.success("নমুনা CSV ফাইল ডাউনলোড সম্পন্ন হয়েছে! (Sample CSV downloaded)")
+    toast.success("নমুনা CSV ফাইল ডাউনলোড সম্পন্ন হয়েছে! (Sample CSV downloaded with Due column)")
   }
 
-  // Robust CSV parser supporting quotes, commas in quotes, Bengali headers
+  // Robust CSV parser supporting quotes, commas in quotes, Bengali headers & Due column
   const parseCSVText = (text: string) => {
-    // Remove UTF-8 BOM if present
     const cleanText = text.replace(/^\uFEFF/, "")
     const lines = cleanText.split(/\r\n|\n|\r/).filter(l => l.trim() !== "")
     if (lines.length < 2) {
@@ -224,13 +227,12 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
       return
     }
 
-    // Delimiter detection (comma, semicolon, or tab)
+    // Delimiter detection
     const firstLine = lines[0]
     let delimiter = ","
     if (firstLine.includes("\t") && !firstLine.includes(",")) delimiter = "\t"
     else if (firstLine.includes(";") && !firstLine.includes(",")) delimiter = ";"
 
-    // Tokenizer regex for CSV line respecting quotes
     const parseLine = (line: string): string[] => {
       const result: string[] = []
       let cur = ""
@@ -258,10 +260,10 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
 
     const rawHeaders = parseLine(lines[0]).map(h => h.toLowerCase().trim())
 
-    // Normalize header mapping
     const colIndex = {
       name: -1,
       guardian_phone: -1,
+      due: -1,
       guardian_name: -1,
       phone: -1,
       address: -1,
@@ -273,6 +275,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
 
     rawHeaders.forEach((h, idx) => {
       if (/^(name|student_name|নাম|শিক্ষার্থীর নাম)$/i.test(h)) colIndex.name = idx
+      else if (/^(due|due_amount|monthly_due|fee|বকেয়া|বকেয়া টাকা|ফি|মাসিক বকেয়া)$/i.test(h)) colIndex.due = idx
       else if (/^(guardian_phone|parent_phone|guardian_mobile|অভিভাবকের মোবাইল|অভিভাবকের ফোন|পিতা\/মাতা মোবাইল)$/i.test(h)) colIndex.guardian_phone = idx
       else if (/^(guardian_name|parent_name|father_name|পিতা\/মাতা নাম|অভিভাবকের নাম|পিতার নাম)$/i.test(h)) colIndex.guardian_name = idx
       else if (/^(phone|student_phone|mobile|মোবাইল|ফোন|শিক্ষার্থীর মোবাইল)$/i.test(h)) colIndex.phone = idx
@@ -283,25 +286,26 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
       else if (/^(email|ইমেইল)$/i.test(h)) colIndex.email = idx
     })
 
-    // Fallbacks if not strictly matched
+    // Fallbacks
     if (colIndex.name === -1) {
-      // Find first column with 'name' or 'নাম'
       colIndex.name = rawHeaders.findIndex(h => h.includes("name") || h.includes("নাম"))
       if (colIndex.name === -1) colIndex.name = rawHeaders.length > 1 ? 1 : 0
     }
     if (colIndex.guardian_phone === -1) {
-      // Look for phone or মোবাইল
       colIndex.guardian_phone = rawHeaders.findIndex(h => h.includes("phone") || h.includes("mobile") || h.includes("মোবাইল") || h.includes("ফোন"))
       if (colIndex.guardian_phone === -1 && colIndex.phone !== -1) {
         colIndex.guardian_phone = colIndex.phone
       }
+    }
+    if (colIndex.due === -1) {
+      colIndex.due = rawHeaders.findIndex(h => h.includes("due") || h.includes("বকেয়া") || h.includes("fee") || h.includes("ফি"))
     }
 
     const students: ParsedStudent[] = []
 
     for (let i = 1; i < lines.length; i++) {
       const cells = parseLine(lines[i])
-      if (cells.every(c => !c)) continue // skip empty rows
+      if (cells.every(c => !c)) continue
 
       const name = colIndex.name >= 0 && cells[colIndex.name] ? cells[colIndex.name].replace(/^["']|["']$/g, "").trim() : ""
       let guardianPhone = colIndex.guardian_phone >= 0 && cells[colIndex.guardian_phone] ? cells[colIndex.guardian_phone].replace(/[^0-9+]/g, "").trim() : ""
@@ -312,6 +316,10 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
       const rawGender = colIndex.gender >= 0 && cells[colIndex.gender] ? cells[colIndex.gender].toLowerCase().trim() : ""
       const classLevel = colIndex.class_level >= 0 && cells[colIndex.class_level] ? cells[colIndex.class_level].trim() : (selectedBatch?.class_level || "")
       const email = colIndex.email >= 0 && cells[colIndex.email] ? cells[colIndex.email].trim() : ""
+
+      // Parse Due Amount
+      const rawDueStr = colIndex.due >= 0 && cells[colIndex.due] ? cells[colIndex.due].replace(/[^0-9.]/g, "").trim() : "0"
+      const dueAmount = parseFloat(rawDueStr) || 0
 
       // Standardize phone
       if (!guardianPhone && studentPhone) guardianPhone = studentPhone
@@ -330,6 +338,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
         id: `stu_${i}_${Date.now().toString(36)}`,
         name,
         guardian_phone: guardianPhone,
+        due_amount: dueAmount,
         guardian_name: guardianName,
         phone: studentPhone,
         address,
@@ -343,7 +352,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
     }
 
     setParsedStudents(students)
-    toast.success(`সফলভাবে ${students.length} জন শিক্ষার্থীর তথ্য পার্স করা হয়েছে! (Parsed ${students.length} rows)`)
+    toast.success(`সফলভাবে ${students.length} জন শিক্ষার্থীর তথ্য পার্স করা হয়েছে!`)
   }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -409,7 +418,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
 
     const invalidCount = parsedStudents.filter(s => !s.isValid).length
     if (invalidCount > 0) {
-      toast.error(`${invalidCount} জন শিক্ষার্থীর তথ্যে ত্রুটি রয়েছে। লাল চিহ্নিত ঘরগুলো ঠিক করুন। (Please fix invalid student rows)`)
+      toast.error(`${invalidCount} জন শিক্ষার্থীর তথ্যে ত্রুটি রয়েছে। লাল চিহ্নিত ঘরগুলো ঠিক করুন।`)
       return
     }
 
@@ -432,18 +441,12 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
     try {
       const payload = {
         batch_id: selectedBatchId,
-        branch_id: selectedBranchId || selectedBatch?.branch_id,
+        branch_id: selectedBranchId !== "all" ? selectedBranchId : selectedBatch?.branch_id,
         password: password.trim(),
-        fee_settings: {
-          admission_fee: admissionFee,
-          monthly_fee: monthlyFee,
-          paid_amount: numericPaid,
-          due_date: dueDate,
-          payment_method: paymentMethod
-        },
         students: parsedStudents.map(s => ({
           name: s.name.trim(),
           guardian_phone: s.guardian_phone.trim(),
+          due_amount: Number(s.due_amount) || 0,
           guardian_name: s.guardian_name?.trim() || "",
           phone: s.phone?.trim() || "",
           address: s.address?.trim() || "",
@@ -466,7 +469,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
         throw new Error(data.error || "Failed to complete bulk enrollment")
       }
 
-      toast.success(`🎉 সফলভাবে ${data.count} জন শিক্ষার্থীর ভর্তি সম্পন্ন হয়েছে! (Bulk Enrollment Complete)`, {
+      toast.success(`🎉 সফলভাবে ${data.count} জন শিক্ষার্থীর ভর্তি সম্পন্ন হয়েছে!`, {
         duration: 5000
       })
 
@@ -517,7 +520,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
         <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-2" />
         <h3 className="font-bold text-slate-800">Financial Access Required</h3>
         <p className="text-sm text-rose-500 mt-1">
-          You need financial access privileges to enroll students and record admission payments.
+          You need financial access privileges to enroll students.
         </p>
       </div>
     )
@@ -542,7 +545,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
               {count} জন শিক্ষার্থীর ভর্তি সফলভাবে সম্পন্ন হয়েছে!
             </h2>
             <p className="text-emerald-100 text-sm mt-1">
-              ব্যাচ: <b>{batch.name}</b> • বরাদ্দকৃত রোল রেঞ্জ: <b>#{roll_range.start} থেকে #{roll_range.end}</b> • পাসওয়ার্ড তৈরি ও প্রোফাইল সংযুক্ত হয়েছে।
+              ব্যাচ: <b>{batch.name}</b> • বরাদ্দকৃত রোল রেঞ্জ: <b>#{roll_range.start} থেকে #{roll_range.end}</b> • বকেয়া ও শিক্ষার্থী প্রোফাইল সংরক্ষিত হয়েছে।
             </p>
 
             {/* Quick Bulk Action Buttons */}
@@ -614,7 +617,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
                   <th className="py-3 px-4">নাম (Name)</th>
                   <th className="py-3 px-4">মোবাইল (Phone)</th>
                   <th className="py-3 px-4">অভিভাবক (Guardian)</th>
-                  <th className="py-3 px-4">ফি স্ট্যাটাস (Fee)</th>
+                  <th className="py-3 px-4">বকেয়া (Due)</th>
                   <th className="py-3 px-4 text-right">অ্যাকশন (Actions)</th>
                 </tr>
               </thead>
@@ -633,9 +636,11 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
                       </td>
                       <td className="py-3 px-4">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold ${
-                          slip.due_amount <= 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-amber-50 text-amber-700 border border-amber-200"
+                          slip.due_amount <= 0 
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200" 
+                            : "bg-rose-50 text-rose-700 border border-rose-200 font-mono"
                         }`}>
-                          {slip.due_amount <= 0 ? "Paid Full" : `Due ৳${slip.due_amount}`}
+                          {slip.due_amount <= 0 ? "৳০ (No Due)" : `বকেয়া: ৳${slip.due_amount}`}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
@@ -672,15 +677,15 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
   // --------------------------------------------------------------------------
   return (
     <div className="space-y-6">
-      {/* 1. Step: Batch Selection & Fee Configuration */}
+      {/* 1. Step: Batch Selection (Clean & Reliable) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5">
         <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
             ১
           </div>
           <div>
-            <h2 className="text-base font-bold text-slate-900">ব্যাচ ও ফি নির্বাচন (Select Batch & Fee Settings)</h2>
-            <p className="text-xs text-slate-500">যে ব্যাচে শিক্ষার্থীদের একসাথে ভর্তি করানো হবে এবং ভর্তিকালীন ফি নির্ধারণ করুন</p>
+            <h2 className="text-base font-bold text-slate-900">ব্যাচ নির্বাচন (Select Target Batch)</h2>
+            <p className="text-xs text-slate-500">যে ব্যাচে শিক্ষার্থীদের একসাথে ভর্তি করানো হবে তা নির্বাচন করুন</p>
           </div>
         </div>
 
@@ -688,13 +693,14 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
           {/* Branch filter */}
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              শাখা (Branch)
+              শাখা ফিল্টার (Branch)
             </label>
             <select
               value={selectedBranchId}
               onChange={(e) => setSelectedBranchId(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-900 shadow-2xs font-medium"
+              className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-900 shadow-2xs font-medium cursor-pointer"
             >
+              <option value="all">সকল শাখা (All Branches)</option>
               {effectiveBranches.map((br) => (
                 <option key={br.id} value={br.id}>{br.name}</option>
               ))}
@@ -703,27 +709,46 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
 
           {/* Batch select */}
           <div className="md:col-span-2">
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide mb-1.5">
-              ভর্তিকৃত ব্যাচ (Batch Selection) <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                ভর্তিকৃত ব্যাচ (Batch Selection) <span className="text-rose-500">*</span>
+              </label>
+              {loadingBatches && (
+                <span className="text-[11px] text-indigo-600 flex items-center gap-1">
+                  <RefreshCw className="w-3 h-3 animate-spin" /> লোড হচ্ছে...
+                </span>
+              )}
+            </div>
+
             <select
               value={selectedBatchId}
               onChange={(e) => setSelectedBatchId(e.target.value)}
-              className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-900 shadow-2xs font-semibold"
+              className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-900 shadow-2xs font-semibold cursor-pointer"
             >
+              <option value="">-- ব্যাচ নির্বাচন করুন (Select Batch) --</option>
               {filteredBatches.map((b) => {
-                const isFull = (b.current_seats || 0) >= b.max_seats
+                const max = b.max_seats || 50
+                const cur = b.current_seats || 0
+                const avail = Math.max(0, max - cur)
+                const isFull = avail <= 0
+                const branchLabel = b.branch?.name ? ` [${b.branch.name}]` : ""
                 return (
                   <option key={b.id} value={b.id} disabled={isFull}>
-                    {b.name} ({b.class_level || "General"} - {b.subject || "All"}) • {b.current_seats || 0}/{b.max_seats} Seats {isFull ? "[FULL]" : `[${b.max_seats - (b.current_seats || 0)} Available]`}
+                    {b.name} ({b.class_level || "General"}{b.subject ? ` - ${b.subject}` : ""}){branchLabel} • {cur}/{max} Seats {isFull ? "[পূর্ণ (Full)]" : `[${avail} Available]`}
                   </option>
                 )
               })}
             </select>
+
+            {filteredBatches.length === 0 && !loadingBatches && (
+              <p className="text-xs text-amber-600 mt-1.5 font-medium">
+                ⚠️ কোনো সক্রিয় ব্যাচ পাওয়া যায়নি। উপরের ফিল্টারে &apos;সকল শাখা (All Branches)&apos; নির্বাচন করুন।
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Selected Batch Summary Card */}
+        {/* Selected Batch Summary */}
         {selectedBatch && (
           <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200/80 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
@@ -734,6 +759,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
                 <div className="font-bold text-slate-900 text-sm">{selectedBatch.name}</div>
                 <div className="text-xs text-slate-500">
                   শ্রেণী: {selectedBatch.class_level || "General"} • বিষয়: {selectedBatch.subject || "All"}
+                  {selectedBatch.branch?.name && ` • শাখা: ${selectedBatch.branch.name}`}
                 </div>
               </div>
             </div>
@@ -742,122 +768,20 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
               <div>
                 <div className="text-xs text-slate-500">আসন অবস্থা (Seats)</div>
                 <div className="text-sm font-bold text-slate-800">
-                  {selectedBatch.current_seats || 0} / {selectedBatch.max_seats}
+                  {selectedBatch.current_seats || 0} / {selectedBatch.max_seats || 50}
                   <span className={`ml-2 text-xs font-extrabold px-2 py-0.5 rounded-full ${
                     availableSeats > 5 ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
                   }`}>
-                    {availableSeats} ফাঁকা
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <div className="text-xs text-slate-500">ভর্তি ও মাসিক ফি</div>
-                <div className="text-sm font-bold text-indigo-700">
-                  ৳{(selectedBatch.admission_fee || 0) + (selectedBatch.monthly_fee || 0)}
-                  <span className="text-xs font-normal text-slate-500 ml-1">
-                    (ভর্তি: ৳{selectedBatch.admission_fee || 0}, মাসিক: ৳{selectedBatch.monthly_fee || 0})
+                    {availableSeats} ফাঁকা (Open)
                   </span>
                 </div>
               </div>
             </div>
           </div>
         )}
-
-        {/* Fee Configuration Sub-form */}
-        <div className="pt-2">
-          <div className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
-            <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
-            <span>ভর্তিকালীন ফি ও পরিশোধ সংক্রান্ত তথ্য (Admission & Payment Settings)</span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">ভর্তি ফি (Admission Fee)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">৳</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={admissionFee}
-                  onChange={(e) => setAdmissionFee(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full pl-7 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 text-slate-900"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">মাসিক ফি (Monthly Fee)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">৳</span>
-                <input
-                  type="number"
-                  min="0"
-                  value={monthlyFee}
-                  onChange={(e) => setMonthlyFee(Math.max(0, parseInt(e.target.value, 10) || 0))}
-                  className="w-full pl-7 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 text-slate-900"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">পরিশোধিত অর্থ (Paid per Student)</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">৳</span>
-                <input
-                  type="number"
-                  min="0"
-                  max={totalPayable}
-                  value={paidAmount}
-                  onChange={(e) => setPaidAmount(e.target.value)}
-                  className="w-full pl-7 pr-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 text-slate-900 font-bold"
-                />
-              </div>
-              <div className="flex gap-1.5 mt-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPaidAmount(String(totalPayable))}
-                  className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
-                >
-                  Full Paid
-                </button>
-                <span className="text-slate-300 text-[10px]">•</span>
-                <button
-                  type="button"
-                  onClick={() => setPaidAmount(String(admissionFee))}
-                  className="text-[10px] font-bold text-slate-600 hover:underline cursor-pointer"
-                >
-                  Admission Only
-                </button>
-                <span className="text-slate-300 text-[10px]">•</span>
-                <button
-                  type="button"
-                  onClick={() => setPaidAmount("0")}
-                  className="text-[10px] font-bold text-rose-600 hover:underline cursor-pointer"
-                >
-                  All Due (৳0)
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-600 mb-1">বকেয়া পরিশোধের তারিখ (Due Date)</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                disabled={remainingDue <= 0}
-                className="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 text-slate-900 disabled:bg-slate-100 disabled:opacity-60"
-              />
-              <div className="text-[11px] text-slate-500 mt-1">
-                বকেয়া: <b className={remainingDue > 0 ? "text-rose-600 font-bold" : "text-emerald-600"}>৳{remainingDue}</b>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
-      {/* 2. Step: CSV Template Format & Download */}
+      {/* 2. Step: CSV Template Format & Download (With Due column) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
           <div className="flex items-center gap-2.5">
@@ -866,7 +790,9 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">সিএসভি ফরম্যাট ও নমুনা ফাইল (CSV Format & Template)</h2>
-              <p className="text-xs text-slate-500">নিচের ফরম্যাট অনুযায়ী এক্সেল বা গুগল শিটে তথ্য তৈরি করে ডাউনলোডকৃত ফাইলে পেস্ট করতে পারেন</p>
+              <p className="text-xs text-slate-500">
+                ফাইলে <b>Due (বকেয়া)</b> কলামে চলতি মাসে শিক্ষার্থীর বকেয়া টাকার পরিমাণ উল্লেখ করুন
+              </p>
             </div>
           </div>
 
@@ -876,7 +802,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
             className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
           >
             <Download className="w-4 h-4" />
-            <span>নমুনা CSV ডাউনলোড করুন (Download Sample)</span>
+            <span>নমুনা CSV ডাউনলোড করুন (Download Sample with Due)</span>
           </button>
         </div>
 
@@ -885,48 +811,54 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
           <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
             <thead className="bg-slate-100 text-slate-700 font-bold">
               <tr>
-                <th className="py-2.5 px-3">কলামের নাম (English)</th>
-                <th className="py-2.5 px-3">বাংলা হেডলাইন (Bangla)</th>
-                <th className="py-2.5 px-3">বাধ্যতামূলক? (Required)</th>
-                <th className="py-2.5 px-3">বর্ণনা ও উদাহরণ (Description)</th>
+                <th className="py-2.5 px-3">কলামের নাম (Header)</th>
+                <th className="py-2.5 px-3">বাংলা নাম</th>
+                <th className="py-2.5 px-3">স্ট্যাটাস</th>
+                <th className="py-2.5 px-3">বর্ণনা ও উদাহরণ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white text-slate-600">
               <tr>
                 <td className="py-2 px-3 font-mono font-bold text-slate-900">Name</td>
-                <td className="py-2 px-3 font-medium text-slate-800">নাম / শিক্ষার্থীর নাম</td>
-                <td className="py-2 px-3"><span className="text-rose-600 font-bold">হ্যাঁ (Required)</span></td>
+                <td className="py-2 px-3 font-medium text-slate-800">নাম</td>
+                <td className="py-2 px-3"><span className="text-rose-600 font-bold">Required</span></td>
                 <td className="py-2 px-3">শিক্ষার্থীর পুরো নাম (যেমন: আবাব হোসেন)</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono font-bold text-slate-900">Guardian Phone</td>
-                <td className="py-2 px-3 font-medium text-slate-800">অভিভাবকের মোবাইল / ফোন</td>
-                <td className="py-2 px-3"><span className="text-rose-600 font-bold">হ্যাঁ (Required)</span></td>
-                <td className="py-2 px-3">অভিভাবকের ১১ ডিজিট মোবাইল নম্বর (যেমন: 01751380602)</td>
+                <td className="py-2 px-3 font-medium text-slate-800">অভিভাবকের মোবাইল</td>
+                <td className="py-2 px-3"><span className="text-rose-600 font-bold">Required</span></td>
+                <td className="py-2 px-3">১১ ডিজিট মোবাইল নম্বর (যেমন: 01751380602)</td>
+              </tr>
+              <tr className="bg-amber-50/50 font-semibold">
+                <td className="py-2 px-3 font-mono text-indigo-700 font-bold">Due</td>
+                <td className="py-2 px-3 text-indigo-900 font-bold">বকেয়া / বকেয়া টাকা</td>
+                <td className="py-2 px-3"><span className="text-amber-700 font-bold">Optional</span></td>
+                <td className="py-2 px-3 text-amber-900">চলতি মাসের বকেয়া টাকার পরিমাণ (যেমন: 1500, 1000 বা 0)</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono text-slate-700">Guardian Name</td>
-                <td className="py-2 px-3 text-slate-800">পিতা/মাতা নাম / অভিভাবকের নাম</td>
-                <td className="py-2 px-3 text-slate-500">ঐচ্ছিক (Recommended)</td>
+                <td className="py-2 px-3 text-slate-800">পিতা/মাতা নাম</td>
+                <td className="py-2 px-3 text-slate-500">Optional</td>
                 <td className="py-2 px-3">অভিভাবকের নাম (যেমন: শাকিলা খাতুন)</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono text-slate-700">Phone</td>
-                <td className="py-2 px-3 text-slate-800">শিক্ষার্থীর মোবাইল / ফোন</td>
-                <td className="py-2 px-3 text-slate-500">ঐচ্ছিক (Optional)</td>
+                <td className="py-2 px-3 text-slate-800">শিক্ষার্থীর মোবাইল</td>
+                <td className="py-2 px-3 text-slate-500">Optional</td>
                 <td className="py-2 px-3">শিক্ষার্থীর নিজস্ব মোবাইল নম্বর</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono text-slate-700">Address</td>
                 <td className="py-2 px-3 text-slate-800">ঠিকানা</td>
-                <td className="py-2 px-3 text-slate-500">ঐচ্ছিক (Optional)</td>
+                <td className="py-2 px-3 text-slate-500">Optional</td>
                 <td className="py-2 px-3">বর্তমান বা স্থায়ী ঠিকানা (যেমন: কামারপাড়া, রংপুর)</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono text-slate-700">School / College</td>
-                <td className="py-2 px-3 text-slate-800">স্কুল/কলেজ / স্কুলের নাম</td>
-                <td className="py-2 px-3 text-slate-500">ঐচ্ছিক (Optional)</td>
-                <td className="py-2 px-3">বর্তমান শিক্ষা প্রতিষ্ঠানের নাম</td>
+                <td className="py-2 px-3 text-slate-800">স্কুল/কলেজ</td>
+                <td className="py-2 px-3 text-slate-500">Optional</td>
+                <td className="py-2 px-3">বর্তমান শিক্ষা প্রতিষ্ঠান</td>
               </tr>
             </tbody>
           </table>
@@ -941,7 +873,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
           </div>
           <div>
             <h2 className="text-base font-bold text-slate-900">সিএসভি ফাইল আপলোড ও প্রিভিউ (Import CSV)</h2>
-            <p className="text-xs text-slate-500">আপনার প্রস্তুতকৃত CSV ফাইলটি ড্র্যাগ করুন অথবা ক্লিক করে সিলেক্ট করুন</p>
+            <p className="text-xs text-slate-500">আপনার তৈরি করা CSV ফাইলটি আপলোড করুন</p>
           </div>
         </div>
 
@@ -975,7 +907,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
             {fileName ? (
               <span className="text-emerald-700">ফাইল লোড হয়েছে: {fileName}</span>
             ) : (
-              <span>ক্লিক করে CSV ফাইল নির্বাচন করুন অথবা এখানে ড্র্যাগ করুন</span>
+              <span>ক্লিক করে CSV ফাইল নির্বাচন করুন অথবা ড্র্যাগ করে আনুন</span>
             )}
           </div>
           <p className="text-xs text-slate-500 mt-1">
@@ -987,9 +919,12 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
         {parsedStudents.length > 0 && (
           <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <span className="text-sm font-bold text-slate-900">
                   মোট শিক্ষার্থী: <span className="text-indigo-600 font-extrabold">{parsedStudents.length}</span> জন
+                </span>
+                <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-md border border-rose-200">
+                  মোট বকেয়া: ৳{totalParsedDue.toLocaleString("en-BD")}
                 </span>
                 {parsedStudents.length > availableSeats && (
                   <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200">
@@ -1001,7 +936,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500">
                   সঠিক: <b>{parsedStudents.filter(s => s.isValid).length}</b> • 
-                  ত্রুটিপূর্ণ: <b className="text-rose-600">{parsedStudents.filter(s => !s.isValid).length}</b>
+                  ত্রুটি: <b className="text-rose-600">{parsedStudents.filter(s => !s.isValid).length}</b>
                 </span>
                 <button
                   type="button"
@@ -1020,6 +955,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
                     <th className="py-2.5 px-3">#</th>
                     <th className="py-2.5 px-3">নাম (Name) <span className="text-rose-500">*</span></th>
                     <th className="py-2.5 px-3">অভিভাবকের মোবাইল <span className="text-rose-500">*</span></th>
+                    <th className="py-2.5 px-3 text-rose-700 bg-rose-50/70">বকেয়া (Due ৳)</th>
                     <th className="py-2.5 px-3">পিতা/মাতার নাম</th>
                     <th className="py-2.5 px-3">শিক্ষার্থীর মোবাইল</th>
                     <th className="py-2.5 px-3">স্কুল/কলেজ</th>
@@ -1051,6 +987,18 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
                             !st.guardian_phone ? "border-rose-400 bg-rose-50" : "border-slate-200 bg-transparent"
                           }`}
                         />
+                      </td>
+                      <td className="py-2 px-3 bg-rose-50/20">
+                        <div className="relative">
+                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">৳</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={st.due_amount}
+                            onChange={(e) => handleUpdateStudentCell(st.id, "due_amount", parseFloat(e.target.value) || 0)}
+                            className="pl-4 pr-1 py-1 border border-slate-200 rounded text-xs font-bold text-rose-600 w-24 bg-transparent"
+                          />
+                        </div>
                       </td>
                       <td className="py-2 px-3">
                         <input
@@ -1114,7 +1062,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
         )}
       </div>
 
-      {/* 4. Step: Password & Confirm Password (Taken for all students) */}
+      {/* 4. Step: Password & Confirm Password */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-4">
         <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
@@ -1178,7 +1126,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
         <div className="bg-indigo-50/70 border border-indigo-100 rounded-xl p-3 text-xs text-indigo-900 flex items-start gap-2.5">
           <Key className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
           <div>
-            শিক্ষার্থীরা তাদের <b>Student ID</b> (যেমন: MS-00012) এবং এই <b>পাসওয়ার্ড</b> ব্যবহার করে স্টুডেন্ট পোর্টালে লগইন করতে পারবে। প্রতিটি শিক্ষার্থীর ভর্তি রসিদে স্বয়ংক্রিয়ভাবে আইডি ও পাসওয়ার্ড মুদ্রিত হবে।
+            শিক্ষার্থীরা তাদের <b>Student ID</b> (যেমন: MS-00012) এবং এই <b>পাসওয়ার্ড</b> ব্যবহার করে স্টুডেন্ট পোর্টালে লগইন করতে পারবে। প্রতিটি শিক্ষার্থীর ভর্তি ও বকেয়া রসিদে স্বয়ংক্রিয়ভাবে আইডি ও পাসওয়ার্ড মুদ্রিত হবে।
           </div>
         </div>
       </div>
@@ -1188,6 +1136,9 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
         <div className="text-xs text-slate-600">
           নির্বাচিত ব্যাচ: <b className="text-slate-900">{selectedBatch?.name || "None"}</b> • 
           ভর্তি হবে: <b className="text-indigo-600">{parsedStudents.length} জন</b>
+          {totalParsedDue > 0 && (
+            <span> • মোট বকেয়া: <b className="text-rose-600">৳{totalParsedDue.toLocaleString("en-BD")}</b></span>
+          )}
         </div>
 
         <button
@@ -1199,7 +1150,7 @@ export default function BulkEnrollClient({ batches = [], branches = [] }: BulkEn
           {isSubmitting ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              <span>একসাথে ভর্তি সম্পন্ন হচ্ছে... (Enrolling...)</span>
+              <span>একসাথে ভর্তি ও স্লিপ তৈরি হচ্ছে... (Enrolling...)</span>
             </>
           ) : (
             <>

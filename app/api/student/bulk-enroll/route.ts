@@ -8,6 +8,7 @@ export const revalidate = 0
 interface StudentImportPayload {
   name: string
   guardian_phone: string
+  due_amount?: number
   guardian_name?: string
   phone?: string
   address?: string
@@ -24,7 +25,6 @@ export async function POST(req: NextRequest) {
       batch_id,
       branch_id,
       password,
-      fee_settings = {},
       students = []
     } = body
 
@@ -42,10 +42,10 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient()
 
-    // 1. Fetch batch details
+    // 1. Fetch batch details safely
     const { data: batch, error: bErr } = await admin
       .from("batches")
-      .select("id, name, branch_id, classroom, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee, status, is_active")
+      .select("*, branch:branches(id, name)")
       .eq("id", batch_id)
       .maybeSingle()
 
@@ -64,19 +64,20 @@ export async function POST(req: NextRequest) {
       .eq("batch_id", batch_id)
       .eq("status", "active")
 
+    const maxSeats = batch.max_seats || 50
     const currentOccupied = Math.max(Number(batch.current_seats) || 0, Number(liveActiveCount) || 0)
-    const availableSeats = Math.max(0, batch.max_seats - currentOccupied)
+    const availableSeats = Math.max(0, maxSeats - currentOccupied)
 
     if (students.length > availableSeats) {
       return NextResponse.json({
-        error: `Cannot enroll ${students.length} students. Only ${availableSeats} seat(s) remaining in batch "${batch.name}" (Max: ${batch.max_seats}, Occupied: ${currentOccupied}).`
+        error: `Cannot enroll ${students.length} students. Only ${availableSeats} seat(s) remaining in batch "${batch.name}" (Max: ${maxSeats}, Occupied: ${currentOccupied}).`
       }, { status: 400 })
     }
 
     // 3. Fetch branch info
     const effectiveBranchId = branch_id || batch.branch_id || null
-    let branchName = "Main Branch"
-    if (effectiveBranchId) {
+    let branchName = batch.branch?.name || "Main Branch"
+    if (effectiveBranchId && !batch.branch?.name) {
       const { data: br } = await admin.from("branches").select("name").eq("id", effectiveBranchId).maybeSingle()
       if (br?.name) branchName = br.name
     }
@@ -120,16 +121,9 @@ export async function POST(req: NextRequest) {
       maxSeq = count || 0
     }
 
-    // 6. Fees setup
-    const admFee = typeof fee_settings.admission_fee === "number" ? fee_settings.admission_fee : (batch.admission_fee || 0)
-    const monFee = typeof fee_settings.monthly_fee === "number" ? fee_settings.monthly_fee : (batch.monthly_fee || 0)
-    const totalFee = admFee + monFee
-    const defaultPaid = typeof fee_settings.paid_amount === "number" ? fee_settings.paid_amount : totalFee
-    const paymentMethod = fee_settings.payment_method || "cash"
-    
     const today = new Date()
     const curMonthStr = today.toISOString().slice(0, 7) // YYYY-MM
-    const defaultDueDate = fee_settings.due_date || (() => {
+    const defaultDueDate = (() => {
       const d = new Date()
       d.setMonth(d.getMonth() + 1)
       d.setDate(10)
@@ -157,6 +151,7 @@ export async function POST(req: NextRequest) {
       const school = (row.school_college || "").trim()
       const classLevel = (row.class_level || batch.class_level || "").trim()
       const gender = row.gender === "female" || row.gender === "other" ? row.gender : "male"
+      const studentDue = typeof row.due_amount === "number" ? Math.max(0, row.due_amount) : 0
 
       nextStudentSeq++
       nextRollSeq++
@@ -183,7 +178,6 @@ export async function POST(req: NextRequest) {
         if (!authErr && authUser?.user?.id) {
           authUserId = authUser.user.id
         } else if (authErr) {
-          // If already exists, update password
           const { data: userList } = await admin.auth.admin.listUsers()
           const existing = userList?.users?.find(u => u.email?.toLowerCase() === studentEmail.toLowerCase())
           if (existing) {
@@ -269,39 +263,19 @@ export async function POST(req: NextRequest) {
         createdEnr = retry.data
       }
 
-      // E. Payments & Fee Dues
-      const paidAmt = Math.min(totalFee, Math.max(0, defaultPaid))
-      const dueAmt = Math.max(0, totalFee - paidAmt)
+      // E. Fee Dues insertion if student has due amount for the month
       const receiptNo = `RCP-${today.getFullYear()}-${Date.now().toString().slice(-6)}-${String(i + 1).padStart(2, "0")}`
 
-      if (paidAmt > 0) {
-        try {
-          await admin.from("payments").insert({
-            student_id: createdStudent.id,
-            batch_id: batch_id,
-            enrollment_id: createdEnr?.id || null,
-            amount: totalFee,
-            total_paid: paidAmt,
-            payment_method: paymentMethod,
-            payment_for: "admission",
-            payment_month: curMonthStr,
-            receipt_number: receiptNo
-          })
-        } catch (payErr) {
-          console.warn("Payment insert notice:", payErr)
-        }
-      }
-
-      if (dueAmt > 0) {
+      if (studentDue > 0) {
         try {
           await admin.from("fee_dues").insert({
             student_id: createdStudent.id,
             batch_id: batch_id,
             due_month: curMonthStr,
-            due_amount: totalFee,
-            paid_amount: paidAmt,
+            due_amount: studentDue,
+            paid_amount: 0,
             due_date: defaultDueDate,
-            status: paidAmt > 0 ? "partial" : "pending"
+            status: "pending"
           })
         } catch (dueErr) {
           console.warn("Due insert notice:", dueErr)
@@ -325,12 +299,12 @@ export async function POST(req: NextRequest) {
         branch_name: branchName,
         subject: batch.subject || batch.class_level || "General",
         date: dateStr,
-        total_fee: totalFee,
-        paid_amount: paidAmt,
-        due_amount: dueAmt,
-        due_date: dueAmt > 0 ? defaultDueDate : undefined,
-        payment_method: paymentMethod.toUpperCase(),
-        qr_data: `Student ID: ${studentIdStr} | Name: ${trimmedName} | Batch: ${batch.name} | Roll: #${assignedRoll} | Fee: ${totalFee} | Paid: ${paidAmt}`
+        total_fee: studentDue > 0 ? studentDue : (batch.monthly_fee || 0),
+        paid_amount: 0,
+        due_amount: studentDue,
+        due_date: studentDue > 0 ? defaultDueDate : undefined,
+        payment_method: studentDue > 0 ? "DUE / PENDING" : "NONE",
+        qr_data: `Student ID: ${studentIdStr} | Name: ${trimmedName} | Batch: ${batch.name} | Roll: #${assignedRoll} | Due: ${studentDue}`
       }
 
       const idCardData: StudentIdCardData = {
@@ -355,7 +329,7 @@ export async function POST(req: NextRequest) {
     }
 
     // 7. Update batch seat count accurately
-    const finalOccupiedSeats = Math.min(batch.max_seats, currentOccupied + results.length)
+    const finalOccupiedSeats = Math.min(maxSeats, currentOccupied + results.length)
     await admin.from("batches").update({ current_seats: finalOccupiedSeats }).eq("id", batch_id)
 
     return NextResponse.json({
@@ -365,7 +339,7 @@ export async function POST(req: NextRequest) {
         id: batch.id,
         name: batch.name,
         current_seats: finalOccupiedSeats,
-        max_seats: batch.max_seats
+        max_seats: maxSeats
       },
       roll_range: {
         start: highestRoll + 1,

@@ -13,7 +13,7 @@ export default async function ReceptionBulkEnrollPage() {
   try {
     const { data: rawList } = await supabase
       .from("batches")
-      .select("id, name, branch_id, origin_batch_id, origin_branch_id, classroom, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee, status, is_active")
+      .select("*, branch:branches(id, name)")
       .order("name")
     if (rawList && rawList.length > 0) {
       batches = rawList.filter((b: any) => b.is_active !== false && b.status !== "finished")
@@ -58,7 +58,7 @@ export default async function ReceptionBulkEnrollPage() {
         </Link>
       </div>
 
-      <BulkEnrollClient batches={batches} branches={branches} />
+      <BulkEnrollClient initialBatches={batches} branches={branches} />
     </div>
   )
 }
