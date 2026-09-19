@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { extractWeeklyScheduleFromNote } from "@/lib/utils"
+import { requireAuth, requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -180,14 +181,14 @@ export async function GET(
       let allResults: any[] | null = null
       const { data: resultsData, error: resErr } = await admin
         .from("exam_results")
-        .select("*, student:students(id, name, student_id, roll_no, batch_roll, phone)")
+        .select("*, student:students(id, name, student_id, roll_no, batch_roll)")
         .eq("exam_id", examId)
 
       if (resErr) {
         // Fallback without wildcard if newer columns aren't in schema cache
         const { data: fbData, error: fbErr } = await admin
           .from("exam_results")
-          .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, roll_no, batch_roll, phone)")
+          .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, roll_no, batch_roll)")
           .eq("exam_id", examId)
         if (fbErr) return NextResponse.json({ error: fbErr.message }, { status: 500 })
         allResults = fbData
@@ -325,7 +326,7 @@ export async function GET(
 
       const { data: ownResult } = await admin
         .from("exam_results")
-        .select("id, exam_id, student_id, obtained_marks, grade, rank, day_marks, created_at, student:students(id, name, student_id, phone)")
+        .select("id, exam_id, student_id, obtained_marks, grade, rank, day_marks, created_at, student:students(id, name, student_id)")
         .eq("exam_id", examId)
         .eq("student_id", currentStudentId)
         .maybeSingle()
@@ -375,6 +376,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+    if (isAuthError(authResult)) return authResult
+
     const resolvedParams = await params
     const examId = resolvedParams.id
     const body = await req.json()
@@ -382,12 +386,6 @@ export async function PATCH(
 
     if (typeof show_all_results !== "boolean") {
       return NextResponse.json({ error: "show_all_results boolean required" }, { status: 400 })
-    }
-
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const admin = createAdminClient()
@@ -451,16 +449,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+    if (isAuthError(authResult)) return authResult
+
     const resolvedParams = await params
     const examId = resolvedParams.id
     if (!examId) {
       return NextResponse.json({ error: "Exam ID is required" }, { status: 400 })
-    }
-
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await req.json().catch(() => ({}))

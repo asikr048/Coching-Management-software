@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { AdmissionSlipData, StudentIdCardData } from "@/lib/id-card-generator"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -97,6 +98,9 @@ function normalizeBDPhone(raw: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  if (isAuthError(auth)) return auth;
+
   try {
     const body = await req.json()
     const {

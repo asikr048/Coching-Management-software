@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 export async function POST(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+  if (isAuthError(auth)) return auth
+
   try {
     const body = await req.json()
     const {
@@ -36,18 +40,21 @@ export async function POST(req: NextRequest) {
     const nonUuidList = rawIds.filter(id => !uuidRegex.test(id))
     let candidateStudentIds = [...uuidList]
 
-    // Resolve non-UUIDs (student_id code or phone)
+    // Resolve non-UUIDs (student_id code or phone) — sanitized to prevent PostgREST filter injection
     if (nonUuidList.length > 0) {
-      const { data: foundStudents } = await admin
-        .from("students")
-        .select("id, student_id, phone")
-        .or(`student_id.in.(${nonUuidList.join(",")}),phone.in.(${nonUuidList.join(",")})`)
-      if (foundStudents) {
-        foundStudents.forEach((s: any) => {
-          if (s.id && !candidateStudentIds.includes(s.id)) {
-            candidateStudentIds.push(s.id)
-          }
-        })
+      const sanitized = nonUuidList.map(id => id.replace(/[^a-zA-Z0-9\-_+@.]/g, "")).filter(Boolean)
+      if (sanitized.length > 0) {
+        const { data: foundStudents } = await admin
+          .from("students")
+          .select("id, student_id, phone")
+          .or(`student_id.in.(${sanitized.join(",")}),phone.in.(${sanitized.join(",")})`)
+        if (foundStudents) {
+          foundStudents.forEach((s: any) => {
+            if (s.id && !candidateStudentIds.includes(s.id)) {
+              candidateStudentIds.push(s.id)
+            }
+          })
+        }
       }
     }
 

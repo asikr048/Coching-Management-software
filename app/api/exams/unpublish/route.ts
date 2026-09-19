@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 const ALL_WEEK_DAYS = [
   { id: "saturday", bn: "শনিবার", en: "Saturday" },
@@ -97,11 +98,8 @@ async function safeUpdateExam(admin: any, examId: string, payload: {
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager"])
+    if (isAuthError(authResult)) return authResult
 
     const body = await req.json()
     const {

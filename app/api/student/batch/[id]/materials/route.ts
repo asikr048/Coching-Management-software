@@ -174,10 +174,12 @@ export async function GET(
       )
     }
     if (candidateEmails.size > 0) {
-      const emailList = Array.from(candidateEmails)
-      lookupQueries.push(
-        admin.from("students").select("id, student_id, email, phone, name, auth_user_id, batch_id").or(emailList.map(e => `email.ilike.${e}`).join(","))
-      )
+      const emailList = Array.from(candidateEmails).map(e => e.replace(/[^a-zA-Z0-9@._\-+]/g, "")).filter(Boolean)
+      if (emailList.length > 0) {
+        lookupQueries.push(
+          admin.from("students").select("id, student_id, email, phone, name, auth_user_id, batch_id").or(emailList.map(e => `email.ilike.${e}`).join(","))
+        )
+      }
     }
     if (candidatePhones.size > 0) {
       lookupQueries.push(

@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager"])
+    if (isAuthError(authResult)) return authResult
+
     const body = await req.json()
     const { id } = body
 
@@ -64,7 +68,7 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
-    const callerRole = (callerStaff?.id && customRolesMap[callerStaff.id]) || callerStaff?.role || "owner"
+    const callerRole = (callerStaff?.id && customRolesMap[callerStaff.id]) || callerStaff?.role
 
     // Determine branch permissions for caller
     let isAllBranchesPermitted = false

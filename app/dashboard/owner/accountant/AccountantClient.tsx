@@ -13,6 +13,8 @@ import {
 import { toast } from "sonner"
 import type { Branch } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
+import * as XLSX from "xlsx"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts"
 
 interface StudentRow {
   id: string
@@ -128,7 +130,7 @@ export default function AccountantClient({
   }, [])
 
   const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr)
-  const [activeTab, setActiveTab] = useState<"students" | "batches" | "history">("students")
+  const [activeTab, setActiveTab] = useState<"students" | "batches" | "history" | "monthly_sheet">("students")
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("")
@@ -155,6 +157,12 @@ export default function AccountantClient({
 
   const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "partial" | "due" | "referral">("all")
   const [historyMethodFilter, setHistoryMethodFilter] = useState<string>("all")
+  const [selectedHistoryBatchId, setSelectedHistoryBatchId] = useState<string>("all")
+
+  // Monthly Sheet State
+  const [monthlySheetYear, setMonthlySheetYear] = useState<number>(new Date().getFullYear())
+  const [monthlySheetBatchId, setMonthlySheetBatchId] = useState<string>("")
+  const [showChart, setShowChart] = useState<boolean>(false)
 
   // Multi-Selection State for Marked Rows
   const [selectedRowKeys, setSelectedRowKeys] = useState<Set<string>>(new Set())
@@ -602,14 +610,105 @@ export default function AccountantClient({
 
   // Filter payments in History Tab by payment method
   const displayedPayments = useMemo(() => {
-    if (historyMethodFilter === "all") return payments
-    return payments.filter((p) => {
-      if (historyMethodFilter === "referral") return p.payment_method === "referral"
-      if (historyMethodFilter === "cash") return p.payment_method === "cash"
-      if (historyMethodFilter === "online") return p.payment_method !== "cash" && p.payment_method !== "referral"
-      return p.payment_method === historyMethodFilter
+    let result = payments
+    if (selectedHistoryBatchId !== "all") {
+      result = result.filter(p => p.batch_id === selectedHistoryBatchId)
+    }
+    if (historyMethodFilter !== "all") {
+      result = result.filter((p) => {
+        if (historyMethodFilter === "referral") return p.payment_method === "referral"
+        if (historyMethodFilter === "cash") return p.payment_method === "cash"
+        if (historyMethodFilter === "online") return p.payment_method !== "cash" && p.payment_method !== "referral"
+        return p.payment_method === historyMethodFilter
+      })
+    }
+    return result
+  }, [payments, historyMethodFilter, selectedHistoryBatchId])
+
+  // Matrix calculation for Monthly Sheet
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+  
+  const monthlyMatrix = useMemo(() => {
+    if (!monthlySheetBatchId) return { students: [], monthTotals: {}, dueTotals: {} }
+
+    // Find all students in this batch
+    const batchStudents = students.filter(s => 
+      s.enrollments?.some(e => e.batch_id === monthlySheetBatchId || e.batch?.id === monthlySheetBatchId)
+    )
+
+    // Filter dues for the batch and year
+    const yearPrefix = `${monthlySheetYear}-`
+    const batchDues = dues.filter(d => 
+      d.batch_id === monthlySheetBatchId && 
+      d.due_month?.startsWith(yearPrefix)
+    )
+
+    const matrixStudents = batchStudents.map(s => {
+      const sEnr = s.enrollments?.find(e => e.batch_id === monthlySheetBatchId || e.batch?.id === monthlySheetBatchId)
+      const roll = sEnr?.roll_no || s.roll_no || "-"
+      
+      const monthsData: Record<string, any> = {}
+      monthNames.forEach((_, i) => {
+        const monthStr = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
+        const d = batchDues.find(due => due.student_id === s.id && due.due_month === monthStr)
+        if (d) {
+          monthsData[monthStr] = {
+            paid: d.paid_amount,
+            due: d.due_amount,
+            status: d.status
+          }
+        }
+      })
+      
+      return {
+        id: s.id,
+        name: s.name,
+        roll,
+        months: monthsData
+      }
+    }).sort((a, b) => Number(a.roll) - Number(b.roll))
+
+    const monthTotals: Record<string, number> = {}
+    const dueTotals: Record<string, number> = {}
+
+    monthNames.forEach((_, i) => {
+      const monthStr = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
+      let totPaid = 0
+      let totDue = 0
+      batchDues.forEach(d => {
+        if (d.due_month === monthStr) {
+          totPaid += Number(d.paid_amount || 0)
+          totDue += Number(d.due_amount || 0)
+        }
+      })
+      monthTotals[monthStr] = totPaid
+      dueTotals[monthStr] = totDue
     })
-  }, [payments, historyMethodFilter])
+
+    return { students: matrixStudents, monthTotals, dueTotals }
+  }, [monthlySheetBatchId, monthlySheetYear, students, dues])
+
+  // Chart data for selected batch in Students Tab
+  const chartData = useMemo(() => {
+    if (selectedBatchId === "all") return []
+    const currentYear = new Date().getFullYear()
+    return monthNames.map((m, i) => {
+      const monthStr = `${currentYear}-${String(i + 1).padStart(2, "0")}`
+      let collected = 0
+      let outstanding = 0
+      dues.forEach(d => {
+        if (d.batch_id === selectedBatchId && d.due_month === monthStr) {
+          collected += Number(d.paid_amount || 0)
+          outstanding += Number(d.due_amount || 0)
+        }
+      })
+      return {
+        name: m,
+        Collected: collected,
+        Due: outstanding
+      }
+    })
+  }, [selectedBatchId, dues, monthNames])
 
   function handleToggleSelectAll() {
     if (isAllFilteredSelected) {
@@ -1350,6 +1449,18 @@ export default function AccountantClient({
             <CreditCard className="w-4 h-4" />
             <span>Recent Payments ({payments.length})</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab("monthly_sheet")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              activeTab === "monthly_sheet"
+                ? "bg-slate-900 text-white shadow-md"
+                : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            <span>মাসিক শীট</span>
+          </button>
         </div>
 
         {/* Filter Controls for Student Billing Ledger */}
@@ -1435,7 +1546,45 @@ export default function AccountantClient({
       {/* 4. TAB 1: STUDENT BILLING LEDGER TABLE (ALL BATCHES + MULTI-SELECT) */}
       {/* ========================================================================= */}
       {activeTab === "students" && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="space-y-4">
+          {/* Monthly Collections Chart */}
+          {selectedBatchId !== "all" && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden p-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-500" />
+                  Monthly Collections ({new Date().getFullYear()})
+                </h3>
+                <button
+                  onClick={() => setShowChart(!showChart)}
+                  className="text-xs font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition-colors"
+                >
+                  {showChart ? "Hide Chart" : "View Chart"}
+                </button>
+              </div>
+              
+              {showChart && (
+                <div className="h-64 mt-4 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                      <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} tickFormatter={(val) => `৳${val}`} />
+                      <Tooltip 
+                        cursor={{ fill: '#f1f5f9' }} 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                      <Bar dataKey="Collected" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="Due" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           {/* Quick Selection Toolbar (Above Table) */}
           <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
@@ -1684,6 +1833,7 @@ export default function AccountantClient({
             </table>
           </div>
         </div>
+        </div>
       )}
 
       {/* ========================================================================= */}
@@ -1835,7 +1985,20 @@ export default function AccountantClient({
           {/* Method Filter Pills & Summary */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1">Method Filter:</span>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1">Batch:</span>
+              <select
+                value={selectedHistoryBatchId}
+                onChange={(e) => setSelectedHistoryBatchId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium py-1.5 px-3 focus:outline-hidden focus:border-indigo-500 cursor-pointer mr-2"
+              >
+                <option value="all">All Batches</option>
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1">Method:</span>
               <button
                 type="button"
                 onClick={() => setHistoryMethodFilter("all")}
@@ -2016,6 +2179,154 @@ export default function AccountantClient({
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 6B. TAB 4: MONTHLY SHEET */}
+      {/* ========================================================================= */}
+      {activeTab === "monthly_sheet" && (
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-slate-200 shadow-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1">Batch:</span>
+              <select
+                value={monthlySheetBatchId}
+                onChange={(e) => setMonthlySheetBatchId(e.target.value)}
+                className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium py-1.5 px-3 focus:outline-hidden focus:border-indigo-500 cursor-pointer mr-2"
+              >
+                <option value="">Select a batch</option>
+                {batches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mr-1">Year:</span>
+              <input
+                type="number"
+                value={monthlySheetYear}
+                onChange={(e) => setMonthlySheetYear(Number(e.target.value))}
+                className="bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium py-1.5 px-3 focus:outline-hidden focus:border-indigo-500 w-24"
+              />
+            </div>
+            
+            <button
+              onClick={() => {
+                if (!monthlySheetBatchId) return toast.error("Please select a batch first")
+                
+                const wsData: any[][] = [
+                  ["Roll", "Name", ...monthNames]
+                ]
+                
+                monthlyMatrix.students.forEach((s: any) => {
+                  const row = [s.roll, s.name]
+                  monthNames.forEach((_, i) => {
+                    const monthKey = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
+                    const mData = s.months[monthKey]
+                    row.push(mData ? (mData.status === "paid" ? "Paid" : mData.status === "partial" ? "Partial" : "Due") : "-")
+                  })
+                  wsData.push(row)
+                })
+                
+                const wb = XLSX.utils.book_new()
+                const ws = XLSX.utils.aoa_to_sheet(wsData)
+                XLSX.utils.book_append_sheet(wb, ws, "Monthly Sheet")
+                XLSX.writeFile(wb, `Monthly_Sheet_${monthlySheetYear}.xlsx`)
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Export Excel</span>
+            </button>
+          </div>
+          
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              {monthlySheetBatchId ? (
+                <table className="w-full text-left border-collapse min-w-max">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="p-3 text-xs font-bold text-slate-500 uppercase">Roll</th>
+                      <th className="p-3 text-xs font-bold text-slate-500 uppercase sticky left-0 bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] z-10">Name</th>
+                      {monthNames.map(m => (
+                        <th key={m} className="p-3 text-xs font-bold text-slate-500 uppercase text-center border-l border-slate-200">{m}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-sm">
+                    {monthlyMatrix.students.map((s: any) => (
+                      <tr key={s.id} className="hover:bg-slate-50">
+                        <td className="p-3 text-slate-700 font-bold">{s.roll}</td>
+                        <td className="p-3 text-slate-900 font-medium sticky left-0 bg-white group-hover:bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] z-10">{s.name}</td>
+                        {monthNames.map((_, i) => {
+                          const monthStr = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
+                          const mData = s.months[monthStr]
+                          let bgClass = "bg-slate-100/50"
+                          let content = <span className="text-slate-400">-</span>
+                          if (mData) {
+                            if (mData.status === "paid") {
+                              bgClass = "bg-emerald-100"
+                              content = <span className="text-emerald-700 font-bold text-xs">Paid</span>
+                            } else if (mData.status === "partial") {
+                              bgClass = "bg-amber-100"
+                              content = <span className="text-amber-700 font-bold text-xs">Partial</span>
+                            } else {
+                              bgClass = "bg-rose-100"
+                              content = <span className="text-rose-700 font-bold text-xs">Due</span>
+                            }
+                          }
+                          return (
+                            <td key={monthStr} className={`p-2 text-center border-l border-slate-100 ${bgClass}`}>
+                              {content}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                    {/* Summary row */}
+                    {monthlyMatrix.students.length > 0 && (
+                      <>
+                        <tr className="bg-slate-50 border-t-2 border-slate-200">
+                          <td colSpan={2} className="p-3 text-right text-xs font-bold text-slate-700 sticky left-0 bg-slate-50 z-10">
+                            Total Collected
+                          </td>
+                          {monthNames.map((_, i) => {
+                            const monthStr = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
+                            const tot = monthlyMatrix.monthTotals[monthStr] || 0
+                            return (
+                              <td key={monthStr} className="p-2 text-center border-l border-slate-200 font-bold text-emerald-600 text-xs">
+                                {tot > 0 ? formatCurrency(tot) : "-"}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                        <tr className="bg-slate-50">
+                          <td colSpan={2} className="p-3 text-right text-xs font-bold text-slate-700 sticky left-0 bg-slate-50 z-10">
+                            Total Due
+                          </td>
+                          {monthNames.map((_, i) => {
+                            const monthStr = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
+                            const tot = monthlyMatrix.dueTotals[monthStr] || 0
+                            return (
+                              <td key={monthStr} className="p-2 text-center border-l border-slate-200 font-bold text-rose-600 text-xs">
+                                {tot > 0 ? formatCurrency(tot) : "-"}
+                              </td>
+                            )
+                          })}
+                        </tr>
+                      </>
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="p-8 text-center text-slate-500">
+                  Select a batch to view the monthly fee sheet
+                </div>
+              )}
             </div>
           </div>
         </div>

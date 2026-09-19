@@ -1078,9 +1078,11 @@ export default function StudentBatchDetailPage() {
         total_fee: amountDue,
         due_amount: 0,
         payment_method: payMethod,
-        sender_number: isRef ? referralName.trim() : senderNumber.trim(),
+        sender_number: isRef ? null : senderNumber.trim(),
         transaction_id: isRef ? `REF-${Date.now().toString(36).toUpperCase()}` : transactionId.trim(),
         status: 'pending',
+        referral_name: isRef ? referralName.trim() : null,
+        referral_reason: isRef ? referralReason.trim() : null,
         notes: isRef 
           ? `Referral: ${referralName.trim()} | Reason: ${referralReason.trim()}`
           : `Due payment for ${payingDue.due_month}`,

@@ -1,37 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 export async function POST(req: NextRequest) {
   try {
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager"])
+    if (isAuthError(authResult)) return authResult
 
     const admin = createAdminClient()
-
-    // Verify requesting user is staff
-    let { data: staff } = await admin
-      .from("staff")
-      .select("id, role, email")
-      .eq("auth_user_id", user.id)
-      .maybeSingle()
-
-    if (!staff && user.email) {
-      const { data: staffByEmail } = await admin
-        .from("staff")
-        .select("id, role, email")
-        .ilike("email", user.email)
-        .maybeSingle()
-      staff = staffByEmail
-    }
-
-    if (!staff) {
-      return NextResponse.json({ error: "Forbidden: Staff credentials required" }, { status: 403 })
-    }
 
     const { studentId, newPassword } = await req.json()
 

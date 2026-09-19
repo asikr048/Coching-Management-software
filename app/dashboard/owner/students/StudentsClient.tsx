@@ -561,6 +561,8 @@ export default function StudentsClient({
         payment_month: due.due_month || null,
         receipt_number: receiptNo,
         notes: paymentNotes,
+        referral_name: payForm.payment_method === "referral" ? payForm.referral_name.trim() : null,
+        referral_reason: payForm.payment_method === "referral" ? payForm.referral_reason.trim() : null,
         created_at: payForm.payment_date ? `${payForm.payment_date}T12:00:00Z` : undefined,
       })
 

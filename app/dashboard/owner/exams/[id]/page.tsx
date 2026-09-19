@@ -184,6 +184,7 @@ export default function ExamResultsPage() {
   const [savingRowStudentId, setSavingRowStudentId] = useState<string | null>(null)
   const [autoSavingIds, setAutoSavingIds] = useState<Set<string>>(new Set())
   const autoSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
+  const inflightSavesRef = useRef<Record<string, boolean>>({})
   const [draftCellMarks, setDraftCellMarks] = useState<Record<string, string>>({})
   const cellAutoSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
   const [loading, setLoading] = useState(false)
@@ -775,13 +776,19 @@ export default function ExamResultsPage() {
   // Filter students for Quick Search dropdown
   const filteredSearchStudents = useMemo(() => {
     const q = studentSearchQuery.trim().toLowerCase()
-    if (!q) return students.slice(0, 8)
-    return students.filter((s) => {
-      const nameMatch = (s.name || "").toLowerCase().includes(q)
-      const idMatch = (s.student_id || "").toLowerCase().includes(q)
-      const phoneMatch = (s.phone || "").includes(q)
-      const rollStr = String(s.roll_no || "")
-      const rollMatch = rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q)
+    // Normalize Bengali digits to English
+    const qNorm = q.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+    if (!qNorm) return students.slice(0, 8)
+    
+    return students.filter((s, idx) => {
+      const nameMatch = (s.name || "").toLowerCase().includes(qNorm)
+      const idMatch = (s.student_id || "").toLowerCase().includes(qNorm)
+      // Only match phone if query has 4+ digits
+      const phoneMatch = qNorm.length >= 4 && (s.phone || "").includes(qNorm)
+      // Exact roll match with fallback for display index
+      const rollStr = String(s.roll_no || (idx + 1))
+      const qStripped = qNorm.replace(/^0+/, "") || "0"
+      const rollMatch = rollStr === qStripped || rollStr === qNorm
       return nameMatch || idMatch || phoneMatch || rollMatch
     })
   }, [students, studentSearchQuery])
@@ -845,14 +852,18 @@ export default function ExamResultsPage() {
 
   // Save specific day mark for a student (works from breakdown table or day view)
   async function saveStudentDayMark(student: Student, day: ParsedWeeklyDay, rawMark: string, silent?: boolean) {
-    if (!exam) return
+    if (inflightSavesRef.current[student.id]) return
+    inflightSavesRef.current[student.id] = true
+
+    if (!exam) { inflightSavesRef.current[student.id] = false; return }
     const raw = rawMark.trim()
-    if (raw === "") return
+    if (raw === "") { inflightSavesRef.current[student.id] = false; return }
 
     const numMarks = parseFloat(raw)
     const dayMax = day.total_marks || 50
     if (isNaN(numMarks) || numMarks < 0 || numMarks > dayMax) {
       if (!silent) toast.error(`নম্বরটি অবশ্যই 0 থেকে ${dayMax}-এর মধ্যে হতে হবে`)
+      inflightSavesRef.current[student.id] = false
       return
     }
 
@@ -925,12 +936,6 @@ export default function ExamResultsPage() {
         ...prev,
         [`${student.id}_${activeKey}`]: String(numMarks),
       }))
-      if (activeDayConfig?.key.toLowerCase() === activeKey) {
-        setDraftMarks((prev) => ({
-          ...prev,
-          [student.id]: String(numMarks),
-        }))
-      }
       setJustSavedIds((prev) => new Set(prev).add(student.id))
 
       if (!silent) {
@@ -939,6 +944,8 @@ export default function ExamResultsPage() {
     } catch (err: any) {
       console.error("Save day mark error:", err)
       if (!silent) toast.error(err.message || "Failed to save mark")
+    } finally {
+      inflightSavesRef.current[student.id] = false
     }
   }
 
@@ -1113,10 +1120,14 @@ export default function ExamResultsPage() {
 
   // Save single student mark (with optional silent mode for auto-save)
   async function saveStudentMark(student: Student, rawMark: string, rowIndex?: number, silent?: boolean) {
-    if (!exam) return
+    if (inflightSavesRef.current[student.id]) return
+    inflightSavesRef.current[student.id] = true
+
+    if (!exam) { inflightSavesRef.current[student.id] = false; return }
     const raw = rawMark.trim()
     if (raw === "") {
       if (!silent) toast.error("অনুগ্রহ করে একটি নম্বর লিখুন (Please enter a mark)")
+      inflightSavesRef.current[student.id] = false
       return
     }
 
@@ -1127,6 +1138,7 @@ export default function ExamResultsPage() {
 
     if (isNaN(numMarks) || numMarks < 0 || numMarks > activeMax) {
       if (!silent) toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeMax}-এর মধ্যে হতে হবে (সর্বোচ্চ: ${activeMax})`)
+      inflightSavesRef.current[student.id] = false
       return
     }
 
@@ -1197,10 +1209,6 @@ export default function ExamResultsPage() {
             grade: overallGrade,
           },
         }))
-        setDraftMarks((prev) => ({
-          ...prev,
-          [student.id]: String(numMarks),
-        }))
         setDraftCellMarks((prev) => ({
           ...prev,
           [`${student.id}_${activeKey}`]: String(numMarks),
@@ -1256,10 +1264,6 @@ export default function ExamResultsPage() {
             grade,
           },
         }))
-        setDraftMarks((prev) => ({
-          ...prev,
-          [student.id]: String(numMarks),
-        }))
         setJustSavedIds((prev) => new Set(prev).add(student.id))
         syncAllRanks({ ...draftMarks, [student.id]: String(numMarks) })
 
@@ -1278,6 +1282,8 @@ export default function ExamResultsPage() {
         if (!silent) toast.error(err.message || "Failed to save mark")
       }
     }
+    
+    inflightSavesRef.current[student.id] = false
   }
 
   // Auto-save mark for a student with debounce or onBlur
@@ -1327,9 +1333,10 @@ export default function ExamResultsPage() {
       : (exam?.total_marks || 100)
 
     if (!isNaN(num) && num >= 0 && num <= activeMax) {
+      const delay = inflightSavesRef.current[student.id] ? 1200 : 700
       autoSaveTimersRef.current[student.id] = setTimeout(() => {
         triggerAutoSave(student, trimmed)
-      }, 700)
+      }, delay)
     }
   }
 
@@ -1995,14 +2002,20 @@ export default function ExamResultsPage() {
 
   // Filtered Students for Table
   const tableStudents = useMemo(() => {
-    return students.filter((s) => {
-      const q = tableSearchQuery.trim().toLowerCase()
+    return students.filter((s, idx) => {
+      let q = tableSearchQuery.trim().toLowerCase()
+      // Normalize Bengali digits to English
+      q = q.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+      
       if (q) {
         const nameMatch = (s.name || "").toLowerCase().includes(q)
         const idMatch = (s.student_id || "").toLowerCase().includes(q)
-        const rollStr = String(s.roll_no || "")
-        const rollMatch = rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q)
-        if (!nameMatch && !idMatch && !rollMatch) return false
+        const phoneMatch = q.length >= 4 && (s.phone || "").includes(q)
+        // Exact roll match with fallback for display index
+        const rollStr = String(s.roll_no || (idx + 1))
+        const qStripped = q.replace(/^0+/, "") || "0"
+        const rollMatch = rollStr === qStripped || rollStr === q
+        if (!nameMatch && !idMatch && !phoneMatch && !rollMatch) return false
       }
 
       const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
@@ -2036,14 +2049,17 @@ export default function ExamResultsPage() {
 
   // Filtered Students for Weekly Multi-Column Table
   const filteredWeeklyStudents = useMemo(() => {
-    if (!weeklySearchQuery.trim()) return students
-    const q = weeklySearchQuery.trim().toLowerCase()
-    return students.filter((s) => {
+    let q = weeklySearchQuery.trim().toLowerCase()
+    q = q.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+    if (!q) return students
+    
+    return students.filter((s, idx) => {
       const nameMatch = (s.name || "").toLowerCase().includes(q)
       const idMatch = (s.student_id || "").toLowerCase().includes(q)
-      const phoneMatch = (s.phone || "").includes(q)
-      const rollStr = String(s.roll_no || "")
-      const rollMatch = rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q)
+      const phoneMatch = q.length >= 4 && (s.phone || "").includes(q)
+      const rollStr = String(s.roll_no || (idx + 1))
+      const qStripped = q.replace(/^0+/, "") || "0"
+      const rollMatch = rollStr === qStripped || rollStr === q
       return nameMatch || idMatch || phoneMatch || rollMatch
     })
   }, [students, weeklySearchQuery])
@@ -3056,6 +3072,7 @@ export default function ExamResultsPage() {
                                 <p className="text-[11px] text-slate-500 font-mono">
                                   <span className="font-semibold text-amber-700">{s.student_id}</span>
                                   {s.phone && <span> • {s.phone}</span>}
+                                  <span className="ml-1 text-xs text-slate-400 font-mono"> • Roll: {s.roll_no || '—'}</span>
                                 </p>
                               </div>
                             </div>

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 // Adaptive notice save with automatic schema detection and column fallback
 async function saveNoticeAdaptive(
@@ -66,6 +67,9 @@ async function saveNoticeAdaptive(
 
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager"])
+    if (isAuthError(authResult)) return authResult
+
     const body = await req.json()
     const {
       id,
@@ -144,7 +148,7 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
-    const callerRole = (callerStaff?.id && customRolesMap[callerStaff.id]) || callerStaff?.role || "owner"
+    const callerRole = (callerStaff?.id && customRolesMap[callerStaff.id]) || callerStaff?.role
 
     // 3. Determine branch permissions for caller
     let isAllBranchesPermitted = false

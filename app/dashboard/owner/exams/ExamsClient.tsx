@@ -1042,6 +1042,7 @@ export default function ExamsClient({
       }
 
       // If user selected "Publish exam schedule to Notice Board"
+      let noticePublished = false
       if (form.publish_to_notice && newExam?.id) {
         try {
           const nRes = await fetch(`/api/exams/${newExam.id}/publish-notice`, {
@@ -1050,20 +1051,24 @@ export default function ExamsClient({
             body: JSON.stringify({ type: "schedule" }),
           })
           if (nRes.ok) {
-            toast.success("Exam created & routine posted to Notice Board!")
+            noticePublished = true
+          } else {
+            toast.warning("Notice Board posting failed — please try manually. (নোটিশ বোর্ডে পোস্ট ব্যর্থ হয়েছে)")
           }
         } catch (nErr) {
           console.warn("Notice publish err:", nErr)
+          toast.warning("Notice Board posting failed — please try manually. (নোটিশ বোর্ডে পোস্ট ব্যর্থ হয়েছে)")
         }
       }
 
       setExams([{ ...newExam, exam_questions: [{ count: questions.length }] }, ...exams])
       setShowModal(false)
-      toast.success(
-        form.exam_schedule_type === "weekly"
-          ? "Weekly exam schedule created!"
-          : (examMode === "online" ? "Online exam created!" : "Exam created!")
-      )
+      
+      if (noticePublished) {
+        toast.success(`✓ "${finalTitle}" created & posted to Notice Board! (পরীক্ষা তৈরি ও নোটিশ বোর্ডে প্রকাশিত)`)
+      } else {
+        toast.success(`✓ "${finalTitle}" created successfully! (পরীক্ষা তৈরি সম্পন্ন হয়েছে)`)
+      }
       
       // Reset form
       resetForm()
@@ -2129,6 +2134,20 @@ export default function ExamsClient({
                       </div>
                     </div>
 
+                    {/* Optional Start Date for Weekly Exams */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Start Date (শুরুর তারিখ - ঐচ্ছিক)
+                      </label>
+                      <input 
+                        type="date"
+                        value={form.exam_date}
+                        onClick={(e) => e.currentTarget.showPicker?.()}
+                        onChange={e => update("exam_date", e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+
                     {/* Publish to Notice Board Checkbox for Weekly */}
                     <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/90 flex items-start gap-3">
                       <input
@@ -2163,7 +2182,7 @@ export default function ExamsClient({
                       </div>
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1.5">Exam Date (পরীক্ষার তারিখ) *</label>
-                        <input type="date" required value={form.exam_date} onChange={e => update("exam_date", e.target.value)} className={inputClass} />
+                        <input type="date" required value={form.exam_date} onClick={(e) => e.currentTarget.showPicker?.()} onChange={e => update("exam_date", e.target.value)} className={inputClass} />
                       </div>
                       {examMode === "offline" && (
                         <div>

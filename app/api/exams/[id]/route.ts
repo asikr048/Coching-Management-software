@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { cleanWeeklyScheduleFromNote } from "@/lib/utils"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 export async function GET(
   req: NextRequest,
@@ -246,16 +247,13 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+    if (isAuthError(authResult)) return authResult
+
     const resolvedParams = await params
     const examId = resolvedParams.id
     if (!examId) {
       return NextResponse.json({ error: "Exam ID is required" }, { status: 400 })
-    }
-
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await req.json().catch(() => ({}))
@@ -449,17 +447,13 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+    if (isAuthError(authResult)) return authResult
+
     const resolvedParams = await params
     const examId = resolvedParams.id
     if (!examId) {
       return NextResponse.json({ error: "Exam ID is required" }, { status: 400 })
-    }
-
-    // Auth verification
-    const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const admin = createAdminClient()

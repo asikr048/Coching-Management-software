@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 // GET: Fetch enrolled students and attendance records for a batch
 export async function GET(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "teacher", "reception"]);
+  if (isAuthError(auth)) return auth;
+
   try {
     const { searchParams } = new URL(req.url)
     const batchId = searchParams.get("batch_id")
@@ -149,6 +153,9 @@ export async function GET(req: NextRequest) {
 
 // POST: Save or Upsert Attendance records securely via admin client
 export async function POST(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "teacher", "reception"]);
+  if (isAuthError(auth)) return auth;
+
   try {
     const body = await req.json()
     const { records } = body

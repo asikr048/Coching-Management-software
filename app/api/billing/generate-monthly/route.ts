@@ -1,14 +1,21 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export async function GET(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "accountant"]);
+  if (isAuthError(auth)) return auth;
+
   return handleGenerate(req)
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "accountant"]);
+  if (isAuthError(auth)) return auth;
+
   return handleGenerate(req)
 }
 

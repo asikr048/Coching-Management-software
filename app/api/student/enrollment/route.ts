@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -15,6 +16,9 @@ const isUUID = (val: any): boolean => {
  * Returns highest roll and next roll (highest + 1) for a batch
  */
 export async function GET(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  if (isAuthError(auth)) return auth;
+
   try {
     const { searchParams } = new URL(req.url)
     const batchId = searchParams.get("batch_id")
@@ -72,6 +76,9 @@ export async function GET(req: NextRequest) {
  * 2. action: "add_enrollment" - enrolls student into an additional batch
  */
 export async function POST(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  if (isAuthError(auth)) return auth;
+
   try {
     const body = await req.json()
     const { action = "change_batch", student_id, enrollment_id, new_batch_id, batch_id, custom_roll_no } = body
@@ -317,6 +324,9 @@ export async function POST(req: NextRequest) {
  * - If student has no other active batches, primary roll is cleared to null.
  */
 export async function DELETE(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  if (isAuthError(auth)) return auth;
+
   try {
     const body = await req.json().catch(() => ({}))
     const { enrollment_id, student_id } = body

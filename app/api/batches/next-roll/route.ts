@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -102,6 +103,9 @@ async function fetchStudentMap(admin: any, rawIds: (string | null | undefined)[]
 
 // GET: Calculate next available batch roll (strictly previous_maximum + 1) and auto-resequence duplicates
 export async function GET(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  if (isAuthError(auth)) return auth;
+
   try {
     const { searchParams } = new URL(req.url)
     const batchId = searchParams.get("batch_id")
@@ -278,6 +282,9 @@ export async function GET(req: NextRequest) {
 
 // POST: Resequence duplicate rolls across one or all batches
 export async function POST(req: NextRequest) {
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  if (isAuthError(auth)) return auth;
+
   try {
     const body = await req.json().catch(() => ({}))
     const admin = createAdminClient()

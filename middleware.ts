@@ -4,9 +4,19 @@ import { NextResponse, type NextRequest } from "next/server"
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname
 
-  // Always pass through API routes, static assets, and auth routes untouched
-  const bypassRoutes = ["/api", "/auth/callback", "/auth/confirm", "/auth/", "/_next", "/favicon.ico"]
+  // Only bypass truly public API routes, static assets, and auth routes
+  const bypassRoutes = [
+    "/api/auth/signup", "/api/auth/resolve-identity",
+    "/api/enroll/submit", "/api/online-results",
+    "/auth/callback", "/auth/confirm", "/auth/",
+    "/_next", "/favicon.ico",
+  ]
   if (bypassRoutes.some(r => pathname.startsWith(r))) {
+    return NextResponse.next()
+  }
+
+  // API routes need auth — let the route handlers check via requireAuth/requireStaffRole
+  if (pathname.startsWith("/api")) {
     return NextResponse.next()
   }
 
@@ -15,11 +25,11 @@ export async function middleware(request: NextRequest) {
   const isPublic = publicRoutes.some(r => pathname === r || (r !== "/" && pathname.startsWith(r)))
   if (isPublic) return NextResponse.next()
 
-  // Check if Supabase is configured
+  // Check if Supabase is configured — fail closed if not
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!supabaseUrl || !supabaseKey || supabaseUrl.includes("placeholder")) {
-    return NextResponse.next()
+    return NextResponse.redirect(new URL("/login", request.url))
   }
 
   let supabaseResponse = NextResponse.next({ request })
@@ -50,17 +60,8 @@ export async function middleware(request: NextRequest) {
       .eq("auth_user_id", user.id)
       .maybeSingle()
 
-    if (!staff && user.email) {
-      const { data: staffByEmail } = await supabase
-        .from("staff")
-        .select("id, role, auth_user_id")
-        .eq("email", user.email)
-        .maybeSingle()
-      if (staffByEmail) {
-        await supabase.from("staff").update({ auth_user_id: user.id }).eq("id", staffByEmail.id)
-        staff = staffByEmail
-      }
-    }
+    // Note: Staff accounts must be explicitly linked by admins.
+    // Auto-linking by email was removed for security.
 
     if (!staff) {
       // Non-staff users (students/parents) trying to access /dashboard routes get redirected to student profile

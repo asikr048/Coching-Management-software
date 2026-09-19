@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+    if (isAuthError(authResult)) return authResult
+
     const resolvedParams = await params
     const examId = resolvedParams.id
     if (!examId) {
