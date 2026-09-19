@@ -489,45 +489,84 @@ export default function AccountantClient({
         const q = searchQuery.toLowerCase().trim()
         const bnToEnMap: Record<string, string> = { "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9" }
         const qNormalized = q.replace(/[০-৯]/g, (d) => bnToEnMap[d] || d)
-        const qClean = qNormalized.replace(/^(roll|r|#|রোল|\s)+/i, "").trim()
-        const qNum = parseInt(qClean, 10)
-        const isNumericQuery = !isNaN(qNum) && qNum > 0
+        const qClean = qNormalized
+          .replace(/^(roll|r|#|রোল|no|নং|রোল\s*নং|roll\s*no|[\s\-\:\.\#])+/i, "")
+          .trim()
+        const qStripped = qClean.replace(/^0+/, "") || "0"
+        const qNum = parseInt(qStripped, 10)
+        const isNumericQuery = !isNaN(qNum) && qNum > 0 && qClean.length > 0
 
-        const nameMatch = item.student.name?.toLowerCase().includes(q)
-        const idMatch = item.student.student_id?.toLowerCase().includes(q)
-        const phoneMatch = item.student.phone?.includes(q)
-        const gPhoneMatch = item.student.guardian_phone?.includes(q)
+        // Only search phone / guardian phone if query has 4+ digits to prevent single/double digits (like 1, 01, 2) matching every phone number
+        const hasMinPhoneDigits = qNormalized.replace(/\D/g, "").length >= 4
+        const nameMatch =
+          item.student.name?.toLowerCase().includes(q) ||
+          item.student.name?.toLowerCase().includes(qNormalized)
+        const idMatch =
+          item.student.student_id?.toLowerCase().includes(q) ||
+          item.student.student_id?.toLowerCase().includes(qNormalized)
+        const phoneMatch =
+          hasMinPhoneDigits &&
+          (item.student.phone?.includes(qNormalized) || item.student.phone?.includes(q))
+        const gPhoneMatch =
+          hasMinPhoneDigits &&
+          (item.student.guardian_phone?.includes(qNormalized) || item.student.guardian_phone?.includes(q))
 
-        // Match current batch roll
-        const rStr = String(item.rollNo)
-        let rollMatch = (isNumericQuery && item.rollNo === qNum) ||
-          rStr === q || rStr === qClean || rStr === qNormalized ||
-          `roll ${rStr}`.includes(qNormalized) || `roll #${rStr}`.includes(qNormalized) ||
-          `r${rStr}` === qNormalized || `রোল ${rStr}`.includes(q)
+        // Collect all roll candidates across this item and student
+        const rollCandidateNumbers = new Set<number>()
+        const rollCandidateStrings = new Set<string>()
 
-        // Match any batch roll across all enrolled batches of this student
-        if (!rollMatch && item.allBatchRolls) {
-          rollMatch = item.allBatchRolls.some((br) => {
-            const brNum = Number(br.roll)
-            const brStr = String(br.roll)
-            if (isNumericQuery && brNum === qNum) return true
-            if (brStr === q || brStr === qClean || brStr === qNormalized) return true
-            if (`roll ${brStr}`.includes(qNormalized) || `roll #${brStr}`.includes(qNormalized) || `r${brStr}` === qNormalized || `রোল ${brStr}`.includes(q)) return true
-            return false
+        if (item.rollNo != null) {
+          rollCandidateNumbers.add(Number(item.rollNo))
+          rollCandidateStrings.add(String(item.rollNo))
+        }
+        if (item.student.roll_no != null) {
+          rollCandidateNumbers.add(Number(item.student.roll_no))
+          rollCandidateStrings.add(String(item.student.roll_no))
+        }
+        if (item.student.batch_roll != null) {
+          rollCandidateNumbers.add(Number(item.student.batch_roll))
+          rollCandidateStrings.add(String(item.student.batch_roll))
+        }
+        if (Array.isArray(item.allBatchRolls)) {
+          item.allBatchRolls.forEach((br) => {
+            if (br.roll != null) {
+              rollCandidateNumbers.add(Number(br.roll))
+              rollCandidateStrings.add(String(br.roll))
+            }
+          })
+        }
+        if (Array.isArray(item.student.enrollments)) {
+          item.student.enrollments.forEach((e: any) => {
+            if (e.roll_no != null) {
+              rollCandidateNumbers.add(Number(e.roll_no))
+              rollCandidateStrings.add(String(e.roll_no))
+            }
           })
         }
 
-        if (!rollMatch && item.student.enrollments) {
-          rollMatch = item.student.enrollments.some((e: any) => {
-            const eRoll = e.roll_no ?? item.student.roll_no
-            if (eRoll == null) return false
-            const eRollNum = Number(eRoll)
-            const eRollStr = String(eRoll)
-            if (isNumericQuery && eRollNum === qNum) return true
-            if (eRollStr === q || eRollStr === qClean || eRollStr === qNormalized) return true
-            if (`roll ${eRollStr}`.includes(qNormalized) || `roll #${eRollStr}`.includes(qNormalized) || `r${eRollStr}` === qNormalized || `রোল ${eRollStr}`.includes(q)) return true
-            return false
-          })
+        let rollMatch = false
+        if (isNumericQuery) {
+          rollMatch = rollCandidateNumbers.has(qNum)
+        }
+        if (!rollMatch) {
+          for (const rStr of rollCandidateStrings) {
+            const rStripped = rStr.replace(/^0+/, "") || "0"
+            if (
+              rStr === q ||
+              rStr === qClean ||
+              rStr === qNormalized ||
+              rStripped === qStripped ||
+              rStripped === qClean ||
+              `roll ${rStr}` === qNormalized ||
+              `roll #${rStr}` === qNormalized ||
+              `r${rStr}` === qNormalized ||
+              `রোল ${rStr}` === qNormalized ||
+              `রোল #${rStr}` === qNormalized
+            ) {
+              rollMatch = true
+              break
+            }
+          }
         }
 
         if (!nameMatch && !idMatch && !phoneMatch && !gPhoneMatch && !rollMatch) return false
