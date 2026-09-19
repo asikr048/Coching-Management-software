@@ -261,6 +261,14 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
     return parsedStudents.reduce((sum, s) => sum + (Number(s.due_amount) || 0), 0)
   }, [parsedStudents])
 
+  // Check if any numbers have Excel scientific notation zero padding
+  const hasScientificNotationZeroes = useMemo(() => {
+    return parsedStudents.some(s => 
+      /00000$/.test((s.guardian_phone || "").replace(/[^0-9]/g, "")) || 
+      /00000$/.test((s.phone || "").replace(/[^0-9]/g, ""))
+    )
+  }, [parsedStudents])
+
   // Download Sample CSV with "Due" column
   const handleDownloadSampleCSV = () => {
     const headers = ["Name", "Guardian Phone", "Due", "Guardian Name", "Phone", "Address", "School / College", "Gender", "Class"]
@@ -494,6 +502,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       if (!name) errors.push("নাম প্রয়োজন (Missing Name)")
       if (!guardianPhone && !studentPhone) errors.push("মোবাইল নম্বর প্রয়োজন (Missing Phone)")
       else if ((guardianPhone || studentPhone).replace(/[^0-9]/g, "").length < 10) errors.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
+      else if (/00000$/.test((guardianPhone || studentPhone).replace(/[^0-9]/g, ""))) errors.push("এক্সেলে নম্বর বিকৃত হয়ে শূন্য হয়েছে (Excel rounded to zeros)")
 
       students.push({
         id: `stu_${i}_${Date.now().toString(36)}`,
@@ -562,6 +571,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       if (!updated.name?.trim()) errors.push("Missing Name")
       if (!updated.guardian_phone?.trim() && !updated.phone?.trim()) errors.push("Missing Phone")
       else if (((updated.guardian_phone || updated.phone || "").replace(/[^0-9]/g, "")).length < 10) errors.push("Invalid Phone")
+      else if (/00000$/.test(((updated.guardian_phone || updated.phone || "").replace(/[^0-9]/g, "")))) errors.push("Excel rounded to zeros")
       return {
         ...updated,
         isValid: errors.length === 0,
@@ -1113,6 +1123,20 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                 </button>
               </div>
             </div>
+
+            {hasScientificNotationZeroes && (
+              <div className="p-4 bg-amber-50 border border-amber-300 rounded-xl text-xs text-amber-900 flex items-start gap-3 shadow-2xs">
+                <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-bold text-amber-950 text-sm">
+                    ⚠️ এক্সেলে কলামের সাইজ সংকীর্ণ থাকায় কিছু নম্বর বিকৃত হয়ে শূন্য হয়েছে (যেমন: +8801790000000)
+                  </p>
+                  <p className="text-amber-800 leading-relaxed">
+                    <b>২ সেকেন্ডে এক্সেলে সমাধান:</b> এক্সেল ফাইলে <b>B</b> কলামটির উপরে ক্লিক করুন $\rightarrow$ কলামটি একটু চওড়া (B ও C এর মাঝের দাগে ডাবল ক্লিক করে Widen) করুন অথবা <b>Number</b> ফরম্যাটে সেট করুন (0 decimals) $\rightarrow$ <b>Save (Ctrl + S)</b> করে পুনরায় ফাইলটি আপলোড করুন। <i>অথবা নিচের টেবিলে লাল চিহ্নিত ঘরে সরাসরি সঠিক নম্বরটি লিখে দিন।</i>
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="overflow-x-auto max-h-[380px] border border-slate-200 rounded-xl overflow-y-auto">
               <table className="w-full text-left border-collapse text-xs">
