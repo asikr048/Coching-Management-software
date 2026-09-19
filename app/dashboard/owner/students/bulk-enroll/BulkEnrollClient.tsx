@@ -525,16 +525,41 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
     toast.success(`সফলভাবে ${students.length} জন শিক্ষার্থীর তথ্য পার্স করা হয়েছে!`)
   }
 
+  const processSpreadsheetFile = async (file: File) => {
+    const isExcel = file.name.endsWith(".xlsx") || file.name.endsWith(".xls")
+    if (isExcel) {
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        try {
+          const buffer = e.target?.result as ArrayBuffer
+          const XLSX = await import("xlsx")
+          const workbook = XLSX.read(buffer, { type: "array", cellFormula: false, raw: true })
+          const firstSheetName = workbook.SheetNames[0]
+          const sheet = workbook.Sheets[firstSheetName]
+          // sheet_to_csv with raw values preserves the unrounded numerical value from cell.v
+          const csvText = XLSX.utils.sheet_to_csv(sheet)
+          parseCSVText(csvText)
+        } catch (err) {
+          console.error("Excel parse error:", err)
+          toast.error("এক্সেল ফাইল পার্স করতে সমস্যা হয়েছে।")
+        }
+      }
+      reader.readAsArrayBuffer(file)
+    } else {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const content = event.target?.result as string
+        if (content) parseCSVText(content)
+      }
+      reader.readAsText(file, "UTF-8")
+    }
+  }
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setFileName(file.name)
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      if (content) parseCSVText(content)
-    }
-    reader.readAsText(file, "UTF-8")
+    processSpreadsheetFile(file)
   }
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
@@ -542,17 +567,13 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
     setIsDragging(false)
     const file = e.dataTransfer.files?.[0]
     if (!file) return
-    if (!file.name.endsWith(".csv")) {
-      toast.error("অনুগ্রহ করে একটি .csv ফাইল আপলোড করুন (Please upload a .csv file)")
+    const isSupported = file.name.endsWith(".csv") || file.name.endsWith(".xlsx") || file.name.endsWith(".xls")
+    if (!isSupported) {
+      toast.error("অনুগ্রহ করে একটি .xlsx অথবা .csv ফাইল আপলোড করুন")
       return
     }
     setFileName(file.name)
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      const content = event.target?.result as string
-      if (content) parseCSVText(content)
-    }
-    reader.readAsText(file, "UTF-8")
+    processSpreadsheetFile(file)
   }
 
   const handleRemoveStudent = (id: string) => {
@@ -1070,7 +1091,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
             onChange={handleFileUpload}
             className="hidden"
           />
@@ -1083,11 +1104,11 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
             {fileName ? (
               <span className="text-emerald-700">ফাইল লোড হয়েছে: {fileName}</span>
             ) : (
-              <span>ক্লিক করে CSV ফাইল নির্বাচন করুন অথবা ড্র্যাগ করে আনুন</span>
+              <span>ক্লিক করে Excel (.xlsx) অথবা CSV ফাইল আপলোড করুন (অথবা ড্র্যাগ করুন)</span>
             )}
           </div>
           <p className="text-xs text-slate-500 mt-1">
-            শুধুমাত্র .csv ফরম্যাটের স্প্রেডশীট ফাইল সমর্থিত
+            .xlsx, .xls অথবা .csv স্প্রেডশীট ফাইল সমর্থিত (সরাসরি <b>.xlsx</b> দিলে নম্বর বিকৃত হয় না)
           </p>
         </div>
 
@@ -1156,9 +1177,9 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {parsedStudents.map((st, idx) => (
-                    <tr key={st.id} className={!st.isValid ? "bg-rose-50/40" : "hover:bg-slate-50/60"}>
-                      <td className="py-2 px-3 font-mono text-slate-400 font-bold">{idx + 1}</td>
-                      <td className="py-2 px-3">
+                    <tr key={st.id} className={`h-11 ${!st.isValid ? "bg-rose-50/40" : "hover:bg-slate-50/60"}`}>
+                      <td className="py-1 px-3 font-mono text-slate-400 font-bold align-middle whitespace-nowrap">{idx + 1}</td>
+                      <td className="py-1 px-3 align-middle">
                         <input
                           type="text"
                           value={st.name}
@@ -1168,17 +1189,17 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                           }`}
                         />
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-1 px-3 align-middle">
                         <input
                           type="text"
                           value={st.guardian_phone}
                           onChange={(e) => handleUpdateStudentCell(st.id, "guardian_phone", e.target.value)}
                           className={`px-2 py-1 border rounded text-xs font-mono text-slate-900 w-32 ${
-                            !st.guardian_phone ? "border-rose-400 bg-rose-50" : "border-slate-200 bg-transparent"
+                            !st.guardian_phone || /00000$/.test(st.guardian_phone.replace(/[^0-9]/g, "")) ? "border-amber-400 bg-amber-50" : "border-slate-200 bg-transparent"
                           }`}
                         />
                       </td>
-                      <td className="py-2 px-3 bg-rose-50/20">
+                      <td className="py-1 px-3 bg-rose-50/20 align-middle">
                         <div className="relative">
                           <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">৳</span>
                           <input
@@ -1190,7 +1211,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                           />
                         </div>
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-1 px-3 align-middle">
                         <input
                           type="text"
                           value={st.guardian_name || ""}
@@ -1198,7 +1219,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                           className="px-2 py-1 border border-slate-200 rounded text-xs text-slate-800 w-32 bg-transparent"
                         />
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-1 px-3 align-middle">
                         <input
                           type="text"
                           value={st.phone || ""}
@@ -1206,7 +1227,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                           className="px-2 py-1 border border-slate-200 rounded text-xs font-mono text-slate-800 w-28 bg-transparent"
                         />
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-1 px-3 align-middle">
                         <input
                           type="text"
                           value={st.school_college || ""}
@@ -1214,7 +1235,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                           className="px-2 py-1 border border-slate-200 rounded text-xs text-slate-800 w-36 bg-transparent"
                         />
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-1 px-3 align-middle">
                         <input
                           type="text"
                           value={st.address || ""}
@@ -1222,18 +1243,21 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                           className="px-2 py-1 border border-slate-200 rounded text-xs text-slate-800 w-32 bg-transparent"
                         />
                       </td>
-                      <td className="py-2 px-3">
+                      <td className="py-1 px-3 align-middle whitespace-nowrap">
                         {st.isValid ? (
-                          <span className="inline-flex items-center text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          <span className="inline-flex items-center text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap">
                             ✓ Ready
                           </span>
                         ) : (
-                          <span className="inline-flex items-center text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200" title={st.errors.join(", ")}>
+                          <span 
+                            className="inline-flex items-center text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 whitespace-nowrap max-w-[130px] truncate block" 
+                            title={st.errors.join(", ")}
+                          >
                             ! {st.errors[0]}
                           </span>
                         )}
                       </td>
-                      <td className="py-2 px-3 text-right">
+                      <td className="py-1 px-3 text-right align-middle">
                         <button
                           type="button"
                           onClick={() => handleRemoveStudent(st.id)}
