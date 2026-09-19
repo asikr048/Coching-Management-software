@@ -36,7 +36,7 @@ import {
   BookOpen,
   Edit2,
 } from "lucide-react"
-import { getGrade, cn, extractWeeklyScheduleFromNote } from "@/lib/utils"
+import { getGrade, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
 import ExamPrintModal from "@/components/modules/exams/ExamPrintModal"
 
@@ -775,20 +775,16 @@ export default function ExamResultsPage() {
 
   // Filter students for Quick Search dropdown
   const filteredSearchStudents = useMemo(() => {
-    const q = studentSearchQuery.trim().toLowerCase()
-    // Normalize Bengali digits to English
-    const qNorm = q.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
-    if (!qNorm) return students.slice(0, 8)
+    if (!studentSearchQuery.trim()) return students.slice(0, 8)
+    const pq = parseRollQuery(studentSearchQuery)
     
     return students.filter((s, idx) => {
-      const nameMatch = (s.name || "").toLowerCase().includes(qNorm)
-      const idMatch = (s.student_id || "").toLowerCase().includes(qNorm)
+      const nameMatch = (s.name || "").toLowerCase().includes(pq.q) || (s.name || "").toLowerCase().includes(pq.qNormalized)
+      const idMatch = (s.student_id || "").toLowerCase().includes(pq.q) || (s.student_id || "").toLowerCase().includes(pq.qNormalized)
       // Only match phone if query has 4+ digits
-      const phoneMatch = qNorm.length >= 4 && (s.phone || "").includes(qNorm)
-      // Exact roll match with fallback for display index
-      const rollStr = String(s.roll_no || (idx + 1))
-      const qStripped = qNorm.replace(/^0+/, "") || "0"
-      const rollMatch = rollStr === qStripped || rollStr === qNorm
+      const phoneMatch = pq.hasMinPhoneDigits && ((s.phone || "").includes(pq.qNormalized) || (s.phone || "").includes(pq.q))
+      // Check roll candidates (student roll, batch roll, display index)
+      const rollMatch = isRollMatch(pq, [s.roll_no, s.batch_roll, idx + 1])
       return nameMatch || idMatch || phoneMatch || rollMatch
     })
   }, [students, studentSearchQuery])
@@ -2003,18 +1999,12 @@ export default function ExamResultsPage() {
   // Filtered Students for Table
   const tableStudents = useMemo(() => {
     return students.filter((s, idx) => {
-      let q = tableSearchQuery.trim().toLowerCase()
-      // Normalize Bengali digits to English
-      q = q.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
-      
-      if (q) {
-        const nameMatch = (s.name || "").toLowerCase().includes(q)
-        const idMatch = (s.student_id || "").toLowerCase().includes(q)
-        const phoneMatch = q.length >= 4 && (s.phone || "").includes(q)
-        // Exact roll match with fallback for display index
-        const rollStr = String(s.roll_no || (idx + 1))
-        const qStripped = q.replace(/^0+/, "") || "0"
-        const rollMatch = rollStr === qStripped || rollStr === q
+      if (tableSearchQuery.trim()) {
+        const pq = parseRollQuery(tableSearchQuery)
+        const nameMatch = (s.name || "").toLowerCase().includes(pq.q) || (s.name || "").toLowerCase().includes(pq.qNormalized)
+        const idMatch = (s.student_id || "").toLowerCase().includes(pq.q) || (s.student_id || "").toLowerCase().includes(pq.qNormalized)
+        const phoneMatch = pq.hasMinPhoneDigits && ((s.phone || "").includes(pq.qNormalized) || (s.phone || "").includes(pq.q))
+        const rollMatch = isRollMatch(pq, [s.roll_no, s.batch_roll, idx + 1])
         if (!nameMatch && !idMatch && !phoneMatch && !rollMatch) return false
       }
 

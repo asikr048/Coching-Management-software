@@ -11,7 +11,7 @@ import {
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { formatDate, formatCurrency, getMonthLabel } from "@/lib/utils"
+import { formatDate, formatCurrency, getMonthLabel, parseRollQuery, isRollMatch } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 import { toast } from "sonner"
 import type { Student } from "@/lib/supabase/types"
@@ -362,39 +362,32 @@ export default function StudentsClient({
   const { selectedBranchId } = useBranch()
 
   const filteredAndSorted = useMemo(() => {
-    const q = query.toLowerCase().trim()
-    const bnToEnMap: Record<string, string> = { "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9" }
-    const qNormalized = q.replace(/[০-৯]/g, d => bnToEnMap[d] || d)
-    // Extract pure numeric roll if user typed a number (e.g. "1" or "01" or "#1" or "roll 1" or "r1" or "রোল ১")
-    const qClean = qNormalized.replace(/^(roll|r|#|রোল|\s)+/i, "").trim()
-    const qNum = parseInt(qClean, 10)
-    const isNumericQuery = !isNaN(qNum) && qNum > 0
+    const pq = parseRollQuery(query)
 
     let result = enrichedStudents.filter(s => {
-      const rollStr = s.roll_no != null ? String(s.roll_no) : (s.batch_roll != null ? String(s.batch_roll) : "")
-      
-      // Match roll in any of student's enrollments
-      const hasEnrRoll = (s.enrollments as any[])?.some((e, idx) => {
-        const effectiveRoll = e.roll_no ?? (s.enrollments?.length === 1 ? s.roll_no : null) ?? s.roll_no ?? s.batch_roll ?? (idx + 1)
-        if (effectiveRoll == null) return false
-        const eRollNum = Number(effectiveRoll)
-        const eRollStr = String(effectiveRoll)
-        if (isNumericQuery && eRollNum === qNum) return true
-        if (eRollStr === q || eRollStr === qClean || eRollStr === qNormalized) return true
-        if (`roll ${eRollStr}`.includes(qNormalized) || `roll #${eRollStr}`.includes(qNormalized) || `r${eRollStr}` === qNormalized || `রোল ${eRollStr}`.includes(q)) return true
-        return false
-      })
+      const candidateRolls: (number | string | null | undefined)[] = [
+        s.roll_no,
+        s.batch_roll,
+      ]
 
-      const matchRoll = (isNumericQuery && (Number(s.roll_no) === qNum || Number(s.batch_roll) === qNum)) ||
-        (rollStr !== "" && (rollStr === q || rollStr === qClean || rollStr === qNormalized || `roll ${rollStr}`.includes(qNormalized) || `roll #${rollStr}`.includes(qNormalized) || `r${rollStr}` === qNormalized || `রোল ${rollStr}`.includes(q))) ||
-        hasEnrRoll
+      if (Array.isArray(s.enrollments)) {
+        s.enrollments.forEach((e: any, idx: number) => {
+          if (e.roll_no != null) candidateRolls.push(e.roll_no)
+          const effectiveRoll = e.roll_no ?? (s.enrollments?.length === 1 ? s.roll_no : null) ?? s.roll_no ?? s.batch_roll ?? (idx + 1)
+          if (effectiveRoll != null) candidateRolls.push(effectiveRoll)
+        })
+      }
 
-      const matchQ = !q || 
-        s.name.toLowerCase().includes(q) ||
-        s.student_id.toLowerCase().includes(q) ||
-        s.phone?.toLowerCase().includes(q) ||
-        s.guardian_phone?.toLowerCase().includes(q) ||
-        s.email?.toLowerCase().includes(q) ||
+      const matchRoll = isRollMatch(pq, candidateRolls)
+
+      const matchQ = !pq.q || 
+        s.name.toLowerCase().includes(pq.q) ||
+        s.name.toLowerCase().includes(pq.qNormalized) ||
+        s.student_id.toLowerCase().includes(pq.q) ||
+        s.student_id.toLowerCase().includes(pq.qNormalized) ||
+        (pq.hasMinPhoneDigits && (s.phone?.includes(pq.qNormalized) || s.phone?.includes(pq.q))) ||
+        (pq.hasMinPhoneDigits && (s.guardian_phone?.includes(pq.qNormalized) || s.guardian_phone?.includes(pq.q))) ||
+        s.email?.toLowerCase().includes(pq.q) ||
         matchRoll
       
       const matchB = !batchFilter || (s.enrollments?.some(e => e.batch_id === batchFilter))

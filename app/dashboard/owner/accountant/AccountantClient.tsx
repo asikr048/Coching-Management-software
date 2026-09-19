@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
 import {
   Calculator, Search, Filter, DollarSign, CreditCard, Users,
   BookOpen, CheckCircle, AlertCircle, Clock, ArrowRight,
@@ -486,88 +486,39 @@ export default function AccountantClient({
 
       // 5. Search Query (name, student_id, roll_no, phone, guardian_phone)
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim()
-        const bnToEnMap: Record<string, string> = { "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4", "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9" }
-        const qNormalized = q.replace(/[০-৯]/g, (d) => bnToEnMap[d] || d)
-        const qClean = qNormalized
-          .replace(/^(roll|r|#|রোল|no|নং|রোল\s*নং|roll\s*no|[\s\-\:\.\#])+/i, "")
-          .trim()
-        const qStripped = qClean.replace(/^0+/, "") || "0"
-        const qNum = parseInt(qStripped, 10)
-        const isNumericQuery = !isNaN(qNum) && qNum > 0 && qClean.length > 0
+        const pq = parseRollQuery(searchQuery)
 
-        // Only search phone / guardian phone if query has 4+ digits to prevent single/double digits (like 1, 01, 2) matching every phone number
-        const hasMinPhoneDigits = qNormalized.replace(/\D/g, "").length >= 4
         const nameMatch =
-          item.student.name?.toLowerCase().includes(q) ||
-          item.student.name?.toLowerCase().includes(qNormalized)
+          item.student.name?.toLowerCase().includes(pq.q) ||
+          item.student.name?.toLowerCase().includes(pq.qNormalized)
         const idMatch =
-          item.student.student_id?.toLowerCase().includes(q) ||
-          item.student.student_id?.toLowerCase().includes(qNormalized)
+          item.student.student_id?.toLowerCase().includes(pq.q) ||
+          item.student.student_id?.toLowerCase().includes(pq.qNormalized)
         const phoneMatch =
-          hasMinPhoneDigits &&
-          (item.student.phone?.includes(qNormalized) || item.student.phone?.includes(q))
+          pq.hasMinPhoneDigits &&
+          (item.student.phone?.includes(pq.qNormalized) || item.student.phone?.includes(pq.q))
         const gPhoneMatch =
-          hasMinPhoneDigits &&
-          (item.student.guardian_phone?.includes(qNormalized) || item.student.guardian_phone?.includes(q))
+          pq.hasMinPhoneDigits &&
+          (item.student.guardian_phone?.includes(pq.qNormalized) || item.student.guardian_phone?.includes(pq.q))
 
         // Collect all roll candidates across this item and student
-        const rollCandidateNumbers = new Set<number>()
-        const rollCandidateStrings = new Set<string>()
-
-        if (item.rollNo != null) {
-          rollCandidateNumbers.add(Number(item.rollNo))
-          rollCandidateStrings.add(String(item.rollNo))
-        }
-        if (item.student.roll_no != null) {
-          rollCandidateNumbers.add(Number(item.student.roll_no))
-          rollCandidateStrings.add(String(item.student.roll_no))
-        }
-        if (item.student.batch_roll != null) {
-          rollCandidateNumbers.add(Number(item.student.batch_roll))
-          rollCandidateStrings.add(String(item.student.batch_roll))
-        }
+        const candidateRolls: (number | string | null | undefined)[] = [
+          item.rollNo,
+          item.student.roll_no,
+          item.student.batch_roll,
+        ]
         if (Array.isArray(item.allBatchRolls)) {
           item.allBatchRolls.forEach((br) => {
-            if (br.roll != null) {
-              rollCandidateNumbers.add(Number(br.roll))
-              rollCandidateStrings.add(String(br.roll))
-            }
+            if (br.roll != null) candidateRolls.push(br.roll)
           })
         }
         if (Array.isArray(item.student.enrollments)) {
           item.student.enrollments.forEach((e: any) => {
-            if (e.roll_no != null) {
-              rollCandidateNumbers.add(Number(e.roll_no))
-              rollCandidateStrings.add(String(e.roll_no))
-            }
+            if (e.roll_no != null) candidateRolls.push(e.roll_no)
           })
         }
 
-        let rollMatch = false
-        if (isNumericQuery) {
-          rollMatch = rollCandidateNumbers.has(qNum)
-        }
-        if (!rollMatch) {
-          for (const rStr of rollCandidateStrings) {
-            const rStripped = rStr.replace(/^0+/, "") || "0"
-            if (
-              rStr === q ||
-              rStr === qClean ||
-              rStr === qNormalized ||
-              rStripped === qStripped ||
-              rStripped === qClean ||
-              `roll ${rStr}` === qNormalized ||
-              `roll #${rStr}` === qNormalized ||
-              `r${rStr}` === qNormalized ||
-              `রোল ${rStr}` === qNormalized ||
-              `রোল #${rStr}` === qNormalized
-            ) {
-              rollMatch = true
-              break
-            }
-          }
-        }
+        const rollMatch = isRollMatch(pq, candidateRolls)
 
         if (!nameMatch && !idMatch && !phoneMatch && !gPhoneMatch && !rollMatch) return false
       }

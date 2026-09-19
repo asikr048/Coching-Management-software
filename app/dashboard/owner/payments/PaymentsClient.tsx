@@ -8,7 +8,7 @@ import {
   User, RefreshCw, CheckCircle2, ArrowRight, Eye, ChevronDown, Clock, History,
   Smartphone, Settings, Save
 } from "lucide-react"
-import { formatCurrency, formatDateTime, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDateTime, formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 import Link from "next/link"
 
@@ -279,16 +279,27 @@ export default function PaymentsClient({
   // Top search filter for students
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return []
-    const q = searchQuery.toLowerCase().trim()
+    const pq = parseRollQuery(searchQuery)
     return students.filter(s => {
-      const rollStr = s.roll_no != null ? String(s.roll_no) : (s.batch_roll != null ? String(s.batch_roll) : "")
-      const hasEnrRoll = s.enrollments?.some(e => e.roll_no != null && (String(e.roll_no) === q || `roll ${e.roll_no}`.includes(q) || `roll #${e.roll_no}`.includes(q)))
+      const candidateRolls: (number | string | null | undefined)[] = [
+        s.roll_no,
+        s.batch_roll,
+      ]
+      if (Array.isArray(s.enrollments)) {
+        s.enrollments.forEach(e => {
+          if (e.roll_no != null) candidateRolls.push(e.roll_no)
+        })
+      }
+      const matchRoll = isRollMatch(pq, candidateRolls)
+
       return (
-        s.name.toLowerCase().includes(q) || 
-        s.student_id.toLowerCase().includes(q) || 
-        (s.phone && s.phone.includes(q)) ||
-        (rollStr !== "" && (rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q)) ||
-        hasEnrRoll
+        s.name.toLowerCase().includes(pq.q) || 
+        s.name.toLowerCase().includes(pq.qNormalized) || 
+        s.student_id.toLowerCase().includes(pq.q) || 
+        s.student_id.toLowerCase().includes(pq.qNormalized) || 
+        (pq.hasMinPhoneDigits && (s.phone && (s.phone.includes(pq.qNormalized) || s.phone.includes(pq.q)))) ||
+        (pq.hasMinPhoneDigits && (s.guardian_phone && (s.guardian_phone.includes(pq.qNormalized) || s.guardian_phone.includes(pq.q)))) ||
+        matchRoll
       )
     }).slice(0, 8)
   }, [searchQuery, students])
@@ -296,16 +307,27 @@ export default function PaymentsClient({
   // Modal search filter for students
   const modalFilteredStudents = useMemo(() => {
     if (!modalSearchQuery.trim()) return []
-    const q = modalSearchQuery.toLowerCase().trim()
+    const pq = parseRollQuery(modalSearchQuery)
     return students.filter(s => {
-      const rollStr = s.roll_no != null ? String(s.roll_no) : (s.batch_roll != null ? String(s.batch_roll) : "")
-      const hasEnrRoll = s.enrollments?.some(e => e.roll_no != null && (String(e.roll_no) === q || `roll ${e.roll_no}`.includes(q) || `roll #${e.roll_no}`.includes(q)))
+      const candidateRolls: (number | string | null | undefined)[] = [
+        s.roll_no,
+        s.batch_roll,
+      ]
+      if (Array.isArray(s.enrollments)) {
+        s.enrollments.forEach(e => {
+          if (e.roll_no != null) candidateRolls.push(e.roll_no)
+        })
+      }
+      const matchRoll = isRollMatch(pq, candidateRolls)
+
       return (
-        s.name.toLowerCase().includes(q) || 
-        s.student_id.toLowerCase().includes(q) || 
-        (s.phone && s.phone.includes(q)) ||
-        (rollStr !== "" && (rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q)) ||
-        hasEnrRoll
+        s.name.toLowerCase().includes(pq.q) || 
+        s.name.toLowerCase().includes(pq.qNormalized) || 
+        s.student_id.toLowerCase().includes(pq.q) || 
+        s.student_id.toLowerCase().includes(pq.qNormalized) || 
+        (pq.hasMinPhoneDigits && (s.phone && (s.phone.includes(pq.qNormalized) || s.phone.includes(pq.q)))) ||
+        (pq.hasMinPhoneDigits && (s.guardian_phone && (s.guardian_phone.includes(pq.qNormalized) || s.guardian_phone.includes(pq.q)))) ||
+        matchRoll
       )
     }).slice(0, 8)
   }, [modalSearchQuery, students])

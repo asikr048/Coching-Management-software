@@ -7,7 +7,7 @@ import {
   UserCheck, Loader2, Search, Check, X, Clock, HelpCircle, 
   FileSpreadsheet, Printer, Download, Calendar, Award, AlertCircle 
 } from "lucide-react"
-import { formatDate } from "@/lib/utils"
+import { formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
 
 function normalizeBanglaDigits(str: string): string {
   const banglaDigits = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"]
@@ -125,19 +125,16 @@ export default function ReceptionAttendancePage() {
   // Filter students by search (Roll No, Name, Student ID)
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return students
-    const q = normalizeBanglaDigits(searchQuery.trim().toLowerCase())
-    return students.filter((s) => {
-      const rollStr = String(s.roll_no || "")
+    const pq = parseRollQuery(searchQuery)
+    return students.filter((s, idx) => {
       const nameStr = String(s.name || "").toLowerCase()
       const idStr = String(s.student_id || "").toLowerCase()
-      return (
-        rollStr === q ||
-        `roll ${rollStr}`.includes(q) ||
-        `roll #${rollStr}`.includes(q) ||
-        `#${rollStr}`.includes(q) ||
-        nameStr.includes(q) ||
-        idStr.includes(q)
-      )
+      const phoneStr = String(s.phone || "")
+      const nameMatch = nameStr.includes(pq.q) || nameStr.includes(pq.qNormalized)
+      const idMatch = idStr.includes(pq.q) || idStr.includes(pq.qNormalized)
+      const phoneMatch = pq.hasMinPhoneDigits && (phoneStr.includes(pq.qNormalized) || phoneStr.includes(pq.q))
+      const rollMatch = isRollMatch(pq, [s.roll_no, s.batch_roll, idx + 1])
+      return nameMatch || idMatch || phoneMatch || rollMatch
     })
   }, [students, searchQuery])
 

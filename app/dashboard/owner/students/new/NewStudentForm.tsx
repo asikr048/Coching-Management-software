@@ -10,7 +10,7 @@ import {
   Calendar, Filter, Eye, Phone, Mail, UserCheck, ArrowRight, FileText, 
   CheckCircle2, Clock, DollarSign, ChevronRight, ExternalLink, X, Contact, Sparkles
 } from "lucide-react"
-import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils"
+import { formatCurrency, formatDate, formatDateTime, parseRollQuery, isRollMatch } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 import { StudentIdCardData, printStudentIdCard, printAdmissionAndIdCard, downloadStudentIdCardPDF } from "@/lib/id-card-generator"
 import StudentIdCardModal from "@/components/id-card/StudentIdCardModal"
@@ -42,6 +42,9 @@ interface StudentOpt {
   address?: string
   class_level?: string
   school_college?: string 
+  roll_no?: number | null
+  batch_roll?: number | null
+  enrollments?: any[]
 }
 
 interface EnrollmentReceipt {
@@ -529,8 +532,29 @@ export default function NewStudentForm({
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return []
-    const q = searchQuery.toLowerCase()
-    return students.filter(s => s.name.toLowerCase().includes(q) || s.student_id.toLowerCase().includes(q) || (s.phone && s.phone.includes(q))).slice(0, 8)
+    const pq = parseRollQuery(searchQuery)
+    return students.filter(s => {
+      const candidateRolls: (number | string | null | undefined)[] = [
+        s.roll_no,
+        s.batch_roll,
+      ]
+      if (Array.isArray(s.enrollments)) {
+        s.enrollments.forEach((e: any) => {
+          if (e.roll_no != null) candidateRolls.push(e.roll_no)
+        })
+      }
+      const matchRoll = isRollMatch(pq, candidateRolls)
+
+      return (
+        s.name.toLowerCase().includes(pq.q) ||
+        s.name.toLowerCase().includes(pq.qNormalized) ||
+        s.student_id.toLowerCase().includes(pq.q) ||
+        s.student_id.toLowerCase().includes(pq.qNormalized) ||
+        (pq.hasMinPhoneDigits && (s.phone && (s.phone.includes(pq.qNormalized) || s.phone.includes(pq.q)))) ||
+        (pq.hasMinPhoneDigits && (s.guardian_phone && (s.guardian_phone.includes(pq.qNormalized) || s.guardian_phone.includes(pq.q)))) ||
+        matchRoll
+      )
+    }).slice(0, 8)
   }, [searchQuery, students])
 
   const branchFilteredBatches = useMemo(() => {
@@ -657,15 +681,31 @@ export default function NewStudentForm({
       if (historyBatchFilter !== "all" && enr.batch_id !== historyBatchFilter) return false
 
       if (historySearchQuery.trim()) {
-        const q = historySearchQuery.trim().toLowerCase()
+        const pq = parseRollQuery(historySearchQuery)
         const sName = (student.name || "").toLowerCase()
         const sId = (student.student_id || "").toLowerCase()
         const sPhone = (student.phone || "").toLowerCase()
         const gPhone = (student.guardian_phone || "").toLowerCase()
         const bName = (b.name || "").toLowerCase()
-        const rollVal = enr.roll_no != null ? String(enr.roll_no) : (student.roll_no != null ? String(student.roll_no) : "")
-        const matchRoll = rollVal !== "" && (rollVal === q || `roll ${rollVal}`.includes(q) || `roll #${rollVal}`.includes(q) || `r${rollVal}` === q)
-        const match = sName.includes(q) || sId.includes(q) || sPhone.includes(q) || gPhone.includes(q) || bName.includes(q) || matchRoll
+
+        const candidateRolls: (number | string | null | undefined)[] = [
+          enr.roll_no,
+          student.roll_no,
+          student.batch_roll,
+        ]
+        const matchRoll = isRollMatch(pq, candidateRolls)
+
+        const match =
+          sName.includes(pq.q) ||
+          sName.includes(pq.qNormalized) ||
+          sId.includes(pq.q) ||
+          sId.includes(pq.qNormalized) ||
+          bName.includes(pq.q) ||
+          bName.includes(pq.qNormalized) ||
+          (pq.hasMinPhoneDigits && (sPhone.includes(pq.qNormalized) || sPhone.includes(pq.q))) ||
+          (pq.hasMinPhoneDigits && (gPhone.includes(pq.qNormalized) || gPhone.includes(pq.q))) ||
+          matchRoll
+
         if (!match) return false
       }
 

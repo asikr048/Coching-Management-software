@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react"
 import Link from "next/link"
 import { createClient } from "@/lib/supabase/client"
-import { formatDate, getGrade, cn, extractWeeklyScheduleFromNote } from "@/lib/utils"
+import { formatDate, getGrade, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
 import {
   Trophy,
   Award,
@@ -594,8 +594,14 @@ export default function OnlineResultPortalPage() {
   // Filter results inside merit list modal
   const filteredModalResults = useMemo(() => {
     if (!studentSearchInModal.trim()) return examResults
-    const q = studentSearchInModal.toLowerCase()
-    return examResults.filter((r) => r.student_name.toLowerCase().includes(q) || r.roll.toLowerCase().includes(q))
+    const pq = parseRollQuery(studentSearchInModal)
+    return examResults.filter((r) => {
+      const nameMatch =
+        r.student_name.toLowerCase().includes(pq.q) ||
+        r.student_name.toLowerCase().includes(pq.qNormalized)
+      const rollMatch = isRollMatch(pq, [r.roll])
+      return nameMatch || rollMatch
+    })
   }, [examResults, studentSearchInModal])
 
   // Is the selected exam in the modal a weekly exam?
@@ -692,11 +698,13 @@ export default function OnlineResultPortalPage() {
       }
     })
 
+    const pq = parseRollQuery(studentSearchInModal)
     const filtered = studentSearchInModal.trim()
       ? mapped.filter(
           (s) =>
-            s.student_name.toLowerCase().includes(studentSearchInModal.toLowerCase()) ||
-            s.roll.toLowerCase().includes(studentSearchInModal.toLowerCase())
+            s.student_name.toLowerCase().includes(pq.q) ||
+            s.student_name.toLowerCase().includes(pq.qNormalized) ||
+            isRollMatch(pq, [s.roll])
         )
       : mapped
 

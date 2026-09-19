@@ -8,7 +8,7 @@ import {
   HelpCircle, UserPlus, ArrowRight
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { formatDate } from "@/lib/utils"
+import { formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
 import { toast } from "sonner"
 import { useBranch } from "@/components/providers/BranchContext"
 import Link from "next/link"
@@ -290,21 +290,16 @@ export default function AttendanceClient({
   // Search Filter for Take Attendance
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return students
-    const q = normalizeBanglaDigits(searchQuery.trim().toLowerCase())
-    return students.filter((s) => {
-      const rollStr = String(s.roll_no || "")
+    const pq = parseRollQuery(searchQuery)
+    return students.filter((s, idx) => {
       const nameStr = String(s.name || "").toLowerCase()
       const idStr = String(s.student_id || "").toLowerCase()
       const phoneStr = String(s.phone || "")
-      return (
-        rollStr === q ||
-        `roll ${rollStr}`.includes(q) ||
-        `roll #${rollStr}`.includes(q) ||
-        `#${rollStr}`.includes(q) ||
-        nameStr.includes(q) ||
-        idStr.includes(q) ||
-        phoneStr.includes(q)
-      )
+      const nameMatch = nameStr.includes(pq.q) || nameStr.includes(pq.qNormalized)
+      const idMatch = idStr.includes(pq.q) || idStr.includes(pq.qNormalized)
+      const phoneMatch = pq.hasMinPhoneDigits && (phoneStr.includes(pq.qNormalized) || phoneStr.includes(pq.q))
+      const rollMatch = isRollMatch(pq, [s.roll_no, s.batch_roll, idx + 1])
+      return nameMatch || idMatch || phoneMatch || rollMatch
     })
   }, [students, searchQuery])
 

@@ -2,7 +2,7 @@
 import { useState, useEffect, Fragment } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { formatCurrency, formatDate, getMonthLabel } from "@/lib/utils"
+import { formatCurrency, formatDate, getMonthLabel, parseRollQuery, isRollMatch } from "@/lib/utils"
 import {
   AlertCircle, Search, Filter, Calendar, DollarSign, CheckCircle,
   X, Loader2, MessageSquare, Download, Clock, ArrowUpDown, ShieldAlert,
@@ -72,14 +72,28 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
 
   // Filter & Sort
   const filtered = dues.filter(d => {
+    const pq = parseRollQuery(search)
     const roll = getDueRoll(d)
-    const rollStr = roll != null ? String(roll) : ""
-    const q = search.toLowerCase().trim()
+    const candidateRolls: (number | string | null | undefined)[] = [
+      roll,
+      d.student?.roll_no,
+      d.student?.batch_roll,
+    ]
+    if (Array.isArray(d.student?.enrollments)) {
+      d.student?.enrollments.forEach(e => {
+        if (e.roll_no != null) candidateRolls.push(e.roll_no)
+      })
+    }
+    const matchRoll = isRollMatch(pq, candidateRolls)
 
-    const matchSearch = !q ||
-      d.student?.name?.toLowerCase().includes(q) ||
-      d.student?.student_id?.toLowerCase().includes(q) ||
-      (rollStr !== "" && (rollStr === q || `roll ${rollStr}`.includes(q) || `roll #${rollStr}`.includes(q) || `r${rollStr}` === q))
+    const matchSearch = !pq.q ||
+      d.student?.name?.toLowerCase().includes(pq.q) ||
+      d.student?.name?.toLowerCase().includes(pq.qNormalized) ||
+      d.student?.student_id?.toLowerCase().includes(pq.q) ||
+      d.student?.student_id?.toLowerCase().includes(pq.qNormalized) ||
+      (pq.hasMinPhoneDigits && (d.student?.phone?.includes(pq.qNormalized) || d.student?.phone?.includes(pq.q))) ||
+      (pq.hasMinPhoneDigits && (d.student?.guardian_phone?.includes(pq.qNormalized) || d.student?.guardian_phone?.includes(pq.q))) ||
+      matchRoll
 
     const matchBatch = !batchFilter || d.batch_id === batchFilter
 

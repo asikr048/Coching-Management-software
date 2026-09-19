@@ -8,7 +8,7 @@ import {
   Clock, Sparkles, ChevronRight, X, UserCheck, Printer, Landmark, Building2
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
-import { formatCurrency, formatDate } from "@/lib/utils"
+import { formatCurrency, formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 import { useBranch } from "@/components/providers/BranchContext"
@@ -564,23 +564,27 @@ export default function MaterialsClient({
 
   // Search filtered students for batch mode (by name, roll, student ID, phone)
   const filteredBatchStudents = useMemo(() => {
-    const q = distributeBatchSearchQuery.trim().toLowerCase()
-    if (!q) return batchStudents
+    if (!distributeBatchSearchQuery.trim()) return batchStudents
+    const pq = parseRollQuery(distributeBatchSearchQuery)
 
     return batchStudents.filter(s => {
-      const nameMatch = (s.name || "").toLowerCase().includes(q)
-      const idMatch = (s.student_id || "").toLowerCase().includes(q)
-      const phoneMatch = (s.phone && s.phone.includes(q)) || (s.guardian_phone && s.guardian_phone.includes(q))
+      const nameMatch = (s.name || "").toLowerCase().includes(pq.q) || (s.name || "").toLowerCase().includes(pq.qNormalized)
+      const idMatch = (s.student_id || "").toLowerCase().includes(pq.q) || (s.student_id || "").toLowerCase().includes(pq.qNormalized)
+      const phoneMatch = pq.hasMinPhoneDigits && (
+        (s.phone && (s.phone.includes(pq.qNormalized) || s.phone.includes(pq.q))) ||
+        (s.guardian_phone && (s.guardian_phone.includes(pq.qNormalized) || s.guardian_phone.includes(pq.q)))
+      )
       
-      const enr = s.enrollments?.find(e => distributeSelectedBatchIds.includes(e.batch_id))
-      const rollVal = enr?.roll_no != null && String(enr.roll_no).trim() !== "" 
-        ? String(enr.roll_no).trim() 
-        : String(s.roll_no || s.batch_roll || "").trim()
-      
-      const rollMatch = rollVal === q ||
-        `roll ${rollVal}`.toLowerCase().includes(q) ||
-        `roll #${rollVal}`.toLowerCase().includes(q) ||
-        rollVal.includes(q)
+      const candidateRolls: (number | string | null | undefined)[] = [
+        s.roll_no,
+        s.batch_roll,
+      ]
+      if (Array.isArray(s.enrollments)) {
+        s.enrollments.forEach(e => {
+          if (e.roll_no != null) candidateRolls.push(e.roll_no)
+        })
+      }
+      const rollMatch = isRollMatch(pq, candidateRolls)
 
       return nameMatch || idMatch || phoneMatch || rollMatch
     })
@@ -588,14 +592,27 @@ export default function MaterialsClient({
 
   // Search filtered students for search mode
   const searchStudents = useMemo(() => {
-    const q = distributeSearchStudentQuery.trim().toLowerCase()
-    if (!q) return students.slice(0, 30)
+    if (!distributeSearchStudentQuery.trim()) return students.slice(0, 30)
+    const pq = parseRollQuery(distributeSearchStudentQuery)
+
     return students.filter(s => {
-      const nameMatch = s.name.toLowerCase().includes(q)
-      const idMatch = s.student_id.toLowerCase().includes(q)
-      const phoneMatch = (s.phone && s.phone.includes(q)) || (s.guardian_phone && s.guardian_phone.includes(q))
-      const rollStr = String(s.roll_no || s.batch_roll || "")
-      const rollMatch = rollStr === q || `roll ${rollStr}`.toLowerCase().includes(q) || `roll #${rollStr}`.toLowerCase().includes(q) || rollStr.includes(q)
+      const nameMatch = (s.name || "").toLowerCase().includes(pq.q) || (s.name || "").toLowerCase().includes(pq.qNormalized)
+      const idMatch = (s.student_id || "").toLowerCase().includes(pq.q) || (s.student_id || "").toLowerCase().includes(pq.qNormalized)
+      const phoneMatch = pq.hasMinPhoneDigits && (
+        (s.phone && (s.phone.includes(pq.qNormalized) || s.phone.includes(pq.q))) ||
+        (s.guardian_phone && (s.guardian_phone.includes(pq.qNormalized) || s.guardian_phone.includes(pq.q)))
+      )
+      const candidateRolls: (number | string | null | undefined)[] = [
+        s.roll_no,
+        s.batch_roll,
+      ]
+      if (Array.isArray(s.enrollments)) {
+        s.enrollments.forEach(e => {
+          if (e.roll_no != null) candidateRolls.push(e.roll_no)
+        })
+      }
+      const rollMatch = isRollMatch(pq, candidateRolls)
+
       return nameMatch || idMatch || phoneMatch || rollMatch
     }).slice(0, 40)
   }, [students, distributeSearchStudentQuery])

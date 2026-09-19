@@ -96,3 +96,84 @@ export function cleanWeeklyScheduleFromNote(note?: string | null): string {
     .trim()
 }
 
+const BN_TO_EN_DIGITS: Record<string, string> = {
+  "০": "0", "১": "1", "২": "2", "৩": "3", "৪": "4",
+  "৫": "5", "৬": "6", "৭": "7", "৮": "8", "৯": "9"
+}
+
+export function normalizeDigits(str: string): string {
+  if (!str) return ""
+  return str.replace(/[০-৯]/g, (d) => BN_TO_EN_DIGITS[d] || d)
+}
+
+export function parseRollQuery(query: string) {
+  const q = (query || "").toLowerCase().trim()
+  const qNormalized = normalizeDigits(q)
+  const qClean = qNormalized
+    .replace(/^(roll|r|#|রোল|no|নং|রোল\s*নং|roll\s*no|[\s\-\:\.\#])+/i, "")
+    .trim()
+  const qStripped = qClean.replace(/^0+/, "") || "0"
+  const qNum = parseInt(qStripped, 10)
+  const isNumericQuery = !isNaN(qNum) && qNum > 0 && qClean.length > 0
+  const hasMinPhoneDigits = qNormalized.replace(/\D/g, "").length >= 4
+
+  return {
+    q,
+    qNormalized,
+    qClean,
+    qStripped,
+    qNum: isNumericQuery ? qNum : null,
+    isNumericQuery,
+    hasMinPhoneDigits,
+  }
+}
+
+export function isRollMatch(
+  queryInfo: ReturnType<typeof parseRollQuery> | string,
+  candidateRolls: (number | string | null | undefined)[]
+): boolean {
+  const parsed = typeof queryInfo === "string" ? parseRollQuery(queryInfo) : queryInfo
+  if (!parsed.q) return false
+
+  const candidateNumbers = new Set<number>()
+  const candidateStrings = new Set<string>()
+
+  for (const r of candidateRolls) {
+    if (r == null || r === "") continue
+    const rStr = String(r).trim()
+    if (!rStr) continue
+    candidateStrings.add(rStr)
+    const n = Number(rStr)
+    if (!isNaN(n) && n > 0) {
+      candidateNumbers.add(n)
+    }
+  }
+
+  if (candidateNumbers.size === 0 && candidateStrings.size === 0) return false
+
+  if (parsed.isNumericQuery && parsed.qNum !== null) {
+    if (candidateNumbers.has(parsed.qNum)) return true
+  }
+
+  for (const rStr of candidateStrings) {
+    const rStripped = rStr.replace(/^0+/, "") || "0"
+    if (
+      rStr === parsed.q ||
+      rStr === parsed.qClean ||
+      rStr === parsed.qNormalized ||
+      rStripped === parsed.qStripped ||
+      rStripped === parsed.qClean ||
+      `roll ${rStr}` === parsed.qNormalized ||
+      `roll #${rStr}` === parsed.qNormalized ||
+      `r${rStr}` === parsed.qNormalized ||
+      `রোল ${rStr}` === parsed.q ||
+      `রোল #${rStr}` === parsed.q
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+
