@@ -8,10 +8,11 @@ import {
   Upload, FileSpreadsheet, Download, CheckCircle2, AlertCircle, 
   Trash2, Key, Eye, EyeOff, Sparkles, Printer, FileText, 
   ArrowRight, Users, ShieldAlert, RefreshCw, Check, Clock,
-  CreditCard, DollarSign, BookOpen, Layers, CheckCircle
+  CreditCard, DollarSign, BookOpen, Layers, CheckCircle,
+  History, UserPlus, Search, ExternalLink, ChevronRight, X
 } from "lucide-react"
 import { toast } from "sonner"
-import { formatCurrency } from "@/lib/utils"
+import { formatCurrency, formatDate, parseRollQuery, isRollMatch, generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 import { useBranch } from "@/components/providers/BranchContext"
 import { 
@@ -24,6 +25,7 @@ import {
   printAdmissionSlip,
   printStudentIdCard
 } from "@/lib/id-card-generator"
+import StudentIdCardModal from "@/components/id-card/StudentIdCardModal"
 import BulkDataExportModal from "@/components/export/BulkDataExportModal"
 
 interface Batch {
@@ -151,12 +153,55 @@ export function normalizeBDPhone(raw: string): string {
 interface BulkEnrollClientProps {
   initialBatches?: Batch[]
   branches?: Branch[]
+  initialStudents?: any[]
+  initialEnrollments?: any[]
+  initialPayments?: any[]
+  initialDues?: any[]
 }
 
-export default function BulkEnrollClient({ initialBatches = [], branches = [] }: BulkEnrollClientProps) {
+export default function BulkEnrollClient({ 
+  initialBatches = [], 
+  branches = [],
+  initialStudents = [],
+  initialEnrollments = [],
+  initialPayments = [],
+  initialDues = []
+}: BulkEnrollClientProps) {
   const router = useRouter()
   const supabase = useMemo(() => createClient(), [])
   const { selectedBranchId: contextBranchId, branches: contextBranches } = useBranch()
+
+  // Primary Tab: Multi-Enroll vs All Enrollment History
+  const [activeTab, setActiveTab] = useState<"enroll" | "history">("enroll")
+
+  // Reactive History Lists
+  const [enrollmentsList, setEnrollmentsList] = useState<any[]>(initialEnrollments || [])
+  const [paymentsList, setPaymentsList] = useState<any[]>(initialPayments || [])
+  const [duesList, setDuesList] = useState<any[]>(initialDues || [])
+  const [studentsList, setStudentsList] = useState<any[]>(initialStudents || [])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historySearchQuery, setHistorySearchQuery] = useState("")
+  const [historyBranchFilter, setHistoryBranchFilter] = useState<string>("all")
+  const [historyBatchFilter, setHistoryBatchFilter] = useState("all")
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<"all" | "paid" | "due">("all")
+  const [historyIdCardStudent, setHistoryIdCardStudent] = useState<StudentIdCardData | null>(null)
+  const [slipPreview, setSlipPreview] = useState<AdmissionSlipData | null>(null)
+
+  useEffect(() => {
+    if (initialEnrollments && initialEnrollments.length > 0) setEnrollmentsList(initialEnrollments)
+  }, [initialEnrollments])
+
+  useEffect(() => {
+    if (initialPayments && initialPayments.length > 0) setPaymentsList(initialPayments)
+  }, [initialPayments])
+
+  useEffect(() => {
+    if (initialDues && initialDues.length > 0) setDuesList(initialDues)
+  }, [initialDues])
+
+  useEffect(() => {
+    if (initialStudents && initialStudents.length > 0) setStudentsList(initialStudents)
+  }, [initialStudents])
 
   const [allBatches, setAllBatches] = useState<Batch[]>(initialBatches)
   const [loadingBatches, setLoadingBatches] = useState(false)
@@ -256,6 +301,261 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       id_card_data: StudentIdCardData
     }>
   } | null>(null)
+
+  // Robust Fetch History function
+  const fetchHistory = async () => {
+    setHistoryLoading(true)
+    try {
+      let rawEnrs: any[] = []
+
+      // 1. Fetch enrollments safely (without asking for non-existent columns)
+      const { data: enr1, error: err1 } = await supabase
+        .from("enrollments")
+        .select("id, created_at, status, batch_id, student_id, branch_id, roll_no")
+        .order("created_at", { ascending: false })
+        .limit(300)
+
+      if (!err1 && enr1 && enr1.length > 0) {
+        rawEnrs = enr1
+      } else {
+        const { data: rawAll } = await supabase
+          .from("enrollments")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(300)
+        if (rawAll) rawEnrs = rawAll
+      }
+
+      // 2. Fetch payments, dues, and fresh students in parallel
+      const [payRes, dueRes, freshStRes] = await Promise.all([
+        supabase
+          .from("payments")
+          .select("id, student_id, batch_id, amount, total_paid, payment_method, payment_for, payment_month, receipt_number, created_at, paid_at")
+          .order("created_at", { ascending: false })
+          .limit(300),
+        supabase
+          .from("fee_dues")
+          .select("id, student_id, batch_id, due_amount, paid_amount, due_date, status")
+          .limit(300),
+        supabase
+          .from("students")
+          .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll, qr_code")
+          .order("name")
+          .limit(500)
+      ])
+
+      const combinedStudents = (freshStRes.data && freshStRes.data.length > 0) ? freshStRes.data : studentsList
+      const studentMap = new Map<string, any>()
+      ;(combinedStudents || []).forEach((s: any) => {
+        if (s.id) studentMap.set(String(s.id), s)
+        if (s.student_id) studentMap.set(String(s.student_id), s)
+      })
+      const batchMap = new Map((allBatches || []).map((b: any) => [b.id, b]))
+
+      const enriched = rawEnrs.map((e: any) => {
+        const student = (e.student_id ? studentMap.get(String(e.student_id)) : null) || e.student || {}
+        const batch = (e.batch_id ? batchMap.get(String(e.batch_id)) : null) || e.batch || {}
+        return {
+          ...e,
+          roll_no: e.roll_no || (student as any).roll_no || (student as any).batch_roll || null,
+          student,
+          batch
+        }
+      })
+
+      setEnrollmentsList(enriched)
+      if (payRes.data) setPaymentsList(payRes.data)
+      if (dueRes.data) setDuesList(dueRes.data)
+      if (freshStRes.data) setStudentsList(freshStRes.data)
+    } catch (err) {
+      console.warn("Could not fetch enrollment history:", err)
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  // Initial client-side fallback if enrollmentsList is empty
+  useEffect(() => {
+    if (enrollmentsList.length === 0) {
+      fetchHistory()
+    }
+  }, [])
+
+  function getHistoryIdCardData(enr: any): StudentIdCardData {
+    const student = (enr.student && enr.student.name)
+      ? enr.student
+      : studentsList.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+    const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+    const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+    const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
+    const effectiveCode = student.qr_code || generateStudentQrCode({
+      studentId: student.student_id,
+      admissionDate: enr.created_at,
+      rollNo: roll,
+      studentUuid: student.id,
+    })
+    return {
+      student_id: student.student_id || "N/A",
+      student_name: student.name || "Student",
+      student_phone: student.phone,
+      guardian_name: student.guardian_name,
+      guardian_phone: student.guardian_phone,
+      batch_name: b.name || "Enrolled Batch",
+      batch_roll: roll,
+      branch_name: branchObj?.name,
+      blood_group: student.blood_group,
+      avatar_url: student.photo_url || student.avatar_url,
+      qr_code: effectiveCode,
+      qr_data: getStudentVerificationUrl(effectiveCode),
+    }
+  }
+
+  function getHistorySlipData(enr: any): AdmissionSlipData {
+    const student = (enr.student && enr.student.name)
+      ? enr.student
+      : studentsList.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+    const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+    const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+    const matchingPayment = paymentsList.find(p => 
+      (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+      (p.batch_id === enr.batch_id || !p.batch_id)
+    )
+    const matchingDue = duesList.find(d => 
+      (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+      (d.batch_id === enr.batch_id || !d.batch_id)
+    )
+
+    const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+    const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+    const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+
+    const dateStr = enr.created_at
+      ? new Date(enr.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+      : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+
+    const receiptNo = matchingPayment?.receipt_number || `SLIP-${new Date(enr.created_at || Date.now()).getFullYear()}-${(enr.id || '').replace(/-/g, '').slice(-6).toUpperCase()}`
+    const rollVal = enr.roll_no != null ? String(enr.roll_no) : (student.roll_no != null ? String(student.roll_no) : "01")
+    const effectiveCode = student.qr_code || generateStudentQrCode({
+      studentId: student.student_id,
+      admissionDate: enr.created_at,
+      rollNo: rollVal,
+      studentUuid: student.id,
+    })
+
+    return {
+      receipt_number: receiptNo,
+      student_name: student.name || "Student",
+      student_id: student.student_id || "N/A",
+      student_phone: student.phone,
+      guardian_name: student.guardian_name,
+      guardian_phone: student.guardian_phone || "N/A",
+      batch_name: b.name || "Enrolled Batch",
+      batch_roll: rollVal,
+      subject: b.subject || "All Subjects",
+      branch_name: branchObj?.name || "Main Campus",
+      date: dateStr,
+      total_fee: totalFee,
+      paid_amount: paidAmt,
+      due_amount: dueAmt,
+      due_date: matchingDue?.due_date || undefined,
+      payment_method: matchingPayment?.payment_method?.toUpperCase() || "Cash / Counter",
+      qr_code: effectiveCode,
+      qr_data: getStudentVerificationUrl(effectiveCode),
+    }
+  }
+
+  const filteredEnrollments = useMemo(() => {
+    return enrollmentsList.filter((enr: any) => {
+      const student = (enr.student && enr.student.name)
+        ? enr.student
+        : studentsList.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+      const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+      const brId = enr.branch_id || b.branch_id
+
+      if (historyBranchFilter !== "all" && brId !== historyBranchFilter) return false
+      if (historyBatchFilter !== "all" && enr.batch_id !== historyBatchFilter) return false
+
+      if (historySearchQuery.trim()) {
+        const pq = parseRollQuery(historySearchQuery)
+        const sName = (student.name || "").toLowerCase()
+        const sId = (student.student_id || "").toLowerCase()
+        const sPhone = (student.phone || "").toLowerCase()
+        const gPhone = (student.guardian_phone || "").toLowerCase()
+        const bName = (b.name || "").toLowerCase()
+
+        const candidateRolls: (number | string | null | undefined)[] = [
+          enr.roll_no,
+          student.roll_no,
+          student.batch_roll,
+        ]
+        const matchRoll = isRollMatch(pq, candidateRolls)
+
+        const match =
+          sName.includes(pq.q) ||
+          sName.includes(pq.qNormalized) ||
+          sId.includes(pq.q) ||
+          sId.includes(pq.qNormalized) ||
+          bName.includes(pq.q) ||
+          bName.includes(pq.qNormalized) ||
+          (pq.hasMinPhoneDigits && (sPhone.includes(pq.qNormalized) || sPhone.includes(pq.q))) ||
+          (pq.hasMinPhoneDigits && (gPhone.includes(pq.qNormalized) || gPhone.includes(pq.q))) ||
+          matchRoll
+
+        if (!match) return false
+      }
+
+      if (historyStatusFilter !== "all") {
+        const matchingPayment = paymentsList.find(p => 
+          (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+          (p.batch_id === enr.batch_id || !p.batch_id)
+        )
+        const matchingDue = duesList.find(d => 
+          (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+          (d.batch_id === enr.batch_id || !d.batch_id)
+        )
+        const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+        const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+        const isPaidFull = totalFee > 0 ? (paidAmt >= totalFee) : true
+
+        if (historyStatusFilter === "paid" && !isPaidFull) return false
+        if (historyStatusFilter === "due" && isPaidFull) return false
+      }
+
+      return true
+    })
+  }, [enrollmentsList, studentsList, allBatches, historyBranchFilter, historyBatchFilter, historySearchQuery, historyStatusFilter, paymentsList, duesList])
+
+  const historyStats = useMemo(() => {
+    let totalEnrolled = enrollmentsList.length
+    let totalPaid = 0
+    let totalDue = 0
+    let paidCount = 0
+
+    enrollmentsList.forEach((enr: any) => {
+      const student = (enr.student && enr.student.name)
+        ? enr.student
+        : studentsList.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+      const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+      const matchingPayment = paymentsList.find(p => 
+        (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+        (p.batch_id === enr.batch_id || !p.batch_id)
+      )
+      const matchingDue = duesList.find(d => 
+        (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+        (d.batch_id === enr.batch_id || !d.batch_id)
+      )
+
+      const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+      const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+      const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+
+      totalPaid += paidAmt
+      totalDue += dueAmt
+      if (totalFee > 0 && paidAmt >= totalFee) paidCount++
+    })
+
+    return { totalEnrolled, totalPaid, totalDue, paidCount }
+  }, [enrollmentsList, allBatches, paymentsList, duesList, studentsList])
 
   // Calculate available seats
   const availableSeats = useMemo(() => {
@@ -754,6 +1054,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       })
 
       setCompletedResults(data)
+      fetchHistory()
     } catch (err: any) {
       console.error("Bulk enroll failure:", err)
       toast.error(err?.message || "Failed to complete bulk enrollment")
@@ -861,6 +1162,17 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                 <Download className="w-4 h-4 text-indigo-300" />
                 <span>আইডি কার্ড PDF ডাউনলোড</span>
               </button>
+
+              <button
+                onClick={() => {
+                  setCompletedResults(null)
+                  setActiveTab("history")
+                }}
+                className="flex items-center gap-2 px-5 py-2.5 bg-emerald-950/70 hover:bg-emerald-950 text-white rounded-xl font-bold text-sm border border-emerald-400/30 transition-all cursor-pointer shadow-sm"
+              >
+                <History className="w-4 h-4 text-emerald-300" />
+                <span>📜 পূর্বের সকল ইতিহাস দেখুন (View All History)</span>
+              </button>
             </div>
           </div>
         </div>
@@ -957,8 +1269,43 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
   // --------------------------------------------------------------------------
   return (
     <div className="space-y-6">
-      {/* 1. Step: Batch Selection (Clean & Reliable) */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5">
+      {/* Primary Tab Switcher */}
+      <div className="flex bg-slate-200/70 p-1.5 rounded-2xl gap-1.5 border border-slate-200/80 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => setActiveTab("enroll")}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeTab === "enroll"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          }`}
+        >
+          <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+          <span>📂 Multi-Enroll Students by CSV (বাল্ক ভর্তি)</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("history")}
+          className={`flex-1 py-3 px-4 rounded-xl text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer ${
+            activeTab === "history"
+              ? "bg-white text-slate-900 shadow-sm border border-slate-200/80"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+          }`}
+        >
+          <History className="w-4 h-4 text-indigo-600" />
+          <span>📜 All Enrollment History (সকল পূর্বের ভর্তির ইতিহাস ও রিসিট)</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+            activeTab === "history" ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-700"
+          }`}>
+            {enrollmentsList.length}
+          </span>
+        </button>
+      </div>
+
+      {activeTab === "enroll" && (
+        <div className="space-y-6">
+          {/* 1. Step: Batch Selection (Clean & Reliable) */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5">
         <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
             ১
@@ -1468,12 +1815,462 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
         </button>
       </div>
 
-      <BulkDataExportModal
-        isOpen={showExportModal}
-        onClose={() => setShowExportModal(false)}
-        branches={effectiveBranches}
-        initialBranchId={selectedBranchId}
-      />
+      {/* Recent Enrollment History Preview in Enroll Tab */}
+      {enrollmentsList.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-indigo-600" />
+              <h3 className="font-bold text-slate-900 text-sm">
+                Recent Enrollment History (পূর্বের সাম্প্রতিক ভর্তির তালিকা)
+              </h3>
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab("history")}
+              className="text-xs font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>View All History ({enrollmentsList.length})</span>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="divide-y divide-slate-100">
+            {enrollmentsList.slice(0, 5).map((enr: any) => {
+              const student = (enr.student && enr.student.name)
+                ? enr.student
+                : studentsList.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+              const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+              const matchingPayment = paymentsList.find(p => 
+                (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+                (p.batch_id === enr.batch_id || !p.batch_id)
+              )
+              const matchingDue = duesList.find(d => 
+                (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+                (d.batch_id === enr.batch_id || !d.batch_id)
+              )
+              const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+              const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+              const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+              const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
+
+              return (
+                <div key={enr.id} className="py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-bold text-sm text-slate-900">{student.name || (enr.student_id && !enr.student_id.includes("-") ? "Student" : enr.student_id) || "Student"}</span>
+                      <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                        {student.student_id || enr.student_id || "N/A"}
+                      </span>
+                      {roll != null && (
+                        <span className="text-xs font-mono font-black text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
+                          রোল #{roll}
+                        </span>
+                      )}
+                      <span className="text-xs font-semibold text-slate-600">• {b.name || "Batch"}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <span>{formatDate(enr.created_at)}</span>
+                      <span>• Paid: <b className="text-emerald-600">{formatCurrency(paidAmt)}</b></span>
+                      {dueAmt > 0 && <span>• Due: <b className="text-rose-600">{formatCurrency(dueAmt)}</b></span>}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryIdCardStudent(getHistoryIdCardData(enr))}
+                      className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="View & Print ID Card"
+                    >
+                      <CreditCard className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>ID Card</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => printAdmissionSlip(getHistorySlipData(enr))}
+                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Print Admission Slip"
+                    >
+                      <Printer className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Slip</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadBulkAdmissionSlipsPDF([getHistorySlipData(enr)])}
+                      className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                      title="Download PDF"
+                    >
+                      <Download className="w-3.5 h-3.5 text-amber-600" />
+                      <span>PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSlipPreview(getHistorySlipData(enr))}
+                      className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-900 rounded-lg text-xs transition-colors cursor-pointer"
+                      title="View Details"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </div>
-  )
+    )}
+
+    {/* Dedicated Full Enrollment History Tab */}
+    {activeTab === "history" && (
+      <div className="space-y-4">
+        {/* Summary Stats Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+            <p className="text-[11px] font-bold text-slate-500 uppercase">Total Enrolled</p>
+            <p className="text-xl font-black text-slate-900 mt-0.5">{historyStats.totalEnrolled}</p>
+          </div>
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+            <p className="text-[11px] font-bold text-emerald-600 uppercase">Total Collection</p>
+            <p className="text-xl font-black text-emerald-700 mt-0.5">{formatCurrency(historyStats.totalPaid)}</p>
+          </div>
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+            <p className="text-[11px] font-bold text-rose-600 uppercase">Outstanding Due</p>
+            <p className="text-xl font-black text-rose-700 mt-0.5">{formatCurrency(historyStats.totalDue)}</p>
+          </div>
+          <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-2xs">
+            <p className="text-[11px] font-bold text-indigo-600 uppercase">Fully Paid</p>
+            <p className="text-xl font-black text-indigo-700 mt-0.5">{historyStats.paidCount}</p>
+          </div>
+        </div>
+
+        {/* Search & Filter Controls */}
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row gap-2.5 items-stretch sm:items-center justify-between">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={historySearchQuery}
+                onChange={e => setHistorySearchQuery(e.target.value)}
+                placeholder="Search student name, ID (MS-...), roll (#1), phone, guardian phone, batch..."
+                className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm text-slate-900 border border-slate-300 rounded-xl focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 bg-white shadow-2xs"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setActiveTab("enroll")}
+              className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-xs"
+              title="নতুন বাল্ক ভর্তি ফর্ম খুলুন"
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>New Bulk CSV Enroll (নতুন বাল্ক ভর্তি)</span>
+            </button>
+            <button
+              type="button"
+              onClick={fetchHistory}
+              disabled={historyLoading}
+              className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              title="Refresh History from Database"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${historyLoading ? "animate-spin text-indigo-600" : ""}`} />
+              <span>Refresh</span>
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-2 items-center text-xs">
+            {/* Branch filter */}
+            <select
+              value={historyBranchFilter}
+              onChange={e => setHistoryBranchFilter(e.target.value)}
+              className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="all">All Branches (সকল শাখা)</option>
+              {effectiveBranches.map((br: any) => (
+                <option key={br.id} value={br.id}>{br.name}</option>
+              ))}
+            </select>
+
+            {/* Batch filter */}
+            <select
+              value={historyBatchFilter}
+              onChange={e => setHistoryBatchFilter(e.target.value)}
+              className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="all">All Batches (সকল ব্যাচ)</option>
+              {allBatches.map((b: any) => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+
+            {/* Status filter */}
+            <select
+              value={historyStatusFilter}
+              onChange={e => setHistoryStatusFilter(e.target.value as any)}
+              className="px-2.5 py-1.5 border border-slate-300 rounded-xl bg-slate-50 text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 cursor-pointer"
+            >
+              <option value="all">All Payment Status</option>
+              <option value="paid">✓ Fully Paid</option>
+              <option value="due">⏳ Has Due</option>
+            </select>
+
+            <span className="text-slate-400 ml-auto font-medium">
+              Showing {filteredEnrollments.length} enrolled students
+            </span>
+          </div>
+        </div>
+
+        {/* Table / Cards */}
+        {filteredEnrollments.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-sm">
+            <UserPlus className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="font-bold text-slate-700 text-sm">No enrollment records found</p>
+            <p className="text-xs text-slate-400 mt-1">
+              {historySearchQuery ? "Try a different search keyword or clear filters." : "Students enrolled in batches will appear here."}
+            </p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="px-3 py-3 text-center w-16">Roll</th>
+                    <th className="px-4 py-3">Student Info</th>
+                    <th className="px-4 py-3">Batch & Campus</th>
+                    <th className="px-4 py-3">Enrolled Date</th>
+                    <th className="px-4 py-3">Payment Summary</th>
+                    <th className="px-4 py-3 text-right">Actions (ID Card / Slip / PDF)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredEnrollments.map((enr: any) => {
+                    const student = (enr.student && enr.student.name)
+                      ? enr.student
+                      : studentsList.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
+                    const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
+                    const branchObj = effectiveBranches.find((br: any) => br.id === enr.branch_id || br.id === b.branch_id)
+                    const matchingPayment = paymentsList.find(p => 
+                      (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
+                      (p.batch_id === enr.batch_id || !p.batch_id)
+                    )
+                    const matchingDue = duesList.find(d => 
+                      (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
+                      (d.batch_id === enr.batch_id || !d.batch_id)
+                    )
+                    const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
+                    const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+                    const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+                    const isPaid = totalFee > 0 ? paidAmt >= totalFee : true
+                    const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
+
+                    return (
+                      <tr key={enr.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-3 py-3.5 text-center">
+                          {roll != null ? (
+                            <span className="inline-flex items-center justify-center font-mono font-bold text-xs bg-amber-50 text-amber-800 border border-amber-300 rounded-lg px-2 py-0.5">
+                              #{roll}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400 font-mono">-</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-bold text-slate-900 text-sm">{student.name || (enr.student_id && !enr.student_id.includes("-") ? "Student" : enr.student_id) || "Student"}</div>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="font-mono text-xs text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 font-semibold">
+                              {student.student_id || enr.student_id || "N/A"}
+                            </span>
+                            {student.phone && (
+                              <span className="text-slate-500 text-xs">📱 {student.phone}</span>
+                            )}
+                            {student.guardian_phone && student.guardian_phone !== student.phone && (
+                              <span className="text-slate-400 text-xs">👨‍👦 {student.guardian_phone}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-semibold text-slate-800">{b.name || "Enrolled Batch"}</div>
+                          <div className="text-slate-500 text-[11px] flex items-center gap-1 mt-0.5">
+                            <span>{branchObj?.name || "Main Campus"}</span>
+                            {b.class_level && <span>• {b.class_level}</span>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 text-slate-600 whitespace-nowrap">
+                          {formatDate(enr.created_at)}
+                        </td>
+                        <td className="px-4 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-1.5">
+                            {isPaid ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle className="w-3 h-3" /> Fully Paid
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                                <Clock className="w-3 h-3" /> Due Pending
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                            <span className="text-emerald-600 font-semibold">Paid: {formatCurrency(paidAmt)}</span>
+                            {dueAmt > 0 && <span className="text-rose-600 font-semibold">• Due: {formatCurrency(dueAmt)}</span>}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setHistoryIdCardStudent(getHistoryIdCardData(enr))}
+                              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="View & Print Student ID Card"
+                            >
+                              <span>🪪 ID Card</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => printAdmissionSlip(getHistorySlipData(enr))}
+                              className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                              title="Print Admission & Payment Slip"
+                            >
+                              <Printer className="w-3.5 h-3.5" />
+                              <span>Slip</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => downloadBulkAdmissionSlipsPDF([getHistorySlipData(enr)])}
+                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+                              title="Download Receipt PDF"
+                            >
+                              <Download className="w-3.5 h-3.5 text-amber-600" />
+                              <span>PDF</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSlipPreview(getHistorySlipData(enr))}
+                              className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-slate-800 rounded-xl transition-colors cursor-pointer"
+                              title="Preview Full Slip"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            {student.id && (
+                              <Link
+                                href={`/dashboard/owner/students/${student.id}`}
+                                className="p-1.5 hover:bg-slate-100 text-slate-500 hover:text-indigo-600 rounded-xl transition-colors"
+                                title="View Student Profile"
+                              >
+                                <ExternalLink className="w-4 h-4" />
+                              </Link>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* ID Card Modal */}
+    <StudentIdCardModal
+      isOpen={!!historyIdCardStudent}
+      onClose={() => setHistoryIdCardStudent(null)}
+      cardData={historyIdCardStudent || undefined}
+      student={historyIdCardStudent ? {
+        id: historyIdCardStudent.student_id,
+        name: historyIdCardStudent.student_name,
+        student_id: historyIdCardStudent.student_id,
+        phone: historyIdCardStudent.student_phone,
+        guardian_phone: historyIdCardStudent.guardian_phone,
+        qr_code: historyIdCardStudent.qr_code
+      } as any : undefined}
+      batchName={historyIdCardStudent?.batch_name}
+      rollNo={historyIdCardStudent?.batch_roll}
+    />
+
+    {/* Slip Preview Modal */}
+    {slipPreview && (
+      <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+        <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4 animate-in fade-in zoom-in-95">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="font-bold text-slate-900 text-base">Admission Slip & Memo</h3>
+              <p className="text-xs text-slate-500 font-mono">{slipPreview.receipt_number}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSlipPreview(null)}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs space-y-2">
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Student Name:</span>
+              <span className="font-bold text-slate-900">{slipPreview.student_name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Student ID:</span>
+              <span className="font-mono font-bold text-indigo-700">{slipPreview.student_id}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Batch Roll:</span>
+              <span className="font-mono font-bold text-rose-700">#{slipPreview.batch_roll}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Batch:</span>
+              <span className="font-semibold text-slate-800">{slipPreview.batch_name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500 font-semibold">Admission Date:</span>
+              <span className="text-slate-700">{slipPreview.date}</span>
+            </div>
+            <div className="flex justify-between border-t border-slate-200 pt-2">
+              <span className="text-slate-500 font-semibold">Paid Amount:</span>
+              <span className="font-bold text-emerald-600">৳{slipPreview.paid_amount.toLocaleString("en-BD")}</span>
+            </div>
+            {slipPreview.due_amount > 0 && (
+              <div className="flex justify-between">
+                <span className="text-rose-600 font-semibold">Due Amount:</span>
+                <span className="font-bold text-rose-600">৳{slipPreview.due_amount.toLocaleString("en-BD")}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => printAdmissionSlip(slipPreview)}
+              className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-sm"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>Print Slip</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => downloadBulkAdmissionSlipsPDF([slipPreview])}
+              className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Download PDF</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <BulkDataExportModal
+      isOpen={showExportModal}
+      onClose={() => setShowExportModal(false)}
+      branches={effectiveBranches}
+      initialBranchId={selectedBranchId}
+    />
+  </div>
+)
 }
