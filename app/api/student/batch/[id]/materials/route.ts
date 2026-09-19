@@ -259,18 +259,19 @@ export async function GET(
     const batchMaterialIds = batchMaterials.map(m => m.id).filter(id => uuidRegex.test(String(id)))
     if (batchMaterialIds.length > 0 || batchId) {
       try {
-        let issueQuery = admin
-          .from("material_issues")
-          .select("*, material:materials(*), student:students(id, name, student_id, phone, email)")
-          .eq("status", "issued")
+        let batchIssues: any[] = []
+        const { data: issuesWithStatus, error: statusErr } = await (batchMaterialIds.length > 0
+          ? admin.from("material_issues").select("*, material:materials(*), student:students(id, name, student_id, phone, email)").eq("status", "issued").in("material_id", batchMaterialIds)
+          : admin.from("material_issues").select("*, material:materials(*), student:students(id, name, student_id, phone, email)").eq("status", "issued").eq("batch_id", batchId!))
 
-        if (batchMaterialIds.length > 0) {
-          issueQuery = issueQuery.in("material_id", batchMaterialIds)
-        } else if (batchId) {
-          issueQuery = issueQuery.eq("batch_id", batchId)
+        if (!statusErr && issuesWithStatus) {
+          batchIssues = issuesWithStatus
+        } else {
+          const { data: issuesFallback } = await (batchMaterialIds.length > 0
+            ? admin.from("material_issues").select("*, material:materials(*), student:students(id, name, student_id, phone, email)").is("returned_at", null).in("material_id", batchMaterialIds)
+            : admin.from("material_issues").select("*, material:materials(*), student:students(id, name, student_id, phone, email)").is("returned_at", null).eq("batch_id", batchId!))
+          batchIssues = issuesFallback || []
         }
-
-        const { data: batchIssues } = await issueQuery
 
         const isNameSimilar = (n1: string, n2: string) => {
           if (!n1 || !n2) return false

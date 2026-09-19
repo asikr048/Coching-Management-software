@@ -68,7 +68,8 @@ export default async function MaterialsPage() {
   const activeIssuesByMatName = new Map<string, number>()
 
   issues.forEach((iss: any) => {
-    if (iss.status === "issued") {
+    const isIssued = iss.status === "issued" || (!iss.status && !iss.returned_at)
+    if (isIssued) {
       if (iss.material_id) {
         activeIssuesByMatId.set(iss.material_id, (activeIssuesByMatId.get(iss.material_id) || 0) + 1)
       }
