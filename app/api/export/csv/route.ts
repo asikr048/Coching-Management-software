@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { requireStaffRole, isAuthError } from "@/lib/api-auth"
+import { generateStudentQrCode } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -64,7 +65,6 @@ export async function GET(req: NextRequest) {
             id,
             roll_no,
             status,
-            qr_code,
             enrollment_date,
             batch:batches(
               id,
@@ -91,8 +91,60 @@ export async function GET(req: NextRequest) {
         query = query.eq("branch_id", branchFilter)
       }
 
-      const { data: rawStudents, error: sErr } = await query
-      if (sErr) throw new Error(sErr.message)
+      let rawStudents: any[] = []
+      const { data: primaryData, error: sErr } = await query
+      if (sErr) {
+        console.warn("Primary student export query error, falling back to schema-safe query:", sErr.message)
+        // Schema-safe fallback query without explicit optional fields
+        let fallbackQuery = admin
+          .from("students")
+          .select(`
+            *,
+            branch:branches(id, name),
+            enrollments(
+              id,
+              status,
+              enrollment_date,
+              batch:batches(
+                id,
+                name,
+                subject,
+                class_level,
+                monthly_fee,
+                branch:branches(id, name)
+              )
+            ),
+            fee_dues(
+              id,
+              due_month,
+              due_amount,
+              paid_amount,
+              due_date,
+              status
+            )
+          `)
+          .order("created_at", { ascending: true })
+
+        if (branchFilter && branchFilter !== "all") {
+          fallbackQuery = fallbackQuery.eq("branch_id", branchFilter)
+        }
+
+        const { data: fbData, error: fbErr } = await fallbackQuery
+        if (fbErr) {
+          console.warn("Fallback query failed, using direct students query:", fbErr.message)
+          let simpleQuery = admin.from("students").select("*, branch:branches(name)")
+          if (branchFilter && branchFilter !== "all") {
+            simpleQuery = simpleQuery.eq("branch_id", branchFilter)
+          }
+          const { data: simpleData, error: simpleErr } = await simpleQuery
+          if (simpleErr) throw new Error(simpleErr.message)
+          rawStudents = simpleData || []
+        } else {
+          rawStudents = fbData || []
+        }
+      } else {
+        rawStudents = primaryData || []
+      }
 
       const headers = [
         "Student ID",
@@ -144,7 +196,12 @@ export async function GET(req: NextRequest) {
             const batchObj = enr.batch || {}
             const enrBranchName = batchObj.branch?.name || s.branch?.name || ""
             const effectiveRoll = enr.roll_no ?? s.roll_no ?? s.batch_roll ?? ""
-            const effectiveQr = enr.qr_code || s.qr_code || ""
+            const effectiveQr = s.qr_code || (enr as any).qr_code || generateStudentQrCode({
+              studentId: s.student_id,
+              admissionDate: enr.enrollment_date || s.enrollment_date || s.created_at,
+              rollNo: effectiveRoll,
+              studentUuid: s.id,
+            })
 
             rows.push([
               s.student_id || "",
@@ -174,6 +231,14 @@ export async function GET(req: NextRequest) {
           }
         } else {
           // Student without enrollments
+          const studentRoll = s.roll_no || s.batch_roll || ""
+          const studentQr = s.qr_code || generateStudentQrCode({
+            studentId: s.student_id,
+            admissionDate: s.enrollment_date || s.created_at,
+            rollNo: studentRoll,
+            studentUuid: s.id,
+          })
+
           rows.push([
             s.student_id || "",
             s.name || "",
@@ -184,7 +249,7 @@ export async function GET(req: NextRequest) {
             totalDue,
             earliestDueDate,
             "", // Batch Name
-            s.roll_no || s.batch_roll || "",
+            studentRoll,
             s.class_level || "",
             "", // Subject
             s.branch?.name || "",
@@ -196,7 +261,7 @@ export async function GET(req: NextRequest) {
             0,
             s.enrollment_date || todayStr,
             "not_enrolled",
-            s.qr_code || "",
+            studentQr,
             s.is_active ? "Active" : "Inactive"
           ])
         }
@@ -314,7 +379,7 @@ export async function GET(req: NextRequest) {
 
       let stQuery = admin
         .from("staff")
-        .select("id, name, email, phone, role, salary, commission_rate, subject, is_active, joined_at, created_at, branch:branches(name)")
+        .select("*, branch:branches(name)")
         .order("name")
 
       if (branchFilter && branchFilter !== "all") {
