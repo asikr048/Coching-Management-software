@@ -1,3 +1,5 @@
+import { generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
+
 export interface StudentIdCardData {
   student_name: string
   student_id: string
@@ -15,6 +17,7 @@ export interface StudentIdCardData {
   valid_till?: string
   avatar_url?: string
   qr_data?: string
+  qr_code?: string
 }
 
 export function getStudentIdCardHtml(card: StudentIdCardData): string {
@@ -22,7 +25,12 @@ export function getStudentIdCardHtml(card: StudentIdCardData): string {
     ? String(card.batch_roll) 
     : "01"
   
-  const qrData = card.qr_data || `MEDHASHIREE-ID:${card.student_id}|ROLL:${rollStr}|BATCH:${card.batch_name}|NAME:${card.student_name}`
+  const effectiveQrCode = card.qr_code || generateStudentQrCode({
+    studentId: card.student_id,
+    admissionDate: card.issue_date,
+    rollNo: rollStr,
+  })
+  const qrData = card.qr_data || getStudentVerificationUrl(effectiveQrCode)
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`
   const initial = card.student_name ? card.student_name.charAt(0).toUpperCase() : "S"
 
@@ -403,9 +411,15 @@ export function printStudentIdCard(data: StudentIdCardData, autoPrint = true) {
 }
 
 export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardData) {
-  const qrUrlReceipt = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(receipt.qr_data || receipt.student_id)}`
   const rollStr = idCardData.batch_roll != null && String(idCardData.batch_roll).trim() !== "" ? String(idCardData.batch_roll) : "01"
-  const qrUrlCard = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(idCardData.qr_data || idCardData.student_id)}`
+  const effectiveCardCode = idCardData.qr_code || generateStudentQrCode({
+    studentId: idCardData.student_id,
+    admissionDate: idCardData.issue_date,
+    rollNo: rollStr,
+  })
+  const cardQrData = idCardData.qr_data || getStudentVerificationUrl(effectiveCardCode)
+  const qrUrlCard = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(cardQrData)}`
+  const qrUrlReceipt = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(receipt.qr_data || cardQrData)}`
   const initial = idCardData.student_name ? idCardData.student_name.charAt(0).toUpperCase() : "S"
 
   const win = window.open("", "_blank", "width=900,height=900")
@@ -785,11 +799,17 @@ export interface AdmissionSlipData {
   due_date?: string
   payment_method: string
   qr_data?: string
+  qr_code?: string
 }
 
 export function printAdmissionSlip(target: AdmissionSlipData) {
   const rollStr = target.batch_roll != null && String(target.batch_roll).trim() !== "" ? String(target.batch_roll) : "01"
-  const qrData = target.qr_data || `Student ID: ${target.student_id} | Name: ${target.student_name} | Batch: ${target.batch_name} | Roll: #${rollStr} | Fee: ${target.total_fee} | Paid: ${target.paid_amount}`
+  const effectiveCode = target.qr_code || generateStudentQrCode({
+    studentId: target.student_id,
+    admissionDate: target.date,
+    rollNo: rollStr,
+  })
+  const qrData = target.qr_data || getStudentVerificationUrl(effectiveCode)
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrData)}`
 
   const win = window.open("", "_blank", "width=650,height=800")
@@ -1015,7 +1035,12 @@ export function printBulkAdmissionSlips(targets: AdmissionSlipData[]) {
 
   const slipsHtml = targets.map((target, idx) => {
     const rollStr = target.batch_roll != null && String(target.batch_roll).trim() !== "" ? String(target.batch_roll) : String(idx + 1).padStart(2, "0")
-    const qrData = target.qr_data || `Student ID: ${target.student_id} | Name: ${target.student_name} | Batch: ${target.batch_name} | Roll: #${rollStr} | Fee: ${target.total_fee} | Paid: ${target.paid_amount}`
+    const effectiveCode = target.qr_code || generateStudentQrCode({
+      studentId: target.student_id,
+      admissionDate: target.date,
+      rollNo: rollStr,
+    })
+    const qrData = target.qr_data || getStudentVerificationUrl(effectiveCode)
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(qrData)}`
 
     return `
@@ -1153,7 +1178,12 @@ export function printBulkStudentIdCards(cards: StudentIdCardData[]) {
 
   const cardsHtml = cards.map((card, idx) => {
     const rollStr = card.batch_roll != null && String(card.batch_roll).trim() !== "" ? String(card.batch_roll) : String(idx + 1).padStart(2, "0")
-    const qrData = card.qr_data || `MEDHASHIREE-ID:${card.student_id}|ROLL:${rollStr}|BATCH:${card.batch_name}|NAME:${card.student_name}`
+    const effectiveCode = card.qr_code || generateStudentQrCode({
+      studentId: card.student_id,
+      admissionDate: card.issue_date,
+      rollNo: rollStr,
+    })
+    const qrData = card.qr_data || getStudentVerificationUrl(effectiveCode)
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(qrData)}`
     const initial = card.student_name ? card.student_name.charAt(0).toUpperCase() : "S"
 

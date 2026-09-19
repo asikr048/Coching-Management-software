@@ -5,13 +5,14 @@ import {
   Users, UserCheck, UserX, Clock, CalendarDays, TrendingUp, TrendingDown, 
   Activity, CheckCircle2, AlertCircle, Search, Printer, Download, 
   Save, RefreshCw, Award, Calendar, FileSpreadsheet, Check, X,
-  HelpCircle, UserPlus, ArrowRight
+  HelpCircle, UserPlus, ArrowRight, Camera
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
 import { toast } from "sonner"
 import { useBranch } from "@/components/providers/BranchContext"
 import Link from "next/link"
+import AttendanceCameraScannerModal, { ScanResultData } from "@/components/attendance/AttendanceCameraScannerModal"
 
 interface AttendanceClientProps {
   todayAttendance: any[]
@@ -95,6 +96,54 @@ export default function AttendanceClient({
 
   // Keep local today attendance updated
   const [todayAttendance, setTodayAttendance] = useState<any[]>(initialTodayAttendance)
+
+  // QR Camera Scanner Modal state
+  const [showScannerModal, setShowScannerModal] = useState(false)
+
+  // Callback when a student is successfully scanned via QR Camera
+  const handleScanSuccess = (data: ScanResultData) => {
+    // 1. Immediately reflect status in the current batch attendance sheet map
+    setAttendanceMap((prev) => ({
+      ...prev,
+      [data.student.id]: {
+        status: data.attendance.status,
+        note: prev[data.student.id]?.note || "QR Checked in",
+      },
+    }))
+
+    // 2. If student isn't in current sheet's students list but enrolled in current batch, reload or append
+    setStudents((prev) => {
+      const exists = prev.some((s) => s.id === data.student.id)
+      if (!exists && selectedBatchId === data.batch.id) {
+        return [...prev, { ...data.student, roll_no: data.student.roll_no, student_id: data.student.student_id }]
+      }
+      return prev
+    })
+
+    // 3. Update local todayAttendance array for real-time overview stats
+    if (data.attendance.date === todayDate) {
+      setTodayAttendance((prev) => {
+        const idx = prev.findIndex((a) => a.student_id === data.student.id && a.batch_id === data.batch.id)
+        const updatedRecord = {
+          id: data.attendance.id || `att-${Date.now()}`,
+          student_id: data.student.id,
+          batch_id: data.batch.id,
+          date: data.attendance.date,
+          status: data.attendance.status,
+          entry_method: "qr",
+          checked_in_at: data.attendance.checked_in_at,
+          student: data.student,
+          batch: data.batch,
+        }
+        if (idx >= 0) {
+          const next = [...prev]
+          next[idx] = { ...next[idx], ...updatedRecord }
+          return next
+        }
+        return [updatedRecord, ...prev]
+      })
+    }
+  }
 
   // Ensure selectedBatchId and resultBatchId are valid whenever displayBatches updates
   useEffect(() => {
@@ -477,41 +526,52 @@ export default function AttendanceClient({
   return (
     <div className="space-y-6">
       {/* Navigation Tabs */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3 print:hidden">
-        <button
-          onClick={() => setActiveTab("overview")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
-            activeTab === "overview"
-              ? "bg-slate-900 text-white shadow-md shadow-slate-900/10"
-              : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
-          }`}
-        >
-          <Activity className="w-4 h-4 text-amber-400" />
-          Attendance Overview
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 print:hidden">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+              activeTab === "overview"
+                ? "bg-slate-900 text-white shadow-md shadow-slate-900/10"
+                : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
+            }`}
+          >
+            <Activity className="w-4 h-4 text-amber-400" />
+            Attendance Overview
+          </button>
 
-        <button
-          onClick={() => setActiveTab("take")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
-            activeTab === "take"
-              ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20"
-              : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
-          }`}
-        >
-          <UserCheck className="w-4 h-4" />
-          Take Attendance (Sheet)
-        </button>
+          <button
+            onClick={() => setActiveTab("take")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+              activeTab === "take"
+                ? "bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20"
+                : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
+            }`}
+          >
+            <UserCheck className="w-4 h-4" />
+            Take Attendance (Sheet)
+          </button>
 
+          <button
+            onClick={() => setActiveTab("result")}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
+              activeTab === "result"
+                ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/20"
+                : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
+            }`}
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Batch Attendance Result / Report
+          </button>
+        </div>
+
+        {/* QR Camera Scanner Modal Trigger */}
         <button
-          onClick={() => setActiveTab("result")}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all cursor-pointer ${
-            activeTab === "result"
-              ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/20"
-              : "bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 border border-slate-200"
-          }`}
+          onClick={() => setShowScannerModal(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm bg-gradient-to-r from-amber-600 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-500 text-white shadow-md shadow-amber-500/25 hover:shadow-lg transition-all cursor-pointer border border-amber-400/40 shrink-0"
         >
-          <FileSpreadsheet className="w-4 h-4" />
-          Batch Attendance Result / Report
+          <Camera className="w-4 h-4" />
+          <span>QR Camera Scanner</span>
         </button>
       </div>
 
@@ -887,6 +947,14 @@ export default function AttendanceClient({
                 >
                   <X className="w-3.5 h-3.5" />
                   Mark All Absent
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowScannerModal(true)}
+                  className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  Scan QR / Camera
                 </button>
               </div>
 
@@ -1342,6 +1410,16 @@ export default function AttendanceClient({
           </div>
         </div>
       )}
+
+      {/* QR Code & Camera Attendance Scanner Modal */}
+      <AttendanceCameraScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        batches={displayBatches}
+        currentBatchId={selectedBatchId}
+        currentDate={attendanceDate}
+        onScanSuccess={handleScanSuccess}
+      />
     </div>
   )
 }

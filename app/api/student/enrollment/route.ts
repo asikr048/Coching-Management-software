@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { requireStaffRole, isAuthError } from "@/lib/api-auth";
+import { generateStudentQrCode } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -268,17 +269,52 @@ export async function POST(req: NextRequest) {
       const autoRoll = highestRoll > 0 ? highestRoll + 1 : 1
       const finalRoll = custom_roll_no && Number(custom_roll_no) > 0 ? Number(custom_roll_no) : autoRoll
 
-      const { data: newEnr, error: insErr } = await admin
-        .from("enrollments")
-        .insert({
-          student_id,
-          batch_id: targetBatchId,
-          branch_id: batch.branch_id || null,
-          roll_no: finalRoll,
-          status: "active"
+      // Fetch student details to get/generate QR code
+      const { data: stu } = await admin
+        .from("students")
+        .select("id, student_id, enrollment_date, created_at, roll_no, batch_roll, qr_code")
+        .eq("id", student_id)
+        .maybeSingle()
+
+      let studentQr = stu?.qr_code
+      if (!studentQr) {
+        studentQr = generateStudentQrCode({
+          studentId: stu?.student_id || student_id,
+          admissionDate: stu?.enrollment_date,
+          createdAt: stu?.created_at,
+          rollNo: finalRoll,
+          studentUuid: stu?.id || student_id,
         })
+        try {
+          await admin.from("students").update({ qr_code: studentQr }).eq("id", student_id)
+        } catch {}
+      }
+
+      const enrPayload: Record<string, any> = {
+        student_id,
+        batch_id: targetBatchId,
+        branch_id: batch.branch_id || null,
+        roll_no: finalRoll,
+        status: "active",
+        qr_code: studentQr,
+      }
+
+      let { data: newEnr, error: insErr } = await admin
+        .from("enrollments")
+        .insert(enrPayload)
         .select("*, batch:batches(name, subject, monthly_fee, admission_fee, class_level)")
         .single()
+
+      if (insErr && (insErr.message?.includes("qr_code") || (insErr as any).code === "PGRST204")) {
+        delete enrPayload.qr_code
+        const retry = await admin
+          .from("enrollments")
+          .insert(enrPayload)
+          .select("*, batch:batches(name, subject, monthly_fee, admission_fee, class_level)")
+          .single()
+        newEnr = retry.data
+        insErr = retry.error
+      }
 
       if (insErr) {
         return NextResponse.json({ error: insErr.message }, { status: 500 })
@@ -293,7 +329,6 @@ export async function POST(req: NextRequest) {
       await admin.from("batches").update({ current_seats: seatsCount || 0 }).eq("id", targetBatchId)
 
       // Check student table roll
-      const { data: stu } = await admin.from("students").select("roll_no, batch_roll").eq("id", student_id).single()
       if (!stu?.roll_no && !stu?.batch_roll) {
         await admin.from("students").update({ roll_no: finalRoll, batch_roll: finalRoll }).eq("id", student_id)
       }

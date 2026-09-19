@@ -5,9 +5,10 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { 
   UserCheck, Loader2, Search, Check, X, Clock, HelpCircle, 
-  FileSpreadsheet, Printer, Download, Calendar, Award, AlertCircle 
+  FileSpreadsheet, Printer, Download, Calendar, Award, AlertCircle, Camera
 } from "lucide-react"
 import { formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
+import AttendanceCameraScannerModal, { ScanResultData } from "@/components/attendance/AttendanceCameraScannerModal"
 
 function normalizeBanglaDigits(str: string): string {
   const banglaDigits = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"]
@@ -26,6 +27,24 @@ export default function ReceptionAttendancePage() {
   const [attendanceMap, setAttendanceMap] = useState<Record<string, { status: string; note: string }>>({})
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [showScannerModal, setShowScannerModal] = useState(false)
+
+  const handleScanSuccess = (data: ScanResultData) => {
+    setAttendanceMap((prev) => ({
+      ...prev,
+      [data.student.id]: {
+        status: data.attendance.status,
+        note: prev[data.student.id]?.note || "QR Checked in",
+      },
+    }))
+    setStudents((prev) => {
+      const exists = prev.some((s) => s.id === data.student.id)
+      if (!exists && selectedBatch === data.batch.id) {
+        return [...prev, { ...data.student, roll_no: data.student.roll_no, student_id: data.student.student_id }]
+      }
+      return prev
+    })
+  }
 
   // Batch Result State
   const [resultBatchId, setResultBatchId] = useState("")
@@ -269,6 +288,13 @@ export default function ReceptionAttendancePage() {
             <FileSpreadsheet className="w-4 h-4" />
             Batch Result Sheet
           </button>
+          <button
+            onClick={() => setShowScannerModal(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-white shadow-md shadow-amber-500/25 transition-all cursor-pointer border border-amber-400/30"
+          >
+            <Camera className="w-4 h-4" />
+            <span>QR Camera Scanner</span>
+          </button>
         </div>
       </div>
 
@@ -356,6 +382,14 @@ export default function ReceptionAttendancePage() {
                 >
                   <X className="w-3.5 h-3.5" />
                   All Absent
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowScannerModal(true)}
+                  className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 shadow-xs"
+                >
+                  <Camera className="w-3.5 h-3.5" />
+                  Scan QR / Camera
                 </button>
               </div>
               <div className="text-xs text-slate-500">
@@ -634,6 +668,16 @@ export default function ReceptionAttendancePage() {
           </div>
         </div>
       )}
+
+      {/* QR Code & Camera Attendance Scanner Modal */}
+      <AttendanceCameraScannerModal
+        isOpen={showScannerModal}
+        onClose={() => setShowScannerModal(false)}
+        batches={batches}
+        currentBatchId={selectedBatch}
+        currentDate={attendanceDate}
+        onScanSuccess={handleScanSuccess}
+      />
     </div>
   )
 }

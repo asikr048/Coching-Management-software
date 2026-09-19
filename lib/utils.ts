@@ -176,4 +176,78 @@ export function isRollMatch(
   return false
 }
 
+/**
+ * Generates a unique admission-time based QR identifier for a student or enrollment.
+ * Format: MSQR-YYYYMMDD-SEQNO-CHECKSUM
+ * Example: MSQR-20260920-0042-8F2B
+ */
+export function generateStudentQrCode(params: {
+  studentId?: string | null
+  admissionDate?: string | Date | null
+  createdAt?: string | Date | null
+  rollNo?: number | string | null
+  studentUuid?: string | null
+}): string {
+  const d = params.admissionDate
+    ? new Date(params.admissionDate)
+    : params.createdAt
+      ? new Date(params.createdAt)
+      : new Date()
+  const validDate = isNaN(d.getTime()) ? new Date() : d
+  const yyyy = validDate.getFullYear()
+  const mm = String(validDate.getMonth() + 1).padStart(2, "0")
+  const dd = String(validDate.getDate()).padStart(2, "0")
+  const dateStr = `${yyyy}${mm}${dd}`
+
+  // Extract digits from student ID (e.g. MS-2026-0042 -> 0042)
+  const rawId = (params.studentId || "").replace(/\D/g, "")
+  const seq = rawId ? rawId.slice(-4).padStart(4, "0") : (params.rollNo ? String(params.rollNo).padStart(3, "0") : "0001")
+
+  // Checksum derived from admission timestamp, UUID or student ID
+  const seed = `${params.studentUuid || ""}|${params.studentId || ""}|${validDate.getTime()}|${params.rollNo || ""}`
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i)
+    hash |= 0
+  }
+  const checksum = Math.abs(hash).toString(16).toUpperCase().padStart(4, "0").slice(-4)
+
+  return `MSQR-${dateStr}-${seq}-${checksum}`
+}
+
+/**
+ * Returns the public verification URL containing the unique QR code
+ */
+export function getStudentVerificationUrl(qrCode: string): string {
+  return `https://medhashiree.vercel.app/verify/student?code=${encodeURIComponent(qrCode)}`
+}
+
+/**
+ * Extracts raw QR code from any scanner input (URL or raw code)
+ */
+export function extractQrCodeFromInput(input: string): string {
+  if (!input) return ""
+  const trimmed = input.trim()
+  try {
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      const url = new URL(trimmed)
+      const code = url.searchParams.get("code")
+      if (code) return code.trim()
+      // Fallback check path parts
+      const parts = url.pathname.split("/").filter(Boolean)
+      const lastPart = parts[parts.length - 1]
+      if (lastPart && (lastPart.startsWith("MSQR-") || lastPart.startsWith("MS-") || lastPart.startsWith("EDU-"))) {
+        return lastPart.trim()
+      }
+    }
+  } catch {}
+
+  // Check if string contains ?code= or &code=
+  const match = trimmed.match(/[?&]code=([^&\s]+)/i)
+  if (match && match[1]) return decodeURIComponent(match[1]).trim()
+
+  return trimmed
+}
+
+
 

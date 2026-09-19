@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { X, Printer, Download, QrCode, ShieldCheck, User, Phone, BookOpen, Layers, Check, Copy, ExternalLink } from "lucide-react"
 import { StudentIdCardData, printStudentIdCard, downloadStudentIdCardPDF } from "@/lib/id-card-generator"
+import { generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
 import { toast } from "sonner"
 
 interface Props {
@@ -30,6 +31,7 @@ export default function StudentIdCardModal({ isOpen, onClose, cardData, student,
     blood_group: student?.blood_group,
     avatar_url: student?.avatar_url || student?.photo_url,
     address: student?.address,
+    qr_code: student?.qr_code,
   } : null)
 
   if (!isOpen || !activeCardData) return null
@@ -38,7 +40,16 @@ export default function StudentIdCardModal({ isOpen, onClose, cardData, student,
     ? String(activeCardData.batch_roll) 
     : "01"
 
-  const qrData = activeCardData.qr_data || `MEDHASHIREE-ID:${activeCardData.student_id}|ROLL:${rollStr}|BATCH:${activeCardData.batch_name}|NAME:${activeCardData.student_name}`
+  const effectiveCode = activeCardData.qr_code || student?.qr_code || generateStudentQrCode({
+    studentId: activeCardData.student_id,
+    admissionDate: activeCardData.issue_date || student?.enrollment_date,
+    rollNo: rollStr,
+    studentUuid: student?.id,
+  })
+
+  activeCardData.qr_code = effectiveCode
+
+  const qrData = activeCardData.qr_data || getStudentVerificationUrl(effectiveCode)
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=${encodeURIComponent(qrData)}`
   const initial = activeCardData.student_name ? activeCardData.student_name.charAt(0).toUpperCase() : "S"
 
@@ -165,9 +176,10 @@ export default function StudentIdCardModal({ isOpen, onClose, cardData, student,
             <div className="bg-slate-50 border-t border-slate-100 px-4 py-2.5 flex items-center justify-between">
               <div className="text-[9px] text-slate-500 leading-tight">
                 <b className="text-slate-700">Official Student Pass</b><br />
-                Campus & Exam Entry
+                <span className="font-mono text-[8px] text-slate-600 block mt-0.5">{effectiveCode}</span>
+                <span className="text-[8px] text-indigo-600">medhashiree.vercel.app</span>
               </div>
-              <img src={qrUrl} alt="QR Code" className="w-10 h-10 rounded border border-slate-200 bg-white p-0.5" />
+              <img src={qrUrl} alt="QR Code" className="w-11 h-11 rounded border border-slate-200 bg-white p-0.5 shadow-2xs" />
             </div>
           </div>
         </div>

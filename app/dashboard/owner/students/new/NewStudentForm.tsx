@@ -10,7 +10,7 @@ import {
   Calendar, Filter, Eye, Phone, Mail, UserCheck, ArrowRight, FileText, 
   CheckCircle2, Clock, DollarSign, ChevronRight, ExternalLink, X, Contact, Sparkles
 } from "lucide-react"
-import { formatCurrency, formatDate, formatDateTime, parseRollQuery, isRollMatch } from "@/lib/utils"
+import { formatCurrency, formatDate, formatDateTime, parseRollQuery, isRollMatch, generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 import { StudentIdCardData, printStudentIdCard, printAdmissionAndIdCard, downloadStudentIdCardPDF } from "@/lib/id-card-generator"
 import StudentIdCardModal from "@/components/id-card/StudentIdCardModal"
@@ -69,6 +69,7 @@ interface EnrollmentReceipt {
   due_date?: string
   payment_method: string
   qr_data: string
+  qr_code?: string
 }
 
 export default function NewStudentForm({ 
@@ -630,7 +631,14 @@ export default function NewStudentForm({
     const receiptNo = matchingPayment?.receipt_number || `RCP-${new Date(enr.created_at || Date.now()).getFullYear()}-${(enr.id || '').replace(/-/g, '').slice(-6).toUpperCase()}`
 
     const dispStudentId = student.student_id || student.id || "N/A"
-    const qrData = `Student ID: ${dispStudentId} | Name: ${student.name || ''} | Batch: ${b.name || ''} | Fee: ${totalFee} | Paid: ${paidAmt}`
+    const rollVal = enr.roll_no != null ? String(enr.roll_no) : (student.roll_no != null ? String(student.roll_no) : "01")
+    const effectiveCode = enr.qr_code || student.qr_code || generateStudentQrCode({
+      studentId: dispStudentId,
+      admissionDate: enr.created_at,
+      rollNo: rollVal,
+      studentUuid: student.id,
+    })
+    const qrData = getStudentVerificationUrl(effectiveCode)
 
     return {
       receipt_number: receiptNo,
@@ -641,6 +649,7 @@ export default function NewStudentForm({
       guardian_name: student.guardian_name,
       guardian_phone: student.guardian_phone,
       batch_name: b.name || "Enrolled Batch",
+      batch_roll: rollVal,
       subject: b.subject || b.class_level || "General",
       date: dateStr,
       total_fee: totalFee,
@@ -648,7 +657,8 @@ export default function NewStudentForm({
       due_amount: dueAmt,
       due_date: matchingDue?.due_date || undefined,
       payment_method: matchingPayment?.payment_method?.toUpperCase() || "Cash / Counter",
-      qr_data: qrData
+      qr_data: qrData,
+      qr_code: effectiveCode,
     }
   }
 
@@ -891,7 +901,12 @@ export default function NewStudentForm({
           throw new Error(authResult.error || "Failed to create login account")
         }
 
-        const { data: st, error: sErr } = await supabase.from("students").insert({
+        const initialQrCode = generateStudentQrCode({
+          studentId: studentIdStr,
+          admissionDate: new Date(),
+        })
+
+        const studentPayload: Record<string, any> = {
           student_id: studentIdStr,
           name: form.name.trim(),
           branch_id: selectedBranchId || batch?.branch_id || null,
@@ -906,7 +921,16 @@ export default function NewStudentForm({
           school_college: form.school_college.trim() || null,
           class_level: form.class_level.trim() || null,
           referred_by_code: form.referred_by_code.trim() || null,
-        }).select().single()
+          qr_code: initialQrCode,
+        }
+
+        let { data: st, error: sErr } = await supabase.from("students").insert(studentPayload).select().single()
+        if (sErr && sErr.message?.includes("qr_code")) {
+          delete studentPayload.qr_code
+          const retryRes = await supabase.from("students").insert(studentPayload).select().single()
+          st = retryRes.data
+          sErr = retryRes.error
+        }
         if (sErr) throw new Error(sErr.message)
         sid = st.id; dispId = st.student_id
         studentName = st.name
@@ -967,10 +991,17 @@ export default function NewStudentForm({
       }
 
       // Add enrollment with adaptive column support
+      const enrQrCode = generateStudentQrCode({
+        studentId: dispId || sid,
+        admissionDate: new Date(),
+        rollNo: finalRoll || 1,
+        studentUuid: sid,
+      })
       const enrollPayload: Record<string, any> = {
         student_id: sid,
         batch_id: form.batch_id,
-        status: "active"
+        status: "active",
+        qr_code: enrQrCode,
       }
       if (selectedBranchId || batch?.branch_id) {
         enrollPayload.branch_id = selectedBranchId || batch?.branch_id || null
@@ -981,13 +1012,17 @@ export default function NewStudentForm({
 
       let { error: eErr } = await supabase.from("enrollments").insert(enrollPayload)
 
-      // Fallback if roll_no or branch_id column doesn't exist in live Supabase enrollments schema cache
+      // Fallback if roll_no, qr_code or branch_id column doesn't exist in live Supabase enrollments schema cache
       if (eErr && (
         eErr.message?.includes("roll_no") ||
         eErr.message?.includes("branch_id") || 
+        eErr.message?.includes("qr_code") || 
         eErr.message?.includes("schema cache") || 
         (eErr as any).code === "PGRST204"
       )) {
+        if (eErr.message?.includes("qr_code")) {
+          delete enrollPayload.qr_code
+        }
         if (eErr.message?.includes("roll_no")) {
           delete enrollPayload.roll_no
         }
@@ -1017,14 +1052,22 @@ export default function NewStudentForm({
         throw new Error(eErr.message)
       }
 
-      // Sync roll_no and batch_roll to student table
+      // Sync roll_no, batch_roll, and qr_code to student table
       if (finalRoll != null) {
         try {
           await supabase.from("students").update({
             roll_no: finalRoll,
-            batch_roll: finalRoll
+            batch_roll: finalRoll,
+            qr_code: enrQrCode,
           }).eq("id", sid)
-        } catch {}
+        } catch {
+          try {
+            await supabase.from("students").update({
+              roll_no: finalRoll,
+              batch_roll: finalRoll
+            }).eq("id", sid)
+          } catch {}
+        }
       }
 
       // Update seats count accurately (never exceed max_seats)
@@ -1144,7 +1187,7 @@ export default function NewStudentForm({
 
       // Display receipt modal with print & save options, staying on this page
       const branchName = selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.name : (batch?.branch_id ? branches.find(b => b.id === batch.branch_id)?.name : undefined)
-      const qrData = `Student ID: ${dispId} | Name: ${studentName} | Batch: ${batch?.name || ''} | Roll: #${enrollPayload.roll_no || finalRoll || 1} | Fee: ${total} | Paid: ${paid}`
+      const qrData = getStudentVerificationUrl(enrQrCode)
       setReceipt({
         receipt_number: receiptNum,
         student_name: studentName,
@@ -1164,7 +1207,8 @@ export default function NewStudentForm({
         due_amount: due,
         due_date: due > 0 ? dueDate : undefined,
         payment_method: "Cash / Counter",
-        qr_data: qrData
+        qr_data: qrData,
+        qr_code: enrQrCode,
       })
       setModalTab("receipt")
 

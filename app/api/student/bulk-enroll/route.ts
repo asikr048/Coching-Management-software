@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { AdmissionSlipData, StudentIdCardData } from "@/lib/id-card-generator"
 import { requireStaffRole, isAuthError } from "@/lib/api-auth";
+import { generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -319,6 +320,14 @@ export async function POST(req: NextRequest) {
       } catch {}
 
       // C. Insert student record into students table
+      const admissionDateStr = today.toISOString().split("T")[0]
+      const studentQr = generateStudentQrCode({
+        studentId: studentIdStr,
+        admissionDate: admissionDateStr,
+        rollNo: assignedRoll,
+      })
+      const qrVerificationUrl = getStudentVerificationUrl(studentQr)
+
       const studentPayload: Record<string, any> = {
         student_id: studentIdStr,
         name: trimmedName,
@@ -334,15 +343,23 @@ export async function POST(req: NextRequest) {
         class_level: classLevel || null,
         roll_no: assignedRoll,
         batch_roll: assignedRoll,
-        enrollment_date: today.toISOString().split("T")[0],
-        is_active: true
+        enrollment_date: admissionDateStr,
+        is_active: true,
+        qr_code: studentQr,
       }
 
-      const { data: createdStudent, error: sErr } = await admin
+      let { data: createdStudent, error: sErr } = await admin
         .from("students")
         .insert(studentPayload)
         .select()
         .single()
+
+      if (sErr && (sErr.message?.includes("qr_code") || (sErr as any).code === "PGRST204")) {
+        delete studentPayload.qr_code
+        const retryS = await admin.from("students").insert(studentPayload).select().single()
+        createdStudent = retryS.data
+        sErr = retryS.error
+      }
 
       if (sErr || !createdStudent) {
         throw new Error(`Failed to create student "${trimmedName}": ${sErr?.message || "Database error"}`)
@@ -353,7 +370,8 @@ export async function POST(req: NextRequest) {
         student_id: createdStudent.id,
         batch_id: batch_id,
         status: "active",
-        roll_no: assignedRoll
+        roll_no: assignedRoll,
+        qr_code: studentQr,
       }
       if (effectiveBranchId) {
         enrPayload.branch_id = effectiveBranchId
@@ -365,10 +383,11 @@ export async function POST(req: NextRequest) {
         .select()
         .single()
 
-      // Fallback if schema cache doesn't have roll_no or branch_id
-      if (enrErr && (enrErr.message?.includes("roll_no") || enrErr.message?.includes("branch_id") || (enrErr as any).code === "PGRST204")) {
+      // Fallback if schema cache doesn't have roll_no, branch_id or qr_code
+      if (enrErr && (enrErr.message?.includes("roll_no") || enrErr.message?.includes("branch_id") || enrErr.message?.includes("qr_code") || (enrErr as any).code === "PGRST204")) {
         delete enrPayload.roll_no
         delete enrPayload.branch_id
+        delete enrPayload.qr_code
         const retry = await admin.from("enrollments").insert(enrPayload).select().single()
         createdEnr = retry.data
       }
@@ -414,7 +433,8 @@ export async function POST(req: NextRequest) {
         due_amount: studentDue,
         due_date: studentDue > 0 ? defaultDueDate : undefined,
         payment_method: studentDue > 0 ? "DUE / PENDING" : "NONE",
-        qr_data: `Student ID: ${studentIdStr} | Name: ${trimmedName} | Batch: ${batch.name} | Roll: #${assignedRoll} | Due: ${studentDue}`
+        qr_data: qrVerificationUrl,
+        qr_code: studentQr,
       }
 
       const idCardData: StudentIdCardData = {
@@ -427,7 +447,8 @@ export async function POST(req: NextRequest) {
         student_phone: effectiveStudentPhone || undefined,
         guardian_name: guardianName || undefined,
         guardian_phone: effectiveGuardianPhone || undefined,
-        qr_data: `MEDHASHIREE-ID:${studentIdStr}|ROLL:${assignedRoll}|BATCH:${batch.name}|NAME:${trimmedName}`
+        qr_data: qrVerificationUrl,
+        qr_code: studentQr,
       }
 
       results.push({
