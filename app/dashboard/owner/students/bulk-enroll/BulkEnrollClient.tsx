@@ -187,10 +187,10 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
   const handleDownloadSampleCSV = () => {
     const headers = ["Name", "Guardian Phone", "Due", "Guardian Name", "Phone", "Address", "School / College", "Gender", "Class"]
     const sampleRows = [
-      ["আবাব হোসেন", "01751380602", "1500", "শাকিলা খাতুন", "01751380602", "কামারপাড়া, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Male", selectedBatch?.class_level || "Class 10"],
-      ["তাযমীন", "01323077148", "1000", "বকুল মিয়া", "", "পার্ক মোড়, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Female", selectedBatch?.class_level || "Class 10"],
-      ["জান্নাতুল", "01314262623", "0", "জিয়াদুল ইসলাম", "", "কামারপাড়া, রংপুর", "মুলাটোল মাদ্রাসা", "Female", selectedBatch?.class_level || "Class 10"],
-      ["Farhan Ahmed", "01712345678", "2000", "Rafiqul Islam", "01987654321", "Dhanmondi, Dhaka", "Dhaka Residential Model College", "Male", selectedBatch?.class_level || "Class 10"]
+      ["আবাব হোসেন", "+8801302201431", "1500", "শাকিলা খাতুন", "+8801751380602", "কামারপাড়া, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Male", selectedBatch?.class_level || "Class 10"],
+      ["তাযমীন", "+8801323077148", "1000", "বকুল মিয়া", "", "পার্ক মোড়, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Female", selectedBatch?.class_level || "Class 10"],
+      ["জান্নাতুল", "+8801314262623", "0", "জিয়াদুল ইসলাম", "", "কামারপাড়া, রংপুর", "মুলাটোল মাদ্রাসা", "Female", selectedBatch?.class_level || "Class 10"],
+      ["Farhan Ahmed", "+8801712345678", "2000", "Rafiqul Islam", "+8801987654321", "Dhanmondi, Dhaka", "Dhaka Residential Model College", "Male", selectedBatch?.class_level || "Class 10"]
     ]
 
     const csvContent = [
@@ -828,7 +828,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
                 <td className="py-2 px-3 font-mono font-bold text-slate-900">Guardian Phone</td>
                 <td className="py-2 px-3 font-medium text-slate-800">অভিভাবকের মোবাইল</td>
                 <td className="py-2 px-3"><span className="text-rose-600 font-bold">Required</span></td>
-                <td className="py-2 px-3">১১ ডিজিট মোবাইল নম্বর (যেমন: 01751380602)</td>
+                <td className="py-2 px-3">মোবাইল নম্বর (যেমন: +8801302201431 বা 01302201431)</td>
               </tr>
               <tr className="bg-amber-50/50 font-semibold">
                 <td className="py-2 px-3 font-mono text-indigo-700 font-bold">Due</td>
