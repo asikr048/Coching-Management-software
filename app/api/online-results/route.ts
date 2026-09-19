@@ -186,17 +186,17 @@ export async function GET(req: NextRequest) {
 
       const exam = normalizeExam(rawExam)
 
-      // Fetch exam results
+      // Fetch exam results with roll_no and batch_roll
       let allResults: any[] = []
       const { data: resData, error: resErr } = await admin
         .from("exam_results")
-        .select("*, student:students(id, name, student_id)")
+        .select("*, student:students(id, name, student_id, roll_no, batch_roll)")
         .eq("exam_id", examId)
 
       if (resErr) {
         const { data: fbData } = await admin
           .from("exam_results")
-          .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id)")
+          .select("id, exam_id, student_id, obtained_marks, grade, rank, created_at, student:students(id, name, student_id, roll_no, batch_roll)")
           .eq("exam_id", examId)
         allResults = fbData || []
       } else {
@@ -214,25 +214,41 @@ export async function GET(req: NextRequest) {
         } catch {}
       }
 
+      // Map for batch enrollment roll numbers
+      const rollMap = new Map<string, any>()
+
       // If batch_id is present, ensure all enrolled students are included
       if (rawExam.batch_id) {
         try {
           const { data: enrollments } = await admin
             .from("enrollments")
-            .select("student:students(id, name, student_id)")
+            .select("roll_no, student_id, student:students(id, name, student_id, roll_no, batch_roll)")
             .eq("batch_id", rawExam.batch_id)
             .eq("status", "active")
 
-          const enrolledStudents = (enrollments || []).map((e: any) => e.student).filter(Boolean)
+          const enrolledStudents: any[] = []
+          for (const e of (enrollments || [])) {
+            const s: any = Array.isArray(e.student) ? e.student[0] : e.student
+            const sId = s?.id || e.student_id
+            const rNo = e.roll_no != null && Number(e.roll_no) > 0 ? e.roll_no : s?.roll_no ?? s?.batch_roll
+            if (sId && rNo != null) {
+              rollMap.set(sId, rNo)
+            }
+            if (s) enrolledStudents.push(s)
+          }
+
           const existingIds = new Set(allResults.map((r) => r.student_id))
 
           for (const s of enrolledStudents) {
             if (!existingIds.has(s.id)) {
+              const rNo = rollMap.get(s.id) ?? s.roll_no ?? s.batch_roll
               allResults.push({
                 id: `enr-${s.id}`,
                 student_id: s.id,
                 student_name: s.name,
-                roll: s.student_id,
+                roll: rNo != null ? String(rNo) : s.student_id,
+                roll_no: rNo,
+                student_code: s.student_id,
                 obtained_marks: 0,
                 student: s,
                 day_marks: fallbackDayMarks[s.id] || {},
@@ -250,13 +266,16 @@ export async function GET(req: NextRequest) {
         for (const sId of Object.keys(fallbackDayMarks)) {
           if (!existingIds.has(sId)) {
             try {
-              const { data: st } = await admin.from("students").select("id, name, student_id").eq("id", sId).maybeSingle()
+              const { data: st } = await admin.from("students").select("id, name, student_id, roll_no, batch_roll").eq("id", sId).maybeSingle()
               if (st) {
+                const rNo = rollMap.get(st.id) ?? st.roll_no ?? st.batch_roll
                 allResults.push({
                   id: `fb-${sId}`,
                   student_id: sId,
                   student_name: st.name,
-                  roll: st.student_id,
+                  roll: rNo != null ? String(rNo) : st.student_id,
+                  roll_no: rNo,
+                  student_code: st.student_id,
                   obtained_marks: 0,
                   student: st,
                   day_marks: fallbackDayMarks[sId] || {},
@@ -298,11 +317,17 @@ export async function GET(req: NextRequest) {
           const rawObt = Number(r.obtained_marks ?? r.marks_obtained ?? 0)
           const finalObt = isWeekly && hasDayMark ? (dayTotal > 0 ? dayTotal : rawObt) : rawObt
 
+          const studentCode = r.student?.student_id || r.student_code || ""
+          const studentRoll = rollMap.get(r.student?.id || r.student_id) ?? r.student?.roll_no ?? r.student?.batch_roll ?? r.roll_no ?? null
+          const displayRoll = studentRoll != null && String(studentRoll).trim() !== "" ? String(studentRoll) : (studentCode || r.roll || "N/A")
+
           return {
             id: r.id,
             student_id: r.student?.id || r.student_id,
             student_name: r.student?.name || r.student_name || "Student",
-            roll: r.student?.student_id || r.roll || "N/A",
+            roll: displayRoll,
+            roll_no: studentRoll,
+            student_code: studentCode,
             obtained_marks: finalObt,
             grade: r.grade || "",
             rank: r.rank || null,

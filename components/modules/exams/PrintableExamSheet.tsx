@@ -276,13 +276,34 @@ export default function PrintableExamSheet({
     }
   }, [students.length, processedRows])
 
-  // Podium / Top 3
-  const topThree = useMemo(() => {
+  // Podium / Top 3 Score Tiers (supporting ties with all student names & rolls)
+  const topThreeTiers = useMemo(() => {
     const evaluated = processedRows
       .filter((r) => r.hasEvaluated && r.mark !== null && r.rank !== null)
-      .sort((a, b) => (a.rank || 9999) - (b.rank || 9999))
+      .sort((a, b) => (a.rank || 9999) - (b.rank || 9999) || (b.mark || 0) - (a.mark || 0))
 
-    return evaluated.slice(0, 3)
+    if (evaluated.length === 0) return []
+
+    // Group by rank / mark into top 3 distinct score tiers
+    const tierMap = new Map<number, typeof evaluated>()
+    for (const row of evaluated) {
+      const rankKey = row.rank || 1
+      if (!tierMap.has(rankKey)) {
+        if (tierMap.size >= 3) break
+        tierMap.set(rankKey, [])
+      }
+      tierMap.get(rankKey)!.push(row)
+    }
+
+    return Array.from(tierMap.entries()).map(([rank, tierStudents], tierIndex) => ({
+      tierIndex,
+      rank,
+      students: tierStudents,
+      isTie: tierStudents.length > 1,
+      mark: tierStudents[0].mark,
+      pct: tierStudents[0].pct,
+      grade: tierStudents[0].grade,
+    }))
   }, [processedRows])
 
   // Subject-wise toppers calculation for Weekly Aggregate
@@ -460,7 +481,7 @@ export default function PrintableExamSheet({
       </div>
 
       {/* 3. TOP 3 PODIUM SUMMARY (If enabled & available) */}
-      {showPodium && topThree.length > 0 && (
+      {showPodium && topThreeTiers.length > 0 && (
         <div className="mb-4 border border-slate-300 rounded-xl p-3 bg-slate-50/50 print:bg-transparent">
           <div className="flex items-center gap-2 mb-2 pb-1.5 border-b border-slate-200">
             <Trophy className="w-4 h-4 text-amber-600" />
@@ -469,38 +490,63 @@ export default function PrintableExamSheet({
             </h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {topThree.map((item, idx) => {
-              const placeLabel = idx === 0 ? "১ম স্থান (1st)" : idx === 1 ? "২য় স্থান (2nd)" : "৩য় স্থান (3rd)"
-              const badgeBg = idx === 0 ? "bg-amber-100 text-amber-900 border-amber-300" : idx === 1 ? "bg-slate-200 text-slate-900 border-slate-400" : "bg-orange-100 text-orange-900 border-orange-300"
+            {topThreeTiers.map((tier) => {
+              const { tierIndex, students: tierStudents, isTie, mark, pct, grade } = tier
+              const placeLabel =
+                tierIndex === 0
+                  ? isTie ? `১ম স্থান (যৌথ - ${tierStudents.length} জন)` : "১ম স্থান (1st)"
+                  : tierIndex === 1
+                  ? isTie ? `২য় স্থান (যৌথ - ${tierStudents.length} জন)` : "২য় স্থান (2nd)"
+                  : isTie ? `৩য় স্থান (যৌথ - ${tierStudents.length} জন)` : "৩য় স্থান (3rd)"
+
+              const badgeBg =
+                tierIndex === 0
+                  ? "bg-amber-100 text-amber-900 border-amber-300"
+                  : tierIndex === 1
+                  ? "bg-slate-200 text-slate-900 border-slate-400"
+                  : "bg-orange-100 text-orange-900 border-orange-300"
 
               return (
                 <div
-                  key={item.student.id}
-                  className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-slate-300 print:border-slate-400"
+                  key={tierIndex}
+                  className="flex items-start gap-2.5 p-2 bg-white rounded-lg border border-slate-300 print:border-slate-400 shadow-2xs print:shadow-none"
                 >
                   <span
                     className={cn(
-                      "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 border",
+                      "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shrink-0 border mt-0.5",
                       badgeBg
                     )}
                   >
-                    #{idx + 1}
+                    #{tierIndex + 1}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                      {placeLabel}
-                    </p>
-                    <p className="text-xs font-black text-slate-900 truncate">{item.student.name}</p>
-                    <p className="text-[10px] text-slate-600 font-mono">
-                      রোল: {item.rollNumber} • আইডি: {item.student.student_id}
-                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                        {placeLabel}
+                      </p>
+                      {isTie && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 bg-amber-100 text-amber-900 rounded border border-amber-200 font-sans">
+                          যৌথ ({tierStudents.length} জন)
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1 mt-1">
+                      {tierStudents.map((st) => (
+                        <div key={st.student.id} className="border-t border-slate-100 first:border-0 pt-0.5 first:pt-0">
+                          <p className="text-xs font-black text-slate-900 truncate">{st.student.name}</p>
+                          <p className="text-[10px] text-slate-600 font-mono">
+                            রোল: #{st.rollNumber} • আইডি: {st.student.student_id}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                   <div className="text-right shrink-0">
                     <span className="text-xs font-black text-amber-900 block">
-                      {item.mark}/{activeTotalMarks}
+                      {mark}/{activeTotalMarks}
                     </span>
                     <span className="text-[10px] font-bold text-emerald-700 block">
-                      {item.pct}% ({item.grade})
+                      {pct}% ({grade})
                     </span>
                   </div>
                 </div>
@@ -510,7 +556,6 @@ export default function PrintableExamSheet({
         </div>
       )}
 
-      {/* 3.1 SUBJECT-WISE TOPPERS (বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী) */}
       {/* 3.1 SUBJECT-WISE TOPPERS (বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী) */}
       {showSubjectToppers && isWeeklyAggregate && subjectToppers.length > 0 && (
         <div
@@ -547,9 +592,16 @@ export default function PrintableExamSheet({
                         <span className="w-2 h-2 rounded-full bg-purple-600 shrink-0"></span>
                         <span>{st.day.day_bn}</span>
                       </span>
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 print:border-slate-300">
-                        পূর্ণমান: {st.day.total_marks}
-                      </span>
+                      <div className="flex items-center gap-1">
+                        {isTie && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800 border border-purple-200 font-sans">
+                            যৌথ ({st.winners.length} জন)
+                          </span>
+                        )}
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 print:border-slate-300">
+                          পূর্ণমান: {st.day.total_marks}
+                        </span>
+                      </div>
                     </div>
                     <p className="text-xs font-bold text-purple-900 mt-1">
                       {st.day.subject || st.day.exam_name}
@@ -557,19 +609,38 @@ export default function PrintableExamSheet({
                   </div>
 
                   {hasWinner ? (
-                    <div className="pt-2 border-t border-slate-100 print:border-slate-200 flex items-center justify-between text-xs gap-2">
+                    <div className="pt-2 border-t border-slate-100 print:border-slate-200 flex items-start justify-between text-xs gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="font-black text-slate-950 text-xs flex items-center gap-1">
-                          <span className="shrink-0 text-amber-500">🏆</span>
-                          <span className="font-black text-slate-950">
-                            {isTie ? st.winners.map((w) => w.student.name).join(", ") : primaryWinner?.student.name}
-                          </span>
-                        </p>
-                        <p className="text-[10px] text-slate-600 font-mono mt-0.5">
-                          {isTie
-                            ? `রোল: ${st.winners.map((w) => w.rollNumber).join(", ")}`
-                            : `রোল: ${primaryWinner?.rollNumber} • আইডি: ${primaryWinner?.student.student_id}`}
-                        </p>
+                        {isTie ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              <span className="text-amber-500">🏆</span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.2 bg-purple-100 text-purple-900 rounded border border-purple-200">
+                                যৌথ শীর্ষ ({st.winners.length} জন)
+                              </span>
+                            </div>
+                            <div className="space-y-1">
+                              {st.winners.map((w) => (
+                                <div key={w.student.id} className="border-t border-slate-100 first:border-0 pt-0.5 first:pt-0">
+                                  <p className="font-bold text-slate-900 text-xs truncate">🏆 {w.student.name}</p>
+                                  <p className="text-[10px] text-slate-600 font-mono">
+                                    রোল: #{w.rollNumber} • আইডি: {w.student.student_id}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-black text-slate-950 text-xs flex items-center gap-1 truncate">
+                              <span className="shrink-0 text-amber-500">🏆</span>
+                              <span className="font-black text-slate-950 truncate">{primaryWinner?.student.name}</span>
+                            </p>
+                            <p className="text-[10px] text-slate-600 font-mono mt-0.5">
+                              রোল: #{primaryWinner?.rollNumber} • আইডি: {primaryWinner?.student.student_id}
+                            </p>
+                          </div>
+                        )}
                       </div>
                       <div className="text-right shrink-0">
                         <span className="font-black text-xs sm:text-sm text-amber-800 block">

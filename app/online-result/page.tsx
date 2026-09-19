@@ -150,10 +150,30 @@ interface StudentRank {
   student_id: string
   student_name: string
   roll: string
+  roll_no?: number | string | null
+  student_code?: string
   obtained_marks: number
   grade?: string
   rank: number
   day_marks?: Record<string, any>
+}
+
+export interface TopperTierItem {
+  position: 1 | 2 | 3
+  positionLabel: string
+  positionShort: string
+  obtained_marks: number
+  pct: number
+  grade: string
+  isTie: boolean
+  students: Array<{
+    id: string
+    student_id: string
+    student_name: string
+    roll: string
+    roll_no?: number | string | null
+    student_code?: string
+  }>
 }
 
 export function checkIsWeeklyExam(ex: any): boolean {
@@ -425,7 +445,7 @@ export default function OnlineResultPortalPage() {
         const supabase = createClient()
         const { data: results } = await supabase
           .from("exam_results")
-          .select("*, student:students(id, name, student_id)")
+          .select("*, student:students(id, name, student_id, roll_no, batch_roll)")
           .eq("exam_id", exam.id)
           .order("obtained_marks", { ascending: false })
 
@@ -435,11 +455,15 @@ export default function OnlineResultPortalPage() {
             if (i > 0 && Number(r.obtained_marks) < Number(results[i - 1].obtained_marks)) {
               curRank = i + 1
             }
+            const sCode = r.student?.student_id || ""
+            const rNo = r.student?.roll_no ?? r.student?.batch_roll ?? null
             return {
               id: r.id,
               student_id: r.student?.id || r.student_id,
               student_name: r.student?.name || "Student",
-              roll: r.student?.student_id || "N/A",
+              roll: rNo != null ? String(rNo) : (sCode || "N/A"),
+              roll_no: rNo,
+              student_code: sCode,
               obtained_marks: Number(r.obtained_marks || 0),
               grade: r.grade || "",
               rank: r.rank || curRank,
@@ -691,6 +715,8 @@ export default function OnlineResultPortalPage() {
         student_id: r.student_id,
         student_name: r.student_name,
         roll: r.roll,
+        roll_no: r.roll_no,
+        student_code: r.student_code || (r.roll && r.roll.startsWith("MS-") ? r.roll : ""),
         obtained_marks: obt,
         pct,
         grade,
@@ -704,7 +730,7 @@ export default function OnlineResultPortalPage() {
           (s) =>
             s.student_name.toLowerCase().includes(pq.q) ||
             s.student_name.toLowerCase().includes(pq.qNormalized) ||
-            isRollMatch(pq, [s.roll])
+            isRollMatch(pq, [s.roll, s.roll_no, s.student_code])
         )
       : mapped
 
@@ -722,10 +748,64 @@ export default function OnlineResultPortalPage() {
     })
   }, [examResults, selectedDayKey, activeDayConfig, studentSearchInModal])
 
-  // Daily Podium Toppers (Top 3 for that day)
+  // Helper to group evaluated students into top 3 distinct score podium tiers
+  function computeTopperTiers(
+    list: Array<{
+      id?: string
+      student_id: string
+      student_name: string
+      roll?: string
+      roll_no?: number | string | null
+      student_code?: string
+      obtained_marks: number | null
+      pct?: number | null
+      grade?: string
+    }>,
+    totalMax: number
+  ): TopperTierItem[] {
+    const validScored = list
+      .filter((x) => x.obtained_marks !== null && !isNaN(Number(x.obtained_marks)) && Number(x.obtained_marks) > 0)
+      .sort((a, b) => Number(b.obtained_marks) - Number(a.obtained_marks))
+
+    if (validScored.length === 0) return []
+
+    // Extract unique scores descending
+    const uniqueScores = Array.from(new Set(validScored.map((x) => Number(x.obtained_marks)))).sort((a, b) => b - a)
+    const top3Scores = uniqueScores.slice(0, 3)
+
+    return top3Scores.map((score, idx) => {
+      const position = (idx + 1) as 1 | 2 | 3
+      const studentsInTier = validScored.filter((x) => Number(x.obtained_marks) === score)
+      const pct = Math.round((score / totalMax) * 100)
+      const grade = getGrade(score, totalMax)
+      const isTie = studentsInTier.length > 1
+      const positionLabel = position === 1 ? "১ম স্থান" : position === 2 ? "২য় স্থান" : "৩য় স্থান"
+      const positionShort = position === 1 ? "১ম" : position === 2 ? "২য়" : "৩য়"
+
+      return {
+        position,
+        positionLabel,
+        positionShort,
+        obtained_marks: score,
+        pct,
+        grade,
+        isTie,
+        students: studentsInTier.map((s) => ({
+          id: s.id || s.student_id,
+          student_id: s.student_id,
+          student_name: s.student_name,
+          roll: s.roll || "",
+          roll_no: s.roll_no,
+          student_code: s.student_code || (s.roll && s.roll.startsWith("MS-") ? s.roll : ""),
+        })),
+      }
+    })
+  }
+
+  // Daily Podium Toppers (Top 3 for that day, supporting ties)
   const dailyToppers = useMemo(() => {
-    return dailyModalResults.filter((s) => s.obtained_marks !== null && s.obtained_marks > 0).slice(0, 3)
-  }, [dailyModalResults])
+    return computeTopperTiers(dailyModalResults, activeDayConfig?.total_marks || 50)
+  }, [dailyModalResults, activeDayConfig])
 
   // Total possible weekly marks
   const totalWeeklyMaxMarks = useMemo(() => {
@@ -736,7 +816,7 @@ export default function OnlineResultPortalPage() {
     return selectedExam.total_marks || 100
   }, [selectedExam, parsedWeeklyDays])
 
-  // Weekly grand total toppers (Top 3 for podium cards)
+  // Weekly grand total toppers (Top 3 podium tiers, supporting multiple students in same position)
   const weeklyTotalToppers = useMemo(() => {
     if (!isWeeklyExam || examResults.length === 0) return []
 
@@ -771,31 +851,24 @@ export default function OnlineResultPortalPage() {
           student_id: r.student_id,
           student_name: r.student_name,
           roll: r.roll,
+          roll_no: r.roll_no,
+          student_code: r.student_code || (r.roll && r.roll.startsWith("MS-") ? r.roll : ""),
           obtained_marks: obt,
           pct,
           grade,
           hasMark,
         }
       })
-      .filter((x) => x.hasMark)
-      .sort((a, b) => b.obtained_marks - a.obtained_marks)
+      .filter((x) => x.hasMark && x.obtained_marks > 0)
 
-    let curRank = 1
-    return scoredList.slice(0, 3).map((item, idx) => {
-      if (idx > 0 && item.obtained_marks < scoredList[idx - 1].obtained_marks) {
-        curRank = idx + 1
-      }
-      return { ...item, rank: curRank }
-    })
+    return computeTopperTiers(scoredList, totalWeeklyMaxMarks)
   }, [isWeeklyExam, examResults, totalWeeklyMaxMarks])
 
-  // Subject-wise toppers (for each scheduled day)
+  // Subject-wise toppers (for each scheduled day, all tied winners included)
   const weeklySubjectToppers = useMemo(() => {
     if (!isWeeklyExam || parsedWeeklyDays.length === 0) return []
 
     return parsedWeeklyDays.map((d) => {
-      let topStudentName = ""
-      let topStudentRoll = ""
       let topScore = -1
 
       for (const r of examResults) {
@@ -804,16 +877,28 @@ export default function OnlineResultPortalPage() {
           const score = Number(dObj.marks)
           if (score > topScore) {
             topScore = score
-            topStudentName = r.student_name
-            topStudentRoll = r.roll
           }
         }
       }
 
+      const winners = topScore >= 0
+        ? examResults
+            .filter((r) => {
+              const dObj = getDayMarkItem(r.day_marks, d.key, d.day_bn, d.day_en)
+              return dObj && !isNaN(Number(dObj.marks)) && Number(dObj.marks) === topScore
+            })
+            .map((r) => ({
+              student_id: r.student_id,
+              student_name: r.student_name,
+              roll: r.roll,
+              roll_no: r.roll_no,
+              student_code: r.student_code || (r.roll && r.roll.startsWith("MS-") ? r.roll : ""),
+            }))
+        : []
+
       return {
         day: d,
-        studentName: topStudentName,
-        studentRoll: topStudentRoll,
+        winners,
         score: topScore,
       }
     })
@@ -821,7 +906,7 @@ export default function OnlineResultPortalPage() {
 
   // Multi-column table rows for weekly view
   const weeklyTableRows = useMemo(() => {
-    return filteredModalResults
+    const rows = filteredModalResults
       .map((r) => {
         let grandTotal = 0
         let hasMark = false
@@ -852,6 +937,8 @@ export default function OnlineResultPortalPage() {
           student_id: r.student_id,
           student_name: r.student_name,
           roll: r.roll,
+          roll_no: r.roll_no,
+          student_code: r.student_code || (r.roll && r.roll.startsWith("MS-") ? r.roll : ""),
           obtained_marks: obt,
           pct,
           grade,
@@ -859,9 +946,133 @@ export default function OnlineResultPortalPage() {
         }
       })
       .sort((a, b) => (b.obtained_marks ?? -1) - (a.obtained_marks ?? -1))
+
+    let curRank = 1
+    return rows.map((item, idx) => {
+      if (idx > 0 && (item.obtained_marks ?? -1) < (rows[idx - 1].obtained_marks ?? -1)) {
+        curRank = idx + 1
+      }
+      return {
+        ...item,
+        rank: item.obtained_marks !== null ? curRank : null,
+      }
+    })
   }, [filteredModalResults, totalWeeklyMaxMarks])
 
-  const top3 = examResults.slice(0, 3)
+  const top3 = useMemo(() => {
+    return computeTopperTiers(examResults, selectedExam?.total_marks || 100)
+  }, [examResults, selectedExam])
+
+  function renderTopperTierCards(tiers: TopperTierItem[], maxMarks: number, scoreLabel: string = "মোট প্রাপ্ত") {
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {tiers.map((tier) => {
+          const isGold = tier.position === 1
+          const isSilver = tier.position === 2
+
+          return (
+            <div
+              key={tier.position}
+              className={cn(
+                "p-4 rounded-2xl border flex flex-col justify-between transition-all shadow-xs gap-3",
+                isGold
+                  ? "bg-gradient-to-br from-amber-50 via-amber-100/50 to-amber-200/40 border-amber-300 ring-2 ring-amber-400/30"
+                  : isSilver
+                  ? "bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/50 border-slate-300"
+                  : "bg-gradient-to-br from-orange-50 via-orange-100/50 to-orange-200/40 border-orange-300"
+              )}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className={cn(
+                    "w-11 h-11 rounded-2xl flex items-center justify-center font-black text-base shadow-sm shrink-0 mt-0.5",
+                    isGold ? "bg-amber-500 text-white" : isSilver ? "bg-slate-600 text-white" : "bg-amber-700 text-white"
+                  )}
+                >
+                  {tier.positionShort}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                      {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
+                    </span>
+                    {tier.isTie && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-200/90 text-amber-900 border border-amber-300">
+                        যৌথ ({tier.students.length} জন)
+                      </span>
+                    )}
+                  </div>
+
+                  {!tier.isTie && tier.students[0] && (
+                    <div className="mt-1">
+                      <h3 className="font-black text-sm text-slate-900 truncate">
+                        {tier.students[0].student_name}
+                      </h3>
+                      <p className="text-[11px] font-mono text-slate-600 flex items-center gap-1.5 flex-wrap mt-0.5">
+                        {(tier.students[0].roll_no != null && String(tier.students[0].roll_no).trim() !== "") ? (
+                          <span className="font-bold text-slate-900 bg-white/90 px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                            রোল: #{tier.students[0].roll_no}
+                          </span>
+                        ) : (tier.students[0].roll && !tier.students[0].roll.startsWith("MS-")) ? (
+                          <span className="font-bold text-slate-900 bg-white/90 px-1.5 py-0.5 rounded border border-slate-200 shadow-2xs">
+                            রোল: #{tier.students[0].roll}
+                          </span>
+                        ) : null}
+                        <span className="text-slate-500 font-medium">
+                          ID: {tier.students[0].student_code || tier.students[0].roll || tier.students[0].student_id}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {tier.isTie && (
+                <div className="space-y-1.5 pt-1.5 border-t border-slate-200/70 max-h-44 overflow-y-auto pr-1">
+                  {tier.students.map((st, sIdx) => {
+                    const rollDisplay = (st.roll_no != null && String(st.roll_no).trim() !== "")
+                      ? st.roll_no
+                      : (st.roll && !st.roll.startsWith("MS-") ? st.roll : null)
+                    const idDisplay = st.student_code || (st.roll && st.roll.startsWith("MS-") ? st.roll : st.student_id)
+
+                    return (
+                      <div
+                        key={st.id || st.student_id || sIdx}
+                        className="bg-white/90 p-2 rounded-xl border border-slate-200/90 flex items-center justify-between text-xs gap-2 shadow-2xs"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black text-slate-900 text-xs truncate">
+                            {st.student_name}
+                          </p>
+                          <p className="text-[10px] font-mono text-slate-600 flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            {rollDisplay ? (
+                              <span className="font-bold text-indigo-950 bg-indigo-50/70 px-1 rounded border border-indigo-200">
+                                রোল: #{rollDisplay}
+                              </span>
+                            ) : null}
+                            {idDisplay ? <span className="text-slate-500 font-medium">ID: {idDisplay}</span> : null}
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                <span className="font-bold text-amber-800">
+                  {scoreLabel}: {tier.obtained_marks} / {maxMarks}
+                </span>
+                <span className="text-[11px] font-bold text-slate-700 bg-white/80 px-2 py-0.5 rounded-md border border-slate-200 shadow-2xs">
+                  {tier.pct}%, গ্রেড: {tier.grade}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans antialiased">
@@ -1340,45 +1551,7 @@ export default function OnlineResultPortalPage() {
                         এই দিনে এখনও কোনো শিক্ষার্থীর প্রাপ্ত নম্বর পাওয়া যায়নি।
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {dailyToppers.map((t, idx) => {
-                          const isGold = idx === 0
-                          const isSilver = idx === 1
-
-                          return (
-                            <div
-                              key={t.id || t.student_id}
-                              className={cn(
-                                "p-4 rounded-2xl border flex items-center gap-3.5 transition-all shadow-xs",
-                                isGold
-                                  ? "bg-gradient-to-br from-amber-50 via-amber-100/50 to-amber-200/40 border-amber-300 ring-2 ring-amber-400/30"
-                                  : isSilver
-                                  ? "bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/50 border-slate-300"
-                                  : "bg-gradient-to-br from-orange-50 via-orange-100/50 to-orange-200/40 border-orange-300"
-                              )}
-                            >
-                              <div
-                                className={cn(
-                                  "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm shrink-0",
-                                  isGold ? "bg-amber-500 text-white" : isSilver ? "bg-slate-600 text-white" : "bg-amber-700 text-white"
-                                )}
-                              >
-                                {isGold ? "১ম" : isSilver ? "২য়" : "৩য়"}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                  {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
-                                </span>
-                                <h3 className="font-black text-sm text-slate-900 truncate">{t.student_name}</h3>
-                                <p className="text-[11px] font-mono text-slate-500">ID: {t.roll}</p>
-                                <p className="text-xs font-bold text-amber-700 mt-1">
-                                  প্রাপ্ত: {t.obtained_marks} / {activeDayConfig.total_marks} ({t.pct}%, গ্রেড: {t.grade})
-                                </p>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                      renderTopperTierCards(dailyToppers, activeDayConfig.total_marks || 50, "প্রাপ্ত")
                     )}
                   </div>
 
@@ -1515,45 +1688,7 @@ export default function OnlineResultPortalPage() {
                         এখনও কোনো শিক্ষার্থীর নম্বর দেওয়া হয়নি।
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        {weeklyTotalToppers.map((t, idx) => {
-                          const isGold = idx === 0
-                          const isSilver = idx === 1
-
-                          return (
-                            <div
-                              key={t.id || t.student_id}
-                              className={cn(
-                                "p-4 rounded-2xl border flex items-center gap-3.5 transition-all shadow-xs",
-                                isGold
-                                  ? "bg-gradient-to-br from-amber-50 via-amber-100/50 to-amber-200/40 border-amber-300 ring-2 ring-amber-400/30"
-                                  : isSilver
-                                  ? "bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/50 border-slate-300"
-                                  : "bg-gradient-to-br from-orange-50 via-orange-100/50 to-orange-200/40 border-orange-300"
-                              )}
-                            >
-                              <div
-                                className={cn(
-                                  "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm shrink-0",
-                                  isGold ? "bg-amber-500 text-white" : isSilver ? "bg-slate-600 text-white" : "bg-amber-700 text-white"
-                                )}
-                              >
-                                {isGold ? "১ম" : isSilver ? "২য়" : "৩য়"}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                                  {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
-                                </span>
-                                <h3 className="font-black text-sm text-slate-900 truncate">{t.student_name}</h3>
-                                <p className="text-[11px] font-mono text-slate-500">ID: {t.roll}</p>
-                                <p className="text-xs font-bold text-amber-700 mt-1">
-                                  মোট প্রাপ্ত: {t.obtained_marks} / {totalWeeklyMaxMarks} ({t.pct}%, গ্রেড: {t.grade})
-                                </p>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                      renderTopperTierCards(weeklyTotalToppers, totalWeeklyMaxMarks, "মোট প্রাপ্ত")
                     )}
                   </div>
 
@@ -1575,33 +1710,94 @@ export default function OnlineResultPortalPage() {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                       {weeklySubjectToppers.map((st) => {
-                        const hasWinner = Boolean(st.studentName && st.score >= 0)
+                        const hasWinner = st.winners.length > 0 && st.score >= 0
+                        const isTie = st.winners.length > 1
+                        const primaryWinner = hasWinner ? st.winners[0] : null
 
                         return (
-                          <div key={st.day.key} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                                <span className="w-2 h-2 rounded-full bg-purple-600"></span>
-                                {st.day.day_bn}
-                              </span>
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                                পূর্ণমান: {st.day.total_marks}
-                              </span>
+                          <div key={st.day.key} className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2 flex flex-col justify-between">
+                            <div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                                  <span className="w-2 h-2 rounded-full bg-purple-600"></span>
+                                  {st.day.day_bn}
+                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  {isTie && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-200">
+                                      যৌথ ({st.winners.length} জন)
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                                    পূর্ণমান: {st.day.total_marks}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <p className="text-xs text-purple-900 font-bold truncate mt-1">
+                                {st.day.subject || st.day.exam_name}
+                              </p>
                             </div>
 
-                            <p className="text-xs text-purple-900 font-bold truncate">
-                              {st.day.subject || st.day.exam_name}
-                            </p>
-
                             {hasWinner ? (
-                              <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-xs">
-                                <div className="truncate">
-                                  <p className="font-bold text-slate-800 truncate">🏆 {st.studentName}</p>
-                                  <p className="text-[10px] text-slate-500 font-mono">ID: {st.studentRoll}</p>
-                                </div>
-                                <span className="font-black text-amber-700 shrink-0 ml-2">
-                                  {st.score}/{st.day.total_marks}
-                                </span>
+                              <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                                {!isTie && primaryWinner ? (
+                                  <div className="flex items-center justify-between text-xs">
+                                    <div className="truncate">
+                                      <p className="font-bold text-slate-800 truncate">🏆 {primaryWinner.student_name}</p>
+                                      <p className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                        {(primaryWinner.roll_no != null && String(primaryWinner.roll_no).trim() !== "") ? (
+                                          <span className="font-bold text-purple-900 bg-white px-1.5 py-0.5 rounded border border-purple-200">
+                                            রোল: #{primaryWinner.roll_no}
+                                          </span>
+                                        ) : (primaryWinner.roll && !primaryWinner.roll.startsWith("MS-")) ? (
+                                          <span className="font-bold text-purple-900 bg-white px-1.5 py-0.5 rounded border border-purple-200">
+                                            রোল: #{primaryWinner.roll}
+                                          </span>
+                                        ) : null}
+                                        <span className="text-slate-500">
+                                          ID: {primaryWinner.student_code || primaryWinner.roll || primaryWinner.student_id}
+                                        </span>
+                                      </p>
+                                    </div>
+                                    <span className="font-black text-amber-700 shrink-0 ml-2">
+                                      {st.score}/{st.day.total_marks}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <>
+                                    <div className="flex items-center justify-between text-xs pb-1 border-b border-slate-200">
+                                      <span className="text-[10px] font-bold text-purple-700">
+                                        যৌথ শীর্ষ স্কোর ({st.winners.length} জন)
+                                      </span>
+                                      <span className="font-black text-amber-700">
+                                        {st.score}/{st.day.total_marks}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-1 max-h-36 overflow-y-auto pr-0.5">
+                                      {st.winners.map((w, wIdx) => {
+                                        const rVal = (w.roll_no != null && String(w.roll_no).trim() !== "")
+                                          ? w.roll_no
+                                          : (w.roll && !w.roll.startsWith("MS-") ? w.roll : null)
+                                        const idVal = w.student_code || (w.roll && w.roll.startsWith("MS-") ? w.roll : w.student_id)
+
+                                        return (
+                                          <div key={w.student_id || wIdx} className="bg-white p-1.5 rounded-lg border border-slate-200 text-xs shadow-2xs">
+                                            <p className="font-bold text-slate-800 truncate">🏆 {w.student_name}</p>
+                                            <p className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                              {rVal ? (
+                                                <span className="font-bold text-purple-900 bg-purple-50 px-1 rounded border border-purple-200">
+                                                  রোল: #{rVal}
+                                                </span>
+                                              ) : null}
+                                              {idVal ? <span className="text-slate-500">ID: {idVal}</span> : null}
+                                            </p>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             ) : (
                               <p className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-200">
@@ -1643,6 +1839,7 @@ export default function OnlineResultPortalPage() {
                           <tr>
                             <th className="px-4 py-3 text-center w-12">#</th>
                             <th className="px-4 py-3">Student Name</th>
+                            <th className="px-4 py-3 text-center whitespace-nowrap">রোল নং</th>
                             <th className="px-4 py-3">Student ID</th>
                             {parsedWeeklyDays.map((d) => (
                               <th key={d.key} className="px-3 py-3 text-center whitespace-nowrap">
@@ -1660,7 +1857,7 @@ export default function OnlineResultPortalPage() {
                         <tbody className="divide-y divide-slate-100">
                           {weeklyTableRows.length === 0 ? (
                             <tr>
-                              <td colSpan={parsedWeeklyDays.length + 7} className="py-8 text-center text-slate-400">
+                              <td colSpan={parsedWeeklyDays.length + 8} className="py-8 text-center text-slate-400">
                                 কোনো শিক্ষার্থীর তথ্য পাওয়া যায়নি।
                               </td>
                             </tr>
@@ -1674,7 +1871,12 @@ export default function OnlineResultPortalPage() {
                                 <tr key={row.id || row.student_id} className="hover:bg-slate-50 transition-colors">
                                   <td className="px-4 py-3 text-center font-mono text-slate-500 font-bold">{idx + 1}</td>
                                   <td className="px-4 py-3 font-bold text-slate-900">{row.student_name}</td>
-                                  <td className="px-4 py-3 font-mono text-slate-600 font-semibold">{row.roll}</td>
+                                  <td className="px-4 py-3 text-center font-mono font-bold text-indigo-700">
+                                    {row.roll_no != null && String(row.roll_no).trim() !== ""
+                                      ? `#${row.roll_no}`
+                                      : (row.roll && !row.roll.startsWith("MS-") ? `#${row.roll}` : "—")}
+                                  </td>
+                                  <td className="px-4 py-3 font-mono text-slate-600 font-semibold">{row.student_code || row.roll}</td>
                                   {parsedWeeklyDays.map((d) => {
                                     const dObj = getDayMarkItem(row.day_marks, d.key, d.day_bn, d.day_en)
                                     return (
@@ -1706,20 +1908,20 @@ export default function OnlineResultPortalPage() {
                                     </span>
                                   </td>
                                   <td className="px-3 py-3 text-center font-black">
-                                    {obt !== null ? (
+                                    {row.rank !== null ? (
                                       <span
                                         className={cn(
                                           "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold",
-                                          idx === 0
+                                          row.rank === 1
                                             ? "bg-amber-500 text-white"
-                                            : idx === 1
+                                            : row.rank === 2
                                             ? "bg-slate-500 text-white"
-                                            : idx === 2
+                                            : row.rank === 3
                                             ? "bg-amber-700 text-white"
                                             : "bg-slate-100 text-slate-700"
                                         )}
                                       >
-                                        {idx + 1}
+                                        {row.rank}
                                       </span>
                                     ) : (
                                       <span className="text-slate-300">—</span>
@@ -1739,45 +1941,8 @@ export default function OnlineResultPortalPage() {
                 <>
                   {/* Top 3 Podium Cards */}
                   {top3.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {top3.map((r, idx) => {
-                        const isGold = idx === 0
-                        const isSilver = idx === 1
-
-                        return (
-                          <div
-                            key={r.id}
-                            className={`p-4 rounded-2xl border flex items-center gap-3.5 ${
-                              isGold
-                                ? "bg-gradient-to-br from-amber-50 to-amber-100/60 border-amber-300 shadow-sm"
-                                : isSilver
-                                ? "bg-gradient-to-br from-slate-50 to-slate-100 border-slate-300 shadow-sm"
-                                : "bg-gradient-to-br from-orange-50 to-orange-100/50 border-orange-300 shadow-sm"
-                            }`}
-                          >
-                            <div
-                              className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg shadow-xs ${
-                                isGold
-                                  ? "bg-amber-500 text-white"
-                                  : isSilver
-                                  ? "bg-slate-600 text-white"
-                                  : "bg-amber-700 text-white"
-                              }`}
-                            >
-                              {isGold ? "১ম" : isSilver ? "২য়" : "৩য়"}
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide">
-                                {isGold ? "🥇 ১ম স্থান" : isSilver ? "🥈 ২য় স্থান" : "🥉 ৩য় স্থান"}
-                              </p>
-                              <p className="font-extrabold text-sm text-slate-900 truncate">{r.student_name}</p>
-                              <p className="text-xs font-bold text-amber-700">
-                                প্রাপ্ত নম্বর: {r.obtained_marks} / {selectedExam.total_marks}
-                              </p>
-                            </div>
-                          </div>
-                        )
-                      })}
+                    <div className="mb-2">
+                      {renderTopperTierCards(top3, selectedExam.total_marks || 100, "প্রাপ্ত নম্বর")}
                     </div>
                   )}
 
@@ -1811,7 +1976,8 @@ export default function OnlineResultPortalPage() {
                           <tr>
                             <th className="px-4 py-3 text-center w-16">মেধা (Rank)</th>
                             <th className="px-4 py-3">শিক্ষার্থীর নাম</th>
-                            <th className="px-4 py-3">রোল / Student ID</th>
+                            <th className="px-4 py-3 text-center whitespace-nowrap">রোল নং</th>
+                            <th className="px-4 py-3">Student ID</th>
                             <th className="px-4 py-3 text-center">প্রাপ্ত নম্বর</th>
                             <th className="px-4 py-3 text-center">গ্রেড</th>
                             <th className="px-4 py-3 text-center">ফলাফল</th>
@@ -1857,7 +2023,12 @@ export default function OnlineResultPortalPage() {
                                     </div>
                                   )}
                                 </td>
-                                <td className="px-4 py-3 text-slate-600 font-mono font-medium">{r.roll}</td>
+                                <td className="px-4 py-3 text-center font-mono font-bold text-indigo-700">
+                                  {r.roll_no != null && String(r.roll_no).trim() !== ""
+                                    ? `#${r.roll_no}`
+                                    : (r.roll && !r.roll.startsWith("MS-") ? `#${r.roll}` : "—")}
+                                </td>
+                                <td className="px-4 py-3 text-slate-600 font-mono font-medium">{r.student_code || r.roll}</td>
                                 <td className="px-4 py-3 text-center font-black text-amber-700 text-sm">
                                   {r.obtained_marks} / {selectedExam.total_marks}
                                 </td>

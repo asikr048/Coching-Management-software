@@ -60,6 +60,50 @@ export async function POST(
     }
     if (!batchNames) batchNames = "সকল ব্যাচ (All Batches)"
 
+    // Resolve roll map from enrollments for student roll numbers
+    const batchId = exam.batch_id || (Array.isArray(exam.batch_ids) ? exam.batch_ids[0] : null)
+    const rollMap = new Map<string, number>()
+    if (batchId) {
+      const { data: enrollments } = await admin
+        .from("enrollments")
+        .select("student_id, roll_no, batch_roll")
+        .eq("batch_id", batchId)
+      if (enrollments) {
+        enrollments.forEach((en: any) => {
+          const r = Number(en.roll_no || en.batch_roll)
+          if (!isNaN(r) && r > 0) rollMap.set(en.student_id, r)
+        })
+      }
+    }
+
+    const formatStudentLabel = (r: any) => {
+      const s = r.student || {}
+      const roll = rollMap.get(r.student_id) || s.roll_no || s.batch_roll || null
+      const rollPart = roll ? `রোল: #${roll}, ` : ""
+      return `${s.name || "Student"} (${rollPart}ID: ${s.student_id || "N/A"})`
+    }
+
+    const computeDistinctScoreTiers = (items: any[]) => {
+      const distinctScores: number[] = []
+      for (const item of items) {
+        const sc = Number(item.obtained_marks ?? item.marks ?? 0)
+        if (!distinctScores.includes(sc)) {
+          distinctScores.push(sc)
+          if (distinctScores.length >= 3) break
+        }
+      }
+
+      return distinctScores.map((sc, tierIdx) => {
+        const tierItems = items.filter((item) => Number(item.obtained_marks ?? item.marks ?? 0) === sc)
+        return {
+          tierIdx,
+          score: sc,
+          items: tierItems,
+          isTie: tierItems.length > 1,
+        }
+      })
+    }
+
     let noticeTitle = ""
     let noticeContent = ""
 
@@ -67,7 +111,7 @@ export async function POST(
       // Consolidated Weekly Results with Total Toppers & Subject-wise Toppers
       const { data: results } = await admin
         .from("exam_results")
-        .select("*, student:students(name, student_id)")
+        .select("*, student:students(id, name, student_id, roll_no, batch_roll)")
         .eq("exam_id", examId)
         .order("obtained_marks", { ascending: false })
 
@@ -91,15 +135,17 @@ export async function POST(
 
       if (totalMaxMarks === 0) totalMaxMarks = exam.total_marks || 100
 
-      // Overall Top 3 Podium
-      const top3 = (results || []).slice(0, 3)
+      // Overall Top 3 Podium (supporting ties)
+      const overallTiers = computeDistinctScoreTiers(results || [])
       let overallToppersText = ""
-      if (top3.length > 0) {
+      if (overallTiers.length > 0) {
         overallToppersText = "\n\n🏆 সামগ্রিক শীর্ষ মেধা (Overall Grand Toppers):\n" +
-          top3.map((r, idx) => {
-            const medal = idx === 0 ? "🥇 ১ম:" : idx === 1 ? "🥈 ২য়:" : "🥉 ৩য়:"
-            const pct = Math.round((Number(r.obtained_marks || 0) / totalMaxMarks) * 100)
-            return `${medal} ${r.student?.name || "Student"} (ID: ${r.student?.student_id || "N/A"}) — প্রাপ্ত নম্বর: ${r.obtained_marks}/${totalMaxMarks} (${pct}%, গ্রেড: ${r.grade || "A+"})`
+          overallTiers.map((tier) => {
+            const medal = tier.tierIdx === 0 ? "🥇 ১ম" : tier.tierIdx === 1 ? "🥈 ২য়" : "🥉 ৩য়"
+            const tieBadge = tier.isTie ? ` (যৌথ - ${tier.items.length} জন)` : ""
+            const pct = Math.round((tier.score / totalMaxMarks) * 100)
+            const studentsStr = tier.items.map(formatStudentLabel).join(", ")
+            return `${medal}${tieBadge}: ${studentsStr} — প্রাপ্ত নম্বর: ${tier.score}/${totalMaxMarks} (${pct}%)`
           }).join("\n")
       }
 
@@ -114,14 +160,13 @@ export async function POST(
         } catch {}
       }
 
-      // Subject-wise Toppers
+      // Subject-wise Toppers (supporting ties)
       let subjectToppersText = ""
       if (daysInfo.length > 0 && results && results.length > 0) {
         const subLines: string[] = []
         for (const d of daysInfo) {
-          let topStudentName = ""
-          let topStudentId = ""
-          let topScore = -1
+          let maxScore = -1
+          const studentDayEntries: Array<{ student_id: string; student: any; score: number }> = []
 
           for (const r of results) {
             const studentDays = (r.day_marks && typeof r.day_marks === "object" && Object.keys(r.day_marks).length > 0)
@@ -149,16 +194,24 @@ export async function POST(
               } catch {}
             }
             const sScore = dayMarkObj ? Number(dayMarkObj.marks ?? dayMarkObj) : -1
-            if (sScore > topScore) {
-              topScore = sScore
-              topStudentName = r.student?.name || "Student"
-              topStudentId = r.student?.student_id || ""
+            if (sScore >= 0) {
+              if (sScore > maxScore) {
+                maxScore = sScore
+              }
+              studentDayEntries.push({
+                student_id: r.student_id,
+                student: r.student,
+                score: sScore,
+              })
             }
           }
 
-          if (topScore >= 0) {
+          const winners = maxScore >= 0 ? studentDayEntries.filter((e) => e.score === maxScore) : []
+          if (winners.length > 0) {
             const subjDisplay = d.subject ? ` (${d.subject})` : ""
-            subLines.push(`  • ${d.label}${subjDisplay}: ${topStudentName} (ID: ${topStudentId}) — ${topScore}/${d.total}`)
+            const tieBadge = winners.length > 1 ? ` (যৌথ - ${winners.length} জন)` : ""
+            const winnersStr = winners.map(formatStudentLabel).join(", ")
+            subLines.push(`  • ${d.label}${subjDisplay}${tieBadge}: ${winnersStr} — ${maxScore}/${d.total}`)
           }
         }
         if (subLines.length > 0) {
@@ -186,7 +239,7 @@ export async function POST(
       // Fetch results
       const { data: results } = await admin
         .from("exam_results")
-        .select("*, student:students(name, student_id)")
+        .select("*, student:students(id, name, student_id, roll_no, batch_roll)")
         .eq("exam_id", examId)
         .order("obtained_marks", { ascending: false })
 
@@ -198,14 +251,17 @@ export async function POST(
       const activeTitle = day_exam_name ? `${exam.title} (${day_exam_name})` : exam.title
       const activeTotalMarks = day_total_marks || exam.total_marks
 
-      // Top 3
-      const top3 = (results || []).slice(0, 3)
+      // Distinct Top 3 Score Tiers for single exam (supporting ties)
+      const topTiers = computeDistinctScoreTiers(results || [])
       let topText = ""
-      if (top3.length > 0) {
+      if (topTiers.length > 0) {
         topText = "\n\n🏆 শীর্ষ মেধাতালিকা (Top Rankers):\n" +
-          top3.map((r, idx) => {
-            const medal = idx === 0 ? "🥇 ১ম:" : idx === 1 ? "🥈 ২য়:" : "🥉 ৩য়:"
-            return `${medal} ${r.student?.name || "Student"} (ID: ${r.student?.student_id || "N/A"}) - ${r.obtained_marks}/${activeTotalMarks}`
+          topTiers.map((tier) => {
+            const medal = tier.tierIdx === 0 ? "🥇 ১ম" : tier.tierIdx === 1 ? "🥈 ২য়" : "🥉 ৩য়"
+            const tieBadge = tier.isTie ? ` (যৌথ - ${tier.items.length} জন)` : ""
+            const pct = Math.round((tier.score / (Number(activeTotalMarks) || 100)) * 100)
+            const studentsStr = tier.items.map(formatStudentLabel).join(", ")
+            return `${medal}${tieBadge}: ${studentsStr} — ${tier.score}/${activeTotalMarks} (${pct}%)`
           }).join("\n")
       }
 
