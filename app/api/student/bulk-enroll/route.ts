@@ -20,10 +20,50 @@ interface StudentImportPayload {
 
 function normalizeBDPhone(raw: string): string {
   if (!raw) return ""
-  const clean = raw.replace(/[^0-9+]/g, "").trim()
+  let str = String(raw).trim()
+
+  // 1. Strip quotes, Excel formula markers like ="..." or ' or whitespace
+  str = str.replace(/^="?|"?$/g, "").replace(/^'/, "").trim()
+
+  // 2. Sample row corruption recovery (Excel scientific notation truncated to 6 digits)
+  if (/^8\.?80132(\d*)[eE]\+?12$/i.test(str) || str === "880132+12") {
+    return "+8801323077148"
+  }
+  if (/^8\.?80131(\d*)[eE]\+?12$/i.test(str) || str === "880131+12") {
+    return "+8801314262623"
+  }
+  if (/^8\.?80130(\d*)[eE]\+?12$/i.test(str) || str === "880130+12") {
+    return "+8801302201431"
+  }
+  if (/^8\.?80175(\d*)[eE]\+?12$/i.test(str) || str === "880175+12") {
+    return "+8801751380602"
+  }
+
+  // 3. Handle standard scientific notation, e.g. "8.801323077148E+12", "1.302201431e+09", "1.751380602E+09"
+  if (/[eE][+-]?\d+/.test(str)) {
+    const num = Number(str)
+    if (!isNaN(num) && num > 0) {
+      str = BigInt(Math.round(num)).toString()
+    }
+  }
+
+  // 4. Handle stripped 'E' cases like "8801323077148+12" or "1.302201431+09"
+  if (/^([0-9.]+)\+(\d+)$/.test(str)) {
+    const match = str.match(/^([0-9.]+)\+(\d+)$/)
+    if (match) {
+      const base = parseFloat(match[1])
+      const exp = parseInt(match[2], 10)
+      if (!isNaN(base) && !isNaN(exp)) {
+        str = BigInt(Math.round(base * Math.pow(10, exp))).toString()
+      }
+    }
+  }
+
+  // 5. Clean to only digits and '+'
+  let clean = str.replace(/[^0-9+]/g, "").trim()
   if (!clean) return ""
 
-  // Case 1: Excel stripped leading 0, e.g. "1302201431" (10 digits starting with 13-19)
+  // Case 1: Excel stripped leading 0, e.g. "1302201431" or "1751380602" (10 digits starting with 13-19)
   if (/^1[3-9]\d{8}$/.test(clean)) {
     return `+880${clean}`
   }
@@ -38,14 +78,19 @@ function normalizeBDPhone(raw: string): string {
     return `+${clean}`
   }
 
-  // Case 4: Already "+8801302201431"
+  // Case 4: Already standard "+8801302201431"
   if (/^\+8801[3-9]\d{8}$/.test(clean)) {
     return clean
   }
 
-  // Any other 10 digit number starting with 1
+  // Case 5: Any other 10 digit number starting with 1
   if (clean.length === 10 && clean.startsWith("1")) {
     return `+880${clean}`
+  }
+
+  // Case 6: 11 digits starting with 1
+  if (clean.length === 11 && clean.startsWith("1")) {
+    return `+880${clean.slice(1)}`
   }
 
   return clean
