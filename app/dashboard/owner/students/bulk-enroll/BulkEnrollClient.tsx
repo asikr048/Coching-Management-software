@@ -62,6 +62,39 @@ interface ParsedStudent {
   errors: string[]
 }
 
+export function normalizeBDPhone(raw: string): string {
+  if (!raw) return ""
+  let clean = raw.replace(/[^0-9+]/g, "").trim()
+  if (!clean) return ""
+
+  // Case 1: Excel stripped leading 0, e.g. "1302201431" (10 digits starting with 13-19)
+  if (/^1[3-9]\d{8}$/.test(clean)) {
+    return `+880${clean}`
+  }
+
+  // Case 2: Standard local 11 digits starting with 01, e.g. "01302201431"
+  if (/^01[3-9]\d{8}$/.test(clean)) {
+    return `+88${clean}`
+  }
+
+  // Case 3: 13 digits starting with 8801, e.g. "8801302201431"
+  if (/^8801[3-9]\d{8}$/.test(clean)) {
+    return `+${clean}`
+  }
+
+  // Case 4: Already "+8801302201431"
+  if (/^\+8801[3-9]\d{8}$/.test(clean)) {
+    return clean
+  }
+
+  // Any other 10 digit number starting with 1
+  if (clean.length === 10 && clean.startsWith("1")) {
+    return `+880${clean}`
+  }
+
+  return clean
+}
+
 interface BulkEnrollClientProps {
   initialBatches?: Batch[]
   branches?: Branch[]
@@ -308,8 +341,8 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       if (cells.every(c => !c)) continue
 
       const name = colIndex.name >= 0 && cells[colIndex.name] ? cells[colIndex.name].replace(/^["']|["']$/g, "").trim() : ""
-      let guardianPhone = colIndex.guardian_phone >= 0 && cells[colIndex.guardian_phone] ? cells[colIndex.guardian_phone].replace(/[^0-9+]/g, "").trim() : ""
-      let studentPhone = colIndex.phone >= 0 && cells[colIndex.phone] ? cells[colIndex.phone].replace(/[^0-9+]/g, "").trim() : ""
+      let guardianPhone = normalizeBDPhone(colIndex.guardian_phone >= 0 && cells[colIndex.guardian_phone] ? cells[colIndex.guardian_phone] : "")
+      let studentPhone = normalizeBDPhone(colIndex.phone >= 0 && cells[colIndex.phone] ? cells[colIndex.phone] : "")
       const guardianName = colIndex.guardian_name >= 0 && cells[colIndex.guardian_name] ? cells[colIndex.guardian_name].replace(/^["']|["']$/g, "").trim() : ""
       const address = colIndex.address >= 0 && cells[colIndex.address] ? cells[colIndex.address].replace(/^["']|["']$/g, "").trim() : ""
       const school = colIndex.school_college >= 0 && cells[colIndex.school_college] ? cells[colIndex.school_college].replace(/^["']|["']$/g, "").trim() : ""
@@ -332,7 +365,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
       const errors: string[] = []
       if (!name) errors.push("নাম প্রয়োজন (Missing Name)")
       if (!guardianPhone && !studentPhone) errors.push("মোবাইল নম্বর প্রয়োজন (Missing Phone)")
-      else if ((guardianPhone || studentPhone).length < 7) errors.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
+      else if ((guardianPhone || studentPhone).replace(/[^0-9]/g, "").length < 10) errors.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
 
       students.push({
         id: `stu_${i}_${Date.now().toString(36)}`,
@@ -392,7 +425,11 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
   const handleUpdateStudentCell = (id: string, field: keyof ParsedStudent, val: any) => {
     setParsedStudents(prev => prev.map(s => {
       if (s.id !== id) return s
-      const updated = { ...s, [field]: val }
+      let finalVal = val
+      if ((field === "guardian_phone" || field === "phone") && typeof val === "string") {
+        finalVal = normalizeBDPhone(val)
+      }
+      const updated = { ...s, [field]: finalVal }
       const errors: string[] = []
       if (!updated.name?.trim()) errors.push("Missing Name")
       if (!updated.guardian_phone?.trim() && !updated.phone?.trim()) errors.push("Missing Phone")
@@ -445,10 +482,10 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
         password: password.trim(),
         students: parsedStudents.map(s => ({
           name: s.name.trim(),
-          guardian_phone: s.guardian_phone.trim(),
+          guardian_phone: normalizeBDPhone(s.guardian_phone),
           due_amount: Number(s.due_amount) || 0,
           guardian_name: s.guardian_name?.trim() || "",
-          phone: s.phone?.trim() || "",
+          phone: normalizeBDPhone(s.phone || ""),
           address: s.address?.trim() || "",
           school_college: s.school_college?.trim() || "",
           gender: s.gender || "male",
@@ -701,7 +738,7 @@ export default function BulkEnrollClient({ initialBatches = [], branches = [] }:
               className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-slate-900 shadow-2xs font-medium cursor-pointer"
             >
               <option value="all">সকল শাখা (All Branches)</option>
-              {effectiveBranches.map((br) => (
+              {effectiveBranches.map((br: any) => (
                 <option key={br.id} value={br.id}>{br.name}</option>
               ))}
             </select>

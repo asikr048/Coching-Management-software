@@ -18,6 +18,39 @@ interface StudentImportPayload {
   email?: string
 }
 
+function normalizeBDPhone(raw: string): string {
+  if (!raw) return ""
+  const clean = raw.replace(/[^0-9+]/g, "").trim()
+  if (!clean) return ""
+
+  // Case 1: Excel stripped leading 0, e.g. "1302201431" (10 digits starting with 13-19)
+  if (/^1[3-9]\d{8}$/.test(clean)) {
+    return `+880${clean}`
+  }
+
+  // Case 2: Standard local 11 digits starting with 01, e.g. "01302201431"
+  if (/^01[3-9]\d{8}$/.test(clean)) {
+    return `+88${clean}`
+  }
+
+  // Case 3: 13 digits starting with 8801, e.g. "8801302201431"
+  if (/^8801[3-9]\d{8}$/.test(clean)) {
+    return `+${clean}`
+  }
+
+  // Case 4: Already "+8801302201431"
+  if (/^\+8801[3-9]\d{8}$/.test(clean)) {
+    return clean
+  }
+
+  // Any other 10 digit number starting with 1
+  if (clean.length === 10 && clean.startsWith("1")) {
+    return `+880${clean}`
+  }
+
+  return clean
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -144,8 +177,10 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < students.length; i++) {
       const row: StudentImportPayload = students[i]
       const trimmedName = (row.name || `Student ${i + 1}`).trim()
-      const guardianPhone = (row.guardian_phone || row.phone || "").trim()
-      const studentPhone = (row.phone || "").trim()
+      const guardianPhone = normalizeBDPhone(row.guardian_phone || row.phone || "")
+      const studentPhone = normalizeBDPhone(row.phone || "")
+      const effectiveStudentPhone = studentPhone || guardianPhone
+      const effectiveGuardianPhone = guardianPhone || studentPhone || "+8801700000000"
       const guardianName = (row.guardian_name || "").trim()
       const address = (row.address || "").trim()
       const school = (row.school_college || "").trim()
@@ -170,7 +205,7 @@ export async function POST(req: NextRequest) {
           user_metadata: {
             full_name: trimmedName,
             user_id: studentIdStr,
-            phone: studentPhone || guardianPhone,
+            phone: effectiveStudentPhone,
             initial_password: password
           }
         })
@@ -186,7 +221,7 @@ export async function POST(req: NextRequest) {
               user_metadata: {
                 full_name: trimmedName,
                 user_id: studentIdStr,
-                phone: studentPhone || guardianPhone,
+                phone: effectiveStudentPhone,
                 initial_password: password
               }
             })
@@ -203,7 +238,7 @@ export async function POST(req: NextRequest) {
           user_id: studentIdStr,
           email: studentEmail,
           name: trimmedName,
-          phone: studentPhone || guardianPhone,
+          phone: effectiveStudentPhone,
           auth_user_id: authUserId
         })
       } catch {}
@@ -213,11 +248,11 @@ export async function POST(req: NextRequest) {
         student_id: studentIdStr,
         name: trimmedName,
         branch_id: effectiveBranchId,
-        phone: studentPhone || null,
+        phone: effectiveStudentPhone || null,
         email: studentEmail,
         gender: gender,
         guardian_name: guardianName || null,
-        guardian_phone: guardianPhone || studentPhone || "01700000000",
+        guardian_phone: effectiveGuardianPhone,
         guardian_relation: "Parent",
         address: address || null,
         school_college: school || null,
@@ -290,10 +325,10 @@ export async function POST(req: NextRequest) {
         student_name: trimmedName,
         student_id: studentIdStr,
         password: password,
-        student_phone: studentPhone || undefined,
+        student_phone: effectiveStudentPhone || undefined,
         student_email: studentEmail,
         guardian_name: guardianName || undefined,
-        guardian_phone: guardianPhone || undefined,
+        guardian_phone: effectiveGuardianPhone || undefined,
         batch_name: batch.name,
         batch_roll: assignedRoll,
         branch_name: branchName,
@@ -314,9 +349,9 @@ export async function POST(req: NextRequest) {
         batch_roll: assignedRoll,
         subject: batch.subject || batch.class_level || "General",
         branch_name: branchName,
-        student_phone: studentPhone || undefined,
+        student_phone: effectiveStudentPhone || undefined,
         guardian_name: guardianName || undefined,
-        guardian_phone: guardianPhone || undefined,
+        guardian_phone: effectiveGuardianPhone || undefined,
         qr_data: `MEDHASHIREE-ID:${studentIdStr}|ROLL:${assignedRoll}|BATCH:${batch.name}|NAME:${trimmedName}`
       }
 
