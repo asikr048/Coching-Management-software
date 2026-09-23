@@ -238,31 +238,44 @@ export async function GET(
 
     if (isWeekly) {
       try {
-        let query = admin
-          .from("exams")
-          .select("id, title, total_marks, pass_marks, exam_date, result_note, exam_schedule_type, batch_id, branch_id, created_at")
-          .order("created_at", { ascending: true })
-
+        let rawSeries: any[] = []
+        let query = admin.from("exams").select("*").order("created_at", { ascending: true })
         if (exam.branch_id) {
           query = query.or(`branch_id.eq.${exam.branch_id},branch_id.is.null`)
         }
+        const { data: qData, error: qErr } = await query
+        if (!qErr && qData && qData.length > 0) {
+          rawSeries = qData
+        } else {
+          const { data: fbData } = await supabase.from("exams").select("*").order("created_at", { ascending: true })
+          if (fbData) rawSeries = fbData
+        }
 
-        const { data: rawSeries } = await query
-        if (rawSeries) {
-          seriesExams = rawSeries.filter((e) => {
-            const ewIsWeekly =
-              e.exam_schedule_type === "weekly" ||
-              (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
-              (e.result_note && e.result_note.includes("[SERIES_WEEK:"))
-            if (!ewIsWeekly) return false
+        seriesExams = rawSeries.filter((e) => {
+          const ewIsWeekly =
+            e.exam_schedule_type === "weekly" ||
+            (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
+            (e.result_note && (e.result_note.includes("[SERIES_WEEK:") || e.result_note.includes("[WEEKLY_SCHEDULE:"))) ||
+            (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
+            (Number(e.total_marks) === 350 && !e.exam_date)
 
-            if (exam.batch_id && e.batch_id && e.batch_id !== exam.batch_id) {
-              const isPatternMatch =
-                (e.title && /weekly[-\s_]?\d+/i.test(e.title)) || (e.title && /সাপ্তাহিক[-\s_]?\d+/.test(e.title))
-              if (!isPatternMatch) return false
-            }
-            return true
-          })
+          if (!ewIsWeekly) return false
+
+          if (exam.branch_id && e.branch_id && e.branch_id !== exam.branch_id) {
+            return false
+          }
+
+          if (exam.batch_id && e.batch_id && e.batch_id !== exam.batch_id) {
+            const isPatternMatch =
+              (e.title && /weekly[-\s_]?\d+/i.test(e.title)) || (e.title && /সাপ্তাহিক[-\s_]?\d+/.test(e.title))
+            const noteHasBatch = (e.result_note && e.result_note.includes(exam.batch_id)) || (exam.result_note && exam.result_note.includes(e.batch_id))
+            if (!isPatternMatch && !noteHasBatch) return false
+          }
+          return true
+        })
+
+        if (!seriesExams.some((e) => e.id === exam.id)) {
+          seriesExams.push(exam)
         }
       } catch (err) {
         console.warn("Failed to load series exams in API:", err)

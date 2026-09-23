@@ -1005,6 +1005,10 @@ export default function ExamResultsPage() {
       const w = extractWeekNumber(e.title, e.result_note)
       if (w && w > maxWeek) maxWeek = w
     })
+    combinedWeeksExamsList.forEach((e) => {
+      const w = extractWeekNumber(e.title, e.result_note)
+      if (w && w > maxWeek) maxWeek = w
+    })
 
     const slots: Array<{
       weekNum: number
@@ -1014,7 +1018,10 @@ export default function ExamResultsPage() {
     }> = []
 
     for (let w = 1; w <= maxWeek; w++) {
-      const found = weeklySeriesExams.find((e) => {
+      const found = (combinedWeeksExamsList || []).find((e) => {
+        const ew = extractWeekNumber(e.title, e.result_note)
+        return ew === w
+      }) || (weeklySeriesExams || []).find((e) => {
         const ew = extractWeekNumber(e.title, e.result_note)
         return ew === w
       }) || (w === curNum ? exam : null)
@@ -1047,32 +1054,43 @@ export default function ExamResultsPage() {
     }
 
     return { prevWeekExam: prev, nextWeekExam: next, currentWeekNum: curNum, fullSeriesSlots: slots }
-  }, [exam, weeklySeriesExams])
+  }, [exam, weeklySeriesExams, combinedWeeksExamsList])
 
   // 1. Immediately load series exams when exam is available
   async function loadWeeklySeriesExams() {
     if (!exam) return
     try {
-      const { data: allExams, error } = await supabase
-        .from("exams")
-        .select("id, title, total_marks, pass_marks, exam_date, result_note, exam_schedule_type, batch_id, branch_id, created_at")
-        .order("created_at", { ascending: true })
+      // 1. Try fetching from server API first (bypasses RLS with admin client)
+      let seriesFromApi: any[] = []
+      try {
+        const res = await fetch(`/api/exams/${exam.id}`)
+        if (res.ok) {
+          const d = await res.json()
+          if (Array.isArray(d.series_exams) && d.series_exams.length > 0) {
+            seriesFromApi = d.series_exams
+          }
+        }
+      } catch {}
 
-      if (error) {
-        console.error("Error fetching weekly series exams:", error)
-        setWeeklySeriesExams([exam])
-        setCombinedWeeksExamsList([exam])
-        return
-      }
+      // 2. Query Supabase with select("*") (safe against column schema mismatches)
+      const { data: allExams } = await supabase
+        .from("exams")
+        .select("*")
+        .order("created_at", { ascending: true })
 
       const curBatchId = exam.batch_id
       const curBranchId = exam.branch_id
 
-      const weeklyExams = (allExams || []).filter((e) => {
+      const pool = [...seriesFromApi, ...(allExams || [])]
+      const uniqueExams = Array.from(new Map(pool.map((e) => [e.id, e])).values())
+
+      const weeklyExams = uniqueExams.filter((e) => {
         const isWeekly =
           e.exam_schedule_type === "weekly" ||
+          (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
           (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
-          (e.result_note && e.result_note.includes("[SERIES_WEEK:"))
+          (e.result_note && (e.result_note.includes("[SERIES_WEEK:") || e.result_note.includes("[WEEKLY_SCHEDULE:"))) ||
+          (Number(e.total_marks) === 350 && !e.exam_date)
 
         if (!isWeekly) return false
 
@@ -1090,6 +1108,7 @@ export default function ExamResultsPage() {
           !e.batch_id ||
           e.batch_id === curBatchId ||
           (e.result_note && e.result_note.includes(curBatchId)) ||
+          (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id)) ||
           isWeeklyPattern
 
         return isSameBatch
@@ -1110,8 +1129,8 @@ export default function ExamResultsPage() {
       setCombinedWeeksExamsList(weeklyExams)
     } catch (err) {
       console.error("Failed to load weekly series exams:", err)
-      setWeeklySeriesExams([exam])
-      setCombinedWeeksExamsList([exam])
+      setWeeklySeriesExams((prev) => (prev.length > 0 ? prev : [exam]))
+      setCombinedWeeksExamsList((prev) => (prev.length > 0 ? prev : [exam]))
     }
   }
 
@@ -1124,7 +1143,7 @@ export default function ExamResultsPage() {
       if (targetExams.length <= 1) {
         const { data: allExams } = await supabase
           .from("exams")
-          .select("id, title, total_marks, pass_marks, exam_date, result_note, exam_schedule_type, batch_id, branch_id, created_at")
+          .select("*")
           .order("created_at", { ascending: true })
 
         const curBatchId = exam.batch_id
@@ -1133,13 +1152,22 @@ export default function ExamResultsPage() {
         targetExams = (allExams || []).filter((e) => {
           const isWeekly =
             e.exam_schedule_type === "weekly" ||
+            (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
             (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
-            (e.result_note && e.result_note.includes("[SERIES_WEEK:"))
+            (e.result_note && (e.result_note.includes("[SERIES_WEEK:") || e.result_note.includes("[WEEKLY_SCHEDULE:"))) ||
+            (Number(e.total_marks) === 350 && !e.exam_date)
 
           if (!isWeekly) return false
           if (curBranchId && e.branch_id && e.branch_id !== curBranchId) return false
           const isWeeklyPattern = (e.title && /weekly[-\s_]?\d+/i.test(e.title)) || (e.title && /সাপ্তাহিক[-\s_]?\d+/.test(e.title))
-          return !curBatchId || !e.batch_id || e.batch_id === curBatchId || (e.result_note && e.result_note.includes(curBatchId)) || isWeeklyPattern
+          return (
+            !curBatchId ||
+            !e.batch_id ||
+            e.batch_id === curBatchId ||
+            (e.result_note && e.result_note.includes(curBatchId)) ||
+            (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id)) ||
+            isWeeklyPattern
+          )
         })
 
         if (!targetExams.some((e) => e.id === exam.id)) {
@@ -1302,7 +1330,12 @@ export default function ExamResultsPage() {
   }
 
   function selectAllCombinedWeeks() {
-    setSelectedCombinedWeekIds(displayCombinedExams.map((e) => e.id))
+    const fromSlots = fullSeriesSlots.filter((s) => s.exam).map((s) => s.exam.id)
+    const fromDisplay = displayCombinedExams.map((e) => e.id)
+    const combinedIds = Array.from(new Set([...fromSlots, ...fromDisplay]))
+    if (combinedIds.length > 0) {
+      setSelectedCombinedWeekIds(combinedIds)
+    }
   }
 
   function selectLastNWeeks(n: number) {
@@ -1313,6 +1346,177 @@ export default function ExamResultsPage() {
     })
     const lastN = sorted.slice(-n)
     setSelectedCombinedWeekIds(lastN.map((e) => e.id))
+  }
+
+  // Create and add any week directly into the combined series without leaving the page
+  async function handleCreateAndAddWeekToCombined(targetWeekNum: number) {
+    if (!exam || targetWeekNum < 1) return
+    setCreatingWeekNum(targetWeekNum)
+    try {
+      const weekLabel = `WEEKLY-${targetWeekNum < 10 ? "0" + targetWeekNum : targetWeekNum}`
+
+      // 1. Check if exam already in memory
+      let existing = weeklySeriesExams.find((e) => {
+        const w = extractWeekNumber(e.title, e.result_note)
+        return w === targetWeekNum
+      })
+
+      // 2. If not in memory, check database with select("*")
+      if (!existing?.id) {
+        const { data: foundExams } = await supabase
+          .from("exams")
+          .select("*")
+          .or(`title.ilike.%${weekLabel}%,result_note.ilike.%[SERIES_WEEK:${targetWeekNum}]%`)
+
+        existing = (foundExams || []).find((e) => {
+          const w = extractWeekNumber(e.title, e.result_note)
+          return w === targetWeekNum
+        })
+      }
+
+      if (existing?.id) {
+        setWeeklySeriesExams((prev) => {
+          if (prev.some((e) => e.id === existing.id)) return prev
+          const next = [...prev, existing]
+          next.sort((a, b) => {
+            const numA = extractWeekNumber(a.title, a.result_note) || 0
+            const numB = extractWeekNumber(b.title, b.result_note) || 0
+            return numA - numB
+          })
+          return next
+        })
+        setCombinedWeeksExamsList((prev) => {
+          if (prev.some((e) => e.id === existing.id)) return prev
+          const next = [...prev, existing]
+          next.sort((a, b) => {
+            const numA = extractWeekNumber(a.title, a.result_note) || 0
+            const numB = extractWeekNumber(b.title, b.result_note) || 0
+            return numA - numB
+          })
+          return next
+        })
+        setSelectedCombinedWeekIds((prev) => (prev.includes(existing.id) ? prev : [...prev, existing.id]))
+
+        try {
+          const { data: resData } = await supabase
+            .from("exam_results")
+            .select("exam_id, student_id, obtained_marks, day_marks, grade")
+            .eq("exam_id", existing.id)
+
+          if (resData && resData.length > 0) {
+            setRawStudentWeekMarks((prevMap) => {
+              const updated = { ...prevMap }
+              resData.forEach((r) => {
+                let mark = Number(r.obtained_marks) || 0
+                if (mark === 0 && r.day_marks && typeof r.day_marks === "object") {
+                  const dayValues = Object.values(r.day_marks) as any[]
+                  const sumDay = dayValues.reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+                  if (sumDay > 0) mark = sumDay
+                }
+                const sid = r.student_id
+                if (!updated[sid]) updated[sid] = {}
+                updated[sid][r.exam_id] = mark
+              })
+              return updated
+            })
+          }
+        } catch {}
+
+        toast.success(`✓ ${existing.title || weekLabel} সমন্বিত মেধা তালিকায় যোগ করা হয়েছে!`)
+        return
+      }
+
+      // 3. Exam doesn't exist yet: Create it with identical batch, subjects, and recurring days!
+      toast.info(`Week ${targetWeekNum} (${weekLabel}) তৈরি ও যোগ করা হচ্ছে...`)
+
+      const targetBatchId = exam.batch_id || (Array.isArray(exam.batch_ids) ? exam.batch_ids[0] : null)
+      const batchIdsList = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0
+        ? exam.batch_ids
+        : exam.batch_id ? [exam.batch_id] : []
+
+      let updatedNote = `[SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
+      if (batchIdsList.length > 0) {
+        updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
+      }
+      if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(exam.recurring_days)}]`
+      }
+
+      const payload: any = {
+        title: weekLabel,
+        batch_id: targetBatchId,
+        subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+        total_marks: Number(exam.total_marks) || 100,
+        pass_marks: Number(exam.pass_marks) || 40,
+        exam_date: new Date().toISOString().split("T")[0],
+        result_note: updatedNote,
+        is_published: false,
+      }
+
+      if (exam.branch_id) payload.branch_id = exam.branch_id
+      if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
+      if (exam.recurring_days) payload.recurring_days = exam.recurring_days
+      if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
+
+      let insertedExam: any = null
+
+      const { data: inserted, error: insErr } = await supabase
+        .from("exams")
+        .insert(payload)
+        .select("*")
+        .single()
+
+      if (!insErr && inserted?.id) {
+        insertedExam = inserted
+      } else {
+        const minimalPayload = {
+          title: weekLabel,
+          batch_id: targetBatchId,
+          subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+          total_marks: Number(exam.total_marks) || 100,
+          pass_marks: Number(exam.pass_marks) || 40,
+          exam_date: new Date().toISOString().split("T")[0],
+          result_note: updatedNote,
+          is_published: false,
+        }
+        const { data: fbExam, error: fbErr } = await supabase
+          .from("exams")
+          .insert(minimalPayload)
+          .select("*")
+          .single()
+
+        if (fbErr) throw fbErr
+        insertedExam = fbExam
+      }
+
+      if (insertedExam?.id) {
+        toast.success(`✓ ${insertedExam.title || weekLabel} তৈরি ও সমন্বিত মেধা তালিকায় যোগ করা হয়েছে!`)
+        setWeeklySeriesExams((prev) => {
+          const next = [...prev.filter((e) => e.id !== insertedExam.id), insertedExam]
+          next.sort((a, b) => {
+            const numA = extractWeekNumber(a.title, a.result_note) || 0
+            const numB = extractWeekNumber(b.title, b.result_note) || 0
+            return numA - numB
+          })
+          return next
+        })
+        setCombinedWeeksExamsList((prev) => {
+          const next = [...prev.filter((e) => e.id !== insertedExam.id), insertedExam]
+          next.sort((a, b) => {
+            const numA = extractWeekNumber(a.title, a.result_note) || 0
+            const numB = extractWeekNumber(b.title, b.result_note) || 0
+            return numA - numB
+          })
+          return next
+        })
+        setSelectedCombinedWeekIds((prev) => (prev.includes(insertedExam.id) ? prev : [...prev, insertedExam.id]))
+      }
+    } catch (err: any) {
+      console.error("Create and add week error:", err)
+      toast.error(err.message || "Failed to create week")
+    } finally {
+      setCreatingWeekNum(null)
+    }
   }
 
   async function handlePublishSelectedCombinedResult() {
@@ -3286,10 +3490,18 @@ export default function ExamResultsPage() {
                 <button
                   key={`slot-${slot.weekNum}`}
                   type="button"
-                  onClick={() => handleOpenOrCreateWeek(slot.weekNum)}
+                  onClick={() =>
+                    selectedTab === "all_weeks_combined"
+                      ? handleCreateAndAddWeekToCombined(slot.weekNum)
+                      : handleOpenOrCreateWeek(slot.weekNum)
+                  }
                   disabled={creatingWeekNum === slot.weekNum}
                   className="px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-1.5 border border-purple-200 hover:border-purple-400 bg-white hover:bg-purple-50 text-purple-900 shrink-0 cursor-pointer shadow-2xs active:scale-95 transition-all"
-                  title={`${slot.title} এ যান বা শুরু করুন ও নম্বর দিন`}
+                  title={
+                    selectedTab === "all_weeks_combined"
+                      ? `${slot.title} তৈরি করুন এবং সমন্বিত মেধা তালিকায় যোগ করুন`
+                      : `${slot.title} এ যান বা শুরু করুন ও নম্বর দিন`
+                  }
                 >
                   {creatingWeekNum === slot.weekNum ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
@@ -3300,7 +3512,7 @@ export default function ExamResultsPage() {
                   )}
                   <span>{slot.title}</span>
                   <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.2 rounded font-bold">
-                    + খুলুন
+                    {selectedTab === "all_weeks_combined" ? "+ তৈরি ও যোগ" : "+ খুলুন"}
                   </span>
                 </button>
               )
@@ -3308,10 +3520,18 @@ export default function ExamResultsPage() {
 
             <button
               type="button"
-              onClick={() => handleOpenOrCreateWeek(fullSeriesSlots.length + 1)}
+              onClick={() =>
+                selectedTab === "all_weeks_combined"
+                  ? handleCreateAndAddWeekToCombined(fullSeriesSlots.length + 1)
+                  : handleOpenOrCreateWeek(fullSeriesSlots.length + 1)
+              }
               disabled={creatingWeekNum === fullSeriesSlots.length + 1}
               className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1 border border-dashed border-purple-300 bg-purple-50/50 hover:bg-purple-100 text-purple-700 shrink-0 cursor-pointer active:scale-95"
-              title="নতুন সপ্তাহ শুরু করুন"
+              title={
+                selectedTab === "all_weeks_combined"
+                  ? "নতুন পরবর্তী সপ্তাহ তৈরি করে সমন্বিত মেধা তালিকায় যুক্ত করুন"
+                  : "নতুন সপ্তাহ শুরু করুন"
+              }
             >
               {creatingWeekNum === fullSeriesSlots.length + 1 ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
@@ -3520,61 +3740,169 @@ export default function ExamResultsPage() {
 
               {/* Week Pills Horizontal Row */}
               <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 pt-0.5">
-                {displayCombinedExams.map((we, wIdx) => {
-                  const isSel = selectedCombinedWeekIds.includes(we.id)
-                  const wNum = extractWeekNumber(we.title, we.result_note) || (wIdx + 1)
+                {fullSeriesSlots.map((slot) => {
+                  if (slot.exam) {
+                    const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
+                    return (
+                      <button
+                        key={`hub-week-pill-${slot.exam.id}`}
+                        type="button"
+                        onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
+                        className={cn(
+                          "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[145px] sm:min-w-[170px] cursor-pointer shadow-2xs active:scale-95",
+                          isSel
+                            ? "bg-gradient-to-br from-blue-700 via-indigo-700 to-indigo-800 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
+                        )}
+                        title={`সমন্বিত ফলাফলে ${slot.exam.title || slot.title} অন্তর্ভুক্ত বা বাদ দিন`}
+                      >
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={cn(
+                                "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0",
+                                isSel ? "bg-white text-blue-900" : "bg-slate-200 text-slate-600"
+                              )}
+                            >
+                              W{slot.weekNum}
+                            </span>
+                            <span className={cn("text-xs font-black truncate", isSel ? "text-white" : "text-slate-800")}>
+                              {slot.exam.title || slot.title}
+                            </span>
+                          </div>
+
+                          {/* Checkbox Icon */}
+                          {isSel ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-300 shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-400 shrink-0" />
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between w-full text-[11px] mt-1 pt-1 border-t border-white/20">
+                          <span className={cn("font-medium", isSel ? "text-blue-100" : "text-slate-500")}>
+                            পূর্ণমান: {slot.exam.total_marks || 350} নম্বর
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[9px] font-bold px-1.5 py-0.2 rounded font-mono uppercase",
+                              isSel ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
+                            )}
+                          >
+                            {isSel ? "✓ অন্তর্ভুক্ত" : "বাদ"}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  }
 
                   return (
                     <button
-                      key={`hub-week-pill-${we.id}`}
+                      key={`hub-week-uncreated-${slot.weekNum}`}
                       type="button"
-                      onClick={() => toggleCombinedWeekSelection(we.id)}
-                      className={cn(
-                        "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[145px] sm:min-w-[170px] cursor-pointer shadow-2xs active:scale-95",
-                        isSel
-                          ? "bg-gradient-to-br from-blue-700 via-indigo-700 to-indigo-800 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
-                          : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
-                      )}
+                      onClick={() => handleCreateAndAddWeekToCombined(slot.weekNum)}
+                      disabled={creatingWeekNum === slot.weekNum}
+                      className="flex flex-col items-start gap-1 p-3 rounded-xl border border-dashed border-blue-300 hover:border-blue-500 bg-blue-50/40 hover:bg-blue-50 text-left transition-all shrink-0 min-w-[145px] sm:min-w-[170px] cursor-pointer shadow-2xs active:scale-95 group"
+                      title={`Week ${slot.weekNum} (${slot.title}) তৈরি করুন এবং সমন্বিত মেধা তালিকায় যুক্ত করুন`}
                     >
                       <div className="flex items-center justify-between w-full gap-2">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span
-                            className={cn(
-                              "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0",
-                              isSel ? "bg-white text-blue-900" : "bg-slate-200 text-slate-600"
-                            )}
-                          >
-                            W{wNum}
-                          </span>
-                          <span className={cn("text-xs font-black truncate", isSel ? "text-white" : "text-slate-800")}>
-                            {we.title || `WEEKLY-0${wNum}`}
+                          {creatingWeekNum === slot.weekNum ? (
+                            <Loader2 className="w-5 h-5 animate-spin text-blue-600 shrink-0" />
+                          ) : (
+                            <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0 bg-blue-100 text-blue-800 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                              W{slot.weekNum}
+                            </span>
+                          )}
+                          <span className="text-xs font-bold text-slate-800 truncate">
+                            {slot.title}
                           </span>
                         </div>
-
-                        {/* Checkbox Icon */}
-                        {isSel ? (
-                          <CheckSquare className="w-4 h-4 text-emerald-300 shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-400 shrink-0" />
-                        )}
+                        <Plus className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
                       </div>
 
-                      <div className="flex items-center justify-between w-full text-[11px] mt-1 pt-1 border-t border-white/20">
-                        <span className={cn("font-medium", isSel ? "text-blue-100" : "text-slate-500")}>
-                          পূর্ণমান: {we.total_marks || 350} নম্বর
-                        </span>
-                        <span
-                          className={cn(
-                            "text-[9px] font-bold px-1.5 py-0.2 rounded font-mono uppercase",
-                            isSel ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
-                          )}
-                        >
-                          {isSel ? "✓ অন্তর্ভুক্ত" : "বাদ"}
+                      <div className="flex items-center justify-between w-full text-[11px] mt-1 pt-1 border-t border-blue-100 text-slate-500">
+                        <span>অনির্ধারিত সপ্তাহ</span>
+                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded font-mono uppercase bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                          + তৈরি ও যোগ
                         </span>
                       </div>
                     </button>
                   )
                 })}
+
+                {/* Extra exams in displayCombinedExams not covered in fullSeriesSlots */}
+                {displayCombinedExams
+                  .filter((de) => !fullSeriesSlots.some((s) => s.exam?.id === de.id))
+                  .map((we, wIdx) => {
+                    const isSel = selectedCombinedWeekIds.includes(we.id)
+                    const wNum = extractWeekNumber(we.title, we.result_note) || (fullSeriesSlots.length + wIdx + 1)
+                    return (
+                      <button
+                        key={`hub-week-pill-extra-${we.id}`}
+                        type="button"
+                        onClick={() => toggleCombinedWeekSelection(we.id)}
+                        className={cn(
+                          "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[145px] sm:min-w-[170px] cursor-pointer shadow-2xs active:scale-95",
+                          isSel
+                            ? "bg-gradient-to-br from-blue-700 via-indigo-700 to-indigo-800 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
+                        )}
+                        title={`সমন্বিত ফলাফলে ${we.title} অন্তর্ভুক্ত বা বাদ দিন`}
+                      >
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={cn(
+                                "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0",
+                                isSel ? "bg-white text-blue-900" : "bg-slate-200 text-slate-600"
+                              )}
+                            >
+                              W{wNum}
+                            </span>
+                            <span className={cn("text-xs font-black truncate", isSel ? "text-white" : "text-slate-800")}>
+                              {we.title || `WEEKLY-0${wNum}`}
+                            </span>
+                          </div>
+                          {isSel ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-300 shrink-0" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-400 shrink-0" />
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between w-full text-[11px] mt-1 pt-1 border-t border-white/20">
+                          <span className={cn("font-medium", isSel ? "text-blue-100" : "text-slate-500")}>
+                            পূর্ণমান: {we.total_marks || 350} নম্বর
+                          </span>
+                          <span
+                            className={cn(
+                              "text-[9px] font-bold px-1.5 py-0.2 rounded font-mono uppercase",
+                              isSel ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
+                            )}
+                          >
+                            {isSel ? "✓ অন্তর্ভুক্ত" : "বাদ"}
+                          </span>
+                        </div>
+                      </button>
+                    )
+                  })}
+
+                {/* Dedicated "+ নতুন সপ্তাহ যোগ" Button at end of row */}
+                <button
+                  type="button"
+                  onClick={() => handleCreateAndAddWeekToCombined(fullSeriesSlots.length + 1)}
+                  disabled={creatingWeekNum === fullSeriesSlots.length + 1}
+                  className="flex flex-col items-center justify-center gap-1 p-3 rounded-xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-100/70 text-indigo-800 transition-all shrink-0 min-w-[140px] cursor-pointer active:scale-95 group shadow-2xs"
+                  title="নতুন পরবর্তী সপ্তাহ তৈরি করে সমন্বিত তালিকায় যুক্ত করুন"
+                >
+                  {creatingWeekNum === fullSeriesSlots.length + 1 ? (
+                    <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                  ) : (
+                    <Plus className="w-5 h-5 text-indigo-600 group-hover:scale-110 transition-transform" />
+                  )}
+                  <span className="text-xs font-bold whitespace-nowrap">+ নতুন সপ্তাহ ({fullSeriesSlots.length + 1})</span>
+                  <span className="text-[9px] text-indigo-600 font-semibold">তৈরি ও যুক্ত করুন</span>
+                </button>
               </div>
             </div>
           ) : (
@@ -3965,38 +4293,112 @@ export default function ExamResultsPage() {
 
               {/* Checkbox pills */}
               <div className="flex flex-wrap items-center gap-2">
-                {displayCombinedExams.map((we, wIdx) => {
-                  const isSel = selectedCombinedWeekIds.includes(we.id)
-                  const wTitle = we.title || `Week ${wIdx + 1}`
-                  return (
-                    <button
-                      key={`sel-week-${we.id}`}
-                      type="button"
-                      onClick={() => toggleCombinedWeekSelection(we.id)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-xl font-bold text-xs transition-all border flex items-center gap-2 cursor-pointer shadow-2xs",
-                        isSel
-                          ? "bg-blue-600 text-white border-blue-700 shadow-xs"
-                          : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
-                      )}
-                    >
-                      {isSel ? (
-                        <CheckSquare className="w-3.5 h-3.5 text-blue-200" />
-                      ) : (
-                        <Square className="w-3.5 h-3.5 text-slate-400" />
-                      )}
-                      <span>{wTitle}</span>
-                      <span
+                {fullSeriesSlots.map((slot) => {
+                  if (slot.exam) {
+                    const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
+                    return (
+                      <button
+                        key={`sel-week-${slot.exam.id}`}
+                        type="button"
+                        onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
                         className={cn(
-                          "text-[10px] px-1.5 py-0.5 rounded font-semibold",
-                          isSel ? "bg-blue-700 text-blue-100" : "bg-slate-200 text-slate-600"
+                          "px-3 py-1.5 rounded-xl font-bold text-xs transition-all border flex items-center gap-2 cursor-pointer shadow-2xs active:scale-95",
+                          isSel
+                            ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
                         )}
                       >
-                        {we.total_marks || 350} নম্বর
+                        {isSel ? (
+                          <CheckSquare className="w-3.5 h-3.5 text-blue-200" />
+                        ) : (
+                          <Square className="w-3.5 h-3.5 text-slate-400" />
+                        )}
+                        <span>{slot.exam.title || slot.title}</span>
+                        <span
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded font-semibold",
+                            isSel ? "bg-blue-700 text-blue-100" : "bg-slate-200 text-slate-600"
+                          )}
+                        >
+                          {slot.exam.total_marks || 350} নম্বর
+                        </span>
+                      </button>
+                    )
+                  }
+
+                  return (
+                    <button
+                      key={`sel-week-uncreated-${slot.weekNum}`}
+                      type="button"
+                      onClick={() => handleCreateAndAddWeekToCombined(slot.weekNum)}
+                      disabled={creatingWeekNum === slot.weekNum}
+                      className="px-3 py-1.5 rounded-xl font-bold text-xs transition-all border border-dashed border-blue-300 hover:border-blue-500 bg-blue-50/50 hover:bg-blue-100 text-blue-800 flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                      title={`${slot.title} তৈরি করুন এবং সমন্বিত মেধা তালিকায় যুক্ত করুন`}
+                    >
+                      {creatingWeekNum === slot.weekNum ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                      ) : (
+                        <Plus className="w-3.5 h-3.5 text-blue-600" />
+                      )}
+                      <span>{slot.title}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">
+                        + তৈরি ও যোগ
                       </span>
                     </button>
                   )
                 })}
+
+                {/* Extra exams not in fullSeriesSlots */}
+                {displayCombinedExams
+                  .filter((de) => !fullSeriesSlots.some((s) => s.exam?.id === de.id))
+                  .map((we, wIdx) => {
+                    const isSel = selectedCombinedWeekIds.includes(we.id)
+                    const wTitle = we.title || `Week ${wIdx + 1}`
+                    return (
+                      <button
+                        key={`sel-week-extra-${we.id}`}
+                        type="button"
+                        onClick={() => toggleCombinedWeekSelection(we.id)}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl font-bold text-xs transition-all border flex items-center gap-2 cursor-pointer shadow-2xs active:scale-95",
+                          isSel
+                            ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
+                        )}
+                      >
+                        {isSel ? (
+                          <CheckSquare className="w-3.5 h-3.5 text-blue-200" />
+                        ) : (
+                          <Square className="w-3.5 h-3.5 text-slate-400" />
+                        )}
+                        <span>{wTitle}</span>
+                        <span
+                          className={cn(
+                            "text-[10px] px-1.5 py-0.5 rounded font-semibold",
+                            isSel ? "bg-blue-700 text-blue-100" : "bg-slate-200 text-slate-600"
+                          )}
+                        >
+                          {we.total_marks || 350} নম্বর
+                        </span>
+                      </button>
+                    )
+                  })}
+
+                {/* Direct Add Next Week Button */}
+                <button
+                  type="button"
+                  onClick={() => handleCreateAndAddWeekToCombined(fullSeriesSlots.length + 1)}
+                  disabled={creatingWeekNum === fullSeriesSlots.length + 1}
+                  className="px-3 py-1.5 rounded-xl font-bold text-xs transition-all border border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
+                  title="নতুন পরবর্তী সপ্তাহ তৈরি করে যুক্ত করুন"
+                >
+                  {creatingWeekNum === fullSeriesSlots.length + 1 ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                  )}
+                  <span>+ নতুন সপ্তাহ ({fullSeriesSlots.length + 1})</span>
+                </button>
               </div>
 
               <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100 gap-2">
