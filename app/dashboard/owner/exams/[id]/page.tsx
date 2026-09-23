@@ -453,6 +453,10 @@ export default function ExamResultsPage() {
             if (Array.isArray(apiData.existing_results)) {
               apiResults = apiData.existing_results
             }
+            if (Array.isArray(apiData.series_exams) && apiData.series_exams.length > 0) {
+              setWeeklySeriesExams(apiData.series_exams)
+              setCombinedWeeksExamsList(apiData.series_exams)
+            }
           }
         } catch (apiErr) {
           console.warn("API exam load failed, proceeding to client fallback:", apiErr)
@@ -856,6 +860,126 @@ export default function ExamResultsPage() {
       toast.error(err.message || "Failed to start next week exam")
     } finally {
       setCreatingNextWeek(false)
+    }
+  }
+
+  // Universal Week Navigator / Creator: opens existing week or automatically creates it
+  const [creatingWeekNum, setCreatingWeekNum] = useState<number | null>(null)
+
+  async function handleOpenOrCreateWeek(targetWeekNum: number) {
+    if (!exam || targetWeekNum < 1) return
+
+    // 1. Check if the target week exam already exists in memory
+    const existing = weeklySeriesExams.find((e) => {
+      const w = extractWeekNumber(e.title, e.result_note)
+      return w === targetWeekNum
+    })
+
+    if (existing?.id) {
+      if (existing.id === exam.id) {
+        toast.info(`আপনি ইতিমধ্যে Week ${targetWeekNum}-এ আছেন`)
+        return
+      }
+      toast.info(`Week ${targetWeekNum}-এ নিয়ে যাওয়া হচ্ছে...`)
+      router.push(`/dashboard/owner/exams/${existing.id}`)
+      return
+    }
+
+    setCreatingWeekNum(targetWeekNum)
+    try {
+      const weekLabel = `WEEKLY-${targetWeekNum < 10 ? "0" + targetWeekNum : targetWeekNum}`
+
+      // 2. Query Supabase directly in case it exists in database but wasn't in state
+      const { data: foundExams } = await supabase
+        .from("exams")
+        .select("id, title, result_note, branch_id, batch_id")
+        .or(`title.ilike.%${weekLabel}%,result_note.ilike.%[SERIES_WEEK:${targetWeekNum}]%`)
+
+      const matched = (foundExams || []).find((e) => {
+        const w = extractWeekNumber(e.title, e.result_note)
+        return w === targetWeekNum
+      })
+
+      if (matched?.id) {
+        toast.info(`✓ ${matched.title || weekLabel}-এ নিয়ে যাওয়া হচ্ছে...`)
+        router.push(`/dashboard/owner/exams/${matched.id}`)
+        return
+      }
+
+      // 3. Exam doesn't exist yet: Create it with identical batch, subjects, and recurring days!
+      toast.info(`Week ${targetWeekNum} (${weekLabel}) তৈরি করা হচ্ছে...`)
+
+      const targetBatchId = exam.batch_id || (Array.isArray(exam.batch_ids) ? exam.batch_ids[0] : null)
+      const batchIdsList = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0
+        ? exam.batch_ids
+        : exam.batch_id ? [exam.batch_id] : []
+
+      let updatedNote = `[SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
+      if (batchIdsList.length > 0) {
+        updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
+      }
+      if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(exam.recurring_days)}]`
+      }
+
+      const payload: any = {
+        title: weekLabel,
+        batch_id: targetBatchId,
+        subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+        total_marks: Number(exam.total_marks) || 100,
+        pass_marks: Number(exam.pass_marks) || 40,
+        exam_date: new Date().toISOString().split("T")[0],
+        result_note: updatedNote,
+        is_published: false,
+      }
+
+      if (exam.branch_id) payload.branch_id = exam.branch_id
+      if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
+      if (exam.recurring_days) payload.recurring_days = exam.recurring_days
+      if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
+
+      let insertedId: string | null = null
+
+      const { data: inserted, error: insErr } = await supabase
+        .from("exams")
+        .insert(payload)
+        .select("id")
+        .single()
+
+      if (!insErr && inserted?.id) {
+        insertedId = inserted.id
+      } else {
+        console.warn("Standard insert failed, attempting minimal fallback:", insErr)
+        const minimalPayload = {
+          title: weekLabel,
+          batch_id: targetBatchId,
+          subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+          total_marks: Number(exam.total_marks) || 100,
+          pass_marks: Number(exam.pass_marks) || 40,
+          exam_date: new Date().toISOString().split("T")[0],
+          result_note: updatedNote,
+          is_published: false,
+        }
+
+        const { data: fbExam, error: fbErr } = await supabase
+          .from("exams")
+          .insert(minimalPayload)
+          .select("id")
+          .single()
+
+        if (fbErr) throw fbErr
+        if (fbExam?.id) insertedId = fbExam.id
+      }
+
+      if (insertedId) {
+        toast.success(`✓ ${weekLabel} সফলভাবে তৈরি হয়েছে! নম্বর প্রদান পেজে নিয়ে যাওয়া হচ্ছে...`)
+        router.push(`/dashboard/owner/exams/${insertedId}`)
+      }
+    } catch (err: any) {
+      console.error("Open/create week error:", err)
+      toast.error(err.message || "Failed to open or create week exam")
+    } finally {
+      setCreatingWeekNum(null)
     }
   }
 
@@ -2852,10 +2976,20 @@ export default function ExamResultsPage() {
                   <span>◀ পূর্ববর্তী সপ্তাহ ({prevWeekExam.title})</span>
                 </Link>
               ) : currentWeekNum > 1 ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold">
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>Week {currentWeekNum - 1}</span>
-                </span>
+                <button
+                  type="button"
+                  onClick={() => handleOpenOrCreateWeek(currentWeekNum - 1)}
+                  disabled={creatingWeekNum === currentWeekNum - 1}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-purple-300 hover:border-purple-500 bg-purple-50 hover:bg-purple-100 text-purple-900 text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
+                  title={`পূর্ববর্তী সপ্তাহ (WEEKLY-0${currentWeekNum - 1}) এ যান বা নম্বর দিন`}
+                >
+                  {creatingWeekNum === currentWeekNum - 1 ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                  ) : (
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  )}
+                  <span>◀ পূর্ববর্তী সপ্তাহ (WEEKLY-0{currentWeekNum - 1})</span>
+                </button>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -2875,12 +3009,12 @@ export default function ExamResultsPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={handleStartNextWeek}
-                  disabled={creatingNextWeek}
+                  onClick={() => handleOpenOrCreateWeek(currentWeekNum + 1)}
+                  disabled={creatingWeekNum === currentWeekNum + 1 || creatingNextWeek}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
                   title="নতুন সপ্তাহ শুরু করুন"
                 >
-                  {creatingNextWeek ? (
+                  {creatingWeekNum === currentWeekNum + 1 || creatingNextWeek ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
                     <span>+ পরবর্তী সপ্তাহ (WEEKLY-{currentWeekNum + 1 < 10 ? "0" + (currentWeekNum + 1) : currentWeekNum + 1})</span>
@@ -2904,6 +3038,7 @@ export default function ExamResultsPage() {
                         ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-700 shadow-md ring-2 ring-purple-400/40"
                         : "bg-white hover:bg-purple-50 text-slate-800 hover:text-purple-900 border-slate-200 hover:border-purple-300 shadow-2xs"
                     )}
+                    title={`${slot.title} এ যান ও নম্বর দেখুন/দিন`}
                   >
                     <span
                       className={cn(
@@ -2924,27 +3059,41 @@ export default function ExamResultsPage() {
               }
 
               return (
-                <span
+                <button
                   key={`slot-${slot.weekNum}`}
-                  className="px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap flex items-center gap-1.5 border border-dashed border-slate-300 bg-slate-50 text-slate-400 shrink-0"
-                  title={`${slot.title} এখনও তৈরি করা হয়নি`}
+                  type="button"
+                  onClick={() => handleOpenOrCreateWeek(slot.weekNum)}
+                  disabled={creatingWeekNum === slot.weekNum}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-1.5 border border-purple-200 hover:border-purple-400 bg-white hover:bg-purple-50 text-purple-900 shrink-0 cursor-pointer shadow-2xs active:scale-95 transition-all"
+                  title={`${slot.title} এ যান বা শুরু করুন ও নম্বর দিন`}
                 >
-                  <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold bg-slate-200 text-slate-500">
-                    W{slot.weekNum}
-                  </span>
+                  {creatingWeekNum === slot.weekNum ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+                  ) : (
+                    <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black bg-purple-100 text-purple-700">
+                      W{slot.weekNum}
+                    </span>
+                  )}
                   <span>{slot.title}</span>
-                </span>
+                  <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.2 rounded font-bold">
+                    + খুলুন
+                  </span>
+                </button>
               )
             })}
 
             <button
               type="button"
-              onClick={handleStartNextWeek}
-              disabled={creatingNextWeek}
+              onClick={() => handleOpenOrCreateWeek(fullSeriesSlots.length + 1)}
+              disabled={creatingWeekNum === fullSeriesSlots.length + 1}
               className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1 border border-dashed border-purple-300 bg-purple-50/50 hover:bg-purple-100 text-purple-700 shrink-0 cursor-pointer active:scale-95"
               title="নতুন সপ্তাহ শুরু করুন"
             >
-              <Plus className="w-3.5 h-3.5" />
+              {creatingWeekNum === fullSeriesSlots.length + 1 ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
+              ) : (
+                <Plus className="w-3.5 h-3.5" />
+              )}
               <span>+ নতুন সপ্তাহ ({fullSeriesSlots.length + 1})</span>
             </button>
           </div>
@@ -3402,12 +3551,19 @@ export default function ExamResultsPage() {
                     )
                   }
                   return (
-                    <span
+                    <button
                       key={`comb-slot-${slot.weekNum}`}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-medium border border-dashed border-slate-300 bg-slate-50 text-slate-400"
+                      type="button"
+                      onClick={() => handleOpenOrCreateWeek(slot.weekNum)}
+                      disabled={creatingWeekNum === slot.weekNum}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-blue-200 hover:border-blue-400 bg-white hover:bg-blue-50 text-blue-900 flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
+                      title={`${slot.title} খুলুন ও নম্বর দিন`}
                     >
-                      {slot.title}
-                    </span>
+                      {creatingWeekNum === slot.weekNum ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
+                      ) : null}
+                      <span>{slot.title} (+ খুলুন)</span>
+                    </button>
                   )
                 })}
               </div>
