@@ -15,6 +15,8 @@ import {
   Users,
   Award,
   Layers,
+  Edit2,
+  Check,
 } from "lucide-react"
 import PrintableExamSheet, { PrintableExamSheetProps } from "./PrintableExamSheet"
 import StudentProgressReport, {
@@ -117,6 +119,39 @@ export default function ExamPrintModal({
   const [showPodium, setShowPodium] = useState<boolean>(true)
   const [showSubjectToppers, setShowSubjectToppers] = useState<boolean>(true)
   const [showSignatures, setShowSignatures] = useState<boolean>(true)
+
+  // 6. Custom Exam Title and Academic Year (Directly editable for Result Sheet & PDF)
+  const [customExamTitle, setCustomExamTitle] = useState<string>(exam.title || "")
+  const [customAcademicYear, setCustomAcademicYear] = useState<string>(
+    exam.exam_date ? new Date(exam.exam_date).getFullYear().toString() : new Date().getFullYear().toString()
+  )
+  const [isSavingTitle, setIsSavingTitle] = useState<boolean>(false)
+  const [titleSavedSuccess, setTitleSavedSuccess] = useState<boolean>(false)
+
+  // Keep custom title & year synced if exam prop changes
+  useEffect(() => {
+    setCustomExamTitle(exam.title || "")
+    if (exam.exam_date) {
+      setCustomAcademicYear(new Date(exam.exam_date).getFullYear().toString())
+    }
+  }, [exam.id, exam.title, exam.exam_date])
+
+  async function handleSaveCustomTitle() {
+    if (!exam.id || !customExamTitle.trim() || customExamTitle.trim() === exam.title) return
+    setIsSavingTitle(true)
+    try {
+      const res = await fetch(`/api/exams/${exam.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: customExamTitle.trim() }),
+      })
+      if (res.ok) {
+        setTitleSavedSuccess(true)
+        setTimeout(() => setTitleSavedSuccess(false), 2500)
+      }
+    } catch {}
+    setIsSavingTitle(false)
+  }
 
   // Sync mode and orientation when defaultMode changes
   useEffect(() => {
@@ -464,7 +499,7 @@ export default function ExamPrintModal({
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500">
-                  {exam.title} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
+                  {customExamTitle || exam.title} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
                 </p>
               </div>
             </div>
@@ -491,7 +526,7 @@ export default function ExamPrintModal({
           </div>
 
           {/* Configuration Toolbars */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-100 text-xs font-semibold text-slate-700">
+          <div className="flex flex-wrap items-center gap-2.5 pt-2 border-t border-slate-100 text-xs font-semibold text-slate-700">
             {/* 1. Template Chooser */}
             <div className="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
@@ -546,6 +581,41 @@ export default function ExamPrintModal({
                 <Trophy className="w-3.5 h-3.5 text-amber-400" />
                 <span>শীর্ষ মেধা ও টপার শিট</span>
               </button>
+            </div>
+
+            {/* Editable Exam Name & Academic Year (for printout customization) */}
+            <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
+              <Edit2 className="w-3.5 h-3.5 text-slate-500 ml-1" />
+              <label className="text-slate-600 font-bold text-[11px] whitespace-nowrap">পরীক্ষার নাম (Edit):</label>
+              <input
+                type="text"
+                value={customExamTitle}
+                onChange={(e) => setCustomExamTitle(e.target.value)}
+                onBlur={handleSaveCustomTitle}
+                className="px-2 py-0.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 w-32 sm:w-40 focus:w-52 transition-all focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                placeholder="e.g. WEEKLY-05"
+                title="রেজাল্ট শিটে পরীক্ষার নাম পরিবর্তন করতে এখানে লিখুন"
+              />
+              <label className="text-slate-600 font-bold text-[11px] whitespace-nowrap ml-1">শিক্ষাবর্ষ:</label>
+              <input
+                type="text"
+                value={customAcademicYear}
+                onChange={(e) => setCustomAcademicYear(e.target.value)}
+                className="px-1.5 py-0.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 w-16 focus:outline-hidden focus:ring-1 focus:ring-amber-500 text-center"
+                placeholder="2026"
+                title="রেজাল্ট শিটে শিক্ষাবর্ষ পরিবর্তন করুন"
+              />
+              {customExamTitle.trim() !== (exam.title || "").trim() && (
+                <button
+                  type="button"
+                  onClick={handleSaveCustomTitle}
+                  disabled={isSavingTitle}
+                  className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-[10px] font-bold cursor-pointer transition-all shrink-0 flex items-center gap-1"
+                  title="ডাটাবেসে পরীক্ষার নাম সংরক্ষণ করুন"
+                >
+                  {isSavingTitle ? "..." : titleSavedSuccess ? <Check className="w-3 h-3 text-white" /> : "সংরক্ষণ"}
+                </button>
+              )}
             </div>
 
             {/* 2. Multi-Batch Selector (When multi-batch exists) */}
@@ -699,8 +769,8 @@ export default function ExamPrintModal({
             {template === "merit_list" && (
               <SectionWiseMeritList
                 sectionName={activeBatchName}
-                examTitle={exam.title}
-                academicYear={exam.exam_date ? new Date(exam.exam_date).getFullYear().toString() : "2025"}
+                examTitle={customExamTitle || exam.title}
+                academicYear={customAcademicYear}
                 rows={meritListRows}
               />
             )}
@@ -715,8 +785,8 @@ export default function ExamPrintModal({
                   return (
                     <StudentProgressReport
                       key={st.id}
-                      examTitle={exam.title}
-                      academicYear={exam.exam_date ? new Date(exam.exam_date).getFullYear().toString() : "2025"}
+                      examTitle={customExamTitle || exam.title}
+                      academicYear={customAcademicYear}
                       batchName={activeBatchName}
                       groupName={st.group || "HUMANITIES"}
                       student={{
@@ -742,7 +812,7 @@ export default function ExamPrintModal({
             {/* TEMPLATE 3: COMPREHENSIVE TABULATION SHEET */}
             {template === "tabulation" && (
               <PrintableExamSheet
-                exam={exam}
+                exam={{ ...exam, title: customExamTitle || exam.title }}
                 mode={selectedMode === "all_weeks_combined" ? "weekly_aggregate" : selectedMode}
                 weeklyDays={weeklyDays}
                 activeDayConfig={currentDayConfig}
@@ -760,9 +830,9 @@ export default function ExamPrintModal({
             {/* TEMPLATE 4: TOPPERS & SUBJECT MERIT SUMMARY SHEET (Pic 2 Toppers & Subject-Wise) */}
             {template === "toppers_sheet" && (
               <WeeklyToppersSheet
-                examTitle={exam.title}
+                examTitle={customExamTitle || exam.title}
                 batchName={activeBatchName}
-                academicYear={exam.exam_date ? new Date(exam.exam_date).getFullYear().toString() : "2025"}
+                academicYear={customAcademicYear}
                 totalWeeklyMaxMarks={activeTotalMarks}
                 totalToppers={totalToppers}
                 subjectToppers={subjectToppers}

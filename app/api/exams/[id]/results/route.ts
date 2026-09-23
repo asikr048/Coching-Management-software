@@ -714,3 +714,65 @@ export async function POST(
   }
 }
 
+// DELETE /api/exams/[id]/results: Clear all entered marks and results for this exam (Reset)
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> | { id: string } }
+) {
+  try {
+    const authResult = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+    if (isAuthError(authResult)) return authResult
+
+    const resolvedParams = await params
+    const examId = resolvedParams.id
+    if (!examId) {
+      return NextResponse.json({ error: "Exam ID is required" }, { status: 400 })
+    }
+
+    const admin = createAdminClient()
+
+    // 1. Delete all exam_results for this exam
+    const { error: delErr } = await admin
+      .from("exam_results")
+      .delete()
+      .eq("exam_id", examId)
+
+    if (delErr) {
+      console.error("Failed to delete exam results:", delErr)
+      return NextResponse.json({ error: delErr.message }, { status: 500 })
+    }
+
+    // 2. Fetch current exam to clean fallback notes
+    const { data: currentExam } = await admin
+      .from("exams")
+      .select("id, result_note")
+      .eq("id", examId)
+      .single()
+
+    if (currentExam) {
+      const currentNote = currentExam.result_note || ""
+      const cleanedNote = currentNote
+        .replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "")
+        .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
+        .trim()
+
+      await admin
+        .from("exams")
+        .update({
+          result_note: cleanedNote,
+          is_published: false,
+          is_weekly_published: false,
+        })
+        .eq("id", examId)
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "All marks and results for this exam have been cleared successfully",
+    })
+  } catch (err: any) {
+    console.error("Exam results DELETE error:", err)
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 })
+  }
+}
+

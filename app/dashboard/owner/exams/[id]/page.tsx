@@ -40,6 +40,7 @@ import {
   Plus,
   CheckSquare,
   Square,
+  RotateCcw,
 } from "lucide-react"
 import { getGrade, getGradePoint, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
@@ -241,6 +242,19 @@ export default function ExamResultsPage() {
   // Delete Exam State
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Inline Title Editing State
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
+  const [editedTitle, setEditedTitle] = useState("")
+  const [savingTitle, setSavingTitle] = useState(false)
+
+  // Clear Week Data State
+  const [showClearWeekDataModal, setShowClearWeekDataModal] = useState(false)
+  const [clearingWeekData, setClearingWeekData] = useState(false)
+
+  // Delete Specific Created Week State
+  const [weekToDelete, setWeekToDelete] = useState<{ id: string; title: string } | null>(null)
+  const [deletingWeekId, setDeletingWeekId] = useState<string | null>(null)
 
   // Publishing & Actions State
   const [publishingExam, setPublishingExam] = useState(false)
@@ -2780,11 +2794,105 @@ export default function ExamResultsPage() {
       }
       toast.success(`Exam "${exam.title}" deleted successfully`)
       setShowDeleteModal(false)
-      router.push(backUrl)
+      const otherWeek = prevWeekExam || weeklySeriesExams.find((w) => w.id !== exam.id)
+      if (otherWeek) {
+        router.push(`/dashboard/owner/exams/${otherWeek.id}`)
+      } else {
+        router.push(backUrl)
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to delete exam")
     } finally {
       setDeleting(false)
+    }
+  }
+
+  // Delete a specific created week directly from the weekly series
+  async function handleDeleteSpecificWeek() {
+    if (!weekToDelete) return
+    setDeletingWeekId(weekToDelete.id)
+    try {
+      const res = await fetch(`/api/exams/${weekToDelete.id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const { error: delErr } = await supabase.from("exams").delete().eq("id", weekToDelete.id)
+        if (delErr) throw delErr
+      }
+      toast.success(`সপ্তাহ "${weekToDelete.title}" সফলভাবে মুছে ফেলা হয়েছে`)
+
+      if (exam && weekToDelete.id === exam.id) {
+        const otherWeek = prevWeekExam || weeklySeriesExams.find((w) => w.id !== weekToDelete.id)
+        setWeekToDelete(null)
+        if (otherWeek) {
+          router.push(`/dashboard/owner/exams/${otherWeek.id}`)
+        } else {
+          router.push(backUrl)
+        }
+        return
+      }
+
+      setWeeklySeriesExams((prev) => prev.filter((w) => w.id !== weekToDelete.id))
+      setSelectedCombinedWeekIds((prev) => prev.filter((id) => id !== weekToDelete.id))
+      setWeekToDelete(null)
+    } catch (err: any) {
+      toast.error(err.message || "সপ্তাহ মুছে ফেলতে সমস্যা হয়েছে")
+    } finally {
+      setDeletingWeekId(null)
+    }
+  }
+
+  // Save Inline Edited Exam Title
+  async function handleSaveExamTitle() {
+    if (!exam || !editedTitle.trim() || editedTitle.trim() === exam.title) {
+      setIsEditingTitle(false)
+      return
+    }
+    setSavingTitle(true)
+    try {
+      const res = await fetch(`/api/exams/${exam.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: editedTitle.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to update title")
+
+      setExam((prev: any) => (prev ? { ...prev, title: editedTitle.trim() } : prev))
+      setWeeklySeriesExams((prev: any[]) =>
+        prev.map((w: any) => (w.id === exam.id ? { ...w, title: editedTitle.trim() } : w))
+      )
+      setIsEditingTitle(false)
+      toast.success("পরীক্ষার নাম সফলভাবে আপডেট করা হয়েছে")
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update exam title")
+    } finally {
+      setSavingTitle(false)
+    }
+  }
+
+  // Clear / Reset all entered marks for this week
+  async function handleClearWeekData() {
+    if (!exam) return
+    setClearingWeekData(true)
+    try {
+      const res = await fetch(`/api/exams/${exam.id}/results`, {
+        method: "DELETE",
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to clear marks")
+
+      setSavedResults({})
+      setDayMarksMap({})
+      setDraftMarks({})
+      setDraftCellMarks({})
+      setJustSavedIds(new Set())
+      setIsWeeklyPublished(false)
+      setPublishedDays([])
+      setShowClearWeekDataModal(false)
+      toast.success("এই সপ্তাহের সকল শিক্ষার্থীর নম্বর ও ফলাফল সফলভাবে পরিষ্কার করা হয়েছে")
+    } catch (err: any) {
+      toast.error(err.message || "ডাটা পরিষ্কার করতে সমস্যা হয়েছে")
+    } finally {
+      setClearingWeekData(false)
     }
   }
 
@@ -3094,10 +3202,58 @@ export default function ExamResultsPage() {
           </Link>
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                <Trophy className="w-6 h-6 text-amber-500" />
-                {exam.title}
-              </h1>
+              {isEditingTitle ? (
+                <div className="flex items-center gap-1.5 bg-amber-50 p-1 rounded-xl border border-amber-300 shadow-xs">
+                  <Trophy className="w-5 h-5 text-amber-500 ml-1 shrink-0" />
+                  <input
+                    type="text"
+                    value={editedTitle}
+                    onChange={(e) => setEditedTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveExamTitle()
+                      if (e.key === "Escape") setIsEditingTitle(false)
+                    }}
+                    autoFocus
+                    className="px-2.5 py-1 bg-white border border-amber-400 rounded-lg text-sm sm:text-base font-black text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-amber-500 w-44 sm:w-60"
+                    placeholder="পরীক্ষার নাম (e.g. WEEKLY-05)"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveExamTitle}
+                    disabled={savingTitle}
+                    className="p-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors cursor-pointer"
+                    title="সংরক্ষণ করুন (Enter)"
+                  >
+                    {savingTitle ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingTitle(false)}
+                    className="p-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg transition-colors cursor-pointer"
+                    title="বাতিল করুন (Esc)"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+                    <Trophy className="w-6 h-6 text-amber-500 shrink-0" />
+                    <span>{exam.title}</span>
+                  </h1>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditedTitle(exam.title)
+                      setIsEditingTitle(true)
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                    title="পরীক্ষার নাম পরিবর্তন করুন (Edit Title)"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
                 {exam.subject || "সাধারণ বিষয়"}
               </span>
@@ -3298,6 +3454,17 @@ export default function ExamResultsPage() {
               <span>🖨️ প্রিন্ট রেজাল্ট (PDF)</span>
             </button>
 
+            {/* 5.8. Clean / Reset Week Data Button */}
+            <button
+              type="button"
+              onClick={() => setShowClearWeekDataModal(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl font-bold text-xs transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
+              title="এই সপ্তাহের সকল শিক্ষার্থীর নম্বর ও ফলাফল রিসেট / পরিষ্কার করুন"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
+              <span>ডাটা পরিষ্কার (Reset)</span>
+            </button>
+
             {/* 6. Delete Exam */}
             <button
               type="button"
@@ -3452,6 +3619,16 @@ export default function ExamResultsPage() {
                       >
                         {isSel ? "যুক্ত" : "বাদ"}
                       </span>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setWeekToDelete({ id: slot.exam.id, title: slot.title })
+                        }}
+                        className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition-colors ml-0.5 shrink-0 cursor-pointer"
+                        title={`${slot.title} মুছে ফেলুন (Delete Week)`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </span>
                     </button>
                   )
                 }
@@ -3482,6 +3659,22 @@ export default function ExamResultsPage() {
                         ✓ বর্তমান
                       </span>
                     )}
+                    <span
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setWeekToDelete({ id: slot.exam.id, title: slot.title })
+                      }}
+                      className={cn(
+                        "p-1 rounded-md transition-colors cursor-pointer shrink-0 ml-0.5",
+                        slot.isCurrent
+                          ? "text-white/70 hover:text-white hover:bg-rose-600/80"
+                          : "text-slate-400 hover:text-rose-600 hover:bg-rose-100"
+                      )}
+                      title={`${slot.title} মুছে ফেলুন (Delete Week)`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </span>
                   </Link>
                 )
               }
@@ -5719,6 +5912,92 @@ export default function ExamResultsPage() {
               >
                 {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
                 <span>Delete Permanently</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CLEAR / RESET WEEK DATA MODAL */}
+      {showClearWeekDataModal && exam && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">ডাটা পরিষ্কার (Reset Marks)?</h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  আপনি কি নিশ্চিত যে &ldquo;{exam.title}&rdquo; এর <strong>সকল শিক্ষার্থীর এন্ট্রি করা নম্বর ও ফলাফল</strong> মুছে ফেলতে চান?
+                </p>
+                <div className="mt-2.5 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                  <p className="font-semibold">⚠️ এটি যা করবে:</p>
+                  <ul className="list-disc list-inside space-y-0.5 text-amber-800">
+                    <li>সকল শিক্ষার্থীর প্রাপ্ত নম্বর ও গ্রেড রিসেট হবে</li>
+                    <li>প্রতিদিনের সেভ করা নম্বর মুছে যাবে</li>
+                    <li>পরীক্ষার শিডিউল ও ব্যাচ অক্ষত থাকবে</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowClearWeekDataModal(false)}
+                disabled={clearingWeekData}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                বাতিল করুন
+              </button>
+              <button
+                type="button"
+                onClick={handleClearWeekData}
+                disabled={clearingWeekData}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                {clearingWeekData ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                <span>হ্যাঁ, ডাটা পরিষ্কার করুন</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE SPECIFIC CREATED WEEK MODAL */}
+      {weekToDelete && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">সপ্তাহ মুছে ফেলবেন?</h3>
+                <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                  আপনি কি নিশ্চিত যে সপ্তাহ &ldquo;{weekToDelete.title}&rdquo; মুছে ফেলতে চান? এই সপ্তাহের সকল তথ্য, প্রশ্ন ও শিক্ষার্থীদের ফলাফল স্থায়ীভাবে মুছে যাবে।
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setWeekToDelete(null)}
+                disabled={Boolean(deletingWeekId)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                বাতিল করুন
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteSpecificWeek}
+                disabled={Boolean(deletingWeekId)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                {deletingWeekId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                <span>সপ্তাহটি মুছে ফেলুন</span>
               </button>
             </div>
           </div>
