@@ -23,9 +23,10 @@ import StudentProgressReport, {
   calculateCoachingGrade,
 } from "./StudentProgressReport"
 import SectionWiseMeritList, { SectionWiseMeritRow } from "./SectionWiseMeritList"
+import WeeklyToppersSheet, { GrandTopperItem, SubjectTopperItem } from "./WeeklyToppersSheet"
 import { cn, getGrade } from "@/lib/utils"
 
-export type PrintTemplateType = "merit_list" | "progress_report" | "tabulation"
+export type PrintTemplateType = "merit_list" | "progress_report" | "tabulation" | "toppers_sheet"
 
 export interface BatchItem {
   id: string
@@ -68,6 +69,8 @@ export interface ExamPrintModalProps {
   availableBatches?: BatchItem[]
   combinedWeekData?: CombinedWeekSummary[]
   defaultTemplate?: PrintTemplateType
+  totalToppers?: GrandTopperItem[]
+  subjectToppers?: SubjectTopperItem[]
 }
 
 export default function ExamPrintModal({
@@ -85,8 +88,10 @@ export default function ExamPrintModal({
   availableBatches = [],
   combinedWeekData = [],
   defaultTemplate = "merit_list",
+  totalToppers = [],
+  subjectToppers = [],
 }: ExamPrintModalProps) {
-  // 1. Template Type: Merit List (Pic 2), Progress Report (Pic 1), or Tabulation Sheet
+  // 1. Template Type: Merit List (Pic 2), Progress Report (Pic 1), Tabulation, or Toppers Sheet
   const [template, setTemplate] = useState<PrintTemplateType>(defaultTemplate)
 
   // 2. Exam Mode / Scope
@@ -489,6 +494,19 @@ export default function ExamPrintModal({
                 <LayoutTemplate className="w-3.5 h-3.5 text-blue-400" />
                 <span>পূর্ণাঙ্গ টেবুলেশন শিট</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setTemplate("toppers_sheet")}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                  template === "toppers_sheet"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900"
+                )}
+              >
+                <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                <span>শীর্ষ মেধা ও টপার শিট</span>
+              </button>
             </div>
 
             {/* 2. Multi-Batch Selector (When multi-batch exists) */}
@@ -697,6 +715,18 @@ export default function ExamPrintModal({
                 showPodium={showPodium}
                 showSubjectToppers={showSubjectToppers}
                 showSignatures={showSignatures}
+              />
+            )}
+
+            {/* TEMPLATE 4: TOPPERS & SUBJECT MERIT SUMMARY SHEET (Pic 2 Toppers & Subject-Wise) */}
+            {template === "toppers_sheet" && (
+              <WeeklyToppersSheet
+                examTitle={exam.title}
+                batchName={activeBatchName}
+                academicYear={exam.exam_date ? new Date(exam.exam_date).getFullYear().toString() : "2025"}
+                totalWeeklyMaxMarks={activeTotalMarks}
+                totalToppers={totalToppers}
+                subjectToppers={subjectToppers}
               />
             )}
           </div>
