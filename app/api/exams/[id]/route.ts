@@ -322,6 +322,25 @@ export async function PATCH(
     let payload: Record<string, any> = { ...body }
     delete payload.id
 
+    // Sanitize empty strings and types to prevent Postgres datatype errors
+    if (payload.branch_id === "") payload.branch_id = null
+    if (payload.batch_id === "") payload.batch_id = null
+    if (payload.exam_date === "") payload.exam_date = null
+    if (payload.duration_minutes !== undefined) {
+      const dm = parseInt(payload.duration_minutes)
+      payload.duration_minutes = isNaN(dm) ? null : dm
+    }
+    if (payload.time_limit_minutes !== undefined) {
+      const tm = parseInt(payload.time_limit_minutes)
+      payload.time_limit_minutes = isNaN(tm) ? null : tm
+    }
+    if (payload.total_marks !== undefined) {
+      payload.total_marks = Number(payload.total_marks) || 0
+    }
+    if (payload.pass_marks !== undefined) {
+      payload.pass_marks = Number(payload.pass_marks) || 0
+    }
+
     // Ensure metadata tags in result_note for guaranteed persistence
     let updatedNote = typeof body.result_note === "string" ? body.result_note : (currentExam.result_note || "")
     if (Array.isArray(body.recurring_days)) {
@@ -413,18 +432,17 @@ export async function PATCH(
     if (error) {
       console.warn("Exam update first attempt failed:", error.message)
       const errMsg = error.message || ""
-      if (errMsg.includes("branch_id")) delete payload.branch_id
-      if (errMsg.includes("batch_ids")) delete payload.batch_ids
-      if (errMsg.includes("schedule_notice_id")) delete payload.schedule_notice_id
-      if (errMsg.includes("published_days")) delete payload.published_days
-      if (errMsg.includes("is_weekly_published")) delete payload.is_weekly_published
-      if (errMsg.includes("duration_minutes")) delete payload.duration_minutes
-      if (errMsg.includes("recurring_days")) delete payload.recurring_days
-      if (errMsg.includes("exam_schedule_type")) delete payload.exam_schedule_type
-      if (errMsg.includes("is_paused")) delete payload.is_paused
-      if (errMsg.includes("is_public_result")) delete payload.is_public_result
-      if (errMsg.includes("show_all_results")) delete payload.show_all_results
-      if (errMsg.includes("show_results_immediately")) delete payload.show_results_immediately
+      const knownOptionalColumns = [
+        "branch_id", "batch_ids", "schedule_notice_id", "published_days",
+        "is_weekly_published", "duration_minutes", "time_limit_minutes",
+        "recurring_days", "exam_schedule_type", "is_paused", "is_public_result",
+        "show_all_results", "show_results_immediately"
+      ]
+      for (const col of knownOptionalColumns) {
+        if (errMsg.includes(col)) {
+          delete payload[col]
+        }
+      }
 
       let { data: fbExam, error: fbErr } = await admin
         .from("exams")
@@ -438,7 +456,7 @@ export async function PATCH(
         const newerColumns = [
           "show_all_results", "show_results_immediately", "is_paused", "is_public_result",
           "exam_schedule_type", "recurring_days", "schedule_notice_id", "published_days",
-          "is_weekly_published", "duration_minutes", "batch_ids", "branch_id"
+          "is_weekly_published", "duration_minutes", "time_limit_minutes", "batch_ids", "branch_id"
         ]
         for (const col of newerColumns) {
           delete payload[col]
@@ -512,7 +530,26 @@ export async function DELETE(
 
     const admin = createAdminClient()
 
-    // 1. Delete student answers for any submissions of this exam
+    // 0. Fetch the exam details to get linked notices and title
+    const { data: targetExam } = await admin
+      .from("exams")
+      .select("id, title, schedule_notice_id, branch_id")
+      .eq("id", examId)
+      .maybeSingle()
+
+    // 1. Delete student answers for questions belonging to this exam
+    // (Prevents FK violation when exam_questions are deleted)
+    const { data: questions } = await admin
+      .from("exam_questions")
+      .select("id")
+      .eq("exam_id", examId)
+
+    if (questions && questions.length > 0) {
+      const qIds = questions.map((q) => q.id)
+      await admin.from("exam_answers").delete().in("question_id", qIds)
+    }
+
+    // 2. Delete student answers for any submissions of this exam
     const { data: submissions } = await admin
       .from("exam_submissions")
       .select("id")
@@ -523,16 +560,36 @@ export async function DELETE(
       await admin.from("exam_answers").delete().in("submission_id", subIds)
     }
 
-    // 2. Delete exam submissions
+    // 3. Delete exam submissions
     await admin.from("exam_submissions").delete().eq("exam_id", examId)
 
-    // 3. Delete exam questions
+    // 4. Delete exam questions
     await admin.from("exam_questions").delete().eq("exam_id", examId)
 
-    // 4. Delete exam results
+    // 5. Delete exam results
     await admin.from("exam_results").delete().eq("exam_id", examId)
 
-    // 5. Delete the exam record itself
+    // 6. Clean up linked notice if present
+    if (targetExam?.schedule_notice_id) {
+      try {
+        await admin.from("exams").update({ schedule_notice_id: null }).eq("id", examId)
+        await admin.from("notices").delete().eq("id", targetExam.schedule_notice_id)
+      } catch (nErr) {
+        console.warn("Failed to delete linked notice:", nErr)
+      }
+    }
+
+    // Also clean up any notices created specifically for this exam by title
+    if (targetExam?.title) {
+      try {
+        await admin
+          .from("notices")
+          .delete()
+          .or(`title.eq.📋 পরীক্ষার রুটিন নোটিশ: ${targetExam.title},title.eq.🏆 পরীক্ষার ফলাফল ও মেরিট লিস্ট: ${targetExam.title},title.eq.🏆 সামগ্রিক সাপ্তাহিক ফলাফল ও মেরিট তালিকা: ${targetExam.title}`)
+      } catch {}
+    }
+
+    // 7. Delete the exam record itself
     const { error: examErr } = await admin
       .from("exams")
       .delete()

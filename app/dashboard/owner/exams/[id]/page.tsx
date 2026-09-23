@@ -807,13 +807,42 @@ export default function ExamResultsPage() {
         ? exam.batch_ids
         : exam.batch_id ? [exam.batch_id] : []
 
+      // Extract the schedule properly from result_note or parsedWeeklyDays
+      let scheduleToCopy: any[] = []
+      const fromNote = extractWeeklyScheduleFromNote(exam.result_note)
+      if (Array.isArray(fromNote) && fromNote.length > 0) {
+        scheduleToCopy = fromNote
+      } else if (Array.isArray(parsedWeeklyDays) && parsedWeeklyDays.length > 0) {
+        scheduleToCopy = parsedWeeklyDays.map((d) => ({
+          day: d.key,
+          day_bn: d.day_bn,
+          exam_name: d.exam_name,
+          subject: d.subject,
+          total_marks: d.total_marks,
+          pass_marks: d.pass_marks,
+        }))
+      } else if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+        scheduleToCopy = exam.recurring_days
+      }
+
+      // Calculate total marks and pass marks based on the schedule
+      let newTotalMarks = Number(exam.total_marks) || 350
+      let newPassMarks = Number(exam.pass_marks) || 140
+      if (scheduleToCopy.length > 0) {
+        const schedTotal = scheduleToCopy.reduce((acc, d) => acc + (Number(d.total_marks) || 0), 0)
+        const schedPass = scheduleToCopy.reduce((acc, d) => acc + (Number(d.pass_marks) || 0), 0)
+        if (schedTotal > 0) newTotalMarks = schedTotal
+        if (schedPass > 0) newPassMarks = schedPass
+      }
+
       // Build rich metadata string in result_note
       let updatedNote = `[SERIES_WEEK:${nextWeekNum}] [SHOW_ALL_RESULTS:true]`
       if (batchIdsList.length > 0) {
         updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
       }
-      if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
-        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(exam.recurring_days)}]`
+      if (scheduleToCopy.length > 0) {
+        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(scheduleToCopy)}]`
+        updatedNote += ` [WEEKLY_DAYS:${scheduleToCopy.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`
       }
 
       // Payload WITHOUT 'batch_ids' (since Supabase exams table does not have a batch_ids column)
@@ -821,8 +850,8 @@ export default function ExamResultsPage() {
         title: nextTitle,
         batch_id: targetBatchId,
         subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-        total_marks: Number(exam.total_marks) || 100,
-        pass_marks: Number(exam.pass_marks) || 40,
+        total_marks: newTotalMarks,
+        pass_marks: newPassMarks,
         exam_date: new Date().toISOString().split("T")[0],
         result_note: updatedNote,
         is_published: false,
@@ -830,7 +859,8 @@ export default function ExamResultsPage() {
 
       if (exam.branch_id) payload.branch_id = exam.branch_id
       if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
-      if (exam.recurring_days) payload.recurring_days = exam.recurring_days
+      if (scheduleToCopy.length > 0) payload.recurring_days = scheduleToCopy
+      else if (exam.recurring_days) payload.recurring_days = exam.recurring_days
       if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
 
       let insertedId: string | null = null
@@ -850,8 +880,8 @@ export default function ExamResultsPage() {
           title: nextTitle,
           batch_id: targetBatchId,
           subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-          total_marks: Number(exam.total_marks) || 100,
-          pass_marks: Number(exam.pass_marks) || 40,
+          total_marks: newTotalMarks,
+          pass_marks: newPassMarks,
           exam_date: new Date().toISOString().split("T")[0],
           result_note: updatedNote,
           is_published: false,
@@ -930,20 +960,49 @@ export default function ExamResultsPage() {
         ? exam.batch_ids
         : exam.batch_id ? [exam.batch_id] : []
 
+      // Extract the schedule properly from result_note or parsedWeeklyDays
+      let scheduleToCopy: any[] = []
+      const fromNote = extractWeeklyScheduleFromNote(exam.result_note)
+      if (Array.isArray(fromNote) && fromNote.length > 0) {
+        scheduleToCopy = fromNote
+      } else if (Array.isArray(parsedWeeklyDays) && parsedWeeklyDays.length > 0) {
+        scheduleToCopy = parsedWeeklyDays.map((d) => ({
+          day: d.key,
+          day_bn: d.day_bn,
+          exam_name: d.exam_name,
+          subject: d.subject,
+          total_marks: d.total_marks,
+          pass_marks: d.pass_marks,
+        }))
+      } else if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+        scheduleToCopy = exam.recurring_days
+      }
+
+      // Calculate total marks and pass marks based on the schedule
+      let newTotalMarks = Number(exam.total_marks) || 350
+      let newPassMarks = Number(exam.pass_marks) || 140
+      if (scheduleToCopy.length > 0) {
+        const schedTotal = scheduleToCopy.reduce((acc, d) => acc + (Number(d.total_marks) || 0), 0)
+        const schedPass = scheduleToCopy.reduce((acc, d) => acc + (Number(d.pass_marks) || 0), 0)
+        if (schedTotal > 0) newTotalMarks = schedTotal
+        if (schedPass > 0) newPassMarks = schedPass
+      }
+
       let updatedNote = `[SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
       if (batchIdsList.length > 0) {
         updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
       }
-      if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
-        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(exam.recurring_days)}]`
+      if (scheduleToCopy.length > 0) {
+        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(scheduleToCopy)}]`
+        updatedNote += ` [WEEKLY_DAYS:${scheduleToCopy.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`
       }
 
       const payload: any = {
         title: weekLabel,
         batch_id: targetBatchId,
         subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-        total_marks: Number(exam.total_marks) || 100,
-        pass_marks: Number(exam.pass_marks) || 40,
+        total_marks: newTotalMarks,
+        pass_marks: newPassMarks,
         exam_date: new Date().toISOString().split("T")[0],
         result_note: updatedNote,
         is_published: false,
@@ -951,7 +1010,8 @@ export default function ExamResultsPage() {
 
       if (exam.branch_id) payload.branch_id = exam.branch_id
       if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
-      if (exam.recurring_days) payload.recurring_days = exam.recurring_days
+      if (scheduleToCopy.length > 0) payload.recurring_days = scheduleToCopy
+      else if (exam.recurring_days) payload.recurring_days = exam.recurring_days
       if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
 
       let insertedId: string | null = null
@@ -970,8 +1030,8 @@ export default function ExamResultsPage() {
           title: weekLabel,
           batch_id: targetBatchId,
           subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-          total_marks: Number(exam.total_marks) || 100,
-          pass_marks: Number(exam.pass_marks) || 40,
+          total_marks: newTotalMarks,
+          pass_marks: newPassMarks,
           exam_date: new Date().toISOString().split("T")[0],
           result_note: updatedNote,
           is_published: false,
@@ -1448,20 +1508,49 @@ export default function ExamResultsPage() {
         ? exam.batch_ids
         : exam.batch_id ? [exam.batch_id] : []
 
+      // Extract the schedule properly from result_note or parsedWeeklyDays
+      let scheduleToCopy: any[] = []
+      const fromNote = extractWeeklyScheduleFromNote(exam.result_note)
+      if (Array.isArray(fromNote) && fromNote.length > 0) {
+        scheduleToCopy = fromNote
+      } else if (Array.isArray(parsedWeeklyDays) && parsedWeeklyDays.length > 0) {
+        scheduleToCopy = parsedWeeklyDays.map((d) => ({
+          day: d.key,
+          day_bn: d.day_bn,
+          exam_name: d.exam_name,
+          subject: d.subject,
+          total_marks: d.total_marks,
+          pass_marks: d.pass_marks,
+        }))
+      } else if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+        scheduleToCopy = exam.recurring_days
+      }
+
+      // Calculate total marks and pass marks based on the schedule
+      let newTotalMarks = Number(exam.total_marks) || 350
+      let newPassMarks = Number(exam.pass_marks) || 140
+      if (scheduleToCopy.length > 0) {
+        const schedTotal = scheduleToCopy.reduce((acc, d) => acc + (Number(d.total_marks) || 0), 0)
+        const schedPass = scheduleToCopy.reduce((acc, d) => acc + (Number(d.pass_marks) || 0), 0)
+        if (schedTotal > 0) newTotalMarks = schedTotal
+        if (schedPass > 0) newPassMarks = schedPass
+      }
+
       let updatedNote = `[SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
       if (batchIdsList.length > 0) {
         updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
       }
-      if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
-        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(exam.recurring_days)}]`
+      if (scheduleToCopy.length > 0) {
+        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(scheduleToCopy)}]`
+        updatedNote += ` [WEEKLY_DAYS:${scheduleToCopy.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`
       }
 
       const payload: any = {
         title: weekLabel,
         batch_id: targetBatchId,
         subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-        total_marks: Number(exam.total_marks) || 100,
-        pass_marks: Number(exam.pass_marks) || 40,
+        total_marks: newTotalMarks,
+        pass_marks: newPassMarks,
         exam_date: new Date().toISOString().split("T")[0],
         result_note: updatedNote,
         is_published: false,
@@ -1469,7 +1558,8 @@ export default function ExamResultsPage() {
 
       if (exam.branch_id) payload.branch_id = exam.branch_id
       if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
-      if (exam.recurring_days) payload.recurring_days = exam.recurring_days
+      if (scheduleToCopy.length > 0) payload.recurring_days = scheduleToCopy
+      else if (exam.recurring_days) payload.recurring_days = exam.recurring_days
       if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
 
       let insertedExam: any = null
@@ -1487,8 +1577,8 @@ export default function ExamResultsPage() {
           title: weekLabel,
           batch_id: targetBatchId,
           subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-          total_marks: Number(exam.total_marks) || 100,
-          pass_marks: Number(exam.pass_marks) || 40,
+          total_marks: newTotalMarks,
+          pass_marks: newPassMarks,
           exam_date: new Date().toISOString().split("T")[0],
           result_note: updatedNote,
           is_published: false,
@@ -2794,6 +2884,7 @@ export default function ExamResultsPage() {
       }
       toast.success(`Exam "${exam.title}" deleted successfully`)
       setShowDeleteModal(false)
+      router.refresh()
       const otherWeek = prevWeekExam || weeklySeriesExams.find((w) => w.id !== exam.id)
       if (otherWeek) {
         router.push(`/dashboard/owner/exams/${otherWeek.id}`)
@@ -2818,6 +2909,7 @@ export default function ExamResultsPage() {
         if (delErr) throw delErr
       }
       toast.success(`সপ্তাহ "${weekToDelete.title}" সফলভাবে মুছে ফেলা হয়েছে`)
+      router.refresh()
 
       if (exam && weekToDelete.id === exam.id) {
         const otherWeek = prevWeekExam || weeklySeriesExams.find((w) => w.id !== weekToDelete.id)

@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { formatDate, cn, extractWeeklyScheduleFromNote, cleanWeeklyScheduleFromNote } from "@/lib/utils"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useBranch } from "@/components/providers/BranchContext"
 import type { Branch } from "@/lib/supabase/types"
 
@@ -122,6 +123,7 @@ export default function ExamsClient({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pausingId, setPausingId] = useState<string | null>(null)
   const { selectedBranchId, currentBranch } = useBranch()
+  const router = useRouter()
   
   // Notice & Result Notification States
   const [deletingNoticeId, setDeletingNoticeId] = useState<string | null>(null)
@@ -890,12 +892,45 @@ export default function ExamsClient({
       }
     }
 
+    // C. If dayConfigs is still empty, look for a template from other exams in the same series or batch
+    if (Object.keys(dayConfigs).length === 0) {
+      const siblingExam = exams.find((e) =>
+        e.id !== exam.id &&
+        (e.batch_id === exam.batch_id || (exam.title && e.title && e.title.slice(0, 6).toLowerCase() === exam.title.slice(0, 6).toLowerCase())) &&
+        e.result_note &&
+        e.result_note.includes("[WEEKLY_SCHEDULE:")
+      )
+      if (siblingExam) {
+        const sibSchedule = extractWeeklyScheduleFromNote(siblingExam.result_note)
+        if (Array.isArray(sibSchedule) && sibSchedule.length > 0) {
+          for (const item of sibSchedule) {
+            const rawKey = item.day || item.day_bn || item.day_en || ""
+            const dayKey = String(rawKey).toLowerCase()
+            const matched = WEEK_DAYS.find(w => w.id.toLowerCase() === dayKey || w.bn === rawKey)
+            if (matched) {
+              dayConfigs[matched.id] = {
+                selected: true,
+                exam_name: item.exam_name || `${matched.bn}ের পরীক্ষা`,
+                subject: item.subject || exam.subject || "",
+                total_marks: item.total_marks != null ? String(item.total_marks) : "50",
+                pass_marks: item.pass_marks != null ? String(item.pass_marks) : "20",
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (isWeekly) {
       const hasConfiguredDays = Object.keys(dayConfigs).length > 0
       const examTotal = Number(exam.total_marks) || 350
-      const defaultDayTotal = examTotal > 0 ? String(Math.round(examTotal / (hasConfiguredDays ? Object.keys(dayConfigs).length : 7))) : "50"
+      const defaultDayTotal = hasConfiguredDays 
+        ? String(Math.round(examTotal / Object.keys(dayConfigs).length))
+        : (examTotal % 7 === 0 ? String(examTotal / 7) : "50")
       const examPass = Number(exam.pass_marks) || 140
-      const defaultDayPass = examPass > 0 ? String(Math.round(examPass / (hasConfiguredDays ? Object.keys(dayConfigs).length : 7))) : "20"
+      const defaultDayPass = hasConfiguredDays 
+        ? String(Math.round(examPass / Object.keys(dayConfigs).length))
+        : (examPass % 7 === 0 ? String(examPass / 7) : "20")
       
       const subjects = (exam.subject || "")
         .split(/[,+;|/]/)
@@ -1219,6 +1254,7 @@ export default function ExamsClient({
             window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""))
           }
         }
+        router.refresh()
         setLoading(false)
         return
       }
@@ -1335,6 +1371,7 @@ export default function ExamsClient({
       
       // Reset form
       resetForm()
+      router.refresh()
     } catch (err: any) { 
       toast.error(err.message || "Failed") 
     } finally { 
@@ -1350,17 +1387,24 @@ export default function ExamsClient({
       })
 
       if (!res.ok) {
-        // Direct Supabase fallback
-        await supabase.from("exam_results").delete().eq("exam_id", examId)
-        await supabase.from("exam_questions").delete().eq("exam_id", examId)
-        await supabase.from("exam_submissions").delete().eq("exam_id", examId)
-        const { error: dErr } = await supabase.from("exams").delete().eq("id", examId)
-        if (dErr) throw dErr
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.error || "Failed to delete exam from server")
       }
 
+      // Remove the deleted exam from local state
       setExams((prev) => prev.filter((e) => e.id !== examId))
-      toast.success("✓ Exam deleted successfully!")
+
+      // Also clean up any linked notices from local state
+      if (deleteConfirmExam?.schedule_notice_id) {
+        setNotices((prev) => prev.filter((n) => n.id !== deleteConfirmExam.schedule_notice_id))
+      }
+      if (deleteConfirmExam?.title) {
+        setNotices((prev) => prev.filter((n) => !n.title?.includes(deleteConfirmExam.title)))
+      }
+
+      toast.success("✓ Exam deleted successfully! (পরীক্ষা সফলভাবে মুছে ফেলা হয়েছে)")
       setDeleteConfirmExam(null)
+      router.refresh()
     } catch (err: any) {
       console.error("Delete exam error:", err)
       toast.error(err?.message || "Failed to delete exam")
@@ -2029,10 +2073,10 @@ export default function ExamsClient({
                                 )}
                               </div>
                               <h3 className="font-extrabold text-slate-900 text-base leading-snug mt-1">
-                                {group.batchName} — ধারাবাহিক পরীক্ষা
+                                {group.latestExam.title || `${group.batchName} — ধারাবাহিক পরীক্ষা`}
                               </h3>
                               <p className="text-xs text-purple-700 font-semibold mt-0.5">
-                                মোট {group.totalWeeksCount}টি সপ্তাহ সক্রিয় • প্রতি সপ্তাহ ৩৫০ নম্বর
+                                {group.batchName} • মোট {group.totalWeeksCount}টি সপ্তাহ সক্রিয় • প্রতি সপ্তাহ {group.latestExam.total_marks || 350} নম্বর
                               </p>
 
                               {/* Badges for Branch & Batch */}

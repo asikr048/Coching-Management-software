@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
 
 export interface AuthResult {
@@ -48,27 +49,41 @@ export async function requireStaffRole(
   const { user, supabase } = authResult
 
   try {
+    let staffData: { id: string; role: string; auth_user_id: string } | null = null
     const { data: staff } = await supabase
       .from("staff")
       .select("id, role, auth_user_id")
       .eq("auth_user_id", user.id)
       .maybeSingle()
 
-    if (!staff) {
+    staffData = staff
+    if (!staffData) {
+      try {
+        const admin = createAdminClient()
+        const { data: adminStaff } = await admin
+          .from("staff")
+          .select("id, role, auth_user_id")
+          .eq("auth_user_id", user.id)
+          .maybeSingle()
+        if (adminStaff) staffData = adminStaff
+      } catch {}
+    }
+
+    if (!staffData) {
       return NextResponse.json(
         { error: "Forbidden — staff access required (শুধুমাত্র কর্মীদের জন্য)" },
         { status: 403 }
       )
     }
 
-    if (!roles.includes(staff.role)) {
+    if (!roles.includes(staffData.role)) {
       return NextResponse.json(
         { error: `Forbidden — requires one of: ${roles.join(", ")} (অনুমতি নেই)` },
         { status: 403 }
       )
     }
 
-    return { user, staff, supabase }
+    return { user, staff: staffData, supabase }
   } catch {
     return NextResponse.json(
       { error: "Authorization check failed" },
@@ -90,13 +105,27 @@ export async function requireAuthOrSelf(
   const { user, supabase } = authResult
 
   // Check if they're staff (any role)
+  let staffData = null
   const { data: staff } = await supabase
     .from("staff")
     .select("id, role")
     .eq("auth_user_id", user.id)
     .maybeSingle()
 
-  if (staff) {
+  staffData = staff
+  if (!staffData) {
+    try {
+      const admin = createAdminClient()
+      const { data: adminStaff } = await admin
+        .from("staff")
+        .select("id, role")
+        .eq("auth_user_id", user.id)
+        .maybeSingle()
+      if (adminStaff) staffData = adminStaff
+    } catch {}
+  }
+
+  if (staffData) {
     return { user, supabase }
   }
 
