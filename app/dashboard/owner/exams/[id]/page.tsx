@@ -1216,11 +1216,21 @@ export default function ExamResultsPage() {
     }
   }
 
+  // Reliable list of all available weekly exams for combined calculation
+  const displayCombinedExams = useMemo(() => {
+    if (combinedWeeksExamsList.length > 0) return combinedWeeksExamsList
+    if (weeklySeriesExams.length > 0) return weeklySeriesExams
+    const fromSlots = fullSeriesSlots.filter((s) => s.exam).map((s) => s.exam)
+    if (fromSlots.length > 0) return fromSlots
+    return exam ? [exam] : []
+  }, [combinedWeeksExamsList, weeklySeriesExams, fullSeriesSlots, exam])
+
   // Active selected exams for combined calculation
   const activeCombinedExams = useMemo(() => {
-    if (selectedCombinedWeekIds.length === 0) return combinedWeeksExamsList
-    return combinedWeeksExamsList.filter((e) => selectedCombinedWeekIds.includes(e.id))
-  }, [combinedWeeksExamsList, selectedCombinedWeekIds])
+    const list = displayCombinedExams
+    if (selectedCombinedWeekIds.length === 0) return list
+    return list.filter((e) => selectedCombinedWeekIds.includes(e.id))
+  }, [displayCombinedExams, selectedCombinedWeekIds])
 
   // Recalculate combined data dynamically whenever activeCombinedExams, rawStudentWeekMarks, or students change
   useEffect(() => {
@@ -1292,11 +1302,11 @@ export default function ExamResultsPage() {
   }
 
   function selectAllCombinedWeeks() {
-    setSelectedCombinedWeekIds(combinedWeeksExamsList.map((e) => e.id))
+    setSelectedCombinedWeekIds(displayCombinedExams.map((e) => e.id))
   }
 
   function selectLastNWeeks(n: number) {
-    const sorted = [...combinedWeeksExamsList].sort((a, b) => {
+    const sorted = [...displayCombinedExams].sort((a, b) => {
       const numA = extractWeekNumber(a.title, a.result_note) || 0
       const numB = extractWeekNumber(b.title, b.result_note) || 0
       return numA - numB
@@ -3125,7 +3135,9 @@ export default function ExamResultsPage() {
                   </span>
                 </h3>
                 <p className="text-[11px] text-slate-500">
-                  যেকোনো সপ্তাহের পরীক্ষার ফলাফলে যেতে বা পূর্ববর্তী সপ্তাহের মার্ক দেখতে ক্লিক করুন
+                  {selectedTab === "all_weeks_combined"
+                    ? "সমন্বিত মেধার জন্য সপ্তাহ নির্বাচন করতে নিচের বাটনগুলোতে ক্লিক করুন (বা অন্য সপ্তাহের পাতায় যেতে পারেন)"
+                    : "যেকোনো সপ্তাহের পরীক্ষার ফলাফলে যেতে বা পূর্ববর্তী সপ্তাহের মার্ক দেখতে ক্লিক করুন"}
                 </p>
               </div>
             </div>
@@ -3194,6 +3206,52 @@ export default function ExamResultsPage() {
           <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
             {fullSeriesSlots.map((slot) => {
               if (slot.exam) {
+                const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
+                if (selectedTab === "all_weeks_combined") {
+                  return (
+                    <button
+                      key={`slot-${slot.weekNum}`}
+                      type="button"
+                      onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
+                      className={cn(
+                        "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border shrink-0 cursor-pointer shadow-2xs active:scale-95",
+                        isSel
+                          ? "bg-gradient-to-r from-blue-700 to-indigo-700 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
+                          : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
+                      )}
+                      title={`সমন্বিত ফলাফলে ${slot.title} অন্তর্ভুক্ত/বাদ দিন`}
+                    >
+                      {isSel ? (
+                        <CheckSquare className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      )}
+                      <span
+                        className={cn(
+                          "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black",
+                          isSel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+                        )}
+                      >
+                        W{slot.weekNum}
+                      </span>
+                      <span>{slot.title}</span>
+                      {slot.isCurrent && (
+                        <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider shadow-2xs">
+                          বর্তমান
+                        </span>
+                      )}
+                      <span
+                        className={cn(
+                          "text-[9px] px-1.5 py-0.2 rounded font-bold uppercase",
+                          isSel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                        )}
+                      >
+                        {isSel ? "যুক্ত" : "বাদ"}
+                      </span>
+                    </button>
+                  )
+                }
+
                 return (
                   <Link
                     key={`slot-${slot.weekNum}`}
@@ -3381,81 +3439,221 @@ export default function ExamResultsPage() {
             </button>
           </div>
 
-          {/* DAY BUTTONS (Shown when in daily marks mode) */}
-          <div className="space-y-1.5 pt-1 border-t border-slate-100">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-600">
-                {selectedTab === "weekly_aggregate" || selectedTab === "all_weeks_combined"
-                  ? "বার ও বিষয়ভিত্তিক নম্বরে দ্রুত যেতে ক্লিক করুন:"
-                  : "বার নির্বাচন করুন (দিনভিত্তিক পরীক্ষা ও বিষয়):"}
-              </span>
-              <span className="text-[11px] text-slate-500 font-mono">মোট পূর্ণমান: {totalWeeklyMaxMarks} নম্বর</span>
-            </div>
+          {/* WHEN IN COMBINED MODE: SHOW COMBINED WEEK SELECTOR */}
+          {selectedTab === "all_weeks_combined" ? (
+            <div className="space-y-3 pt-2.5 border-t-2 border-blue-200">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="w-8 h-8 rounded-xl bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 border border-blue-200 shadow-2xs">
+                    <CheckSquare className="w-4 h-4 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs sm:text-sm font-black text-blue-950 flex items-center gap-2 flex-wrap">
+                      <span>সমন্বিত মেধার জন্য সপ্তাহ নির্বাচন করুন (Select Weeks to Combine):</span>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-600 text-white shadow-2xs font-mono">
+                        {activeCombinedExams.length}টি সপ্তাহ নির্বাচিত (মোট {displayCombinedExams.length}টি)
+                      </span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500">
+                      নিচের যেকোনো সপ্তাহে ক্লিক করে যোগ বা বাদ দিন • মোট পূর্ণমান:{" "}
+                      <span className="font-bold text-blue-900 font-mono">
+                        {activeCombinedExams.reduce((acc, curr) => acc + (Number(curr.total_marks) || 100), 0)} নম্বর
+                      </span>
+                    </p>
+                  </div>
+                </div>
 
-            <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5">
-              {parsedWeeklyDays.map((d) => {
-                const isSelected = selectedTab === d.key
-                const isDayPub = publishedDays.some(
-                  (p) =>
-                    p &&
-                    ((d.key && String(p).toLowerCase() === String(d.key).toLowerCase()) ||
-                      (d.day_bn && String(p).toLowerCase() === String(d.day_bn).toLowerCase()))
-                )
-
-                return (
+                {/* Quick Selection Shortcuts & Actions */}
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <button
-                    key={d.key}
+                    type="button"
+                    onClick={selectAllCombinedWeeks}
+                    className="px-2.5 py-1.5 text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl border border-blue-200 cursor-pointer transition-all shadow-2xs"
+                  >
+                    সকল সপ্তাহ ({displayCombinedExams.length})
+                  </button>
+                  {displayCombinedExams.length >= 3 && (
+                    <button
+                      type="button"
+                      onClick={() => selectLastNWeeks(3)}
+                      className="px-2.5 py-1.5 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl border border-indigo-200 cursor-pointer transition-all shadow-2xs"
+                    >
+                      সর্বশেষ ৩ সপ্তাহ
+                    </button>
+                  )}
+                  {displayCombinedExams.length >= 2 && (
+                    <button
+                      type="button"
+                      onClick={() => selectLastNWeeks(2)}
+                      className="px-2.5 py-1.5 text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-xl border border-purple-200 cursor-pointer transition-all shadow-2xs"
+                    >
+                      সর্বশেষ ২ সপ্তাহ
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handlePublishSelectedCombinedResult}
+                    disabled={publishingCombinedNotice || activeCombinedExams.length === 0}
+                    className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95 disabled:opacity-50"
+                    title="নির্বাচিত সপ্তাহগুলোর সমন্বিত মেধা তালিকা নোটিশ বোর্ডে প্রকাশ করুন"
+                  >
+                    {publishingCombinedNotice ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Globe className="w-3.5 h-3.5 text-emerald-200" />
+                    )}
+                    <span>📢 ফলাফল প্রকাশ</span>
+                  </button>
+                  <button
                     type="button"
                     onClick={() => {
-                      Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
-                      autoSaveTimersRef.current = {}
-                      setSelectedTab(d.key)
-                      setJustSavedIds(new Set())
-                      setSelectedStudent(null)
-                      setQuickMarkInput("")
-                      setStudentSearchQuery("")
+                      setPrintModalDefaultMode("all_weeks_combined")
+                      setIsPrintModalOpen(true)
                     }}
-                    className={cn(
-                      "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[130px] sm:min-w-[155px] cursor-pointer",
-                      isSelected
-                        ? "bg-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-400/40"
-                        : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200"
-                    )}
+                    className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
                   >
-                    <div className="flex items-center justify-between w-full gap-2">
-                      <span className={cn("text-xs font-black", isSelected ? "text-white" : "text-slate-900")}>
-                        {d.day_bn}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-[10px] font-bold px-1.5 py-0.2 rounded-full border",
-                          isDayPub
-                            ? isSelected
-                              ? "bg-white text-emerald-700 border-white"
-                              : "bg-emerald-100 text-emerald-800 border-emerald-300"
-                            : isSelected
-                            ? "bg-amber-600/40 text-white border-amber-400"
-                            : "bg-slate-200 text-slate-600 border-slate-300"
-                        )}
-                      >
-                        {isDayPub ? "✓ প্রকাশিত" : "ড্রাফট"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center gap-1 text-[11px] truncate w-full">
-                      <span className={cn("font-medium truncate", isSelected ? "text-amber-100" : "text-slate-600")}>
-                        {d.subject || d.exam_name}
-                      </span>
-                    </div>
-
-                    <div className={cn("text-[10px] font-bold mt-0.5", isSelected ? "text-white" : "text-amber-700")}>
-                      মোট: {d.total_marks} নম্বর (পাস: {d.pass_marks})
-                    </div>
+                    <Printer className="w-3.5 h-3.5 text-amber-300" />
+                    <span>🖨️ প্রিন্ট (PDF)</span>
                   </button>
-                )
-              })}
+                </div>
+              </div>
+
+              {/* Week Pills Horizontal Row */}
+              <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 pt-0.5">
+                {displayCombinedExams.map((we, wIdx) => {
+                  const isSel = selectedCombinedWeekIds.includes(we.id)
+                  const wNum = extractWeekNumber(we.title, we.result_note) || (wIdx + 1)
+
+                  return (
+                    <button
+                      key={`hub-week-pill-${we.id}`}
+                      type="button"
+                      onClick={() => toggleCombinedWeekSelection(we.id)}
+                      className={cn(
+                        "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[145px] sm:min-w-[170px] cursor-pointer shadow-2xs active:scale-95",
+                        isSel
+                          ? "bg-gradient-to-br from-blue-700 via-indigo-700 to-indigo-800 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span
+                            className={cn(
+                              "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0",
+                              isSel ? "bg-white text-blue-900" : "bg-slate-200 text-slate-600"
+                            )}
+                          >
+                            W{wNum}
+                          </span>
+                          <span className={cn("text-xs font-black truncate", isSel ? "text-white" : "text-slate-800")}>
+                            {we.title || `WEEKLY-0${wNum}`}
+                          </span>
+                        </div>
+
+                        {/* Checkbox Icon */}
+                        {isSel ? (
+                          <CheckSquare className="w-4 h-4 text-emerald-300 shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-400 shrink-0" />
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between w-full text-[11px] mt-1 pt-1 border-t border-white/20">
+                        <span className={cn("font-medium", isSel ? "text-blue-100" : "text-slate-500")}>
+                          পূর্ণমান: {we.total_marks || 350} নম্বর
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[9px] font-bold px-1.5 py-0.2 rounded font-mono uppercase",
+                            isSel ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
+                          )}
+                        >
+                          {isSel ? "✓ অন্তর্ভুক্ত" : "বাদ"}
+                        </span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          ) : (
+            /* DAY BUTTONS (Shown when in daily marks mode or weekly aggregate mode) */
+            <div className="space-y-1.5 pt-1 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-600">
+                  {selectedTab === "weekly_aggregate"
+                    ? "বার ও বিষয়ভিত্তিক নম্বরে দ্রুত যেতে ক্লিক করুন:"
+                    : "বার নির্বাচন করুন (দিনভিত্তিক পরীক্ষা ও বিষয়):"}
+                </span>
+                <span className="text-[11px] text-slate-500 font-mono">মোট পূর্ণমান: {totalWeeklyMaxMarks} নম্বর</span>
+              </div>
+
+              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5">
+                {parsedWeeklyDays.map((d) => {
+                  const isSelected = selectedTab === d.key
+                  const isDayPub = publishedDays.some(
+                    (p) =>
+                      p &&
+                      ((d.key && String(p).toLowerCase() === String(d.key).toLowerCase()) ||
+                        (d.day_bn && String(p).toLowerCase() === String(d.day_bn).toLowerCase()))
+                  )
+
+                  return (
+                    <button
+                      key={d.key}
+                      type="button"
+                      onClick={() => {
+                        Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
+                        autoSaveTimersRef.current = {}
+                        setSelectedTab(d.key)
+                        setJustSavedIds(new Set())
+                        setSelectedStudent(null)
+                        setQuickMarkInput("")
+                        setStudentSearchQuery("")
+                      }}
+                      className={cn(
+                        "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[130px] sm:min-w-[155px] cursor-pointer",
+                        isSelected
+                          ? "bg-amber-500 text-white border-amber-600 shadow-md ring-2 ring-amber-400/40"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200"
+                      )}
+                    >
+                      <div className="flex items-center justify-between w-full gap-2">
+                        <span className={cn("text-xs font-black", isSelected ? "text-white" : "text-slate-900")}>
+                          {d.day_bn}
+                        </span>
+                        <span
+                          className={cn(
+                            "text-[10px] font-bold px-1.5 py-0.2 rounded-full border",
+                            isDayPub
+                              ? isSelected
+                                ? "bg-white text-emerald-700 border-white"
+                                : "bg-emerald-100 text-emerald-800 border-emerald-300"
+                              : isSelected
+                              ? "bg-amber-600/40 text-white border-amber-400"
+                              : "bg-slate-200 text-slate-600 border-slate-300"
+                          )}
+                        >
+                          {isDayPub ? "✓ প্রকাশিত" : "ড্রাফট"}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1 text-[11px] truncate w-full">
+                        <span className={cn("font-medium truncate", isSelected ? "text-amber-100" : "text-slate-600")}>
+                          {d.subject || d.exam_name}
+                        </span>
+                      </div>
+
+                      <div className={cn("text-[10px] font-bold mt-0.5", isSelected ? "text-white" : "text-amber-700")}>
+                        মোট: {d.total_marks} নম্বর (পাস: {d.pass_marks})
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3742,9 +3940,9 @@ export default function ExamResultsPage() {
                     onClick={selectAllCombinedWeeks}
                     className="px-2.5 py-1 text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 cursor-pointer transition-all"
                   >
-                    সকল সপ্তাহ ({combinedWeeksExamsList.length})
+                    সকল সপ্তাহ ({displayCombinedExams.length})
                   </button>
-                  {combinedWeeksExamsList.length >= 3 && (
+                  {displayCombinedExams.length >= 3 && (
                     <button
                       type="button"
                       onClick={() => selectLastNWeeks(3)}
@@ -3753,7 +3951,7 @@ export default function ExamResultsPage() {
                       সর্বশেষ ৩ সপ্তাহ
                     </button>
                   )}
-                  {combinedWeeksExamsList.length >= 2 && (
+                  {displayCombinedExams.length >= 2 && (
                     <button
                       type="button"
                       onClick={() => selectLastNWeeks(2)}
@@ -3767,7 +3965,7 @@ export default function ExamResultsPage() {
 
               {/* Checkbox pills */}
               <div className="flex flex-wrap items-center gap-2">
-                {combinedWeeksExamsList.map((we, wIdx) => {
+                {displayCombinedExams.map((we, wIdx) => {
                   const isSel = selectedCombinedWeekIds.includes(we.id)
                   const wTitle = we.title || `Week ${wIdx + 1}`
                   return (
