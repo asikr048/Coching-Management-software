@@ -32,7 +32,8 @@ export function getMonthLabel(yearMonth: string): string {
 }
 
 export function getGrade(obtained: number, total: number): string {
-  const pct = (obtained / total) * 100
+  if (total <= 0 || isNaN(obtained) || obtained === null) return "F"
+  const pct = Math.round((obtained / total) * 100)
   if (pct >= 80) return "A+"
   if (pct >= 70) return "A"
   if (pct >= 60) return "A-"
@@ -40,6 +41,30 @@ export function getGrade(obtained: number, total: number): string {
   if (pct >= 40) return "C"
   if (pct >= 33) return "D"
   return "F"
+}
+
+export function getGradePoint(obtained: number, total: number): number {
+  if (total <= 0 || isNaN(obtained) || obtained === null) return 0.0
+  const pct = Math.round((obtained / total) * 100)
+  if (pct >= 80) return 5.0
+  if (pct >= 70) return 4.0
+  if (pct >= 60) return 3.5
+  if (pct >= 50) return 3.0
+  if (pct >= 40) return 2.0
+  if (pct >= 33) return 1.0
+  return 0.0
+}
+
+export function getGradeRemarks(obtained: number, total: number): string {
+  if (total <= 0 || isNaN(obtained) || obtained === null) return "Fail"
+  const pct = Math.round((obtained / total) * 100)
+  if (pct >= 80) return "Outstanding"
+  if (pct >= 70) return "Excellent"
+  if (pct >= 60) return "Very Good"
+  if (pct >= 50) return "Good"
+  if (pct >= 40) return "Satisfactory"
+  if (pct >= 33) return "Pass"
+  return "Fail"
 }
 
 /**

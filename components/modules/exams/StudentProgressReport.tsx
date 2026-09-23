@@ -59,24 +59,26 @@ export interface StudentProgressReportProps {
 }
 
 /**
- * Coaching Center Grade Scale Calculator (as shown in Pic 1):
- * Range    | Grade | GP
- * 60-100%  | A+    | 5.0
- * 40-59%   | A     | 4.0
- * 30-39%   | B     | 3.5
- * 20-29%   | C     | 3.0
- * 10-19%   | D     | 2.0
- * 0-9%     | E     | 1.0
+ * Coaching Center Grade Scale Calculator:
+ * Marks (%) | Letter Grade | Grade Point | Remarks
+ * 80–100    | A+           | 5.00        | Outstanding
+ * 70–79     | A            | 4.00        | Excellent
+ * 60–69     | A-           | 3.50        | Very Good
+ * 50–59     | B            | 3.00        | Good
+ * 40–49     | C            | 2.00        | Satisfactory
+ * 33–39     | D            | 1.00        | Pass
+ * 0–32      | F            | 0.00        | Fail
  */
-export function calculateCoachingGrade(marks: number, fullMarks: number): { grade: string; gp: number } {
-  if (fullMarks <= 0 || isNaN(marks) || marks === null) return { grade: "—", gp: 0 }
+export function calculateCoachingGrade(marks: number, fullMarks: number): { grade: string; gp: number; remarks: string } {
+  if (fullMarks <= 0 || isNaN(marks) || marks === null) return { grade: "—", gp: 0, remarks: "—" }
   const pct = Math.round((marks / fullMarks) * 100)
-  if (pct >= 60) return { grade: "A+", gp: 5.0 }
-  if (pct >= 40) return { grade: "A", gp: 4.0 }
-  if (pct >= 30) return { grade: "B", gp: 3.5 }
-  if (pct >= 20) return { grade: "C", gp: 3.0 }
-  if (pct >= 10) return { grade: "D", gp: 2.0 }
-  return { grade: "E", gp: 1.0 }
+  if (pct >= 80) return { grade: "A+", gp: 5.0, remarks: "Outstanding" }
+  if (pct >= 70) return { grade: "A", gp: 4.0, remarks: "Excellent" }
+  if (pct >= 60) return { grade: "A-", gp: 3.5, remarks: "Very Good" }
+  if (pct >= 50) return { grade: "B", gp: 3.0, remarks: "Good" }
+  if (pct >= 40) return { grade: "C", gp: 2.0, remarks: "Satisfactory" }
+  if (pct >= 33) return { grade: "D", gp: 1.0, remarks: "Pass" }
+  return { grade: "F", gp: 0.0, remarks: "Fail" }
 }
 
 export default function StudentProgressReport({
@@ -198,44 +200,57 @@ export default function StudentProgressReport({
 
             {/* RIGHT: OFFICIAL GRADING SYSTEM TABLE */}
             <div className="shrink-0">
-              <table className="border-collapse border border-black text-[10px] leading-tight text-center font-mono">
+              <table className="border-collapse border border-black text-[9px] leading-tight text-center font-mono">
                 <thead>
                   <tr className="bg-slate-100 print:bg-slate-100 font-bold border-b border-black">
-                    <th className="border border-black px-1.5 py-0.5">Range</th>
-                    <th className="border border-black px-1.5 py-0.5">Grade</th>
-                    <th className="border border-black px-1.5 py-0.5">GP</th>
+                    <th className="border border-black px-1.5 py-0.5">Marks (%)</th>
+                    <th className="border border-black px-1.5 py-0.5">Letter Grade</th>
+                    <th className="border border-black px-1.5 py-0.5">Grade Point</th>
+                    <th className="border border-black px-1.5 py-0.5">Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="border border-black px-1.5 py-0.2">60-100</td>
+                    <td className="border border-black px-1.5 py-0.2">80–100</td>
                     <td className="border border-black px-1.5 py-0.2 font-bold">A+</td>
-                    <td className="border border-black px-1.5 py-0.2">5.0</td>
+                    <td className="border border-black px-1.5 py-0.2">5.00</td>
+                    <td className="border border-black px-1.5 py-0.2">Outstanding</td>
                   </tr>
                   <tr>
-                    <td className="border border-black px-1.5 py-0.2">40-59</td>
+                    <td className="border border-black px-1.5 py-0.2">70–79</td>
                     <td className="border border-black px-1.5 py-0.2 font-bold">A</td>
-                    <td className="border border-black px-1.5 py-0.2">4.0</td>
+                    <td className="border border-black px-1.5 py-0.2">4.00</td>
+                    <td className="border border-black px-1.5 py-0.2">Excellent</td>
                   </tr>
                   <tr>
-                    <td className="border border-black px-1.5 py-0.2">30-39</td>
+                    <td className="border border-black px-1.5 py-0.2">60–69</td>
+                    <td className="border border-black px-1.5 py-0.2 font-bold">A-</td>
+                    <td className="border border-black px-1.5 py-0.2">3.50</td>
+                    <td className="border border-black px-1.5 py-0.2">Very Good</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black px-1.5 py-0.2">50–59</td>
                     <td className="border border-black px-1.5 py-0.2 font-bold">B</td>
-                    <td className="border border-black px-1.5 py-0.2">3.5</td>
+                    <td className="border border-black px-1.5 py-0.2">3.00</td>
+                    <td className="border border-black px-1.5 py-0.2">Good</td>
                   </tr>
                   <tr>
-                    <td className="border border-black px-1.5 py-0.2">20-29</td>
+                    <td className="border border-black px-1.5 py-0.2">40–49</td>
                     <td className="border border-black px-1.5 py-0.2 font-bold">C</td>
-                    <td className="border border-black px-1.5 py-0.2">3.0</td>
+                    <td className="border border-black px-1.5 py-0.2">2.00</td>
+                    <td className="border border-black px-1.5 py-0.2">Satisfactory</td>
                   </tr>
                   <tr>
-                    <td className="border border-black px-1.5 py-0.2">10-19</td>
+                    <td className="border border-black px-1.5 py-0.2">33–39</td>
                     <td className="border border-black px-1.5 py-0.2 font-bold">D</td>
-                    <td className="border border-black px-1.5 py-0.2">2.0</td>
+                    <td className="border border-black px-1.5 py-0.2">1.00</td>
+                    <td className="border border-black px-1.5 py-0.2">Pass</td>
                   </tr>
                   <tr>
-                    <td className="border border-black px-1.5 py-0.2">0-9</td>
-                    <td className="border border-black px-1.5 py-0.2 font-bold">E</td>
-                    <td className="border border-black px-1.5 py-0.2">1.0</td>
+                    <td className="border border-black px-1.5 py-0.2">0–32</td>
+                    <td className="border border-black px-1.5 py-0.2 font-bold text-rose-700">F</td>
+                    <td className="border border-black px-1.5 py-0.2">0.00</td>
+                    <td className="border border-black px-1.5 py-0.2">Fail</td>
                   </tr>
                 </tbody>
               </table>

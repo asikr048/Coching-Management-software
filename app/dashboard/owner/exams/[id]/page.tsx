@@ -38,7 +38,7 @@ import {
   BookOpen,
   Edit2,
 } from "lucide-react"
-import { getGrade, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
+import { getGrade, getGradePoint, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
 import ExamPrintModal, { PrintTemplateType } from "@/components/modules/exams/ExamPrintModal"
 import { calculateCoachingGrade } from "@/components/modules/exams/StudentProgressReport"
@@ -2278,7 +2278,7 @@ export default function ExamResultsPage() {
       obtained_marks: t.obtained_marks,
       pct: t.pct,
       grade: t.grade,
-      gpa: 5.0,
+      gpa: getGradePoint(t.obtained_marks, totalWeeklyMaxMarks),
       students: t.students.map((st) => ({
         id: st.id,
         name: st.name,
@@ -2287,7 +2287,7 @@ export default function ExamResultsPage() {
         student_id: st.student_id,
       })),
     }))
-  }, [totalToppers])
+  }, [totalToppers, totalWeeklyMaxMarks])
 
   const printableSubjectToppers = useMemo(() => {
     return subjectToppers.map((st) => ({
@@ -3212,12 +3212,13 @@ export default function ExamResultsPage() {
                 <span className="font-bold text-slate-800">প্রতিষ্ঠানের গ্রেডিং স্কেল (Grading Scale):</span>
               </div>
               <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
-                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">৬০-১০০% (A+ 5.0)</span>
-                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-bold">৪০-৫৯% (A 4.0)</span>
-                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-bold">৩০-৩৯% (B 3.5)</span>
-                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">২০-২৯% (C 3.0)</span>
-                <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200 font-bold">১০-১৯% (D 2.0)</span>
-                <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 font-bold">০-৯% (E 1.0)</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">৮০-১০০% (A+ 5.00)</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-50/70 text-emerald-700 border border-emerald-200 font-bold">৭০-৭৯% (A 4.00)</span>
+                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-bold">৬০-৬৯% (A- 3.50)</span>
+                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-bold">৫০-৫৯% (B 3.00)</span>
+                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">৪০-৪৯% (C 2.00)</span>
+                <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200 font-bold">৩৩-৩৯% (D 1.00)</span>
+                <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 font-bold">০-৩২% (F 0.00)</span>
               </div>
             </div>
 
@@ -3491,12 +3492,13 @@ export default function ExamResultsPage() {
                 <span className="font-bold text-slate-800">প্রতিষ্ঠানের গ্রেডিং স্কেল (Grading Scale):</span>
               </div>
               <div className="flex flex-wrap gap-1.5 font-mono text-[11px]">
-                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">৬০-১০০% (A+ 5.0)</span>
-                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-bold">৪০-৫৯% (A 4.0)</span>
-                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-bold">৩০-৩৯% (B 3.5)</span>
-                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">২০-২৯% (C 3.0)</span>
-                <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200 font-bold">১০-১৯% (D 2.0)</span>
-                <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 font-bold">০-৯% (E 1.0)</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">৮০-১০০% (A+ 5.00)</span>
+                <span className="px-2 py-0.5 rounded bg-emerald-50/70 text-emerald-700 border border-emerald-200 font-bold">৭০-৭৯% (A 4.00)</span>
+                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-bold">৬০-৬৯% (A- 3.50)</span>
+                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-800 border border-purple-200 font-bold">৫০-৫৯% (B 3.00)</span>
+                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">৪০-৪৯% (C 2.00)</span>
+                <span className="px-2 py-0.5 rounded bg-orange-50 text-orange-800 border border-orange-200 font-bold">৩৩-৩৯% (D 1.00)</span>
+                <span className="px-2 py-0.5 rounded bg-rose-50 text-rose-800 border border-rose-200 font-bold">০-৩২% (F 0.00)</span>
               </div>
             </div>
           </div>
