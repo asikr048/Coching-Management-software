@@ -147,20 +147,24 @@ export default function WeeklyToppersSheet({
                     {medalLabel}
                   </div>
 
-                  <div className="py-2">
-                    {primaryStudent ? (
-                      <>
-                        <h4 className="font-black text-sm text-black leading-snug">{primaryStudent.name}</h4>
-                        <div className="text-[11px] font-mono text-slate-700 font-bold mt-0.5">
-                          রোল: #{primaryStudent.roll_no ?? primaryStudent.batch_roll ?? "—"} • ID: {primaryStudent.student_id}
+                  <div className="py-2 space-y-1.5 min-h-[60px] flex flex-col justify-center">
+                    {t.students && t.students.length > 0 ? (
+                      t.students.map((st, sIdx) => (
+                        <div key={st.id || sIdx} className={cn("text-center", sIdx > 0 && "pt-1.5 border-t border-black/15")}>
+                          <h4 className="font-black text-sm text-black leading-snug">{st.name}</h4>
+                          <div className="text-[11px] font-mono text-slate-800 font-bold mt-0.5">
+                            রোল: #{st.roll_no ?? st.batch_roll ?? "—"} • ID: {st.student_id}
+                          </div>
                         </div>
-                      </>
+                      ))
                     ) : (
                       <div className="text-xs text-slate-400">—</div>
                     )}
-                    {t.students.length > 1 && (
-                      <div className="text-[10px] font-bold text-slate-600 mt-1">
-                        + আরও {t.students.length - 1} জন (যৌথ)
+                    {t.students && t.students.length > 1 && (
+                      <div className="pt-0.5">
+                        <span className="inline-block text-[9px] font-bold px-2 py-0.5 bg-amber-200 text-amber-950 rounded border border-amber-300">
+                          যৌথ ({t.students.length} জন)
+                        </span>
                       </div>
                     )}
                   </div>
@@ -221,24 +225,48 @@ export default function WeeklyToppersSheet({
                       {st.totalMarks}
                     </td>
                     <td className="border border-black py-1.5 px-3 text-left font-black text-black">
-                      {winner ? (
-                        <div className="flex items-center gap-1.5">
-                          <span>{winner.name}</span>
-                          {hasTie && (
-                            <span className="text-[9px] px-1 py-0.2 bg-slate-200 rounded font-bold">
-                              +{st.winners.length - 1}
-                            </span>
-                          )}
+                      {st.winners.length > 0 ? (
+                        <div className="space-y-1">
+                          {st.winners.map((w, wIdx) => (
+                            <div key={w.id || wIdx} className={cn("flex items-center justify-between gap-1", wIdx > 0 && "pt-1 border-t border-slate-200")}>
+                              <span>{w.name}</span>
+                              {hasTie && (
+                                <span className="text-[9px] px-1.5 py-0.2 bg-amber-100 text-amber-900 border border-amber-300 rounded font-bold shrink-0">
+                                  যৌথ
+                                </span>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       ) : (
                         <span className="text-slate-400 font-normal">—</span>
                       )}
                     </td>
                     <td className="border border-black py-1.5 px-2 font-mono font-bold">
-                      {winner ? winner.roll_no ?? winner.batch_roll ?? "—" : "—"}
+                      {st.winners.length > 0 ? (
+                        <div className="space-y-1">
+                          {st.winners.map((w, wIdx) => (
+                            <div key={w.id || wIdx} className={cn(wIdx > 0 && "pt-1 border-t border-slate-200")}>
+                              {w.roll_no ?? w.batch_roll ?? "—"}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="border border-black py-1.5 px-2 font-mono text-[11px] text-slate-700">
-                      {winner ? winner.student_id : "—"}
+                      {st.winners.length > 0 ? (
+                        <div className="space-y-1">
+                          {st.winners.map((w, wIdx) => (
+                            <div key={w.id || wIdx} className={cn(wIdx > 0 && "pt-1 border-t border-slate-200")}>
+                              {w.student_id}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        "—"
+                      )}
                     </td>
                     <td className="border border-black py-1.5 px-2 font-mono font-black text-black bg-slate-50">
                       {st.highestMarks >= 0 ? st.highestMarks : "—"}

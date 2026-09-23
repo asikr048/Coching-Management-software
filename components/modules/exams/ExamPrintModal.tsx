@@ -49,7 +49,10 @@ export interface ExamPrintModalProps {
   isOpen: boolean
   onClose: () => void
   exam: PrintableExamSheetProps["exam"] & {
+    batch_id?: string | null
     batch_ids?: string[]
+    result_note?: string | null
+    batch?: { id?: string; name: string; branch_id?: string | null } | null
   }
   isWeeklyExam: boolean
   weeklyDays?: PrintableExamSheetProps["weeklyDays"]
@@ -135,19 +138,55 @@ export default function ExamPrintModal({
 
   const currentDayConfig = weeklyDays.find((d) => d.key === selectedDayKey) || activeDayConfig || weeklyDays[0] || null
 
-  // Resolved list of batches relevant to this exam
+  // Resolved list of batches relevant to this exam (ONLY batches selected at creation time)
   const relevantBatches = useMemo<BatchItem[]>(() => {
-    if (availableBatches.length > 0) {
-      if (Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0) {
-        return availableBatches.filter((b) => exam.batch_ids!.includes(b.id))
-      }
-      return availableBatches
+    // 1. Gather all allowed batch IDs specified during exam creation
+    let targetBatchIds: string[] = []
+    if (Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0) {
+      targetBatchIds = exam.batch_ids
+    } else if (exam.result_note && exam.result_note.includes("[BATCH_IDS:")) {
+      try {
+        const m = exam.result_note.match(/\[BATCH_IDS:(.*?)\]/)
+        if (m && m[1]) {
+          const parsed = JSON.parse(m[1])
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            targetBatchIds = parsed
+          }
+        }
+      } catch {}
     }
+
+    if (targetBatchIds.length === 0 && exam.batch_id) {
+      targetBatchIds = [exam.batch_id]
+    }
+
+    // 2. If target batches were specified, return ONLY matching batches
+    if (targetBatchIds.length > 0) {
+      if (availableBatches.length > 0) {
+        const matched = availableBatches.filter((b) => targetBatchIds.includes(b.id))
+        if (matched.length > 0) return matched
+      }
+      if (exam.batch?.name) {
+        return [{ id: exam.batch_id || (exam.batch as any).id || "primary", name: exam.batch.name }]
+      }
+      return targetBatchIds.map((id) => ({ id, name: "নির্ধারিত ব্যাচ" }))
+    }
+
+    // 3. If exam had no batch_id, check which batches the participating students actually belong to
+    if (students.length > 0 && availableBatches.length > 0) {
+      const studentBatchIds = new Set(students.map((s) => s.batch_id).filter(Boolean))
+      if (studentBatchIds.size > 0) {
+        const matched = availableBatches.filter((b) => studentBatchIds.has(b.id))
+        if (matched.length > 0) return matched
+      }
+    }
+
     if (exam.batch?.name) {
       return [{ id: "primary", name: exam.batch.name }]
     }
+
     return []
-  }, [availableBatches, exam.batch_ids, exam.batch])
+  }, [availableBatches, exam.batch_ids, exam.batch_id, exam.batch, exam.result_note, students])
 
   // Filter students based on selected batch
   const filteredStudents = useMemo(() => {
