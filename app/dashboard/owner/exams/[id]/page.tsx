@@ -39,6 +39,7 @@ import {
 import { getGrade, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
 import ExamPrintModal from "@/components/modules/exams/ExamPrintModal"
+import { calculateCoachingGrade } from "@/components/modules/exams/StudentProgressReport"
 
 interface Student {
   id: string
@@ -46,8 +47,14 @@ interface Student {
   student_id: string
   roll_no?: number | null
   batch_roll?: number | null
+  batch_id?: string | null
   phone?: string | null
   guardian_phone?: string | null
+  father_name?: string | null
+  mother_name?: string | null
+  guardian_name?: string | null
+  group?: string | null
+  qr_code?: string | null
 }
 
 interface Result {
@@ -226,7 +233,7 @@ export default function ExamResultsPage() {
 
   // Print Modal State
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
-  const [printModalDefaultMode, setPrintModalDefaultMode] = useState<"one_time" | "weekly_aggregate" | "weekly_day">("one_time")
+  const [printModalDefaultMode, setPrintModalDefaultMode] = useState<"one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined">("one_time")
 
   // Batch Selection & Students State
   const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string }[]>([])
@@ -379,14 +386,14 @@ export default function ExamResultsPage() {
 
   // Active day configuration
   const activeDayConfig = useMemo<ParsedWeeklyDay | null>(() => {
-    if (!isWeeklyExam || selectedTab === "weekly_aggregate") return null
-    const sTabLower = (selectedTab || "").toLowerCase()
+    if (!isWeeklyExam || selectedTab === "weekly_aggregate" || selectedTab === "all_weeks_combined") return null
+    const sTabLower = String(selectedTab || "").toLowerCase()
     return (
       parsedWeeklyDays.find(
         (d) =>
-          d.key.toLowerCase() === sTabLower ||
+          (d.key && d.key.toLowerCase() === sTabLower) ||
           d.day_bn === selectedTab ||
-          d.day_en.toLowerCase() === sTabLower
+          (d.day_en && String(d.day_en).toLowerCase() === sTabLower)
       ) || parsedWeeklyDays[0] || null
     )
   }, [isWeeklyExam, selectedTab, parsedWeeklyDays])
@@ -528,8 +535,14 @@ export default function ExamResultsPage() {
                       : idx + 1
                   return {
                     ...s,
+                    batch_id: e.batch_id || s.batch_id || ex.batch_id,
                     roll_no: Number(rNo),
                     batch_roll: Number(rNo),
+                    father_name: s.father_name || s.guardian_name || "",
+                    mother_name: s.mother_name || "",
+                    guardian_name: s.guardian_name || "",
+                    group: s.class_level || s.group || "HUMANITIES",
+                    qr_code: s.qr_code || s.student_id,
                   }
                 })
                 .filter(Boolean) as Student[]
@@ -730,10 +743,166 @@ export default function ExamResultsPage() {
     }
   }
 
+  // Continuous Weekly Exam: Start Next Week Session
+  const [creatingNextWeek, setCreatingNextWeek] = useState(false)
+  async function handleStartNextWeek() {
+    if (!exam) return
+    setCreatingNextWeek(true)
+    try {
+      let curWeek = 1
+      const m = (exam.title || "").match(/weekly[-\s_]?(\d+)/i) || (exam.title || "").match(/সাপ্তাহিক[-\s_]?(\d+)/)
+      if (m && m[1]) {
+        curWeek = parseInt(m[1])
+      } else {
+        const noteM = (exam.result_note || "").match(/\[SERIES_WEEK:(\d+)\]/)
+        if (noteM && noteM[1]) curWeek = parseInt(noteM[1])
+      }
+
+      const nextWeekNum = curWeek + 1
+      const nextTitle = `WEEKLY-${nextWeekNum < 10 ? "0" + nextWeekNum : nextWeekNum}`
+
+      const payload: any = {
+        title: nextTitle,
+        exam_schedule_type: "weekly",
+        batch_id: exam.batch_id,
+        batch_ids: Array.isArray(exam.batch_ids) ? exam.batch_ids : exam.batch_id ? [exam.batch_id] : [],
+        branch_id: exam.branch_id || null,
+        subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+        total_marks: exam.total_marks || 100,
+        pass_marks: exam.pass_marks || 40,
+        exam_date: new Date().toISOString().split("T")[0],
+        recurring_days: exam.recurring_days || [],
+        duration_minutes: exam.duration_minutes || 60,
+        show_results_immediately: true,
+        show_all_results: true,
+        result_note: `[SERIES_WEEK:${nextWeekNum}]`,
+        is_published: false,
+      }
+
+      const res = await fetch("/api/exams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        const newExamId = data.exam?.id || data.id
+        if (newExamId) {
+          toast.success(`✓ ${nextTitle} সফলভাবে তৈরি হয়েছে! নতুন সপ্তাহে নিয়ে যাওয়া হচ্ছে...`)
+          router.push(`/dashboard/owner/exams/${newExamId}`)
+          return
+        }
+      }
+
+      const { data: inserted, error: insErr } = await supabase.from("exams").insert(payload).select().single()
+      if (insErr) throw insErr
+      if (inserted?.id) {
+        toast.success(`✓ ${nextTitle} সফলভাবে তৈরি হয়েছে!`)
+        router.push(`/dashboard/owner/exams/${inserted.id}`)
+      }
+    } catch (err: any) {
+      console.error("Start next week error:", err)
+      toast.error(err.message || "Failed to start next week exam")
+    } finally {
+      setCreatingNextWeek(false)
+    }
+  }
+
+  // All-Week Combined Result State & Calculation
+  const [combinedWeeksExamsList, setCombinedWeeksExamsList] = useState<any[]>([])
+  const [combinedWeekData, setCombinedWeekData] = useState<any[]>([])
+  const [loadingCombinedWeeks, setLoadingCombinedWeeks] = useState(false)
+
+  async function loadCombinedWeeklyResults() {
+    if (!exam) return
+    setLoadingCombinedWeeks(true)
+    try {
+      const targetBatchId = exam.batch_id
+      let query = supabase
+        .from("exams")
+        .select("id, title, total_marks, exam_date, result_note, exam_schedule_type")
+        .order("created_at", { ascending: true })
+
+      if (targetBatchId) {
+        query = query.eq("batch_id", targetBatchId)
+      }
+
+      const { data: batchExams } = await query
+      const weeklyExams = (batchExams || []).filter(
+        (e) =>
+          e.exam_schedule_type === "weekly" ||
+          (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক")))
+      )
+
+      setCombinedWeeksExamsList(weeklyExams)
+
+      if (weeklyExams.length === 0) {
+        setLoadingCombinedWeeks(false)
+        return
+      }
+
+      const examIds = weeklyExams.map((e) => e.id)
+      const { data: allResults } = await supabase
+        .from("exam_results")
+        .select("exam_id, student_id, obtained_marks, grade")
+        .in("exam_id", examIds)
+
+      const studentTotalMarksMap: Record<string, { total: number; count: number }> = {}
+      let seriesTotalMaxMarks = 0
+      weeklyExams.forEach((we) => {
+        seriesTotalMaxMarks += Number(we.total_marks) || 100
+      })
+
+      ;(allResults || []).forEach((r) => {
+        const mark = Number(r.obtained_marks) || 0
+        if (!studentTotalMarksMap[r.student_id]) {
+          studentTotalMarksMap[r.student_id] = { total: 0, count: 0 }
+        }
+        studentTotalMarksMap[r.student_id].total += mark
+        studentTotalMarksMap[r.student_id].count++
+      })
+
+      const combinedList = students.map((s, idx) => {
+        const roll = s.roll_no || s.batch_roll || idx + 1
+        const stat = studentTotalMarksMap[s.id] || { total: 0, count: 0 }
+        const pct = seriesTotalMaxMarks > 0 ? Math.round((stat.total / seriesTotalMaxMarks) * 100) : 0
+        const gradeInfo = calculateCoachingGrade(stat.total, seriesTotalMaxMarks)
+
+        return {
+          student_id: s.student_id,
+          roll_no: roll,
+          name: s.name,
+          total_marks: stat.total,
+          total_max_marks: seriesTotalMaxMarks,
+          average_pct: pct,
+          grade: stat.count > 0 ? gradeInfo.grade : "—",
+          gpa: stat.count > 0 ? gradeInfo.gp : 0,
+          section_merit: 0,
+        }
+      })
+
+      combinedList.sort((a, b) => b.total_marks - a.total_marks || Number(a.roll_no) - Number(b.roll_no))
+      let rank = 1
+      combinedList.forEach((item, i) => {
+        if (i > 0 && item.total_marks < combinedList[i - 1].total_marks) {
+          rank = i + 1
+        }
+        item.section_merit = item.total_marks > 0 ? rank : ("—" as any)
+      })
+
+      setCombinedWeekData(combinedList)
+    } catch (err) {
+      console.error("Failed to load combined weeks:", err)
+    } finally {
+      setLoadingCombinedWeeks(false)
+    }
+  }
+
   // Initialize selectedTab once parsedWeeklyDays is available
   useEffect(() => {
     if (parsedWeeklyDays.length > 0) {
-      if (!selectedTab || (selectedTab !== "weekly_aggregate" && !parsedWeeklyDays.some((d) => d.key === selectedTab))) {
+      if (!selectedTab || (selectedTab !== "weekly_aggregate" && selectedTab !== "all_weeks_combined" && !parsedWeeklyDays.some((d) => d.key === selectedTab))) {
         setSelectedTab(parsedWeeklyDays[0].key)
       }
     }
@@ -2102,10 +2271,11 @@ export default function ExamResultsPage() {
   }
 
   const isWeeklyActive = isWeeklyExam && selectedTab === "weekly_aggregate"
+  const isCombinedWeeksActive = isWeeklyExam && selectedTab === "all_weeks_combined"
   const isSelectedDayPublished = activeDayConfig
-    ? (publishedDays.some((p) => p.toLowerCase() === activeDayConfig.key.toLowerCase()) ||
-       publishedDays.some((p) => p.toLowerCase() === activeDayConfig.day_bn.toLowerCase()) ||
-       (activeDayConfig.day_en ? publishedDays.some((p) => p.toLowerCase() === activeDayConfig.day_en.toLowerCase()) : false))
+    ? (publishedDays.some((p) => p && activeDayConfig.key && String(p).toLowerCase() === String(activeDayConfig.key).toLowerCase()) ||
+       publishedDays.some((p) => p && activeDayConfig.day_bn && String(p).toLowerCase() === String(activeDayConfig.day_bn).toLowerCase()) ||
+       (activeDayConfig.day_en ? publishedDays.some((p) => p && String(p).toLowerCase() === String(activeDayConfig.day_en).toLowerCase()) : false))
     : false
   const activeTotalMarks = isWeeklyExam ? (isWeeklyActive ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50)) : exam.total_marks
   const activePassMarks = isWeeklyExam ? (isWeeklyActive ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20)) : exam.pass_marks
@@ -2328,11 +2498,37 @@ export default function ExamResultsPage() {
             <span>Edit Exam (সম্পাদনা)</span>
           </Link>
 
+          {/* Continuous Weekly Exam: Start Next Week Button */}
+          {isWeeklyExam && (
+            <button
+              type="button"
+              onClick={handleStartNextWeek}
+              disabled={creatingNextWeek}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-purple-500/20 transition-all cursor-pointer whitespace-nowrap active:scale-95 shrink-0"
+              title="পরবর্তী সপ্তাহের পরীক্ষা শুরু করুন (যেমন WEEKLY-34)"
+            >
+              {creatingNextWeek ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <CalendarDays className="w-3.5 h-3.5 text-purple-200" />
+              )}
+              <span>+ Start Next Week (পরবর্তী সপ্তাহ)</span>
+            </button>
+          )}
+
           {/* 5.6. Print Result Sheet Button (PDF) */}
           <button
             type="button"
             onClick={() => {
-              setPrintModalDefaultMode(isWeeklyActive ? "weekly_aggregate" : isWeeklyExam ? "weekly_day" : "one_time")
+              setPrintModalDefaultMode(
+                selectedTab === "all_weeks_combined"
+                  ? "all_weeks_combined"
+                  : isWeeklyActive
+                  ? "weekly_aggregate"
+                  : isWeeklyExam
+                  ? "weekly_day"
+                  : "one_time"
+              )
               setIsPrintModalOpen(true)
             }}
             className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer border border-slate-800 active:scale-95"
@@ -2399,7 +2595,12 @@ export default function ExamResultsPage() {
           <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5">
             {parsedWeeklyDays.map((d) => {
               const isSelected = selectedTab === d.key
-              const isDayPub = publishedDays.includes(d.key.toLowerCase()) || publishedDays.includes(d.day_bn.toLowerCase())
+              const isDayPub = publishedDays.some(
+                (p) =>
+                  p &&
+                  ((d.key && String(p).toLowerCase() === String(d.key).toLowerCase()) ||
+                    (d.day_bn && String(p).toLowerCase() === String(d.day_bn).toLowerCase()))
+              )
 
               return (
                 <button
@@ -2494,6 +2695,43 @@ export default function ExamResultsPage() {
               </p>
               <span className={cn("text-[10px] font-bold", selectedTab === "weekly_aggregate" ? "text-amber-300" : "text-purple-900")}>
                 মোট পূর্ণমান: {totalWeeklyMaxMarks} নম্বর
+              </span>
+            </button>
+
+            {/* TAB: ALL WEEKS COMBINED RESULT (সকল সপ্তাহের সমন্বিত মেধা) */}
+            <button
+              type="button"
+              onClick={() => {
+                Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
+                autoSaveTimersRef.current = {}
+                setSelectedTab("all_weeks_combined")
+                setJustSavedIds(new Set())
+                setSelectedStudent(null)
+                setQuickMarkInput("")
+                setStudentSearchQuery("")
+                loadCombinedWeeklyResults()
+              }}
+              className={cn(
+                "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[190px] sm:min-w-[220px] cursor-pointer",
+                selectedTab === "all_weeks_combined"
+                  ? "bg-gradient-to-r from-blue-700 to-indigo-800 text-white border-blue-900 shadow-lg ring-2 ring-blue-400/40"
+                  : "bg-blue-50 hover:bg-blue-100 text-blue-950 border-blue-200"
+              )}
+            >
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="text-xs font-black flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5 text-amber-400" />
+                  🌟 সকল সপ্তাহের সমন্বিত মেধা
+                </span>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-blue-200 text-blue-900 border border-blue-300">
+                  {combinedWeeksExamsList.length > 0 ? `${combinedWeeksExamsList.length} সপ্তাহ` : "হিসাব করুন"}
+                </span>
+              </div>
+              <p className={cn("text-[11px] font-medium", selectedTab === "all_weeks_combined" ? "text-blue-100" : "text-blue-700")}>
+                Week 1 থেকে বর্তমান সপ্তাহের সমন্বিত ফল
+              </p>
+              <span className={cn("text-[10px] font-bold", selectedTab === "all_weeks_combined" ? "text-amber-300" : "text-blue-900")}>
+                ধারাবাহিক সর্বমোট মেধা তালিকা
               </span>
             </button>
           </div>
@@ -2619,8 +2857,137 @@ export default function ExamResultsPage() {
         </div>
       )}
 
-      {/* CONDITIONAL CONTENT: IF "WEEKLY AGGREGATE" IS SELECTED, SHOW TOPPERS & CONSOLIDATED TABLE */}
-      {isWeeklyActive ? (
+      {/* CONDITIONAL CONTENT: IF "ALL WEEKS COMBINED" IS SELECTED */}
+      {selectedTab === "all_weeks_combined" ? (
+        <div className="space-y-6">
+          <div className="bg-white p-5 rounded-2xl border border-blue-200 shadow-sm space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-3">
+                <span className="p-2 rounded-xl bg-blue-600 text-white font-bold shadow-xs">
+                  <Award className="w-5 h-5 text-amber-300" />
+                </span>
+                <div>
+                  <h2 className="text-base font-black text-slate-900">
+                    সকল সপ্তাহের সমন্বিত মেধা তালিকা (Cumulative Series Merit List)
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Week 1 থেকে বর্তমান সপ্তাহের সর্বমোট নম্বরের ভিত্তিতে ক্রমধারা • {exam.batch?.name || "সকল ব্যাচ"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPrintModalDefaultMode("all_weeks_combined")
+                    setIsPrintModalOpen(true)
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                >
+                  <Printer className="w-4 h-4 text-amber-300" />
+                  <span>প্রিন্ট সমন্বিত মেধা তালিকা (Pic 2 / PDF)</span>
+                </button>
+              </div>
+            </div>
+
+            {loadingCombinedWeeks ? (
+              <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                <p className="text-xs font-bold text-slate-600">সকল সপ্তাহের ফলাফল গণনা করা হচ্ছে...</p>
+              </div>
+            ) : combinedWeekData.length === 0 ? (
+              <div className="py-12 text-center text-slate-400 text-xs">
+                কোনো সাপ্তাহিক পরীক্ষার রেকর্ড পাওয়া যায়নি।
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
+                    <tr>
+                      <th className="px-3 py-3 text-center w-12 font-mono">মেধাক্রম</th>
+                      <th className="px-3 py-3 w-16 font-mono text-center">রোল</th>
+                      <th className="px-3 py-3 w-28 font-mono">শিক্ষার্থী আইডি</th>
+                      <th className="px-4 py-3 min-w-[160px]">শিক্ষার্থীর নাম</th>
+                      <th className="px-3 py-3 text-center font-mono bg-blue-50/60 font-black text-blue-950">
+                        মোট প্রাপ্ত নম্বর
+                      </th>
+                      <th className="px-3 py-3 text-center">গড় শতকরা</th>
+                      <th className="px-3 py-3 text-center">গ্রেড</th>
+                      <th className="px-3 py-3 text-center font-mono">GPA</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {combinedWeekData.map((row, idx) => {
+                      const isTop3 = typeof row.section_merit === "number" && row.section_merit <= 3
+                      return (
+                        <tr
+                          key={row.student_id || idx}
+                          className={cn(
+                            "hover:bg-slate-50/80 transition-colors",
+                            isTop3 ? "bg-amber-50/30 font-bold" : ""
+                          )}
+                        >
+                          <td className="px-3 py-2.5 text-center font-mono font-black">
+                            {row.section_merit <= 3 ? (
+                              <span
+                                className={cn(
+                                  "inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-black",
+                                  row.section_merit === 1
+                                    ? "bg-amber-400 text-amber-950 shadow-xs"
+                                    : row.section_merit === 2
+                                    ? "bg-slate-300 text-slate-900"
+                                    : "bg-orange-300 text-orange-950"
+                                )}
+                              >
+                                {row.section_merit}
+                              </span>
+                            ) : (
+                              row.section_merit
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-800">
+                            {row.roll_no}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-slate-600">
+                            {row.student_id}
+                          </td>
+                          <td className="px-4 py-2.5 font-bold text-slate-900">
+                            {row.name}
+                          </td>
+                          <td className="px-3 py-2.5 text-center font-mono font-black text-blue-900 bg-blue-50/40">
+                            {row.total_marks} <span className="text-[10px] text-slate-500 font-normal">/ {row.total_max_marks}</span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-700">
+                            {row.average_pct}%
+                          </td>
+                          <td className="px-3 py-2.5 text-center font-bold">
+                            <span
+                              className={cn(
+                                "px-2 py-0.5 rounded text-[11px] font-black",
+                                row.grade === "A+" || row.grade === "A"
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : row.grade === "B" || row.grade === "C"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-slate-100 text-slate-700"
+                              )}
+                            >
+                              {row.grade}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-center font-mono font-bold text-slate-800">
+                            {typeof row.gpa === "number" ? row.gpa.toFixed(1) : row.gpa}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : isWeeklyActive ? (
         <div className="space-y-6">
           {/* TOTAL TOPPERS (GRAND MERIT PODIUM) */}
           <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
@@ -3733,10 +4100,13 @@ export default function ExamResultsPage() {
         weeklyDays={parsedWeeklyDays}
         activeDayConfig={activeDayConfig}
         totalWeeklyMaxMarks={totalWeeklyMaxMarks}
-        students={students}
+        students={students as any}
         savedResults={savedResults}
         dayMarksMap={dayMarksMap}
-        defaultMode={printModalDefaultMode}
+        defaultMode={selectedTab === "all_weeks_combined" ? "all_weeks_combined" : printModalDefaultMode}
+        availableBatches={availableBatches}
+        combinedWeekData={combinedWeekData}
+        defaultTemplate="merit_list"
       />
     </>
   )

@@ -254,6 +254,86 @@ export default function ExamsClient({
     setShowModal(true)
   }
 
+  // Quick Continuous Weekly Exam Creator (Auto increments week number, clones subjects/marks)
+  function handleOpenNewWeeklyExam() {
+    resetForm()
+
+    let highestWeek = 0
+    let lastWeeklyExam: any = null
+
+    for (const ex of exams) {
+      const isWeekly =
+        ex.exam_schedule_type === "weekly" ||
+        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
+        (ex.title && (ex.title.includes("সাপ্তাহিক") || ex.title.toLowerCase().includes("weekly")))
+      if (isWeekly) {
+        lastWeeklyExam = ex
+        const m = (ex.title || "").match(/weekly[-\s_]?(\d+)/i) || (ex.title || "").match(/সাপ্তাহিক[-\s_]?(\d+)/)
+        if (m && m[1]) {
+          const num = parseInt(m[1])
+          if (num > highestWeek) highestWeek = num
+        }
+      }
+    }
+
+    const nextWeekNum = highestWeek + 1
+    const suggestedTitle = `WEEKLY-${nextWeekNum < 10 ? "0" + nextWeekNum : nextWeekNum}`
+    const initialBatchId =
+      batchFilter !== "all" ? batchFilter : (lastWeeklyExam?.batch_id || batches[0]?.id || "")
+
+    setForm((prev) => ({
+      ...prev,
+      title: suggestedTitle,
+      subject: lastWeeklyExam?.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+      batch_id: initialBatchId,
+      batch_ids: initialBatchId ? [initialBatchId] : [],
+      exam_schedule_type: "weekly",
+      recurring_days: [],
+      total_marks: lastWeeklyExam?.total_marks ? String(lastWeeklyExam.total_marks) : "100",
+      pass_marks: lastWeeklyExam?.pass_marks ? String(lastWeeklyExam.pass_marks) : "40",
+      exam_date: new Date().toISOString().split("T")[0],
+      duration_minutes: "60",
+      show_results_immediately: true,
+      show_all_results: true,
+      result_note: `[SERIES_WEEK:${nextWeekNum}]`,
+    }))
+
+    // Clone recurring days schedule from last weekly exam if available
+    if (lastWeeklyExam?.recurring_days) {
+      let recDays: any[] = []
+      if (Array.isArray(lastWeeklyExam.recurring_days)) recDays = lastWeeklyExam.recurring_days
+      else if (typeof lastWeeklyExam.recurring_days === "string") {
+        try {
+          recDays = JSON.parse(lastWeeklyExam.recurring_days)
+        } catch {}
+      }
+
+      if (recDays.length > 0) {
+        const clonedSchedule = defaultWeeklySchedule()
+        recDays.forEach((item: any) => {
+          const rawKey =
+            typeof item === "object" && item !== null ? item.day || item.day_bn || item.day_en || "" : item
+          const matched = WEEK_DAYS.find(
+            (w) => w.id === String(rawKey).toLowerCase() || w.bn === rawKey
+          )
+          if (matched && clonedSchedule[matched.id as keyof typeof clonedSchedule]) {
+            clonedSchedule[matched.id as keyof typeof clonedSchedule] = {
+              selected: true,
+              exam_name: item.exam_name || `${matched.bn}ের পরীক্ষা`,
+              subject: item.subject || "",
+              total_marks: item.total_marks != null ? String(item.total_marks) : "50",
+              pass_marks: item.pass_marks != null ? String(item.pass_marks) : "20",
+            }
+          }
+        })
+        setWeeklySchedule(clonedSchedule)
+      }
+    }
+
+    setExamMode("offline")
+    setShowModal(true)
+  }
+
   // Weekly Day-by-Day Schedule State
   const [weeklySchedule, setWeeklySchedule] = useState(defaultWeeklySchedule())
 
@@ -1235,12 +1315,25 @@ export default function ExamsClient({
           </select>
         </div>
 
-        <button 
-          onClick={handleOpenCreate} 
-          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> Create Exam
-        </button>
+        <div className="flex items-center gap-2.5 shrink-0 min-w-fit">
+          <button 
+            type="button"
+            onClick={handleOpenNewWeeklyExam} 
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-purple-500/20 hover:scale-[1.02] transition-all cursor-pointer shrink-0 whitespace-nowrap"
+            title="নতুন ধারাবাহিক সাপ্তাহিক পরীক্ষা শুরু করুন (WEEKLY-XX)"
+          >
+            <CalendarDays className="w-4 h-4 text-purple-200" />
+            <span>+ New Weekly Exam (নতুন সপ্তাহ)</span>
+          </button>
+
+          <button 
+            type="button"
+            onClick={handleOpenCreate} 
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-amber-500/20 hover:scale-[1.02] transition-all cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <Plus className="w-4 h-4" /> Create Exam
+          </button>
+        </div>
       </div>
 
       {/* NOTICES MANAGEMENT VIEW (When "notices" tab is active) */}
@@ -1315,11 +1408,15 @@ export default function ExamsClient({
               const isRes = isResultNotice(notice)
               const isRout = isRoutineNotice(notice)
 
-              // Try finding matching exam
-              const linkedExam = exams.find(e => 
-                e.schedule_notice_id === notice.id ||
-                (e.title && (notice.title.toLowerCase().includes(e.title.toLowerCase()) || notice.content.toLowerCase().includes(e.title.toLowerCase())))
-              )
+              // Try finding matching exam safely
+              const linkedExam = exams.find((e) => {
+                if (e.schedule_notice_id === notice.id) return true
+                if (!e.title) return false
+                const nT = String(notice.title || "").toLowerCase()
+                const nC = String(notice.content || "").toLowerCase()
+                const eT = String(e.title).toLowerCase()
+                return nT.includes(eT) || nC.includes(eT)
+              })
 
               return (
                 <div
