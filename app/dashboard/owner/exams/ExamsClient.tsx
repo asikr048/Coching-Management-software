@@ -6,7 +6,7 @@ import {
   Plus, X, Loader2, FileText, Trophy, Clock, CheckCircle, GripVertical, 
   Trash2, Edit2, PlayCircle, Eye, Globe, MessageSquare, Landmark, Building2, BookOpen,
   Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle, Search, ExternalLink, Filter,
-  Check, RefreshCw
+  Check, RefreshCw, Layers, Award
 } from "lucide-react"
 import { formatDate, cn, extractWeeklyScheduleFromNote, cleanWeeklyScheduleFromNote } from "@/lib/utils"
 import Link from "next/link"
@@ -134,6 +134,7 @@ export default function ExamsClient({
   // Filters
   const [statusFilter, setStatusFilter] = useState<"all" | "one_time" | "weekly" | "published" | "draft" | "online" | "notices">("all")
   const [batchFilter, setBatchFilter] = useState<string>("all")
+  const [groupSeries, setGroupSeries] = useState(true)
   
   // Modal State
   const [examMode, setExamMode] = useState<"offline" | "online">("offline")
@@ -485,12 +486,121 @@ export default function ExamsClient({
         Boolean(ex.title?.includes("সাপ্তাহিক")) ||
         Boolean(ex.subject?.includes("সাপ্তাহিক")) ||
         Boolean(ex.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
+        Boolean(ex.result_note?.includes("[SERIES_WEEK:")) ||
+        Boolean(ex.title?.toUpperCase().includes("WEEKLY-")) ||
         (Number(ex.total_marks) === 350 && !ex.exam_date)
       if (statusFilter === "one_time" && isWeeklyEx) return false
       if (statusFilter === "weekly" && !isWeeklyEx) return false
       return true
     })
   }, [exams, statusFilter, batchFilter, selectedBranchId])
+
+  // Grouped Series vs Standalone Exams
+  const { groupedSeriesList, standaloneExams } = useMemo(() => {
+    if (!groupSeries) {
+      return { groupedSeriesList: [], standaloneExams: filteredExams }
+    }
+
+    const weeklyList: ExamRow[] = []
+    const standalone: ExamRow[] = []
+
+    filteredExams.forEach((ex) => {
+      const isW =
+        ex.exam_schedule_type === "weekly" ||
+        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
+        Boolean(ex.title?.includes("সাপ্তাহিক")) ||
+        Boolean(ex.subject?.includes("সাপ্তাহিক")) ||
+        Boolean(ex.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
+        Boolean(ex.result_note?.includes("[SERIES_WEEK:")) ||
+        Boolean(ex.title?.toUpperCase().includes("WEEKLY-")) ||
+        (Number(ex.total_marks) === 350 && !ex.exam_date)
+
+      if (isW) {
+        weeklyList.push(ex)
+      } else {
+        standalone.push(ex)
+      }
+    })
+
+    // Group weekly exams by batch and branch
+    const groupMap = new Map<string, ExamRow[]>()
+    weeklyList.forEach((ex) => {
+      const bId = ex.batch_id || (Array.isArray(ex.batch_ids) && ex.batch_ids.length > 0 ? [...ex.batch_ids].sort().join(",") : "all_batches")
+      const brId = ex.branch_id || "all_branches"
+      const key = `${brId}::${bId}`
+      if (!groupMap.has(key)) {
+        groupMap.set(key, [])
+      }
+      groupMap.get(key)!.push(ex)
+    })
+
+    const parseWeekNum = (ex: ExamRow) => {
+      const title = ex.title || ""
+      const note = ex.result_note || ""
+      const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+      const m = normalized.match(/weekly[-\s_]?0*(\d+)/i) || normalized.match(/সাপ্তাহিক[-\s_]?0*(\d+)/) || normalized.match(/week[-\s_]?0*(\d+)/i)
+      if (m && m[1]) return parseInt(m[1], 10)
+      if (note) {
+        const nm = note.match(/\[SERIES_WEEK:(\d+)\]/)
+        if (nm && nm[1]) return parseInt(nm[1], 10)
+      }
+      const numOnly = normalized.match(/(\d+)/)
+      if (numOnly && numOnly[1] && (normalized.toLowerCase().includes("week") || normalized.includes("সাপ্তাহিক"))) {
+        return parseInt(numOnly[1], 10)
+      }
+      return 1
+    }
+
+    const seriesGroups: Array<{
+      groupKey: string
+      batchId: string | null
+      batchName: string
+      branchId: string | null
+      branchName: string | null
+      latestExam: ExamRow
+      allWeeks: ExamRow[]
+      totalWeeksCount: number
+      isPaused: boolean
+      isPublished: boolean
+      allNotices: NoticeRow[]
+    }> = []
+
+    groupMap.forEach((examsInGroup, key) => {
+      examsInGroup.sort((a, b) => parseWeekNum(a) - parseWeekNum(b))
+      const latest = examsInGroup[examsInGroup.length - 1]
+
+      const batchName =
+        latest.batch?.name ||
+        batches.find((b) => b.id === latest.batch_id)?.name ||
+        (Array.isArray(latest.batch_ids) && latest.batch_ids.length > 0
+          ? latest.batch_ids.map((id) => batches.find((b) => b.id === id)?.name).filter(Boolean).join(", ")
+          : null) ||
+        "সকল ব্যাচ (সমন্বিত সিরিজ)"
+
+      const branchName = latest.branch?.name || branches.find((br) => br.id === latest.branch_id)?.name || null
+
+      const linkedNoticesSet = new Map<string, NoticeRow>()
+      examsInGroup.forEach((ex) => {
+        getLinkedNotices(ex, notices).forEach((n) => linkedNoticesSet.set(n.id, n))
+      })
+
+      seriesGroups.push({
+        groupKey: key,
+        batchId: latest.batch_id || null,
+        batchName,
+        branchId: latest.branch_id || null,
+        branchName,
+        latestExam: latest,
+        allWeeks: examsInGroup,
+        totalWeeksCount: examsInGroup.length,
+        isPaused: examsInGroup.every((e) => e.is_paused),
+        isPublished: examsInGroup.some((e) => isExamPublished(e)),
+        allNotices: Array.from(linkedNoticesSet.values()),
+      })
+    })
+
+    return { groupedSeriesList: seriesGroups, standaloneExams: standalone }
+  }, [filteredExams, groupSeries, notices, batches, branches])
 
   // Filtered Notices
   const filteredNotices = useMemo(() => {
@@ -1259,6 +1369,301 @@ export default function ExamsClient({
     }
   }
 
+  function renderSingleExam(exam: ExamRow) {
+    const isWeekly =
+      exam.exam_schedule_type === "weekly" ||
+      (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+      Boolean(exam.title?.includes("সাপ্তাহিক")) ||
+      Boolean(exam.subject?.includes("সাপ্তাহিক")) ||
+      Boolean(exam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
+      (Number(exam.total_marks) === 350 && !exam.exam_date)
+
+    let recurringDaysList: any[] = []
+    if (Array.isArray(exam.recurring_days)) {
+      recurringDaysList = exam.recurring_days
+    } else if (typeof exam.recurring_days === "string") {
+      try {
+        recurringDaysList = JSON.parse(exam.recurring_days)
+      } catch {}
+    }
+    if (recurringDaysList.length === 0 && exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+      try {
+        const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+        if (match && match[1]) {
+          recurringDaysList = JSON.parse(match[1])
+        }
+      } catch {}
+    }
+
+    const daysBengali = recurringDaysList.map((d: any) => {
+      if (typeof d === "object" && d !== null) {
+        return `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (${d.total_marks || ""} নম্বর)`
+      }
+      return WEEK_DAYS.find(w => w.id === d)?.short || d
+    }).join(", ")
+
+    const linkedNoticeList = getLinkedNotices(exam, notices)
+
+    return (
+      <div key={exam.id} className={cn(
+        "bg-white rounded-2xl border shadow-sm p-5 shadow-xl transition-all flex flex-col h-full",
+        exam.is_paused ? "border-rose-200 bg-rose-50/20" : "border-slate-200/90 hover:border-amber-500/40"
+      )}>
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-start gap-3">
+            <div className={cn(
+              "p-2.5 rounded-xl border mt-0.5", 
+              exam.is_online 
+                ? "bg-blue-50 text-blue-600 border-blue-200" 
+                : isWeekly
+                  ? "bg-purple-50 text-purple-600 border-purple-200"
+                  : "bg-amber-50 text-amber-600 border-amber-200"
+            )}>
+              {exam.is_online ? <Globe className="w-5 h-5" /> : isWeekly ? <CalendarDays className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="font-extrabold text-slate-900 text-base leading-snug">{exam.title}</p>
+                {exam.is_paused && (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
+                    PAUSED (স্থগিত)
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">{exam.subject || "General Subject"}</p>
+              
+              {/* Configured Batches & Branch badges */}
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                {exam.branch?.name && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    <Landmark className="w-2.5 h-2.5" /> {exam.branch.name}
+                  </span>
+                )}
+                {Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? (
+                  exam.batch_ids.map(bId => {
+                    const bName = batches.find(b => b.id === bId)?.name || (exam.batch_id === bId ? exam.batch?.name : null)
+                    if (!bName) return null
+                    return (
+                      <span key={bId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                        <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {bName}
+                      </span>
+                    )
+                  })
+                ) : exam.batch?.name ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                    <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {exam.batch.name}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                    All Batches
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5 items-end shrink-0">
+            <div className="flex items-center gap-1.5">
+              <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", isExamPublished(exam) ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
+                {isExamPublished(exam) ? "Published" : "Draft"}
+              </span>
+              <button
+                type="button"
+                onClick={() => handleOpenEdit(exam)}
+                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-indigo-200"
+                title="Edit Exam (পরীক্ষা সম্পাদনা করুন)"
+              >
+                <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmExam(exam)}
+                disabled={deletingId === exam.id}
+                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                title="Delete Exam"
+              >
+                {deletingId === exam.id ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                ) : (
+                  <Trash2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+            <div className="flex items-center gap-1 flex-wrap justify-end">
+              {isWeekly ? (
+                <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1">
+                  <CalendarDays className="w-3 h-3" /> WEEKLY
+                </span>
+              ) : (
+                <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-bold">
+                  ONE-TIME
+                </span>
+              )}
+              {exam.is_online && <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-extrabold">ONLINE</span>}
+              {exam.is_public_result && (
+                <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md font-bold" title="Public in Online Results portal">
+                  PUBLIC RESULT
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex-grow">
+          <div className="flex flex-col">
+            <span className="text-[11px] text-slate-500 font-medium">Total Marks</span>
+            <span className="font-extrabold text-amber-700 text-sm">
+              {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
+                ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+                : exam.total_marks}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[11px] text-slate-500 font-medium">
+              {isWeekly ? "Weekly Day(s)" : "Exam Date"}
+            </span>
+            <span className="font-semibold text-slate-800 text-sm truncate">
+              {isWeekly 
+                ? (daysBengali ? `প্রতি ${daysBengali}` : "সাপ্তাহিক নির্ধারিত দিন")
+                : (exam.exam_date ? formatDate(exam.exam_date) : "TBD")}
+            </span>
+          </div>
+          {exam.is_online && (
+            <>
+              <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Duration</span><span className="font-semibold text-slate-800 text-sm">{exam.time_limit_minutes} min</span></div>
+              <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Questions</span><span className="font-semibold text-slate-800 text-sm">{exam.exam_questions?.[0]?.count || 0}</span></div>
+            </>
+          )}
+          {isWeekly && (
+            <div className="col-span-2 flex items-center justify-between pt-1 border-t border-slate-200 mt-1">
+              <span className="text-[11px] text-slate-500 font-medium">Weekly Status:</span>
+              <button
+                type="button"
+                onClick={() => handleTogglePause(exam)}
+                disabled={pausingId === exam.id}
+                className={cn(
+                  "flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition-colors border cursor-pointer",
+                  exam.is_paused 
+                    ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 shadow-2xs" 
+                    : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
+                )}
+              >
+                {pausingId === exam.id ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : exam.is_paused ? (
+                  <>
+                    <Play className="w-3 h-3 text-rose-600 fill-rose-600" />
+                    <span>Resume (সচল করুন)</span>
+                  </>
+                ) : (
+                  <>
+                    <Pause className="w-3 h-3 text-amber-700 fill-amber-700" />
+                    <span>Pause (স্থগিত করুন)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Linked Notice Section on Exam Card */}
+        {linkedNoticeList.length > 0 ? (
+          <div className="mb-3 p-2.5 bg-amber-50/90 border border-amber-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 border border-amber-300">
+                <Bell className="w-3.5 h-3.5 fill-amber-600 text-amber-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-amber-950 truncate" title={linkedNoticeList[0].title}>
+                  {linkedNoticeList[0].title}
+                </p>
+                <p className="text-[10px] text-amber-700 font-semibold">
+                  {linkedNoticeList.length > 1 ? `${linkedNoticeList.length}টি নোটিশ সক্রিয় • ` : ""}নোটিশ বোর্ডে প্রকাশিত
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedNoticeForView(linkedNoticeList[0])}
+                className="p-1.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                title="View Notice (নোটিশ দেখুন)"
+              >
+                <Eye className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmNotice(linkedNoticeList[0])}
+                disabled={deletingNoticeId === linkedNoticeList[0].id}
+                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                title="Delete Notice (নোটিশ ডিলিট করুন)"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : isExamPublished(exam) ? (
+          <div className="mb-3">
+            <button
+              type="button"
+              onClick={() => handlePublishExamNotice(exam)}
+              disabled={publishingNoticeExamId === exam.id}
+              className="w-full py-1.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 border-dashed rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="ফলাফল নোটিশ বোর্ডে পোস্ট করুন"
+            >
+              {publishingNoticeExamId === exam.id ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                  <span>নোটিশ তৈরি হচ্ছে...</span>
+                </>
+              ) : (
+                <>
+                  <Bell className="w-3.5 h-3.5 text-amber-600" />
+                  <span>নোটিশ বোর্ডে প্রকাশ করুন (Publish Notice)</span>
+                </>
+              )}
+            </button>
+          </div>
+        ) : null}
+
+        <div className="pt-3 border-t border-slate-200 flex flex-col gap-2 mt-auto">
+          <div className="flex items-center gap-2 w-full">
+            {exam.is_online ? (
+              <>
+                {!exam.is_published && (
+                  <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 font-bold transition-colors cursor-pointer">
+                    {publishing === exam.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />} Publish
+                  </button>
+                )}
+                <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold transition-colors border border-slate-300">
+                  <Eye className="w-3.5 h-3.5" /> Questions
+                </Link>
+              </>
+            ) : (
+              <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex-1 flex justify-center items-center gap-2 py-2 bg-amber-500/15 text-amber-900 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/25 transition-colors">
+                <Trophy className="w-4 h-4 text-amber-600" /> Enter Results & Merit
+              </Link>
+            )}
+          </div>
+          <div className="flex items-center gap-2 w-full">
+            <button
+              type="button"
+              onClick={() => handleOpenEdit(exam)}
+              className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
+            >
+              <Edit2 className="w-3.5 h-3.5 text-indigo-600" /> Edit Exam
+            </button>
+            <Link
+              href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
+              className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Result SMS
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const inputClass = "w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 shadow-2xs transition-all"
 
   return (
@@ -1313,6 +1718,21 @@ export default function ExamsClient({
             <option value="all" className="bg-white text-slate-900">All Batches (সব ব্যাচ)</option>
             {availableBatches.map(b => <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>)}
           </select>
+
+          <button
+            type="button"
+            onClick={() => setGroupSeries(prev => !prev)}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm font-bold rounded-xl border transition-all whitespace-nowrap cursor-pointer shadow-2xs",
+              groupSeries
+                ? "bg-purple-100/90 hover:bg-purple-200 text-purple-950 border-purple-300"
+                : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+            )}
+            title="সাপ্তাহিক পরীক্ষাসমূহ ব্যাচভিত্তিক এক কার্ডে দেখুন অথবা আলাদা আলাদা কার্ডে দেখুন"
+          >
+            <Layers className={cn("w-4 h-4", groupSeries ? "text-purple-700" : "text-slate-500")} />
+            <span>{groupSeries ? "সিরিজ একত্রিত (Grouped)" : "আলাদা কার্ড (Flat)"}</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0 min-w-fit">
@@ -1576,303 +1996,244 @@ export default function ExamsClient({
 
           {/* Exam Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {filteredExams.map(exam => {
-              const isWeekly =
-                exam.exam_schedule_type === "weekly" ||
-                (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
-                Boolean(exam.title?.includes("সাপ্তাহিক")) ||
-                Boolean(exam.subject?.includes("সাপ্তাহিক")) ||
-                Boolean(exam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
-                (Number(exam.total_marks) === 350 && !exam.exam_date)
-
-              let recurringDaysList: any[] = []
-              if (Array.isArray(exam.recurring_days)) {
-                recurringDaysList = exam.recurring_days
-              } else if (typeof exam.recurring_days === "string") {
-                try {
-                  recurringDaysList = JSON.parse(exam.recurring_days)
-                } catch {}
-              }
-              if (recurringDaysList.length === 0 && exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
-                try {
-                  const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-                  if (match && match[1]) {
-                    recurringDaysList = JSON.parse(match[1])
-                  }
-                } catch {}
-              }
-
-              const daysBengali = recurringDaysList.map((d: any) => {
-                if (typeof d === "object" && d !== null) {
-                  return `${d.day_bn || d.day}: ${d.exam_name || "পরীক্ষা"} (${d.total_marks || ""} নম্বর)`
-                }
-                return WEEK_DAYS.find(w => w.id === d)?.short || d
-              }).join(", ")
-
-              const linkedNoticeList = getLinkedNotices(exam, notices)
-
-              return (
-                <div key={exam.id} className={cn(
-                  "bg-white rounded-2xl border shadow-sm p-5 shadow-xl transition-all flex flex-col h-full",
-                  exam.is_paused ? "border-rose-200 bg-rose-50/20" : "border-slate-200/90 hover:border-amber-500/40"
-                )}>
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        "p-2.5 rounded-xl border mt-0.5", 
-                        exam.is_online 
-                          ? "bg-blue-50 text-blue-600 border-blue-200" 
-                          : isWeekly
-                            ? "bg-purple-50 text-purple-600 border-purple-200"
-                            : "bg-amber-50 text-amber-600 border-amber-200"
-                      )}>
-                        {exam.is_online ? <Globe className="w-5 h-5" /> : isWeekly ? <CalendarDays className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="font-extrabold text-slate-900 text-base leading-snug">{exam.title}</p>
-                          {exam.is_paused && (
-                            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
-                              PAUSED (স্থগিত)
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 mt-0.5 font-medium">{exam.subject || "General Subject"}</p>
-                        
-                        {/* Configured Batches & Branch badges */}
-                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                          {exam.branch?.name && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                              <Landmark className="w-2.5 h-2.5" /> {exam.branch.name}
-                            </span>
-                          )}
-                          {Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? (
-                            exam.batch_ids.map(bId => {
-                              const bName = batches.find(b => b.id === bId)?.name || (exam.batch_id === bId ? exam.batch?.name : null)
-                              if (!bName) return null
-                              return (
-                                <span key={bId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
-                                  <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {bName}
-                                </span>
-                              )
-                            })
-                          ) : exam.batch?.name ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
-                              <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {exam.batch.name}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                              All Batches
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex flex-col gap-1.5 items-end shrink-0">
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn("px-2 py-0.5 rounded-md text-xs font-bold border", isExamPublished(exam) ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200")}>
-                          {isExamPublished(exam) ? "Published" : "Draft"}
-                        </span>
-                        {/* EDIT EXAM BUTTON */}
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(exam)}
-                          className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-indigo-200"
-                          title="Edit Exam (পরীক্ষা সম্পাদনা করুন)"
-                        >
-                          <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
-                        </button>
-                        {/* ONLY UPPER DELETE BUTTON */}
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmExam(exam)}
-                          disabled={deletingId === exam.id}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
-                          title="Delete Exam"
-                        >
-                          {deletingId === exam.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
-                          ) : (
-                            <Trash2 className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-                      </div>
-                      <div className="flex items-center gap-1 flex-wrap justify-end">
-                        {isWeekly ? (
-                          <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1">
-                            <CalendarDays className="w-3 h-3" /> WEEKLY
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-slate-100 text-slate-700 border border-slate-200 px-2 py-0.5 rounded-md font-bold">
-                            ONE-TIME
-                          </span>
-                        )}
-                        {exam.is_online && <span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-md font-extrabold">ONLINE</span>}
-                        {exam.is_public_result && (
-                          <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md font-bold" title="Public in Online Results portal">
-                            PUBLIC RESULT
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2 text-sm mt-3 mb-3 bg-slate-50 p-3 rounded-xl border border-slate-200/80 flex-grow">
-                    <div className="flex flex-col">
-                      <span className="text-[11px] text-slate-500 font-medium">Total Marks</span>
-                      <span className="font-extrabold text-amber-700 text-sm">
-                        {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                          ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-                          : exam.total_marks}
-                      </span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[11px] text-slate-500 font-medium">
-                        {isWeekly ? "Weekly Day(s)" : "Exam Date"}
-                      </span>
-                      <span className="font-semibold text-slate-800 text-sm truncate">
-                        {isWeekly 
-                          ? (daysBengali ? `প্রতি ${daysBengali}` : "সাপ্তাহিক নির্ধারিত দিন")
-                          : (exam.exam_date ? formatDate(exam.exam_date) : "TBD")}
-                      </span>
-                    </div>
-                    {exam.is_online && (
-                      <>
-                        <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Duration</span><span className="font-semibold text-slate-800 text-sm">{exam.time_limit_minutes} min</span></div>
-                        <div className="flex flex-col"><span className="text-[11px] text-slate-500 font-medium">Questions</span><span className="font-semibold text-slate-800 text-sm">{exam.exam_questions?.[0]?.count || 0}</span></div>
-                      </>
-                    )}
-                    {isWeekly && (
-                      <div className="col-span-2 flex items-center justify-between pt-1 border-t border-slate-200 mt-1">
-                        <span className="text-[11px] text-slate-500 font-medium">Weekly Status:</span>
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePause(exam)}
-                          disabled={pausingId === exam.id}
-                          className={cn(
-                            "flex items-center gap-1.5 px-2.5 py-1 text-xs font-bold rounded-lg transition-colors border cursor-pointer",
-                            exam.is_paused 
-                              ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-300 shadow-2xs" 
-                              : "bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-300 shadow-2xs"
-                          )}
-                        >
-                          {pausingId === exam.id ? (
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                          ) : exam.is_paused ? (
-                            <>
-                              <Play className="w-3 h-3 text-rose-600 fill-rose-600" />
-                              <span>Resume (সচল করুন)</span>
-                            </>
-                          ) : (
-                            <>
-                              <Pause className="w-3 h-3 text-amber-700 fill-amber-700" />
-                              <span>Pause (স্থগিত করুন)</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Linked Notice Section on Exam Card */}
-                  {linkedNoticeList.length > 0 ? (
-                    <div className="mb-3 p-2.5 bg-amber-50/90 border border-amber-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 border border-amber-300">
-                          <Bell className="w-3.5 h-3.5 fill-amber-600 text-amber-600" />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-black text-amber-950 truncate" title={linkedNoticeList[0].title}>
-                            {linkedNoticeList[0].title}
-                          </p>
-                          <p className="text-[10px] text-amber-700 font-semibold">
-                            {linkedNoticeList.length > 1 ? `${linkedNoticeList.length}টি নোটিশ সক্রিয় • ` : ""}নোটিশ বোর্ডে প্রকাশিত
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedNoticeForView(linkedNoticeList[0])}
-                          className="p-1.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
-                          title="View Notice (নোটিশ দেখুন)"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmNotice(linkedNoticeList[0])}
-                          disabled={deletingNoticeId === linkedNoticeList[0].id}
-                          className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
-                          title="Delete Notice (নোটিশ ডিলিট করুন)"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : isExamPublished(exam) ? (
-                    <div className="mb-3">
-                      <button
-                        type="button"
-                        onClick={() => handlePublishExamNotice(exam)}
-                        disabled={publishingNoticeExamId === exam.id}
-                        className="w-full py-1.5 px-3 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 border-dashed rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                        title="ফলাফল নোটিশ বোর্ডে পোস্ট করুন"
-                      >
-                        {publishingNoticeExamId === exam.id ? (
-                          <>
-                            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
-                            <span>নোটিশ তৈরি হচ্ছে...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Bell className="w-3.5 h-3.5 text-amber-600" />
-                            <span>নোটিশ বোর্ডে প্রকাশ করুন (Publish Notice)</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  ) : null}
-
-                  <div className="pt-3 border-t border-slate-200 flex flex-col gap-2 mt-auto">
-                    <div className="flex items-center gap-2 w-full">
-                      {exam.is_online ? (
-                        <>
-                          {!exam.is_published && (
-                            <button onClick={() => handlePublish(exam.id)} disabled={publishing === exam.id} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-500 disabled:opacity-50 font-bold transition-colors cursor-pointer">
-                              {publishing === exam.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />} Publish
-                            </button>
-                          )}
-                          <Link href={`/dashboard/owner/exams/${exam.id}/questions`} className="flex-1 flex justify-center items-center gap-1.5 text-xs sm:text-sm py-2 px-3 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl font-bold transition-colors border border-slate-300">
-                            <Eye className="w-3.5 h-3.5" /> Questions
-                          </Link>
-                        </>
-                      ) : (
-                        <Link href={`/dashboard/owner/exams/${exam.id}`} className="flex-1 flex justify-center items-center gap-2 py-2 bg-amber-500/15 text-amber-900 border border-amber-500/30 rounded-xl text-xs sm:text-sm font-bold hover:bg-amber-500/25 transition-colors">
-                          <Trophy className="w-4 h-4 text-amber-600" /> Enter Results & Merit
-                        </Link>
+            {groupSeries ? (
+              <>
+                {groupedSeriesList.map((group) => {
+                  return (
+                    <div
+                      key={`series-${group.groupKey}`}
+                      className={cn(
+                        "bg-white rounded-2xl border-2 shadow-sm hover:shadow-xl transition-all p-5 flex flex-col justify-between h-full relative overflow-hidden",
+                        group.isPaused
+                          ? "border-rose-300 bg-rose-50/20"
+                          : "border-purple-200/90 hover:border-purple-400 bg-gradient-to-br from-white via-purple-50/15 to-indigo-50/15"
                       )}
+                    >
+                      <div>
+                        {/* Series Header */}
+                        <div className="flex items-start justify-between mb-3.5 gap-2">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2.5 rounded-xl border mt-0.5 bg-gradient-to-br from-purple-600 to-indigo-600 text-white shadow-sm shadow-purple-500/20 shrink-0">
+                              <CalendarDays className="w-5 h-5 text-white" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200 flex items-center gap-1">
+                                  <Trophy className="w-3 h-3 text-purple-600" />
+                                  ধারাবাহিক সিরিজ (SERIES)
+                                </span>
+                                {group.isPaused && (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-100 text-rose-700 border border-rose-200">
+                                    PAUSED
+                                  </span>
+                                )}
+                              </div>
+                              <h3 className="font-extrabold text-slate-900 text-base leading-snug mt-1">
+                                {group.batchName} — ধারাবাহিক পরীক্ষা
+                              </h3>
+                              <p className="text-xs text-purple-700 font-semibold mt-0.5">
+                                মোট {group.totalWeeksCount}টি সপ্তাহ সক্রিয় • প্রতি সপ্তাহ ৩৫০ নম্বর
+                              </p>
+
+                              {/* Badges for Branch & Batch */}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                {group.branchName && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    <Landmark className="w-2.5 h-2.5" /> {group.branchName}
+                                  </span>
+                                )}
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-900 border border-amber-200">
+                                  <BookOpen className="w-2.5 h-2.5 text-amber-600" /> {group.batchName}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col gap-1.5 items-end shrink-0">
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={cn(
+                                  "px-2 py-0.5 rounded-md text-xs font-bold border",
+                                  group.isPublished
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : "bg-amber-50 text-amber-700 border-amber-200"
+                                )}
+                              >
+                                {group.isPublished ? "Published" : "Draft"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(group.latestExam)}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-indigo-200"
+                                title="Edit Latest Week Exam (সপ্তাহ সম্পাদনা)"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmExam(group.latestExam)}
+                                disabled={deletingId === group.latestExam.id}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
+                                title={`Delete ${group.latestExam.title}`}
+                              >
+                                {deletingId === group.latestExam.id ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* All Weeks Pills */}
+                        <div className="my-3 p-3 bg-purple-50/60 rounded-xl border border-purple-200/80">
+                          <div className="flex items-center justify-between gap-1 mb-2">
+                            <span className="text-[11px] font-black text-purple-950 flex items-center gap-1">
+                              <CalendarDays className="w-3.5 h-3.5 text-purple-700" />
+                              সকল সপ্তাহ ({group.totalWeeksCount}টি সপ্তাহ):
+                            </span>
+                            <span className="text-[10px] text-purple-600 font-bold">
+                              সপ্তাহে ক্লিক করে নম্বর দিন
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {group.allWeeks.map((we) => {
+                              const title = we.title || ""
+                              const note = we.result_note || ""
+                              const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+                              const m = normalized.match(/weekly[-\s_]?0*(\d+)/i) || normalized.match(/সাপ্তাহিক[-\s_]?0*(\d+)/) || normalized.match(/week[-\s_]?0*(\d+)/i)
+                              const wNum = (m && m[1]) ? parseInt(m[1], 10) : (note.match(/\[SERIES_WEEK:(\d+)\]/)?.[1] ? parseInt(note.match(/\[SERIES_WEEK:(\d+)\]/)![1], 10) : 1)
+                              const isPub = isExamPublished(we)
+                              return (
+                                <Link
+                                  key={we.id}
+                                  href={`/dashboard/owner/exams/${we.id}`}
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 border shadow-2xs hover:scale-105",
+                                    isPub
+                                      ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300"
+                                      : "bg-white hover:bg-purple-100 text-purple-900 border-purple-300"
+                                  )}
+                                  title={`${we.title} (${isPub ? "প্রকাশিত" : "ড্রাফট"})`}
+                                >
+                                  <span>W{wNum}</span>
+                                  <span className={cn("w-1.5 h-1.5 rounded-full", isPub ? "bg-emerald-500" : "bg-amber-400")} />
+                                </Link>
+                              )
+                            })}
+
+                            <button
+                              type="button"
+                              onClick={handleOpenNewWeeklyExam}
+                              className="px-2 py-1 rounded-lg text-xs font-bold bg-white hover:bg-purple-100 text-purple-700 border border-purple-300 border-dashed flex items-center gap-1 transition-all cursor-pointer"
+                              title="নতুন সপ্তাহ যোগ করুন"
+                            >
+                              <Plus className="w-3 h-3 text-purple-600" />
+                              <span>+ নতুন সপ্তাহ</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Linked Notices on Series Card */}
+                        {group.allNotices.length > 0 && (
+                          <div className="mb-3 p-2.5 bg-amber-50/90 border border-amber-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-6 h-6 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 border border-amber-300">
+                                <Bell className="w-3.5 h-3.5 fill-amber-600 text-amber-600" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-black text-amber-950 truncate" title={group.allNotices[0].title}>
+                                  {group.allNotices[0].title}
+                                </p>
+                                <p className="text-[10px] text-amber-700 font-semibold">
+                                  {group.allNotices.length > 1 ? `${group.allNotices.length}টি নোটিশ সক্রিয় • ` : ""}নোটিশ বোর্ডে প্রকাশিত
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedNoticeForView(group.allNotices[0])}
+                                className="p-1.5 bg-white hover:bg-amber-100 text-amber-800 border border-amber-300 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                                title="View Notice"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteConfirmNotice(group.allNotices[0])}
+                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                                title="Delete Notice"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Actions Footer */}
+                      <div className="pt-3 border-t border-purple-100 flex flex-col gap-2 mt-auto">
+                        <div className="flex items-center gap-2 w-full">
+                          <Link
+                            href={`/dashboard/owner/exams/${group.latestExam.id}`}
+                            className="flex-1 flex justify-center items-center gap-2 py-2.5 px-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-black shadow-md shadow-purple-500/20 transition-all hover:scale-[1.01]"
+                            title="সাপ্তাহিক পরীক্ষার হাবে প্রবেশ করুন যেখানে সব সপ্তাহ ও নম্বর রয়েছে"
+                          >
+                            <Trophy className="w-4 h-4 text-amber-300" />
+                            <span>সাপ্তাহিক হাব ও ফলাফল প্রবেশ</span>
+                          </Link>
+                        </div>
+                        <div className="flex items-center gap-2 w-full">
+                          <Link
+                            href={`/dashboard/owner/exams/${group.latestExam.id}?tab=all_weeks_combined`}
+                            className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
+                            title="সকল সপ্তাহের সমন্বিত মেধা তালিকা দেখুন"
+                          >
+                            <Award className="w-3.5 h-3.5 text-blue-600" />
+                            <span>সমন্বিত মেধা</span>
+                          </Link>
+                          <Link
+                            href={`/dashboard/owner/sms?exam_id=${group.latestExam.id}&mode=exam_result`}
+                            className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Result SMS
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePause(group.latestExam)}
+                            disabled={pausingId === group.latestExam.id}
+                            className={cn(
+                              "px-2.5 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer flex items-center justify-center",
+                              group.isPaused
+                                ? "bg-rose-50 text-rose-700 border-rose-300"
+                                : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                            )}
+                            title={group.isPaused ? "Resume Series" : "Pause Series"}
+                          >
+                            {group.isPaused ? <Play className="w-3.5 h-3.5 fill-rose-600 text-rose-600" /> : <Pause className="w-3.5 h-3.5 text-slate-600" />}
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 w-full">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(exam)}
-                        className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition-all shadow-2xs cursor-pointer"
-                      >
-                        <Edit2 className="w-3.5 h-3.5 text-indigo-600" /> Edit Exam
-                      </button>
-                      <Link
-                        href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result`}
-                        className="flex-1 flex justify-center items-center gap-1.5 py-2 px-3 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-xl text-xs font-bold transition-all shadow-2xs"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 text-purple-600" /> Result SMS
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-            {filteredExams.length === 0 && <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 shadow-xs">No exams match your filters.</div>}
+                  )
+                })}
+
+                {standaloneExams.map((exam) => renderSingleExam(exam))}
+
+                {groupedSeriesList.length === 0 && standaloneExams.length === 0 && (
+                  <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 shadow-xs">No exams match your filters.</div>
+                )}
+              </>
+            ) : (
+              <>
+                {filteredExams.map((exam) => renderSingleExam(exam))}
+                {filteredExams.length === 0 && (
+                  <div className="col-span-full text-center py-16 bg-white rounded-2xl border border-dashed border-slate-200 text-slate-500 shadow-xs">No exams match your filters.</div>
+                )}
+              </>
+            )}
           </div>
         </>
       )}

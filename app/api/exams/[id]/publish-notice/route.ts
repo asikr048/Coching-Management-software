@@ -219,8 +219,8 @@ export async function POST(
         }
       }
 
-      noticeTitle = `🏆 সামগ্রিক সাপ্তাহিক ফলাফল ও মেরিট তালিকা: ${exam.title}`
-      noticeContent = `মেধাশিরী কোচিংয়ের শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, "${exam.title}"-এর সকল বিষয়ের সাপ্তাহিক মূল্যায়ন ও সামগ্রিক মেধা তালিকা চূড়ান্তভাবে প্রকাশিত হয়েছে।
+      noticeTitle = custom_title?.trim() || `🏆 সামগ্রিক সাপ্তাহিক ফলাফল ও মেরিট তালিকা: ${exam.title}`
+      noticeContent = custom_content?.trim() || `মেধাশিরী কোচিংয়ের শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, "${exam.title}"-এর সকল বিষয়ের সাপ্তাহিক মূল্যায়ন ও সামগ্রিক মেধা তালিকা চূড়ান্তভাবে প্রকাশিত হয়েছে।
 
 📋 সাপ্তাহিক পরীক্ষার তথ্য:
 • বিষয়সমূহ: ${exam.subject || "সাপ্তাহিক নির্ধারিত বিষয়সমূহ"}
@@ -267,8 +267,8 @@ export async function POST(
 
       const sessionInfo = session_date ? ` [${session_date}]` : (day ? ` [${day}]` : "")
 
-      noticeTitle = `🏆 পরীক্ষার ফলাফল ও মেরিট লিস্ট: ${activeTitle}${sessionInfo}`
-      noticeContent = `মেধাশিরী কোচিংয়ের শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, "${activeTitle}" পরীক্ষার ফলাফল প্রকাশিত হয়েছে।
+      noticeTitle = custom_title?.trim() || `🏆 পরীক্ষার ফলাফল ও মেরিট লিস্ট: ${activeTitle}${sessionInfo}`
+      noticeContent = custom_content?.trim() || `মেধাশিরী কোচিংয়ের শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, "${activeTitle}" পরীক্ষার ফলাফল প্রকাশিত হয়েছে।
 
 📋 পরীক্ষার তথ্য:
 • বিষয়: ${exam.subject || "সাধারণ"}

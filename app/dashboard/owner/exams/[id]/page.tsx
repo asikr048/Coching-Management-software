@@ -38,6 +38,8 @@ import {
   BookOpen,
   Edit2,
   Plus,
+  CheckSquare,
+  Square,
 } from "lucide-react"
 import { getGrade, getGradePoint, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
@@ -988,6 +990,10 @@ export default function ExamResultsPage() {
   const [combinedWeeksExamsList, setCombinedWeeksExamsList] = useState<any[]>([])
   const [combinedWeekData, setCombinedWeekData] = useState<any[]>([])
   const [loadingCombinedWeeks, setLoadingCombinedWeeks] = useState(false)
+  const [selectedCombinedWeekIds, setSelectedCombinedWeekIds] = useState<string[]>([])
+  const [rawStudentWeekMarks, setRawStudentWeekMarks] = useState<Record<string, Record<string, number>>>({})
+  const [publishingCombinedNotice, setPublishingCombinedNotice] = useState(false)
+  const [isCombinedNoticeLive, setIsCombinedNoticeLive] = useState(false)
 
   // Current, Prev, and Next Week calculation + Full Series Slots (Week 1..5+)
   const { prevWeekExam, nextWeekExam, currentWeekNum, fullSeriesSlots } = useMemo(() => {
@@ -1163,12 +1169,8 @@ export default function ExamResultsPage() {
         .select("exam_id, student_id, obtained_marks, day_marks, grade")
         .in("exam_id", examIds)
 
-      // Map: studentId -> { total, weekMarks: { [examId]: number }, count }
-      const studentTotalMarksMap: Record<string, { total: number; weekMarks: Record<string, number>; count: number }> = {}
-      let seriesTotalMaxMarks = 0
-      targetExams.forEach((we) => {
-        seriesTotalMaxMarks += Number(we.total_marks) || 100
-      })
+      // Map: studentId -> { [examId]: number }
+      const studentMarksMap: Record<string, Record<string, number>> = {}
 
       ;(allResults || []).forEach((r) => {
         let mark = Number(r.obtained_marks) || 0
@@ -1179,48 +1181,212 @@ export default function ExamResultsPage() {
         }
 
         const sid = r.student_id
-        if (!studentTotalMarksMap[sid]) {
-          studentTotalMarksMap[sid] = { total: 0, weekMarks: {}, count: 0 }
+        if (!studentMarksMap[sid]) {
+          studentMarksMap[sid] = {}
         }
-        studentTotalMarksMap[sid].total += mark
-        studentTotalMarksMap[sid].weekMarks[r.exam_id] = mark
-        if (mark > 0) studentTotalMarksMap[sid].count++
+        studentMarksMap[sid][r.exam_id] = mark
       })
 
-      const combinedList = students.map((s, idx) => {
-        const roll = s.roll_no || s.batch_roll || idx + 1
-        const stat = studentTotalMarksMap[s.id] || studentTotalMarksMap[s.student_id] || { total: 0, weekMarks: {}, count: 0 }
-        const pct = seriesTotalMaxMarks > 0 ? Math.round((stat.total / seriesTotalMaxMarks) * 100) : 0
-        const gradeInfo = calculateCoachingGrade(stat.total, seriesTotalMaxMarks)
+      setRawStudentWeekMarks(studentMarksMap)
 
-        return {
-          student_id: s.student_id,
-          roll_no: roll,
-          name: s.name,
-          total_marks: stat.total,
-          total_max_marks: seriesTotalMaxMarks,
-          weekMarks: stat.weekMarks,
-          average_pct: pct,
-          grade: stat.count > 0 ? gradeInfo.grade : "—",
-          gpa: stat.count > 0 ? gradeInfo.gp : 0,
-          section_merit: 0,
+      // Initialize selected week IDs to all if empty or restore saved published selection
+      setSelectedCombinedWeekIds((prev) => {
+        if (prev.length > 0) {
+          const valid = prev.filter((id) => targetExams.some((e) => e.id === id))
+          return valid.length > 0 ? valid : targetExams.map((e) => e.id)
         }
-      })
-
-      combinedList.sort((a, b) => b.total_marks - a.total_marks || Number(a.roll_no) - Number(b.roll_no))
-      let rank = 1
-      combinedList.forEach((item, i) => {
-        if (i > 0 && item.total_marks < combinedList[i - 1].total_marks) {
-          rank = i + 1
+        if (exam?.result_note?.includes("[PUBLISHED_COMBINED_WEEKS:")) {
+          try {
+            const m = exam.result_note.match(/\[PUBLISHED_COMBINED_WEEKS:(.*?)\]/)
+            if (m && m[1]) {
+              const savedIds = JSON.parse(m[1])
+              if (Array.isArray(savedIds) && savedIds.length > 0) {
+                setIsCombinedNoticeLive(true)
+                return savedIds
+              }
+            }
+          } catch {}
         }
-        item.section_merit = item.total_marks > 0 ? rank : ("—" as any)
+        return targetExams.map((e) => e.id)
       })
-
-      setCombinedWeekData(combinedList)
     } catch (err) {
       console.error("Failed to load combined weeks:", err)
     } finally {
       setLoadingCombinedWeeks(false)
+    }
+  }
+
+  // Active selected exams for combined calculation
+  const activeCombinedExams = useMemo(() => {
+    if (selectedCombinedWeekIds.length === 0) return combinedWeeksExamsList
+    return combinedWeeksExamsList.filter((e) => selectedCombinedWeekIds.includes(e.id))
+  }, [combinedWeeksExamsList, selectedCombinedWeekIds])
+
+  // Recalculate combined data dynamically whenever activeCombinedExams, rawStudentWeekMarks, or students change
+  useEffect(() => {
+    if (activeCombinedExams.length === 0 || students.length === 0) {
+      if (students.length === 0) setCombinedWeekData([])
+      return
+    }
+
+    let seriesTotalMaxMarks = 0
+    activeCombinedExams.forEach((we) => {
+      seriesTotalMaxMarks += Number(we.total_marks) || 100
+    })
+
+    const combinedList = students.map((s, idx) => {
+      const roll = s.roll_no || s.batch_roll || idx + 1
+      const studentWeekMarks = rawStudentWeekMarks[s.id] || rawStudentWeekMarks[s.student_id] || {}
+
+      let studentTotal = 0
+      let count = 0
+      activeCombinedExams.forEach((we) => {
+        const m = studentWeekMarks[we.id]
+        if (m !== undefined && m !== null) {
+          studentTotal += Number(m) || 0
+          if (Number(m) > 0) count++
+        }
+      })
+
+      const pct = seriesTotalMaxMarks > 0 ? Math.round((studentTotal / seriesTotalMaxMarks) * 100) : 0
+      const gradeInfo = calculateCoachingGrade(studentTotal, seriesTotalMaxMarks)
+
+      return {
+        student_id: s.student_id,
+        roll_no: roll,
+        name: s.name,
+        total_marks: studentTotal,
+        total_max_marks: seriesTotalMaxMarks,
+        weekMarks: studentWeekMarks,
+        average_pct: pct,
+        grade: count > 0 ? gradeInfo.grade : "—",
+        gpa: count > 0 ? gradeInfo.gp : 0,
+        section_merit: 0,
+      }
+    })
+
+    combinedList.sort((a, b) => b.total_marks - a.total_marks || Number(a.roll_no) - Number(b.roll_no))
+    let rank = 1
+    combinedList.forEach((item, i) => {
+      if (i > 0 && item.total_marks < combinedList[i - 1].total_marks) {
+        rank = i + 1
+      }
+      item.section_merit = item.total_marks > 0 ? rank : ("—" as any)
+    })
+
+    setCombinedWeekData(combinedList)
+  }, [activeCombinedExams, rawStudentWeekMarks, students])
+
+  function toggleCombinedWeekSelection(weekId: string) {
+    setSelectedCombinedWeekIds((prev) => {
+      if (prev.includes(weekId)) {
+        if (prev.length <= 1) {
+          toast.error("কমপক্ষে একটি সপ্তাহ নির্বাচিত থাকতে হবে")
+          return prev
+        }
+        return prev.filter((id) => id !== weekId)
+      } else {
+        return [...prev, weekId]
+      }
+    })
+  }
+
+  function selectAllCombinedWeeks() {
+    setSelectedCombinedWeekIds(combinedWeeksExamsList.map((e) => e.id))
+  }
+
+  function selectLastNWeeks(n: number) {
+    const sorted = [...combinedWeeksExamsList].sort((a, b) => {
+      const numA = extractWeekNumber(a.title, a.result_note) || 0
+      const numB = extractWeekNumber(b.title, b.result_note) || 0
+      return numA - numB
+    })
+    const lastN = sorted.slice(-n)
+    setSelectedCombinedWeekIds(lastN.map((e) => e.id))
+  }
+
+  async function handlePublishSelectedCombinedResult() {
+    if (!exam || activeCombinedExams.length === 0) {
+      toast.error("অনুগ্রহ করে অন্তত একটি সপ্তাহ নির্বাচন করুন")
+      return
+    }
+
+    setPublishingCombinedNotice(true)
+    try {
+      const weekTitles = activeCombinedExams
+        .map((we, idx) => we.title || `Week ${idx + 1}`)
+        .join(", ")
+
+      const batchName = exam.batch?.name || "সকল ব্যাচ"
+
+      let seriesTotalMaxMarks = 0
+      activeCombinedExams.forEach((we) => {
+        seriesTotalMaxMarks += Number(we.total_marks) || 100
+      })
+
+      const top1 = combinedWeekData.filter((r) => r.section_merit === 1)
+      const top2 = combinedWeekData.filter((r) => r.section_merit === 2)
+      const top3 = combinedWeekData.filter((r) => r.section_merit === 3)
+
+      const formatWinners = (items: typeof combinedWeekData) => {
+        if (items.length === 0) return "—"
+        return items
+          .map((it) => `${it.name} (রোল: #${it.roll_no}, প্রাপ্ত: ${it.total_marks}/${seriesTotalMaxMarks})`)
+          .join(", ")
+      }
+
+      let toppersText = "\n\n🏆 সমন্বিত শীর্ষ মেধা তালিকা (Combined Series Toppers):\n"
+      if (top1.length > 0) toppersText += `🥇 ১ম স্থান: ${formatWinners(top1)}\n`
+      if (top2.length > 0) toppersText += `🥈 ২য় স্থান: ${formatWinners(top2)}\n`
+      if (top3.length > 0) toppersText += `🥉 ৩য় স্থান: ${formatWinners(top3)}\n`
+
+      const noticeTitle = `🏆 সাপ্তাহিক পরীক্ষার সমন্বিত মেধা তালিকা (${weekTitles}) - ${batchName}`
+      const noticeContent = `মেধাশিরী কোচিংয়ের সংশ্লিষ্ট শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, সাপ্তাহিক পরীক্ষার ধারাবাহিক মূল্যায়নে নিম্নোক্ত নির্বাচিত সপ্তাহসমূহের সমন্বিত মেধা তালিকা চূড়ান্তভাবে প্রকাশিত হয়েছে:
+
+📋 সমন্বিত পরীক্ষার তথ্য:
+• অন্তর্ভুক্ত সপ্তাহসমূহ: ${weekTitles} (মোট ${activeCombinedExams.length}টি সপ্তাহ)
+• ব্যাচ: ${batchName}
+• সমন্বিত পূর্ণমান: ${seriesTotalMaxMarks} নম্বর
+• অংশগ্রহণকারী শিক্ষার্থী: ${combinedWeekData.filter((r) => r.total_marks > 0).length} জন${toppersText}
+
+শিক্ষার্থীরা তাদের প্রোফাইল অথবা ওয়েবসাইটের "অনলাইন রেজাল্ট" পোর্টাল থেকে বিষয়ভিত্তিক ও সামগ্রিক মেরিট তালিকা দেখতে পারবে।`
+
+      const res = await fetch(`/api/exams/${exam.id}/publish-notice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "weekly_aggregate",
+          custom_title: noticeTitle,
+          custom_content: noticeContent,
+        }),
+      })
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to publish notice")
+      }
+
+      // Update selected exams in Supabase: is_public_result, is_published, is_weekly_published
+      const selectedIds = activeCombinedExams.map((e) => e.id)
+      await supabase
+        .from("exams")
+        .update({ is_public_result: true, is_published: true, is_weekly_published: true })
+        .in("id", selectedIds)
+
+      // Persist published combined selection in current exam's result_note
+      const currentNote = exam.result_note || ""
+      const cleanNote = currentNote.replace(/\[PUBLISHED_COMBINED_WEEKS:.*?\]/g, "").trim()
+      const updatedNote = `${cleanNote} [PUBLISHED_COMBINED_WEEKS:${JSON.stringify(selectedIds)}]`
+      await supabase.from("exams").update({ result_note: updatedNote }).eq("id", exam.id)
+      setExam((prev: any) => ({ ...prev, result_note: updatedNote }))
+
+      setIsCombinedNoticeLive(true)
+      toast.success(`✓ "${weekTitles}"-এর সমন্বিত মেধা তালিকা সফলভাবে প্রকাশ করা হয়েছে!`)
+    } catch (err: any) {
+      console.error("Publish combined result error:", err)
+      toast.error(err?.message || "সমন্বিত মেধা প্রকাশ করতে ব্যর্থ হয়েছে")
+    } finally {
+      setPublishingCombinedNotice(false)
     }
   }
 
@@ -3509,7 +3675,22 @@ export default function ExamResultsPage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={handlePublishSelectedCombinedResult}
+                  disabled={publishingCombinedNotice || activeCombinedExams.length === 0}
+                  className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95 disabled:opacity-50"
+                  title="নির্বাচিত সপ্তাহগুলোর সমন্বিত মেধা তালিকা নোটিশ বোর্ডে ও অনলাইন রেজাল্ট পোর্টালে প্রকাশ করুন"
+                >
+                  {publishingCombinedNotice ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-emerald-200" />
+                  ) : (
+                    <Globe className="w-4 h-4 text-emerald-200" />
+                  )}
+                  <span>📢 সমন্বিত মেধা প্রকাশ করুন (Publish Result)</span>
+                </button>
+
                 <button
                   type="button"
                   onClick={() => {
@@ -3521,6 +3702,112 @@ export default function ExamResultsPage() {
                   <Printer className="w-4 h-4 text-amber-300" />
                   <span>প্রিন্ট সমন্বিত মেধা তালিকা (Pic 2 / PDF)</span>
                 </button>
+              </div>
+            </div>
+
+            {/* LIVE NOTICE INDICATOR */}
+            {isCombinedNoticeLive && (
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0 border border-emerald-300">
+                    <CheckCircle className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-emerald-950">
+                      সমন্বিত মেধা তালিকা নোটিশ বোর্ডে ও অনলাইন রেজাল্ট পোর্টালে সক্রিয় রয়েছে
+                    </p>
+                    <p className="text-[10px] text-emerald-700 font-semibold">
+                      নির্বাচিত সপ্তাহ: {activeCombinedExams.map((e) => e.title).join(", ")}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-200 text-emerald-900 border border-emerald-300">
+                  LIVE PUBLISHED
+                </span>
+              </div>
+            )}
+
+            {/* WEEK SELECTOR CONTROL PANEL FOR COMBINED CALCULATION */}
+            <div className="bg-white p-4 rounded-xl border border-blue-200/90 shadow-xs space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-100 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="w-4 h-4 text-blue-600" />
+                  <span className="font-extrabold text-xs sm:text-sm text-blue-950">
+                    সমন্বিত ফলাফলের জন্য সপ্তাহ নির্বাচন করুন (Select Weeks to Combine):
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={selectAllCombinedWeeks}
+                    className="px-2.5 py-1 text-xs font-bold bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg border border-blue-200 cursor-pointer transition-all"
+                  >
+                    সকল সপ্তাহ ({combinedWeeksExamsList.length})
+                  </button>
+                  {combinedWeeksExamsList.length >= 3 && (
+                    <button
+                      type="button"
+                      onClick={() => selectLastNWeeks(3)}
+                      className="px-2.5 py-1 text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg border border-indigo-200 cursor-pointer transition-all"
+                    >
+                      সর্বশেষ ৩ সপ্তাহ
+                    </button>
+                  )}
+                  {combinedWeeksExamsList.length >= 2 && (
+                    <button
+                      type="button"
+                      onClick={() => selectLastNWeeks(2)}
+                      className="px-2.5 py-1 text-xs font-bold bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-lg border border-purple-200 cursor-pointer transition-all"
+                    >
+                      সর্বশেষ ২ সপ্তাহ
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Checkbox pills */}
+              <div className="flex flex-wrap items-center gap-2">
+                {combinedWeeksExamsList.map((we, wIdx) => {
+                  const isSel = selectedCombinedWeekIds.includes(we.id)
+                  const wTitle = we.title || `Week ${wIdx + 1}`
+                  return (
+                    <button
+                      key={`sel-week-${we.id}`}
+                      type="button"
+                      onClick={() => toggleCombinedWeekSelection(we.id)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl font-bold text-xs transition-all border flex items-center gap-2 cursor-pointer shadow-2xs",
+                        isSel
+                          ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
+                      )}
+                    >
+                      {isSel ? (
+                        <CheckSquare className="w-3.5 h-3.5 text-blue-200" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                      <span>{wTitle}</span>
+                      <span
+                        className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded font-semibold",
+                          isSel ? "bg-blue-700 text-blue-100" : "bg-slate-200 text-slate-600"
+                        )}
+                      >
+                        {we.total_marks || 350} নম্বর
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100 gap-2">
+                <span>
+                  বর্তমানে নির্বাচিত: <strong className="text-blue-900 font-extrabold">{activeCombinedExams.length}টি সপ্তাহ</strong> ({activeCombinedExams.map((e) => e.title).join(", ")})
+                </span>
+                <span className="font-bold text-slate-800">
+                  নির্বাচিত সপ্তাহের সমন্বিত পূর্ণমান: <strong className="text-amber-700 font-extrabold">{activeCombinedExams.reduce((acc, e) => acc + (Number(e.total_marks) || 100), 0)} নম্বর</strong>
+                </span>
               </div>
             </div>
 
@@ -3604,8 +3891,8 @@ export default function ExamResultsPage() {
                       <th className="px-3 py-3 w-16 font-mono text-center">রোল</th>
                       <th className="px-3 py-3 w-28 font-mono">শিক্ষার্থী আইডি</th>
                       <th className="px-4 py-3 min-w-[160px]">শিক্ষার্থীর নাম</th>
-                      {/* Week-by-week marks breakdown columns */}
-                      {combinedWeeksExamsList.map((we, wIdx) => {
+                      {/* Week-by-week marks breakdown columns for ACTIVE selected weeks */}
+                      {activeCombinedExams.map((we, wIdx) => {
                         const shortTitle = (we.title || "").replace(/weekly[-\s_]?/i, "W").replace(/সাপ্তাহিক[-\s_]?/, "W").trim() || `W${wIdx + 1}`
                         return (
                           <th key={we.id} className="px-2.5 py-3 text-center font-mono text-[11px] bg-slate-100/80 border-x border-slate-200 whitespace-nowrap" title={we.title}>
@@ -3659,8 +3946,8 @@ export default function ExamResultsPage() {
                           <td className="px-4 py-2.5 font-bold text-slate-900">
                             {row.name}
                           </td>
-                          {/* Week-by-week score cells */}
-                          {combinedWeeksExamsList.map((we) => {
+                          {/* Week-by-week score cells for ACTIVE selected weeks */}
+                          {activeCombinedExams.map((we) => {
                             const m = row.weekMarks?.[we.id]
                             return (
                               <td key={we.id} className="px-2.5 py-2.5 text-center font-mono font-bold text-slate-700 border-x border-slate-100 whitespace-nowrap">
