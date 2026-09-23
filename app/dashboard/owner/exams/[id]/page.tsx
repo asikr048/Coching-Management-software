@@ -761,45 +761,74 @@ export default function ExamResultsPage() {
       const nextWeekNum = curWeek + 1
       const nextTitle = `WEEKLY-${nextWeekNum < 10 ? "0" + nextWeekNum : nextWeekNum}`
 
+      const targetBatchId = exam.batch_id || (Array.isArray(exam.batch_ids) ? exam.batch_ids[0] : null)
+      const batchIdsList = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0
+        ? exam.batch_ids
+        : exam.batch_id ? [exam.batch_id] : []
+
+      // Build rich metadata string in result_note
+      let updatedNote = `[SERIES_WEEK:${nextWeekNum}] [SHOW_ALL_RESULTS:true]`
+      if (batchIdsList.length > 0) {
+        updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
+      }
+      if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
+        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(exam.recurring_days)}]`
+      }
+
+      // Payload WITHOUT 'batch_ids' (since Supabase exams table does not have a batch_ids column)
       const payload: any = {
         title: nextTitle,
-        exam_schedule_type: "weekly",
-        batch_id: exam.batch_id,
-        batch_ids: Array.isArray(exam.batch_ids) ? exam.batch_ids : exam.batch_id ? [exam.batch_id] : [],
-        branch_id: exam.branch_id || null,
+        batch_id: targetBatchId,
         subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-        total_marks: exam.total_marks || 100,
-        pass_marks: exam.pass_marks || 40,
+        total_marks: Number(exam.total_marks) || 100,
+        pass_marks: Number(exam.pass_marks) || 40,
         exam_date: new Date().toISOString().split("T")[0],
-        recurring_days: exam.recurring_days || [],
-        duration_minutes: exam.duration_minutes || 60,
-        show_results_immediately: true,
-        show_all_results: true,
-        result_note: `[SERIES_WEEK:${nextWeekNum}]`,
+        result_note: updatedNote,
         is_published: false,
       }
 
-      const res = await fetch("/api/exams", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      })
+      if (exam.branch_id) payload.branch_id = exam.branch_id
+      if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
+      if (exam.recurring_days) payload.recurring_days = exam.recurring_days
+      if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
 
-      if (res.ok) {
-        const data = await res.json()
-        const newExamId = data.exam?.id || data.id
-        if (newExamId) {
-          toast.success(`✓ ${nextTitle} সফলভাবে তৈরি হয়েছে! নতুন সপ্তাহে নিয়ে যাওয়া হচ্ছে...`)
-          router.push(`/dashboard/owner/exams/${newExamId}`)
-          return
+      let insertedId: string | null = null
+
+      const { data: inserted, error: insErr } = await supabase
+        .from("exams")
+        .insert(payload)
+        .select("id")
+        .single()
+
+      if (!insErr && inserted?.id) {
+        insertedId = inserted.id
+      } else {
+        console.warn("Standard insert failed, attempting minimal fallback:", insErr)
+        // Fallback: strip optional custom schema columns that may not exist
+        const minimalPayload = {
+          title: nextTitle,
+          batch_id: targetBatchId,
+          subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+          total_marks: Number(exam.total_marks) || 100,
+          pass_marks: Number(exam.pass_marks) || 40,
+          exam_date: new Date().toISOString().split("T")[0],
+          result_note: updatedNote,
+          is_published: false,
         }
+
+        const { data: fbExam, error: fbErr } = await supabase
+          .from("exams")
+          .insert(minimalPayload)
+          .select("id")
+          .single()
+
+        if (fbErr) throw fbErr
+        if (fbExam?.id) insertedId = fbExam.id
       }
 
-      const { data: inserted, error: insErr } = await supabase.from("exams").insert(payload).select().single()
-      if (insErr) throw insErr
-      if (inserted?.id) {
-        toast.success(`✓ ${nextTitle} সফলভাবে তৈরি হয়েছে!`)
-        router.push(`/dashboard/owner/exams/${inserted.id}`)
+      if (insertedId) {
+        toast.success(`✓ ${nextTitle} সফলভাবে তৈরি হয়েছে! নতুন সপ্তাহে নিয়ে যাওয়া হচ্ছে...`)
+        router.push(`/dashboard/owner/exams/${insertedId}`)
       }
     } catch (err: any) {
       console.error("Start next week error:", err)
@@ -2368,197 +2397,204 @@ export default function ExamResultsPage() {
         </div>
 
         {/* Dynamic Action Buttons */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          {/* 1. Dynamic Publish Button */}
-          {isWeeklyExam ? (
-            isWeeklyActive ? (
+        {/* Dynamic Action Buttons - Structured in TWO Clean Lines */}
+        <div className="flex flex-col gap-2.5 w-full lg:w-auto items-start lg:items-end shrink-0">
+          {/* Line 1: Communications & Publishing */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* 1. Dynamic Publish Button */}
+            {isWeeklyExam ? (
+              isWeeklyActive ? (
+                <button
+                  type="button"
+                  onClick={() => handleTogglePublishWeekly(!isWeeklyPublished)}
+                  disabled={publishingExam}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer border",
+                    isWeeklyPublished
+                      ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
+                      : "bg-purple-600 hover:bg-purple-700 text-white border-purple-600 shadow-purple-600/20"
+                  )}
+                  title="Publish consolidated weekly results"
+                >
+                  {publishingExam ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : isWeeklyPublished ? (
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isWeeklyPublished ? "সাপ্তাহিক রেজাল্ট প্রকাশিত ✓" : "Publish Weekly Result"}</span>
+                </button>
+              ) : activeDayConfig ? (
+                <button
+                  type="button"
+                  onClick={() => handleTogglePublishDay(activeDayConfig.key)}
+                  disabled={publishingExam}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer border",
+                    isSelectedDayPublished
+                      ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
+                      : "bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-blue-600/20"
+                  )}
+                  title={`Publish results for ${activeDayConfig.day_bn}`}
+                >
+                  {publishingExam ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : isSelectedDayPublished ? (
+                    <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5" />
+                  )}
+                  <span>
+                    {isSelectedDayPublished ? `${activeDayConfig.day_bn} প্রকাশিত ✓` : `Publish [${activeDayConfig.day_bn}] Result`}
+                  </span>
+                </button>
+              ) : null
+            ) : (
               <button
                 type="button"
-                onClick={() => handleTogglePublishWeekly(!isWeeklyPublished)}
+                onClick={() => handleTogglePublishOneTime(!exam.is_published)}
                 disabled={publishingExam}
                 className={cn(
-                  "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
-                  isWeeklyPublished
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer border",
+                  exam.is_published
                     ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
-                    : "bg-purple-600 hover:bg-purple-700 text-white border-purple-600 shadow-purple-600/20"
+                    : "bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
                 )}
-                title="Publish consolidated weekly results"
               >
-                {publishingExam ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : isWeeklyPublished ? (
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                ) : (
-                  <Play className="w-3.5 h-3.5" />
-                )}
-                <span>{isWeeklyPublished ? "সাপ্তাহিক রেজাল্ট প্রকাশিত ✓" : "Publish Weekly Result"}</span>
+                {publishingExam ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : exam.is_published ? <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> : <Play className="w-3.5 h-3.5" />}
+                <span>{exam.is_published ? "Results Published" : "Publish Exam"}</span>
               </button>
-            ) : activeDayConfig ? (
-              <button
-                type="button"
-                onClick={() => handleTogglePublishDay(activeDayConfig.key)}
-                disabled={publishingExam}
-                className={cn(
-                  "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
-                  isSelectedDayPublished
-                    ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
-                    : "bg-blue-600 hover:bg-blue-700 text-white border-blue-600 shadow-blue-600/20"
-                )}
-                title={`Publish results for ${activeDayConfig.day_bn}`}
-              >
-                {publishingExam ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : isSelectedDayPublished ? (
-                  <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-                ) : (
-                  <Play className="w-3.5 h-3.5" />
-                )}
-                <span>
-                  {isSelectedDayPublished ? `${activeDayConfig.day_bn} প্রকাশিত ✓` : `Publish [${activeDayConfig.day_bn}] Result`}
-                </span>
-              </button>
-            ) : null
-          ) : (
-            <button
-              type="button"
-              onClick={() => handleTogglePublishOneTime(!exam.is_published)}
-              disabled={publishingExam}
-              className={cn(
-                "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
-                exam.is_published
-                  ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300"
-                  : "bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
-              )}
-            >
-              {publishingExam ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : exam.is_published ? <CheckCircle className="w-3.5 h-3.5 text-emerald-600" /> : <Play className="w-3.5 h-3.5" />}
-              <span>{exam.is_published ? "Results Published" : "Publish Exam"}</span>
-            </button>
-          )}
-
-          {/* 2. Public Online Result Portal Toggle */}
-          <button
-            type="button"
-            onClick={() => handleTogglePublicResult(!exam.is_public_result)}
-            disabled={publishingPublic}
-            className={cn(
-              "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
-              exam.is_public_result
-                ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-700"
-                : "bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
             )}
-            title="Publish on homepage Online Result portal"
-          >
-            {publishingPublic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
-            <span>{exam.is_public_result ? "🌐 Public Online Result" : "Publish to Public"}</span>
-          </button>
 
-          {/* 3. Publish Notice Button */}
-          <button
-            type="button"
-            onClick={handlePublishNotice}
-            disabled={publishingNotice}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer"
-            title="Post merit list announcement to notice board"
-          >
-            {publishingNotice ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bell className="w-3.5 h-3.5 text-amber-600" />}
-            <span>{isWeeklyActive ? "Publish Weekly Notice" : activeDayConfig ? `Publish [${activeDayConfig.day_bn}] Notice` : "Publish to Notice"}</span>
-          </button>
-
-          {/* 4. Weekly Pause/Resume */}
-          {isWeeklyExam && (
+            {/* 2. Public Online Result Portal Toggle */}
             <button
               type="button"
-              onClick={handleTogglePauseExam}
-              disabled={pausingExam}
+              onClick={() => handleTogglePublicResult(!exam.is_public_result)}
+              disabled={publishingPublic}
               className={cn(
-                "flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs cursor-pointer border",
-                exam.is_paused ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-700" : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer border",
+                exam.is_public_result
+                  ? "bg-purple-600 hover:bg-purple-700 text-white border-purple-700"
+                  : "bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200"
               )}
+              title="Publish on homepage Online Result portal"
             >
-              {pausingExam ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : exam.is_paused ? <Play className="w-3.5 h-3.5 fill-white" /> : <Pause className="w-3.5 h-3.5 fill-slate-800" />}
-              <span>{exam.is_paused ? "Resume Exam" : "Pause Exam"}</span>
+              {publishingPublic ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Globe className="w-3.5 h-3.5" />}
+              <span>{exam.is_public_result ? "🌐 Public Online Result" : "Publish to Public"}</span>
             </button>
-          )}
 
-          {/* 5. SMS Button */}
-          <Link
-            href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result${activeDayConfig ? `&day=${activeDayConfig.key}` : ""}`}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer"
-          >
-            <MessageSquare className="w-4 h-4" /> Send SMS
-          </Link>
-
-          {/* 5.5. Edit Exam Button */}
-          <Link
-            href={`/dashboard/owner/exams?edit=${exam.id}`}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer shadow-2xs"
-            title="Edit Exam details, schedule, marks, and settings"
-          >
-            <Edit2 className="w-4 h-4 text-indigo-600" />
-            <span>Edit Exam (সম্পাদনা)</span>
-          </Link>
-
-          {/* Continuous Weekly Exam: Start Next Week Button */}
-          {isWeeklyExam && (
+            {/* 3. Publish Notice Button */}
             <button
               type="button"
-              onClick={handleStartNextWeek}
-              disabled={creatingNextWeek}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-purple-500/20 transition-all cursor-pointer whitespace-nowrap active:scale-95 shrink-0"
-              title="পরবর্তী সপ্তাহের পরীক্ষা শুরু করুন (যেমন WEEKLY-34)"
+              onClick={handlePublishNotice}
+              disabled={publishingNotice}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
+              title="Post merit list announcement to notice board"
             >
-              {creatingNextWeek ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <CalendarDays className="w-3.5 h-3.5 text-purple-200" />
-              )}
-              <span>+ Start Next Week (পরবর্তী সপ্তাহ)</span>
+              {publishingNotice ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bell className="w-3.5 h-3.5 text-amber-600" />}
+              <span>{isWeeklyActive ? "Publish Weekly Notice" : activeDayConfig ? `Publish [${activeDayConfig.day_bn}] Notice` : "Publish to Notice"}</span>
             </button>
-          )}
 
-          {/* 5.6. Print Result Sheet Button (PDF) */}
-          <button
-            type="button"
-            onClick={() => {
-              setPrintModalDefaultMode(
-                selectedTab === "all_weeks_combined"
-                  ? "all_weeks_combined"
-                  : isWeeklyActive
-                  ? "weekly_aggregate"
-                  : isWeeklyExam
-                  ? "weekly_day"
-                  : "one_time"
-              )
-              setIsPrintModalOpen(true)
-            }}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs sm:text-sm transition-all shadow-xs cursor-pointer border border-slate-800 active:scale-95"
-            title="প্রিন্ট রেজাল্ট শিট বা PDF সংরক্ষণ করুন"
-          >
-            <Printer className="w-4 h-4 text-amber-400" />
-            <span>প্রিন্ট রেজাল্ট (PDF)</span>
-          </button>
+            {/* 4. Weekly Pause/Resume */}
+            {isWeeklyExam && (
+              <button
+                type="button"
+                onClick={handleTogglePauseExam}
+                disabled={pausingExam}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer border",
+                  exam.is_paused ? "bg-rose-600 hover:bg-rose-700 text-white border-rose-700" : "bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-300"
+                )}
+              >
+                {pausingExam ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : exam.is_paused ? <Play className="w-3.5 h-3.5 fill-white" /> : <Pause className="w-3.5 h-3.5 fill-slate-800" />}
+                <span>{exam.is_paused ? "Resume Exam" : "Pause Exam"}</span>
+              </button>
+            )}
 
-          {/* 6. Delete Exam */}
-          <button
-            type="button"
-            onClick={() => setShowDeleteModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer"
-            title="Delete this exam"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            {/* 5. SMS Button */}
+            <Link
+              href={`/dashboard/owner/sms?exam_id=${exam.id}&mode=exam_result${activeDayConfig ? `&day=${activeDayConfig.key}` : ""}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 rounded-xl font-bold text-xs transition-all cursor-pointer"
+            >
+              <MessageSquare className="w-3.5 h-3.5" /> Send SMS
+            </Link>
 
-          {/* 7. Save All */}
-          {!isWeeklyActive && (
+            {/* 5.5. Edit Exam Button */}
+            <Link
+              href={`/dashboard/owner/exams?edit=${exam.id}`}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-2xs"
+              title="Edit Exam details, schedule, marks, and settings"
+            >
+              <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Edit Exam (সম্পাদনা)</span>
+            </Link>
+          </div>
+
+          {/* Line 2: Operations, Continuous Next Week, Print & Save */}
+          <div className="flex items-center gap-2 flex-wrap pt-1.5 sm:pt-2 border-t border-slate-100 w-full justify-start lg:justify-end">
+            {/* Continuous Weekly Exam: Start Next Week Button */}
+            {isWeeklyExam && (
+              <button
+                type="button"
+                onClick={handleStartNextWeek}
+                disabled={creatingNextWeek}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-purple-500/20 transition-all cursor-pointer whitespace-nowrap active:scale-95 shrink-0"
+                title="পরবর্তী সপ্তাহের পরীক্ষা শুরু করুন (যেমন WEEKLY-34)"
+              >
+                {creatingNextWeek ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <CalendarDays className="w-3.5 h-3.5 text-purple-200" />
+                )}
+                <span>+ Start Next Week (পরবর্তী সপ্তাহ)</span>
+              </button>
+            )}
+
+            {/* 5.6. Print Result Sheet Button (PDF) */}
             <button
-              onClick={handleSaveAll}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs sm:text-sm shadow-md shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer"
+              type="button"
+              onClick={() => {
+                setPrintModalDefaultMode(
+                  selectedTab === "all_weeks_combined"
+                    ? "all_weeks_combined"
+                    : isWeeklyActive
+                    ? "weekly_aggregate"
+                    : isWeeklyExam
+                    ? "weekly_day"
+                    : "one_time"
+                )
+                setIsPrintModalOpen(true)
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-all shadow-xs cursor-pointer border border-slate-800 active:scale-95 whitespace-nowrap"
+              title="প্রিন্ট রেজাল্ট শিট বা PDF সংরক্ষণ করুন"
             >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin text-white" /> : <Save className="w-4 h-4" />}
-              <span>Save All</span>
+              <Printer className="w-3.5 h-3.5 text-amber-400" />
+              <span>🖨️ প্রিন্ট রেজাল্ট (PDF)</span>
             </button>
-          )}
+
+            {/* 6. Delete Exam */}
+            <button
+              type="button"
+              onClick={() => setShowDeleteModal(true)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-xs transition-all cursor-pointer"
+              title="Delete this exam"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+
+            {/* 7. Save All */}
+            {!isWeeklyActive && (
+              <button
+                onClick={handleSaveAll}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-black rounded-xl text-xs shadow-md shadow-amber-500/20 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
+              >
+                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin text-white" /> : <Save className="w-3.5 h-3.5" />}
+                <span>Save All</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
