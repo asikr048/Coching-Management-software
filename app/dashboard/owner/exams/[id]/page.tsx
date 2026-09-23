@@ -37,6 +37,7 @@ import {
   ChevronLeft,
   BookOpen,
   Edit2,
+  Plus,
 } from "lucide-react"
 import { getGrade, getGradePoint, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
@@ -120,6 +121,23 @@ function getDayMarkItem(
     }
   }
   return undefined
+}
+
+function extractWeekNumber(title?: string | null, note?: string | null): number | null {
+  if (title) {
+    const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+    const m = normalized.match(/weekly[-\s_]?0*(\d+)/i) || normalized.match(/সাপ্তাহিক[-\s_]?0*(\d+)/) || normalized.match(/week[-\s_]?0*(\d+)/i)
+    if (m && m[1]) return parseInt(m[1], 10)
+    const numOnly = normalized.match(/(\d+)/)
+    if (numOnly && numOnly[1] && (normalized.toLowerCase().includes("week") || normalized.includes("সাপ্তাহিক"))) {
+      return parseInt(numOnly[1], 10)
+    }
+  }
+  if (note) {
+    const nm = note.match(/\[SERIES_WEEK:(\d+)\]/)
+    if (nm && nm[1]) return parseInt(nm[1], 10)
+  }
+  return null
 }
 
 function normalizeDayMarks(rawDays: Record<string, any> | undefined): Record<string, DayMarkItem> {
@@ -847,68 +865,175 @@ export default function ExamResultsPage() {
   const [combinedWeekData, setCombinedWeekData] = useState<any[]>([])
   const [loadingCombinedWeeks, setLoadingCombinedWeeks] = useState(false)
 
-  // Current, Prev, and Next Week calculation
-  const { prevWeekExam, nextWeekExam, currentWeekNum } = useMemo(() => {
-    if (!exam) return { prevWeekExam: null, nextWeekExam: null, currentWeekNum: 1 }
-    const m = (exam.title || "").match(/weekly[-\s_]?(\d+)/i) || (exam.title || "").match(/সাপ্তাহিক[-\s_]?(\d+)/)
-    const curNum = m && m[1] ? parseInt(m[1]) : 1
+  // Current, Prev, and Next Week calculation + Full Series Slots (Week 1..5+)
+  const { prevWeekExam, nextWeekExam, currentWeekNum, fullSeriesSlots } = useMemo(() => {
+    if (!exam) return { prevWeekExam: null, nextWeekExam: null, currentWeekNum: 1, fullSeriesSlots: [] }
+    const curNum = extractWeekNumber(exam.title, exam.result_note) || 1
+
+    let maxWeek = Math.max(curNum, 5)
+    weeklySeriesExams.forEach((e) => {
+      const w = extractWeekNumber(e.title, e.result_note)
+      if (w && w > maxWeek) maxWeek = w
+    })
+
+    const slots: Array<{
+      weekNum: number
+      title: string
+      exam: any | null
+      isCurrent: boolean
+    }> = []
+
+    for (let w = 1; w <= maxWeek; w++) {
+      const found = weeklySeriesExams.find((e) => {
+        const ew = extractWeekNumber(e.title, e.result_note)
+        return ew === w
+      }) || (w === curNum ? exam : null)
+
+      const weekLabel = `WEEKLY-${w < 10 ? "0" + w : w}`
+      slots.push({
+        weekNum: w,
+        title: found?.title || weekLabel,
+        exam: found,
+        isCurrent: w === curNum || Boolean(found && found.id === exam.id),
+      })
+    }
 
     let prev: any = null
-    let next: any = null
-
-    if (weeklySeriesExams.length > 0) {
+    const prevSlot = slots.find((s) => s.weekNum === curNum - 1)
+    if (prevSlot?.exam) {
+      prev = prevSlot.exam
+    } else if (weeklySeriesExams.length > 0) {
       const idx = weeklySeriesExams.findIndex((e) => e.id === exam.id)
       if (idx > 0) prev = weeklySeriesExams[idx - 1]
+    }
+
+    let next: any = null
+    const nextSlot = slots.find((s) => s.weekNum === curNum + 1)
+    if (nextSlot?.exam) {
+      next = nextSlot.exam
+    } else if (weeklySeriesExams.length > 0) {
+      const idx = weeklySeriesExams.findIndex((e) => e.id === exam.id)
       if (idx >= 0 && idx < weeklySeriesExams.length - 1) next = weeklySeriesExams[idx + 1]
     }
 
-    return { prevWeekExam: prev, nextWeekExam: next, currentWeekNum: curNum }
+    return { prevWeekExam: prev, nextWeekExam: next, currentWeekNum: curNum, fullSeriesSlots: slots }
   }, [exam, weeklySeriesExams])
 
-  async function loadCombinedWeeklyResults() {
+  // 1. Immediately load series exams when exam is available
+  async function loadWeeklySeriesExams() {
     if (!exam) return
-    setLoadingCombinedWeeks(true)
     try {
-      const targetBatchId = exam.batch_id
-      let query = supabase
+      const { data: allExams, error } = await supabase
         .from("exams")
         .select("id, title, total_marks, pass_marks, exam_date, result_note, exam_schedule_type, batch_id, branch_id, created_at")
         .order("created_at", { ascending: true })
 
-      if (exam.branch_id) {
-        query = query.eq("branch_id", exam.branch_id)
+      if (error) {
+        console.error("Error fetching weekly series exams:", error)
+        setWeeklySeriesExams([exam])
+        setCombinedWeeksExamsList([exam])
+        return
       }
 
-      const { data: allExams } = await query
+      const curBatchId = exam.batch_id
+      const curBranchId = exam.branch_id
+
       const weeklyExams = (allExams || []).filter((e) => {
         const isWeekly =
           e.exam_schedule_type === "weekly" ||
-          (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক")))
+          (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
+          (e.result_note && e.result_note.includes("[SERIES_WEEK:"))
+
+        if (!isWeekly) return false
+
+        // Don't drop exams if branch_id is null; only drop if both have explicit different branches
+        if (curBranchId && e.branch_id && e.branch_id !== curBranchId) {
+          return false
+        }
+
+        // Batch matching: same batch, or either has no batch, or result_note includes it, or both follow weekly naming pattern
+        const isWeeklyPattern =
+          (e.title && /weekly[-\s_]?\d+/i.test(e.title)) || (e.title && /সাপ্তাহিক[-\s_]?\d+/.test(e.title))
+
         const isSameBatch =
-          !targetBatchId ||
-          e.batch_id === targetBatchId ||
-          (e.result_note && e.result_note.includes(targetBatchId))
-        return isWeekly && isSameBatch
+          !curBatchId ||
+          !e.batch_id ||
+          e.batch_id === curBatchId ||
+          (e.result_note && e.result_note.includes(curBatchId)) ||
+          isWeeklyPattern
+
+        return isSameBatch
       })
 
-      // Sort chronologically by week number or created_at
+      if (!weeklyExams.some((e) => e.id === exam.id)) {
+        weeklyExams.push(exam)
+      }
+
       weeklyExams.sort((a, b) => {
-        const mA = (a.title || "").match(/(\d+)/)
-        const mB = (b.title || "").match(/(\d+)/)
-        if (mA && mB) return parseInt(mA[1]) - parseInt(mB[1])
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        const numA = extractWeekNumber(a.title, a.result_note) || 0
+        const numB = extractWeekNumber(b.title, b.result_note) || 0
+        if (numA !== numB && numA > 0 && numB > 0) return numA - numB
+        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
       })
 
       setWeeklySeriesExams(weeklyExams)
       setCombinedWeeksExamsList(weeklyExams)
+    } catch (err) {
+      console.error("Failed to load weekly series exams:", err)
+      setWeeklySeriesExams([exam])
+      setCombinedWeeksExamsList([exam])
+    }
+  }
 
-      if (weeklyExams.length === 0) {
+  // 2. Load Combined Weekly Results (Student marks aggregation)
+  async function loadCombinedWeeklyResults() {
+    if (!exam) return
+    setLoadingCombinedWeeks(true)
+    try {
+      let targetExams = weeklySeriesExams
+      if (targetExams.length <= 1) {
+        const { data: allExams } = await supabase
+          .from("exams")
+          .select("id, title, total_marks, pass_marks, exam_date, result_note, exam_schedule_type, batch_id, branch_id, created_at")
+          .order("created_at", { ascending: true })
+
+        const curBatchId = exam.batch_id
+        const curBranchId = exam.branch_id
+
+        targetExams = (allExams || []).filter((e) => {
+          const isWeekly =
+            e.exam_schedule_type === "weekly" ||
+            (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
+            (e.result_note && e.result_note.includes("[SERIES_WEEK:"))
+
+          if (!isWeekly) return false
+          if (curBranchId && e.branch_id && e.branch_id !== curBranchId) return false
+          const isWeeklyPattern = (e.title && /weekly[-\s_]?\d+/i.test(e.title)) || (e.title && /সাপ্তাহিক[-\s_]?\d+/.test(e.title))
+          return !curBatchId || !e.batch_id || e.batch_id === curBatchId || (e.result_note && e.result_note.includes(curBatchId)) || isWeeklyPattern
+        })
+
+        if (!targetExams.some((e) => e.id === exam.id)) {
+          targetExams.push(exam)
+        }
+
+        targetExams.sort((a, b) => {
+          const numA = extractWeekNumber(a.title, a.result_note) || 0
+          const numB = extractWeekNumber(b.title, b.result_note) || 0
+          if (numA !== numB && numA > 0 && numB > 0) return numA - numB
+          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+        })
+
+        setWeeklySeriesExams(targetExams)
+        setCombinedWeeksExamsList(targetExams)
+      }
+
+      if (targetExams.length === 0) {
         setCombinedWeekData([])
         setLoadingCombinedWeeks(false)
         return
       }
 
-      const examIds = weeklyExams.map((e) => e.id)
+      const examIds = targetExams.map((e) => e.id)
       const { data: allResults } = await supabase
         .from("exam_results")
         .select("exam_id, student_id, obtained_marks, day_marks, grade")
@@ -917,7 +1042,7 @@ export default function ExamResultsPage() {
       // Map: studentId -> { total, weekMarks: { [examId]: number }, count }
       const studentTotalMarksMap: Record<string, { total: number; weekMarks: Record<string, number>; count: number }> = {}
       let seriesTotalMaxMarks = 0
-      weeklyExams.forEach((we) => {
+      targetExams.forEach((we) => {
         seriesTotalMaxMarks += Number(we.total_marks) || 100
       })
 
@@ -975,12 +1100,19 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Auto-load series exams and combined result when exam and students are ready
+  // Immediately load series exams when exam is available
+  useEffect(() => {
+    if (exam && isWeeklyExam) {
+      loadWeeklySeriesExams()
+    }
+  }, [exam?.id, isWeeklyExam])
+
+  // Auto-load combined results when students or series exams are available
   useEffect(() => {
     if (exam && isWeeklyExam && students.length > 0) {
       loadCombinedWeeklyResults()
     }
-  }, [exam?.id, isWeeklyExam, students.length])
+  }, [exam?.id, isWeeklyExam, students.length, weeklySeriesExams.length])
 
   // Initialize selectedTab once parsedWeeklyDays is available
   useEffect(() => {
@@ -2689,20 +2821,18 @@ export default function ExamResultsPage() {
 
       {/* 4. PREVIOUS WEEKS & CONTINUOUS SERIES NAVIGATION BAR */}
       {isWeeklyExam && (
-        <div className="bg-white p-4 rounded-2xl border border-purple-200 shadow-sm space-y-3">
+        <div className="bg-white p-4 rounded-2xl border-2 border-purple-200/90 shadow-sm space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="flex items-center gap-3">
-              <span className="p-2 rounded-xl bg-purple-100 text-purple-700">
-                <Calendar className="w-4 h-4" />
+              <span className="p-2.5 rounded-xl bg-purple-100 text-purple-700 shadow-2xs">
+                <Calendar className="w-5 h-5" />
               </span>
               <div>
                 <h3 className="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-2">
                   <span>ধারাবাহিক সাপ্তাহিক পরীক্ষা তালিকা (Weekly Exam Series)</span>
-                  {weeklySeriesExams.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                      মোট {weeklySeriesExams.length}টি সপ্তাহ
-                    </span>
-                  )}
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                    মোট {fullSeriesSlots.length}টি সপ্তাহ (বর্তমান: Week {currentWeekNum})
+                  </span>
                 </h3>
                 <p className="text-[11px] text-slate-500">
                   যেকোনো সপ্তাহের পরীক্ষার ফলাফলে যেতে বা পূর্ববর্তী সপ্তাহের মার্ক দেখতে ক্লিক করুন
@@ -2715,12 +2845,17 @@ export default function ExamResultsPage() {
               {prevWeekExam ? (
                 <Link
                   href={`/dashboard/owner/exams/${prevWeekExam.id}`}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-300 hover:border-purple-400 bg-slate-50 hover:bg-purple-50 text-slate-700 hover:text-purple-900 text-xs font-bold transition-all shadow-2xs"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-purple-300 hover:border-purple-500 bg-purple-50/70 hover:bg-purple-100 text-purple-900 text-xs font-bold transition-all shadow-2xs"
                   title="পূর্ববর্তী সপ্তাহে যান"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>পূর্ববর্তী সপ্তাহ ({prevWeekExam.title})</span>
+                  <span>◀ পূর্ববর্তী সপ্তাহ ({prevWeekExam.title})</span>
                 </Link>
+              ) : currentWeekNum > 1 ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold">
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <span>Week {currentWeekNum - 1}</span>
+                </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
                   <ChevronLeft className="w-3.5 h-3.5" />
@@ -2731,10 +2866,10 @@ export default function ExamResultsPage() {
               {nextWeekExam ? (
                 <Link
                   href={`/dashboard/owner/exams/${nextWeekExam.id}`}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-300 hover:border-purple-400 bg-slate-50 hover:bg-purple-50 text-slate-700 hover:text-purple-900 text-xs font-bold transition-all shadow-2xs"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-purple-300 hover:border-purple-500 bg-purple-50/70 hover:bg-purple-100 text-purple-900 text-xs font-bold transition-all shadow-2xs"
                   title="পরবর্তী সপ্তাহে যান"
                 >
-                  <span>পরবর্তী সপ্তাহ ({nextWeekExam.title})</span>
+                  <span>পরবর্তী সপ্তাহ ({nextWeekExam.title}) ▶</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
               ) : (
@@ -2745,39 +2880,74 @@ export default function ExamResultsPage() {
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
                   title="নতুন সপ্তাহ শুরু করুন"
                 >
-                  {creatingNextWeek ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <span>+ নতুন সপ্তাহ</span>}
+                  {creatingNextWeek ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <span>+ পরবর্তী সপ্তাহ (WEEKLY-{currentWeekNum + 1 < 10 ? "0" + (currentWeekNum + 1) : currentWeekNum + 1})</span>
+                  )}
                 </button>
               )}
             </div>
           </div>
 
-          {/* List of all weeks in series */}
-          {weeklySeriesExams.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
-              {weeklySeriesExams.map((we, wIdx) => {
-                const isCurrent = we.id === exam.id
+          {/* List of all weeks in series (Week 1..5+) */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
+            {fullSeriesSlots.map((slot) => {
+              if (slot.exam) {
                 return (
                   <Link
-                    key={we.id}
-                    href={`/dashboard/owner/exams/${we.id}`}
+                    key={`slot-${slot.weekNum}`}
+                    href={`/dashboard/owner/exams/${slot.exam.id}`}
                     className={cn(
-                      "px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 border shrink-0",
-                      isCurrent
-                        ? "bg-purple-600 text-white border-purple-700 shadow-sm ring-2 ring-purple-400/40"
-                        : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                      "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border shrink-0",
+                      slot.isCurrent
+                        ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-700 shadow-md ring-2 ring-purple-400/40"
+                        : "bg-white hover:bg-purple-50 text-slate-800 hover:text-purple-900 border-slate-200 hover:border-purple-300 shadow-2xs"
                     )}
                   >
-                    <span>{we.title || `Week ${wIdx + 1}`}</span>
-                    {isCurrent && (
-                      <span className="text-[9px] bg-white/20 text-white px-1.5 py-0.2 rounded-full uppercase tracking-wider font-extrabold">
-                        বর্তমান
+                    <span
+                      className={cn(
+                        "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black",
+                        slot.isCurrent ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"
+                      )}
+                    >
+                      W{slot.weekNum}
+                    </span>
+                    <span>{slot.title}</span>
+                    {slot.isCurrent && (
+                      <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider shadow-2xs">
+                        ✓ বর্তমান
                       </span>
                     )}
                   </Link>
                 )
-              })}
-            </div>
-          )}
+              }
+
+              return (
+                <span
+                  key={`slot-${slot.weekNum}`}
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap flex items-center gap-1.5 border border-dashed border-slate-300 bg-slate-50 text-slate-400 shrink-0"
+                  title={`${slot.title} এখনও তৈরি করা হয়নি`}
+                >
+                  <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold bg-slate-200 text-slate-500">
+                    W{slot.weekNum}
+                  </span>
+                  <span>{slot.title}</span>
+                </span>
+              )
+            })}
+
+            <button
+              type="button"
+              onClick={handleStartNextWeek}
+              disabled={creatingNextWeek}
+              className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1 border border-dashed border-purple-300 bg-purple-50/50 hover:bg-purple-100 text-purple-700 shrink-0 cursor-pointer active:scale-95"
+              title="নতুন সপ্তাহ শুরু করুন"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ নতুন সপ্তাহ ({fullSeriesSlots.length + 1})</span>
+            </button>
+          </div>
         </div>
       )}
 
@@ -2891,7 +3061,7 @@ export default function ExamResultsPage() {
               <Award className="w-4 h-4 text-amber-400 shrink-0" />
               <span>৩. সকল সপ্তাহের সমন্বিত মেধা</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold border border-blue-200 font-mono">
-                {weeklySeriesExams.length > 0 ? `${weeklySeriesExams.length}টি সপ্তাহ` : "হিসাব করুন"}
+                {fullSeriesSlots.length > 0 ? `${fullSeriesSlots.length}টি সপ্তাহ` : "হিসাব করুন"}
               </span>
             </button>
           </div>
@@ -3202,6 +3372,44 @@ export default function ExamResultsPage() {
                   <Printer className="w-4 h-4 text-amber-300" />
                   <span>প্রিন্ট সমন্বিত মেধা তালিকা (Pic 2 / PDF)</span>
                 </button>
+              </div>
+            </div>
+
+            {/* Quick Week Switcher within Combined Tab */}
+            <div className="flex items-center gap-2 flex-wrap p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs">
+              <span className="font-bold text-blue-950 flex items-center gap-1.5 shrink-0">
+                <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
+                একক সপ্তাহে যান:
+              </span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {fullSeriesSlots.map((slot) => {
+                  if (slot.exam) {
+                    return (
+                      <Link
+                        key={`comb-slot-${slot.weekNum}`}
+                        href={`/dashboard/owner/exams/${slot.exam.id}`}
+                        className={cn(
+                          "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all flex items-center gap-1 border",
+                          slot.isCurrent
+                            ? "bg-blue-600 text-white border-blue-700 shadow-2xs"
+                            : "bg-white hover:bg-blue-100 text-blue-900 border-blue-200"
+                        )}
+                        title={`${slot.title} এ যান`}
+                      >
+                        <span>{slot.title}</span>
+                        {slot.isCurrent && <span className="text-[9px] bg-white/20 px-1 rounded-full">বর্তমান</span>}
+                      </Link>
+                    )
+                  }
+                  return (
+                    <span
+                      key={`comb-slot-${slot.weekNum}`}
+                      className="px-2.5 py-1 rounded-lg text-[11px] font-medium border border-dashed border-slate-300 bg-slate-50 text-slate-400"
+                    >
+                      {slot.title}
+                    </span>
+                  )
+                })}
               </div>
             </div>
 
