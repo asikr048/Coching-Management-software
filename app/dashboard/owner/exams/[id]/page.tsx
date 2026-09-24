@@ -1116,7 +1116,7 @@ export default function ExamResultsPage() {
       const wNum = extractSeriesWeek(ex.result_note, ex.title) || idx + 1
       return {
         weekNum: wNum,
-        title: ex.title || `WEEKLY-${wNum < 10 ? "0" + wNum : wNum}`,
+        title: `Week ${wNum}`,
         exam: ex,
         isCurrent: ex.id === exam.id,
       }
@@ -1140,17 +1140,22 @@ export default function ExamResultsPage() {
   }, [fullSeriesSlots])
 
   // The series name = the title given at exam creation or updated during edit.
-  // We search for the latest custom title across the series (ignoring generic labels like WEEKLY-01),
+  // We search for the latest custom title across the series (ignoring generic labels like WEEKLY-01, Week 1),
   // falling back to W1's title or the current exam's title.
   const seriesName = useMemo(() => {
     if (!isWeeklyExam || !exam) return undefined
-    const customSlot = [...fullSeriesSlots].reverse().find(
-      (s) => s.exam?.title && !/^weekly-?\d+$/i.test(s.exam.title.trim()) && !/^সাপ্তাহিক-?\d+$/i.test(s.exam.title.trim())
+    const pool = [exam, ...(weeklySeriesExams || []), ...fullSeriesSlots.map((s) => s.exam).filter(Boolean)]
+    const customExam = [...pool].reverse().find(
+      (e) => e?.title && 
+             !/^week[-_\s]?\d+$/i.test(e.title.trim()) && 
+             !/^weekly[-_\s]?\d+$/i.test(e.title.trim()) && 
+             !/^সাপ্তাহিক[-_\s]?\d+$/i.test(e.title.trim())
     )
-    if (customSlot?.exam?.title) return customSlot.exam.title
+    if (customExam?.title) return customExam.title
     const w1 = fullSeriesSlots.find((s) => s.weekNum === 1)
-    return w1?.exam?.title || exam.title || undefined
-  }, [isWeeklyExam, fullSeriesSlots, exam])
+    if (w1?.exam?.title && !/^week[-_\s]?\d+$/i.test(w1.exam.title.trim())) return w1.exam.title
+    return exam.title || undefined
+  }, [isWeeklyExam, fullSeriesSlots, weeklySeriesExams, exam])
 
   // 1. Immediately load series exams when exam is available
   async function loadWeeklySeriesExams() {
@@ -1697,7 +1702,7 @@ export default function ExamResultsPage() {
     setPublishingCombinedNotice(true)
     try {
       const weekTitles = activeCombinedExams
-        .map((we, idx) => we.title || `Week ${idx + 1}`)
+        .map((we, idx) => `Week ${extractSeriesWeek(we.result_note, we.title) || (idx + 1)}`)
         .join(", ")
 
       const batchName = exam.batch?.name || "সকল ব্যাচ"
@@ -3431,12 +3436,12 @@ export default function ExamResultsPage() {
                 <div className="flex items-center gap-2">
                   <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
                     <Trophy className="w-6 h-6 text-amber-500 shrink-0" />
-                    <span>{exam.title}</span>
+                    <span>{isWeeklyExam ? (seriesName || exam.title) : exam.title}</span>
                   </h1>
                   <button
                     type="button"
                     onClick={() => {
-                      setEditedTitle(exam.title)
+                      setEditedTitle(isWeeklyExam ? (seriesName || exam.title) : exam.title)
                       setIsEditingTitle(true)
                     }}
                     className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
@@ -3714,7 +3719,7 @@ export default function ExamResultsPage() {
                   title="পূর্ববর্তী সপ্তাহে যান"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>◀ পূর্ববর্তী সপ্তাহ ({prevWeekExam.title})</span>
+                  <span>◀ পূর্ববর্তী সপ্তাহ (Week {extractSeriesWeek(prevWeekExam.result_note, prevWeekExam.title) || (currentWeekNum - 1)})</span>
                 </Link>
               ) : currentWeekNum > 1 ? (
                 <button
@@ -3722,14 +3727,14 @@ export default function ExamResultsPage() {
                   onClick={() => handleOpenOrCreateWeek(currentWeekNum - 1)}
                   disabled={creatingWeekNum === currentWeekNum - 1}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-purple-300 hover:border-purple-500 bg-purple-50 hover:bg-purple-100 text-purple-900 text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
-                  title={`পূর্ববর্তী সপ্তাহ (WEEKLY-0${currentWeekNum - 1}) এ যান বা নম্বর দিন`}
+                  title={`পূর্ববর্তী সপ্তাহ (Week ${currentWeekNum - 1}) এ যান বা নম্বর দিন`}
                 >
                   {creatingWeekNum === currentWeekNum - 1 ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
                   ) : (
                     <ChevronLeft className="w-3.5 h-3.5" />
                   )}
-                  <span>◀ পূর্ববর্তী সপ্তাহ (WEEKLY-0{currentWeekNum - 1})</span>
+                  <span>◀ পূর্ববর্তী সপ্তাহ (Week {currentWeekNum - 1})</span>
                 </button>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-slate-100 text-slate-400 text-xs font-semibold cursor-not-allowed">
@@ -3744,7 +3749,7 @@ export default function ExamResultsPage() {
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border border-purple-300 hover:border-purple-500 bg-purple-50/70 hover:bg-purple-100 text-purple-900 text-xs font-bold transition-all shadow-2xs"
                   title="পরবর্তী সপ্তাহে যান"
                 >
-                  <span>পরবর্তী সপ্তাহ ({nextWeekExam.title}) ▶</span>
+                  <span>পরবর্তী সপ্তাহ (Week {extractSeriesWeek(nextWeekExam.result_note, nextWeekExam.title) || (currentWeekNum + 1)}) ▶</span>
                   <ChevronRight className="w-3.5 h-3.5" />
                 </Link>
               ) : (
@@ -3758,7 +3763,7 @@ export default function ExamResultsPage() {
                   {creatingWeekNum === nextWeekNumToCreate || creatingNextWeek ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <span>+ পরবর্তী সপ্তাহ (WEEKLY-{nextWeekNumToCreate < 10 ? "0" + nextWeekNumToCreate : nextWeekNumToCreate})</span>
+                    <span>+ পরবর্তী সপ্তাহ (Week {nextWeekNumToCreate})</span>
                   )}
                 </button>
               )}
@@ -4107,7 +4112,7 @@ export default function ExamResultsPage() {
                           ? "bg-gradient-to-r from-blue-700 to-indigo-700 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
                           : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
                       )}
-                      title={`সমন্বিত ফলাফলে ${slot.exam.title || slot.title} অন্তর্ভুক্ত বা বাদ দিন`}
+                      title={`সমন্বিত ফলাফলে ${slot.title} অন্তর্ভুক্ত বা বাদ দিন`}
                     >
                       {isSel ? (
                         <CheckSquare className="w-3.5 h-3.5 text-blue-200 shrink-0" />
@@ -4122,7 +4127,7 @@ export default function ExamResultsPage() {
                       >
                         W{slot.weekNum}
                       </span>
-                      <span className="font-extrabold">{slot.exam.title || slot.title}</span>
+                      <span className="font-extrabold">{slot.title}</span>
                       <span
                         className={cn(
                           "text-[10px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0",
@@ -4142,7 +4147,7 @@ export default function ExamResultsPage() {
                       <span
                         onClick={(e) => {
                           e.stopPropagation()
-                          setWeekToDelete({ id: slot.exam.id, title: slot.exam.title || slot.title })
+                          setWeekToDelete({ id: slot.exam.id, title: slot.title })
                         }}
                         className={cn(
                           "p-1 rounded-md transition-colors ml-0.5 shrink-0 cursor-pointer",
@@ -4150,7 +4155,7 @@ export default function ExamResultsPage() {
                             ? "text-white/70 hover:text-white hover:bg-rose-600/80"
                             : "text-slate-400 hover:text-rose-600 hover:bg-rose-100"
                         )}
-                        title={`${slot.exam.title || slot.title} মুছে ফেলুন (Delete Week)`}
+                        title={`${slot.title} মুছে ফেলুন (Delete Week)`}
                       >
                         <Trash2 className="w-3 h-3" />
                       </span>
@@ -4583,7 +4588,7 @@ export default function ExamResultsPage() {
                       ) : (
                         <Square className="w-3.5 h-3.5 text-slate-400" />
                       )}
-                      <span>{slot.exam.title || slot.title}</span>
+                      <span>{slot.title}</span>
                       <span
                         className={cn(
                           "text-[10px] px-1.5 py-0.5 rounded font-semibold",
