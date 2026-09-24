@@ -265,11 +265,14 @@ export async function GET(
             return false
           }
 
-          if (exam.batch_id && e.batch_id && e.batch_id !== exam.batch_id) {
-            const isPatternMatch =
-              (e.title && /weekly[-\s_]?\d+/i.test(e.title)) || (e.title && /সাপ্তাহিক[-\s_]?\d+/.test(e.title))
-            const noteHasBatch = (e.result_note && e.result_note.includes(exam.batch_id)) || (exam.result_note && exam.result_note.includes(e.batch_id))
-            if (!isPatternMatch && !noteHasBatch) return false
+          if (exam.batch_id) {
+            const eBatchIds = Array.isArray(e.batch_ids) && e.batch_ids.length > 0 ? e.batch_ids : (e.batch_id ? [e.batch_id] : [])
+            const curBatchIds = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? exam.batch_ids : (exam.batch_id ? [exam.batch_id] : [])
+            const hasCommonBatch = eBatchIds.some((b: string) => curBatchIds.includes(b)) || e.batch_id === exam.batch_id
+            const noteHasBatch = (e.result_note && e.result_note.includes(exam.batch_id)) || (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id))
+            if (!hasCommonBatch && !noteHasBatch) {
+              return false
+            }
           }
           return true
         })

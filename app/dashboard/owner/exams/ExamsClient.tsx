@@ -1097,7 +1097,7 @@ export default function ExamsClient({
       const selectedBatchIdsToUse = form.batch_ids.length > 0 ? form.batch_ids : (form.batch_id ? [form.batch_id] : [])
 
       const finalTitle = form.exam_schedule_type === "weekly"
-        ? (form.title.trim() || `সাপ্তাহিক পরীক্ষা (${activeWeeklyDays.map(d => d.day_bn).join(", ")})`)
+        ? (form.title.trim() || "WEEKLY-01")
         : form.title
 
       const finalTotalMarks = form.exam_schedule_type === "weekly"
@@ -2564,7 +2564,7 @@ export default function ExamsClient({
                         value={form.title} 
                         onChange={e => update("title", e.target.value)} 
                         className={inputClass} 
-                        placeholder="যেমন: HSC 2026 সাপ্তাহিক মডেল টেস্ট সিরিজ (ফাঁকা রাখলে স্বয়ংক্রিয় নাম তৈরি হবে)" 
+                        placeholder="যেমন: WEEKLY-01 (ফাঁকা রাখলে স্বয়ংক্রিয়ভাবে WEEKLY-01 হবে)" 
                       />
                     </div>
 

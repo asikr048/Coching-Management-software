@@ -1165,19 +1165,19 @@ export default function ExamResultsPage() {
           return false
         }
 
-        // Batch matching: same batch, or either has no batch, or result_note includes it, or both follow weekly naming pattern
-        const isWeeklyPattern =
-          (e.title && /weekly[-\s_]?\d+/i.test(e.title)) || (e.title && /সাপ্তাহিক[-\s_]?\d+/.test(e.title))
+        // Batch matching: strictly match the same batch
+        if (curBatchId) {
+          const eBatchIds = Array.isArray(e.batch_ids) && e.batch_ids.length > 0 ? e.batch_ids : (e.batch_id ? [e.batch_id] : [])
+          const curBatchIds = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? exam.batch_ids : (exam.batch_id ? [exam.batch_id] : [])
+          const hasCommonBatch = eBatchIds.some((b: string) => curBatchIds.includes(b)) || e.batch_id === curBatchId
+          const noteMatch = (e.result_note && e.result_note.includes(curBatchId)) || (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id))
 
-        const isSameBatch =
-          !curBatchId ||
-          !e.batch_id ||
-          e.batch_id === curBatchId ||
-          (e.result_note && e.result_note.includes(curBatchId)) ||
-          (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id)) ||
-          isWeeklyPattern
+          if (!hasCommonBatch && !noteMatch) {
+            return false
+          }
+        }
 
-        return isSameBatch
+        return true
       })
 
       if (!weeklyExams.some((e) => e.id === exam.id)) {
@@ -1239,15 +1239,17 @@ export default function ExamResultsPage() {
 
           if (!isWeekly) return false
           if (curBranchId && e.branch_id && e.branch_id !== curBranchId) return false
-          const isWeeklyPattern = (e.title && /weekly[-\s_]?\d+/i.test(e.title)) || (e.title && /সাপ্তাহিক[-\s_]?\d+/.test(e.title))
-          return (
-            !curBatchId ||
-            !e.batch_id ||
-            e.batch_id === curBatchId ||
-            (e.result_note && e.result_note.includes(curBatchId)) ||
-            (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id)) ||
-            isWeeklyPattern
-          )
+          if (curBatchId) {
+            const eBatchIds = Array.isArray(e.batch_ids) && e.batch_ids.length > 0 ? e.batch_ids : (e.batch_id ? [e.batch_id] : [])
+            const curBatchIds = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? exam.batch_ids : (exam.batch_id ? [exam.batch_id] : [])
+            const hasCommonBatch = eBatchIds.some((b: string) => curBatchIds.includes(b)) || e.batch_id === curBatchId
+            const noteMatch = (e.result_note && e.result_note.includes(curBatchId)) || (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id))
+
+            if (!hasCommonBatch && !noteMatch) {
+              return false
+            }
+          }
+          return true
         })
 
         foundExams.forEach((e) => {
