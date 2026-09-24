@@ -1139,6 +1139,15 @@ export default function ExamResultsPage() {
     return maxW + 1
   }, [fullSeriesSlots])
 
+  // The series name = the title given at exam creation (stored on W1).
+  // We search for weekNum===1 specifically, not just index 0, so it's correct
+  // even before async weeklySeriesExams has fully loaded.
+  const seriesName = useMemo(() => {
+    if (!isWeeklyExam || !exam) return undefined
+    const w1 = fullSeriesSlots.find((s) => s.weekNum === 1)
+    return w1?.exam?.title || exam.title || undefined
+  }, [isWeeklyExam, fullSeriesSlots, exam])
+
   // 1. Immediately load series exams when exam is available
   async function loadWeeklySeriesExams() {
     if (!exam) return
@@ -6000,7 +6009,7 @@ export default function ExamResultsPage() {
         combinedWeeksMarks={rawStudentWeekMarks}
         defaultTemplate={printModalDefaultTemplate}
         totalToppers={printableTotalToppers}
-        seriesTitle={isWeeklyExam ? (fullSeriesSlots[0]?.exam?.title || exam.title) : undefined}
+        seriesTitle={seriesName}
         subjectToppers={printableSubjectToppers}
       />
     </>
