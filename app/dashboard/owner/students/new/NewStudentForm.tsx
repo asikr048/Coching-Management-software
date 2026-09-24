@@ -151,7 +151,7 @@ export default function NewStudentForm({
   const [dueDate, setDueDate] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10); return d.toISOString().split("T")[0] })
   
   // Payment methods & referral payment states
-  type PaymentMode = "cash" | "referral" | "split" | "digital"
+  type PaymentMode = "cash" | "referral" | "split" | "digital" | "other"
   const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash")
   const [digitalMethod, setDigitalMethod] = useState<"bkash" | "nagad" | "rocket" | "bank">("bkash")
   const [digitalTrxId, setDigitalTrxId] = useState("")
@@ -159,6 +159,8 @@ export default function NewStudentForm({
   const [referralAmount, setReferralAmount] = useState<string>("")
   const [referralPerson, setReferralPerson] = useState<string>("")
   const [referralReason, setReferralReason] = useState<string>("")
+  const [otherMethodName, setOtherMethodName] = useState<string>("")
+  const [otherRef, setOtherRef] = useState<string>("")
   const [paymentNotes, setPaymentNotes] = useState<string>("")
   
   const [enrolledBatchIds, setEnrolledBatchIds] = useState<string[]>([])
@@ -533,6 +535,8 @@ export default function NewStudentForm({
     setReferralAmount("")
     setReferralPerson("")
     setReferralReason("")
+    setOtherMethodName("")
+    setOtherRef("")
     setPaymentNotes("")
     setDigitalTrxId("")
     setPaymentMode("cash")
@@ -627,7 +631,7 @@ export default function NewStudentForm({
   }, [paymentMode, cashAmount])
 
   const effectiveReferral = useMemo(() => {
-    if (paymentMode === "cash" || paymentMode === "digital") return 0
+    if (paymentMode === "cash" || paymentMode === "digital" || paymentMode === "other") return 0
     return parseFloat(referralAmount) || 0
   }, [paymentMode, referralAmount])
 
@@ -1195,9 +1199,26 @@ export default function NewStudentForm({
       let refReceiptNum = `RCP-${now.getFullYear()}-${(Date.now() + 1).toString().slice(-6)}`
       const newPaymentsToRecord: any[] = []
 
-      // 1. Record Cash / Digital payment if effectiveCash > 0
+      // 1. Record Cash / Digital / Other payment if effectiveCash > 0
       if (effectiveCash > 0) {
-        const cashMethod = paymentMode === "digital" ? digitalMethod : "cash"
+        let cashMethod = "cash"
+        if (paymentMode === "digital") {
+          cashMethod = digitalMethod
+        } else if (paymentMode === "other") {
+          cashMethod = "offline"
+        }
+        const customNote = paymentMode === "split" 
+          ? `Split payment: Cash ৳${effectiveCash} (with Referral ৳${effectiveReferral})` 
+          : paymentMode === "other"
+          ? `Other payment (${otherMethodName.trim() || "Custom"}): ${otherRef.trim() ? `Ref: ${otherRef.trim()} | ` : ""}${paymentNotes.trim()}`
+          : (paymentNotes.trim() || null)
+
+        const customTrxId = paymentMode === "digital" && digitalTrxId.trim() 
+          ? digitalTrxId.trim() 
+          : paymentMode === "other" && otherRef.trim()
+          ? otherRef.trim()
+          : null
+
         const { data: pData, error: pErr } = await supabase.from("payments").insert({
           student_id: sid,
           batch_id: form.batch_id,
@@ -1207,8 +1228,8 @@ export default function NewStudentForm({
           payment_for: "admission",
           payment_month: paymentMonth,
           receipt_number: primaryReceiptNum,
-          transaction_id: paymentMode === "digital" && digitalTrxId.trim() ? digitalTrxId.trim() : null,
-          notes: paymentMode === "split" ? `Split payment: Cash ৳${effectiveCash} (with Referral ৳${effectiveReferral})` : (paymentNotes.trim() || null)
+          transaction_id: customTrxId,
+          notes: customNote
         }).select().maybeSingle()
 
         if (pErr) console.warn("Error inserting cash payment:", pErr)
@@ -1225,8 +1246,8 @@ export default function NewStudentForm({
           payment_for: "admission",
           payment_month: paymentMonth,
           receipt_number: primaryReceiptNum,
-          transaction_id: paymentMode === "digital" && digitalTrxId.trim() ? digitalTrxId.trim() : null,
-          notes: paymentMode === "split" ? `Split payment: Cash ৳${effectiveCash} (with Referral ৳${effectiveReferral})` : (paymentNotes.trim() || null),
+          transaction_id: customTrxId,
+          notes: customNote,
           created_at: new Date().toISOString(),
         })
       }
@@ -1337,6 +1358,8 @@ export default function NewStudentForm({
         methodDescription = `Referral Credit (${referralPerson.trim() || "Approved"})`
       } else if (paymentMode === "digital") {
         methodDescription = `${digitalMethod.toUpperCase()}${digitalTrxId ? ` (Trx: ${digitalTrxId})` : ""}`
+      } else if (paymentMode === "other") {
+        methodDescription = `Other (${otherMethodName.trim() || "Custom"})${otherRef.trim() ? ` (Ref: ${otherRef.trim()})` : ""}`
       }
 
       // Display receipt modal with print & save options, staying on this page
@@ -2147,110 +2170,51 @@ export default function NewStudentForm({
               </div>
             </div>
 
-            {/* Payment Method / Mode Selector */}
-            <div className="pt-2 border-t border-slate-100">
-              <label className="block text-xs font-black text-slate-800 mb-2">
-                পেমেন্ট মাধ্যম নির্বাচন করুন (Select Payment Method) *
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {/* Cash option */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaymentMode("cash")
-                    if (!cashAmount && total > 0) setCashAmount(String(total))
-                    setReferralAmount("")
-                  }}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    paymentMode === "cash"
-                      ? "border-emerald-500 bg-emerald-50/80 text-emerald-950 ring-2 ring-emerald-500/20 shadow-xs"
-                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-base">💵</span>
-                    {paymentMode === "cash" && <Check className="w-3.5 h-3.5 text-emerald-600 font-bold" />}
+            {/* Payment Method / Mode Selector - Compact Dropdown */}
+            <div className="pt-2.5 border-t border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-slate-50/90 p-2.5 sm:px-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <div>
+                    <label htmlFor="payment-mode-select" className="text-xs font-black text-slate-800 block cursor-pointer">
+                      পেমেন্ট মাধ্যম (Payment Method) *
+                    </label>
+                    <p className="text-[10px] text-slate-500 hidden sm:block">
+                      ডিফল্ট ক্যাশ (Cash) নির্বাচিত — প্রয়োজনে অন্য মাধ্যম সিলেক্ট করুন
+                    </p>
                   </div>
-                  <div className="mt-2">
-                    <p className="text-xs font-black">Cash (নগদ)</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">কাউন্টারে সরাসরি নগদ গ্রহণ</p>
-                  </div>
-                </button>
+                </div>
 
-                {/* Referral option */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaymentMode("referral")
-                    if (!referralAmount && total > 0) setReferralAmount(String(total))
-                    setCashAmount("")
-                  }}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    paymentMode === "referral"
-                      ? "border-indigo-500 bg-indigo-50/80 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs"
-                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-base">🤝</span>
-                    {paymentMode === "referral" && <Check className="w-3.5 h-3.5 text-indigo-600 font-bold" />}
-                  </div>
-                  <div className="mt-2">
-                    <p className="text-xs font-black">Referral (রেফারেল)</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">রেফারেল ক্রেডিট বা বিশেষ ছাড়</p>
-                  </div>
-                </button>
-
-                {/* Split Cash + Referral */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaymentMode("split")
-                    if (!cashAmount && !referralAmount && total > 0) {
-                      const half = Math.round(total / 2)
-                      setCashAmount(String(half))
-                      setReferralAmount(String(total - half))
-                    }
-                  }}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    paymentMode === "split"
-                      ? "border-amber-500 bg-amber-50/80 text-amber-950 ring-2 ring-amber-500/20 shadow-xs"
-                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-base">⚖️</span>
-                    {paymentMode === "split" && <Check className="w-3.5 h-3.5 text-amber-600 font-bold" />}
-                  </div>
-                  <div className="mt-2">
-                    <p className="text-xs font-black">Cash + Refer (সমন্বয়)</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">কিছু নগদ + বাকি রেফারেল</p>
-                  </div>
-                </button>
-
-                {/* Digital / Online option */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPaymentMode("digital")
-                    if (!cashAmount && total > 0) setCashAmount(String(total))
-                    setReferralAmount("")
-                  }}
-                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                    paymentMode === "digital"
-                      ? "border-violet-500 bg-violet-50/80 text-violet-950 ring-2 ring-violet-500/20 shadow-xs"
-                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-base">📱</span>
-                    {paymentMode === "digital" && <Check className="w-3.5 h-3.5 text-violet-600 font-bold" />}
-                  </div>
-                  <div className="mt-2">
-                    <p className="text-xs font-black">Digital (বিকাশ/নগদ)</p>
-                    <p className="text-[10px] text-slate-500 mt-0.5">বিকাশ, নগদ বা ব্যাংক ট্রান্সফার</p>
-                  </div>
-                </button>
+                <div className="w-full sm:w-72">
+                  <select
+                    id="payment-mode-select"
+                    value={paymentMode}
+                    onChange={(e) => {
+                      const val = e.target.value as PaymentMode
+                      setPaymentMode(val)
+                      if (val === "cash" || val === "digital" || val === "other") {
+                        if (!cashAmount && total > 0) setCashAmount(String(total))
+                        setReferralAmount("")
+                      } else if (val === "referral") {
+                        if (!referralAmount && total > 0) setReferralAmount(String(total))
+                        setCashAmount("")
+                      } else if (val === "split") {
+                        if (!cashAmount && !referralAmount && total > 0) {
+                          const half = Math.round(total / 2)
+                          setCashAmount(String(half))
+                          setReferralAmount(String(total - half))
+                        }
+                      }
+                    }}
+                    className={`${ic} font-bold text-xs py-2 bg-white border-slate-300 focus:border-emerald-500 focus:ring-emerald-500 cursor-pointer shadow-2xs`}
+                  >
+                    <option value="cash">💵 Cash (নগদ গ্রহণ)</option>
+                    <option value="digital">📱 Digital (বিকাশ / নগদ / রকেট / ব্যাংক)</option>
+                    <option value="referral">🤝 Referral (রেফারেল ক্রেডিট বা বিশেষ ছাড়)</option>
+                    <option value="split">⚖️ Cash + Refer (নগদ + রেফারেল সমন্বয়)</option>
+                    <option value="other">📝 Other (অন্যান্য মাধ্যম)</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -2552,6 +2516,70 @@ export default function NewStudentForm({
                       className={`${ic} font-mono uppercase`}
                     />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Mode 5: Other Payment Method Details Box */}
+            {paymentMode === "other" && (
+              <div className="p-4 rounded-xl bg-cyan-50/40 border border-cyan-200/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-cyan-950 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-cyan-600" />
+                    <span>অন্যান্য মাধ্যম বিবরণ (Other Payment Details) *</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCashAmount(String(total))}
+                      className="text-[11px] font-bold text-cyan-700 bg-cyan-100 hover:bg-cyan-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      সম্পূর্ণ ফি (৳{total})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCashAmount("")}
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-700 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      ক্লিয়ার
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Paid Amount (পরিশোধিত টাকা ৳) *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max={total}
+                      value={cashAmount}
+                      onChange={e => setCashAmount(e.target.value)}
+                      placeholder={`যেমন: ${total}`}
+                      className={`${ic} font-mono font-bold text-slate-900 text-sm`}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Payment Method / Name (মাধ্যমের নাম বা ধরণ) *</label>
+                    <input
+                      type="text"
+                      value={otherMethodName}
+                      onChange={e => setOtherMethodName(e.target.value)}
+                      placeholder="যেমন: চেক (Cheque) / পে-অর্ডার / বিশেষ ফান্ড"
+                      className={ic}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelCls}>Reference / Cheque No / Notes (রেফারেন্স নম্বর বা বিবরণ - ঐচ্ছিক)</label>
+                  <input
+                    type="text"
+                    value={otherRef}
+                    onChange={e => setOtherRef(e.target.value)}
+                    placeholder="যেমন: Cheque #987654 / নোট"
+                    className={ic}
+                  />
                 </div>
               </div>
             )}
