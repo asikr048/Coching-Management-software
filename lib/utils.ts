@@ -165,10 +165,28 @@ export function getExamSeriesKey(exam: {
   branch_id?: string | null
   result_note?: string | null
   title?: string | null
+  exam_schedule_type?: string | null
+  recurring_days?: any
 }): string {
   if (!exam) return ""
   const explicit = extractSeriesId(exam.result_note)
-  if (explicit) return `series_${explicit}`
+  if (explicit) {
+    const cleanId = explicit.replace(/^series_|^exam_/, "")
+    return `series_${cleanId}`
+  }
+
+  // If this exam is a weekly exam, its own ID is its series identity!
+  // Sibling weeks created from this exam will carry [SERIES_ID:exam.id]
+  const isWeekly =
+    exam.exam_schedule_type === "weekly" ||
+    (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+    exam.result_note?.includes("[WEEKLY_SCHEDULE:") ||
+    exam.result_note?.includes("[SERIES_WEEK:")
+
+  if (isWeekly && exam.id) {
+    const cleanId = exam.id.replace(/^series_|^exam_/, "")
+    return `series_${cleanId}`
+  }
 
   // Legacy fallback:
   const title = (exam.title || "").trim()

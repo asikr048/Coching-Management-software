@@ -790,137 +790,25 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Continuous Weekly Exam: Start Next Week Session
+  // Universal Week Navigator / Creator: opens existing week or automatically creates it
+  const [creatingWeekNum, setCreatingWeekNum] = useState<number | null>(null)
   const [creatingNextWeek, setCreatingNextWeek] = useState(false)
+
+  // Continuous Weekly Exam: Start Next Week Session
   async function handleStartNextWeek() {
     if (!exam) return
     setCreatingNextWeek(true)
     try {
-      let curWeek = 1
-      const m = (exam.title || "").match(/weekly[-\s_]?(\d+)/i) || (exam.title || "").match(/সাপ্তাহিক[-\s_]?(\d+)/)
-      if (m && m[1]) {
-        curWeek = parseInt(m[1])
-      } else {
-        const noteM = (exam.result_note || "").match(/\[SERIES_WEEK:(\d+)\]/)
-        if (noteM && noteM[1]) curWeek = parseInt(noteM[1])
-      }
-
-      const nextWeekNum = curWeek + 1
-      const nextTitle = `WEEKLY-${nextWeekNum < 10 ? "0" + nextWeekNum : nextWeekNum}`
-
-      const targetBatchId = exam.batch_id || (Array.isArray(exam.batch_ids) ? exam.batch_ids[0] : null)
-      const batchIdsList = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0
-        ? exam.batch_ids
-        : exam.batch_id ? [exam.batch_id] : []
-
-      // Extract the schedule properly from result_note or parsedWeeklyDays
-      let scheduleToCopy: any[] = []
-      const fromNote = extractWeeklyScheduleFromNote(exam.result_note)
-      if (Array.isArray(fromNote) && fromNote.length > 0) {
-        scheduleToCopy = fromNote
-      } else if (Array.isArray(parsedWeeklyDays) && parsedWeeklyDays.length > 0) {
-        scheduleToCopy = parsedWeeklyDays.map((d) => ({
-          day: d.key,
-          day_bn: d.day_bn,
-          exam_name: d.exam_name,
-          subject: d.subject,
-          total_marks: d.total_marks,
-          pass_marks: d.pass_marks,
-        }))
-      } else if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) {
-        scheduleToCopy = exam.recurring_days
-      }
-
-      // Calculate total marks and pass marks based on the schedule
-      let newTotalMarks = Number(exam.total_marks) || 350
-      let newPassMarks = Number(exam.pass_marks) || 140
-      if (scheduleToCopy.length > 0) {
-        const schedTotal = scheduleToCopy.reduce((acc, d) => acc + (Number(d.total_marks) || 0), 0)
-        const schedPass = scheduleToCopy.reduce((acc, d) => acc + (Number(d.pass_marks) || 0), 0)
-        if (schedTotal > 0) newTotalMarks = schedTotal
-        if (schedPass > 0) newPassMarks = schedPass
-      }
-
-      // Build rich metadata string in result_note
-      const curSeriesId = extractSeriesId(exam.result_note) || getExamSeriesKey(exam).replace(/^series_|^legacy_weekly_/, "")
-      let updatedNote = `[SERIES_ID:${curSeriesId}] [SERIES_WEEK:${nextWeekNum}] [SHOW_ALL_RESULTS:true]`
-      if (batchIdsList.length > 0) {
-        updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
-      }
-      if (scheduleToCopy.length > 0) {
-        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(scheduleToCopy)}]`
-        updatedNote += ` [WEEKLY_DAYS:${scheduleToCopy.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`
-      }
-
-      // Payload WITHOUT 'batch_ids' (since Supabase exams table does not have a batch_ids column)
-      const payload: any = {
-        title: nextTitle,
-        batch_id: targetBatchId,
-        subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-        total_marks: newTotalMarks,
-        pass_marks: newPassMarks,
-        exam_date: new Date().toISOString().split("T")[0],
-        result_note: updatedNote,
-        is_published: false,
-      }
-
-      if (exam.branch_id) payload.branch_id = exam.branch_id
-      if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
-      if (scheduleToCopy.length > 0) payload.recurring_days = scheduleToCopy
-      else if (exam.recurring_days) payload.recurring_days = exam.recurring_days
-      if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
-
-      let insertedId: string | null = null
-
-      const { data: inserted, error: insErr } = await supabase
-        .from("exams")
-        .insert(payload)
-        .select("id")
-        .single()
-
-      if (!insErr && inserted?.id) {
-        insertedId = inserted.id
-      } else {
-        console.warn("Standard insert failed, attempting minimal fallback:", insErr)
-        // Fallback: strip optional custom schema columns that may not exist
-        const minimalPayload = {
-          title: nextTitle,
-          batch_id: targetBatchId,
-          subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-          total_marks: newTotalMarks,
-          pass_marks: newPassMarks,
-          exam_date: new Date().toISOString().split("T")[0],
-          result_note: updatedNote,
-          is_published: false,
-        }
-
-        const { data: fbExam, error: fbErr } = await supabase
-          .from("exams")
-          .insert(minimalPayload)
-          .select("id")
-          .single()
-
-        if (fbErr) throw fbErr
-        if (fbExam?.id) insertedId = fbExam.id
-      }
-
-      if (insertedId) {
-        toast.success(`✓ ${nextTitle} সফলভাবে তৈরি হয়েছে! নতুন সপ্তাহে নিয়ে যাওয়া হচ্ছে...`)
-        router.push(`/dashboard/owner/exams/${insertedId}`)
-      }
-    } catch (err: any) {
-      console.error("Start next week error:", err)
-      toast.error(err.message || "Failed to start next week exam")
+      await handleOpenOrCreateWeek(nextWeekNumToCreate)
     } finally {
       setCreatingNextWeek(false)
     }
   }
 
-  // Universal Week Navigator / Creator: opens existing week or automatically creates it
-  const [creatingWeekNum, setCreatingWeekNum] = useState<number | null>(null)
-
   async function handleOpenOrCreateWeek(targetWeekNum: number) {
     if (!exam || targetWeekNum < 1) return
+
+    const curSeriesKey = getExamSeriesKey(exam)
 
     // 1. Check if the target week exam already exists in the series slots (sequential order)
     const existingSlot = fullSeriesSlots.find((s) => s.weekNum === targetWeekNum)
@@ -951,8 +839,9 @@ export default function ExamResultsPage() {
       }
       const { data: foundExams } = await query
 
+      // MUST strictly match THIS series key so separate exams/series never collide!
       const matched = (foundExams || []).find((e) => {
-        // Match by exact title or SERIES_WEEK tag
+        if (getExamSeriesKey(e) !== curSeriesKey) return false
         const titleMatch = e.title && e.title.toUpperCase().includes(weekLabel)
         const noteMatch = e.result_note && e.result_note.includes(`[SERIES_WEEK:${targetWeekNum}]`)
         return titleMatch || noteMatch
@@ -1000,8 +889,7 @@ export default function ExamResultsPage() {
         if (schedPass > 0) newPassMarks = schedPass
       }
 
-      const curSeriesKey = getExamSeriesKey(exam)
-      const seriesId = extractSeriesId(exam.result_note) || curSeriesKey.replace(/^series_|^legacy_weekly_/, "")
+      const seriesId = extractSeriesId(exam.result_note) || curSeriesKey.replace(/^series_|^legacy_weekly_|^exam_/, "")
       let updatedNote = `[SERIES_ID:${seriesId}] [SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
       if (batchIdsList.length > 0) {
         updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
@@ -1009,6 +897,18 @@ export default function ExamResultsPage() {
       if (scheduleToCopy.length > 0) {
         updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(scheduleToCopy)}]`
         updatedNote += ` [WEEKLY_DAYS:${scheduleToCopy.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`
+      }
+
+      // Ensure the root exam also has this SERIES_ID in its note if it was missing
+      if (!exam.result_note?.includes("[SERIES_ID:")) {
+        try {
+          await supabase
+            .from("exams")
+            .update({
+              result_note: `[SERIES_ID:${seriesId}] [SERIES_WEEK:1] ` + (exam.result_note || "")
+            })
+            .eq("id", exam.id)
+        } catch {}
       }
 
       const payload: any = {
@@ -1604,7 +1504,9 @@ export default function ExamResultsPage() {
         if (schedPass > 0) newPassMarks = schedPass
       }
 
-      let updatedNote = `[SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
+      const curSeriesKey = getExamSeriesKey(exam)
+      const seriesId = extractSeriesId(exam.result_note) || curSeriesKey.replace(/^series_|^legacy_weekly_|^exam_/, "")
+      let updatedNote = `[SERIES_ID:${seriesId}] [SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
       if (batchIdsList.length > 0) {
         updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
       }
