@@ -474,7 +474,19 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                       <button
                         key={cKey}
                         type="button"
-                        onClick={() => setFormData({ ...formData, themeColor: cKey })}
+                        onClick={() => {
+                          setFormData({ ...formData, themeColor: cKey })
+                          if (pal && typeof document !== "undefined") {
+                            const root = document.documentElement
+                            root.style.setProperty("--brand-primary", pal.primaryHex)
+                            root.style.setProperty("--brand-secondary", pal.secondaryHex)
+                            root.style.setProperty("--brand-bg-light", pal.bgLightHex)
+                            root.style.setProperty("--brand-border", pal.borderHex)
+                            root.style.setProperty("--brand-text", pal.textHex)
+                            root.style.setProperty("--brand-primary-rgb", hexToRgb(pal.primaryHex))
+                            root.style.setProperty("--brand-secondary-rgb", hexToRgb(pal.secondaryHex))
+                          }
+                        }}
                         className={cn(
                           "flex items-center gap-2.5 p-3 rounded-xl border text-left transition-all cursor-pointer",
                           isSelected
