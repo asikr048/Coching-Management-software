@@ -1863,3 +1863,73 @@ CREATE INDEX IF NOT EXISTS idx_enrollments_qr_code ON public.enrollments (qr_cod
 -- 6. Refresh PostgREST schema cache
 NOTIFY pgrst, 'reload schema';
 
+
+-- ====================================================================
+-- FINAL STEP: CREATE DEFAULT BRANCH & SUPER ADMIN (OWNER) ACCOUNT
+-- ====================================================================
+DO $$
+DECLARE
+  user_email TEXT := 'asikrcommon@gmail.com';
+  user_password TEXT := 'Admin@123456';
+  user_id UUID;
+  branch_record_id UUID;
+BEGIN
+  -- 1. Ensure at least one Branch exists
+  INSERT INTO branches (name, address, phone, is_active)
+  SELECT 'Main Campus', 'Main Road', '+880 1700-000000', true
+  WHERE NOT EXISTS (SELECT 1 FROM branches LIMIT 1);
+
+  SELECT id INTO branch_record_id FROM branches LIMIT 1;
+
+  -- 2. Create the user in auth.users with password if not exists, or update password
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = user_email) THEN
+    user_id := gen_random_uuid();
+    INSERT INTO auth.users (
+      instance_id,
+      id,
+      aud,
+      role,
+      email,
+      encrypted_password,
+      email_confirmed_at,
+      raw_app_meta_data,
+      raw_user_meta_data,
+      created_at,
+      updated_at
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000000',
+      user_id,
+      'authenticated',
+      'authenticated',
+      user_email,
+      crypt(user_password, gen_salt('bf')),
+      NOW(),
+      '{"provider":"email","providers":["email"]}',
+      '{"full_name":"Super Admin"}',
+      NOW(),
+      NOW()
+    );
+  ELSE
+    UPDATE auth.users 
+    SET encrypted_password = crypt(user_password, gen_salt('bf')),
+        email_confirmed_at = NOW()
+    WHERE email = user_email
+    RETURNING id INTO user_id;
+  END IF;
+
+  -- 3. Link or update the staff record with 'owner' role
+  INSERT INTO staff (auth_user_id, name, email, role, branch_id)
+  VALUES (
+    (SELECT id FROM auth.users WHERE email = user_email),
+    'Super Admin',
+    user_email,
+    'owner',
+    branch_record_id
+  )
+  ON CONFLICT (email) DO UPDATE SET 
+    role = 'owner',
+    auth_user_id = (SELECT id FROM auth.users WHERE email = user_email),
+    branch_id = branch_record_id;
+
+  RAISE NOTICE 'SUCCESS: Database tables and Super Admin created! Email: %, Password: %', user_email, user_password;
+END $$;
