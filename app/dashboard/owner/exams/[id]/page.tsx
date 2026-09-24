@@ -1113,7 +1113,7 @@ export default function ExamResultsPage() {
       exam: any
       isCurrent: boolean
     }> = existingExams.map((ex, idx) => {
-      const wNum = extractSeriesWeek(ex.result_note, ex.title) || idx + 1
+      const wNum = idx + 1 // Always starts from 1, then 2, 3, 4 sequentially
       return {
         weekNum: wNum,
         title: `Week ${wNum}`,
@@ -1124,7 +1124,7 @@ export default function ExamResultsPage() {
 
     // Find current exam's slot
     const curIdx = slots.findIndex((s) => s.exam.id === exam.id)
-    const curNum = curIdx >= 0 ? slots[curIdx].weekNum : (extractSeriesWeek(exam.result_note, exam.title) || 1)
+    const curNum = curIdx >= 0 ? slots[curIdx].weekNum : 1
 
     // Find previous and next exam among the actual existing exams
     const prev = curIdx > 0 ? slots[curIdx - 1].exam : null
@@ -1134,9 +1134,7 @@ export default function ExamResultsPage() {
   }, [exam, weeklySeriesExams, combinedWeeksExamsList])
 
   const nextWeekNumToCreate = useMemo(() => {
-    if (fullSeriesSlots.length === 0) return 1
-    const maxW = Math.max(...fullSeriesSlots.map((s) => s.weekNum), 0)
-    return maxW + 1
+    return fullSeriesSlots.length + 1
   }, [fullSeriesSlots])
 
   // The series name = the title given at exam creation or updated during edit.

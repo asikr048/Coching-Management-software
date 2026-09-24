@@ -2223,7 +2223,7 @@ export default function ExamsClient({
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5">
                             {group.allWeeks.map((we, idx) => {
-                              const wNum = extractSeriesWeek(we.result_note, we.title) || idx + 1
+                              const wNum = idx + 1 // Always starts from 1, then 2, 3, 4 sequentially
                               const isPub = isExamPublished(we)
                               return (
                                 <Link
