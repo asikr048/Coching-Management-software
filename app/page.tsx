@@ -707,18 +707,21 @@ export default function HomePage() {
           <Link href="/" className="flex items-center gap-2 sm:gap-4 group min-w-0">
             <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-full border-2 border-indigo-700 p-0.5 shadow-md flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden">
               <img
-                src="/logo.jpg"
-                alt="MedhaShiree Logo"
-                className="w-full h-full object-cover rounded-full"
+                src={branding.logoUrl || "/logo.jpg"}
+                alt={`${branding.name || "Institute"} Logo`}
+                className="w-full h-full object-contain rounded-full"
+                onError={(e) => {
+                  ;(e.target as HTMLImageElement).src = "/logo.jpg"
+                }}
               />
             </div>
 
             <div className="min-w-0">
               <h1 className="text-lg sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight leading-tight group-hover:text-indigo-700 transition-colors truncate">
-                MedhaShiree
+                {branding.name || "MedhaShiree"}
               </h1>
               <p className="text-[11px] sm:text-sm font-semibold text-gray-600 mt-0.5 truncate">
-                {currentBranch ? currentBranch.name : "প্রধান ক্যাম্পাস ও সকল শাখা"} , {displayAddress}
+                {currentBranch ? currentBranch.name : (branding.tagline || branding.nameBn || "প্রধান ক্যাম্পাস ও সকল শাখা")} • {displayAddress}
               </p>
             </div>
           </Link>
@@ -1625,12 +1628,19 @@ export default function HomePage() {
           <div>
             <div className="flex items-center gap-3 mb-3">
               <div className="w-9 h-9 rounded-full border border-indigo-400/30 overflow-hidden flex items-center justify-center bg-white flex-shrink-0">
-                <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+                <img
+                  src={branding.logoUrl || "/logo.jpg"}
+                  alt={`${branding.name || "Institute"} Logo`}
+                  className="w-full h-full object-contain rounded-full"
+                  onError={(e) => {
+                    ;(e.target as HTMLImageElement).src = "/logo.jpg"
+                  }}
+                />
               </div>
-              <h3 className="font-bold text-white text-base">MedhaShiree</h3>
+              <h3 className="font-bold text-white text-base">{branding.name || "MedhaShiree"}</h3>
             </div>
-            <p className="text-gray-400 leading-relaxed text-[11px] mb-3">{footerAbout}</p>
-            <p className="text-amber-400 font-bold">স্থাপিত: {displayEstablishedYear}ইং</p>
+            <p className="text-gray-400 leading-relaxed text-[11px] mb-3">{branding.footerAbout || footerAbout}</p>
+            <p className="text-amber-400 font-bold">স্থাপিত: {branding.establishedYear || displayEstablishedYear}ইং</p>
           </div>
 
           {/* Col 2: Active Branch & Contacts */}
@@ -1710,7 +1720,7 @@ export default function HomePage() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-8 pt-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-gray-500 gap-2">
-          <p>© {new Date().getFullYear()} MedhaShiree Coaching. সর্বস্বত্ব সংরক্ষিত।</p>
+          <p>© {new Date().getFullYear()} {branding.name || "MIIS ACADEMY"}. সর্বস্বত্ব সংরক্ষিত।</p>
           <p>Designed with excellence for Bangladesh Academic Coaching.</p>
         </div>
       </footer>
