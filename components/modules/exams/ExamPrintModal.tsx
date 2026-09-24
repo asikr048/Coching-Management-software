@@ -163,12 +163,17 @@ export default function ExamPrintModal({
     exam.exam_date ? new Date(exam.exam_date).getFullYear().toString() : new Date().getFullYear().toString()
   )
 
-  // Keep academic year synced if exam changes (e.g. navigating between weeks)
+  // 7. PDF Title — editable, LOCAL ONLY, never saved to DB.
+  //    Defaults to displayTitle (series name). User can change it just for the printout.
+  const [pdfTitle, setPdfTitle] = useState<string>(displayTitle)
+
+  // Keep academic year and pdfTitle synced if exam changes (e.g. navigating between weeks)
   useEffect(() => {
     if (exam.exam_date) {
       setCustomAcademicYear(new Date(exam.exam_date).getFullYear().toString())
     }
-  }, [exam.id, exam.exam_date])
+    setPdfTitle((isWeeklyExam && seriesTitle) ? seriesTitle : (exam.title || ""))
+  }, [exam.id, exam.exam_date, exam.title, isWeeklyExam, seriesTitle])
 
   // Sync mode and orientation when defaultMode changes
   useEffect(() => {
@@ -690,7 +695,7 @@ export default function ExamPrintModal({
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500">
-                  {displayTitle} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
+                  {pdfTitle || displayTitle} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
                 </p>
               </div>
             </div>
@@ -777,13 +782,26 @@ export default function ExamPrintModal({
             {/* Exam Name Display (always shows the saved exam title — to change it, use ✏️ on the main page) */}
             <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
               <FileText className="w-3.5 h-3.5 text-slate-400 ml-1 shrink-0" />
+              {/* Fixed exam name — always the name given at creation */}
               <label className="text-slate-500 font-bold text-[11px] whitespace-nowrap">পরীক্ষার নাম:</label>
               <span
-                className="px-2 py-0.5 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-900 min-w-[80px] truncate max-w-[200px]"
-                title={displayTitle}
+                className="px-2 py-0.5 bg-slate-100 border border-slate-200 rounded-lg text-xs font-black text-slate-700 min-w-[60px] truncate max-w-[160px]"
+                title={`সৃষ্টির সময় দেওয়া নাম: ${displayTitle}`}
               >
                 {displayTitle || "—"}
               </span>
+
+              {/* Editable PDF name — local only, used on printout, never saved to DB */}
+              <label className="text-slate-500 font-bold text-[11px] whitespace-nowrap ml-1">PDF নাম:</label>
+              <input
+                type="text"
+                value={pdfTitle}
+                onChange={(e) => setPdfTitle(e.target.value)}
+                className="px-2 py-0.5 bg-white border border-amber-300 rounded-lg text-xs font-bold text-slate-800 w-28 sm:w-36 focus:w-48 transition-all focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                placeholder={displayTitle}
+                title="শুধুমাত্র প্রিন্টের জন্য — এটি পরিবর্তন করলে পরীক্ষার আসল নাম পরিবর্তন হবে না"
+              />
+
               <label className="text-slate-500 font-bold text-[11px] whitespace-nowrap ml-1">শিক্ষাবর্ষ:</label>
               <input
                 type="text"
@@ -952,7 +970,7 @@ export default function ExamPrintModal({
                 examTitle={
                   isCombinedWeeks && activeCombinedExams.length > 0
                     ? `সমন্বিত মেধা তালিকা (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                    : displayTitle
+                    : (pdfTitle || displayTitle)
                 }
                 academicYear={customAcademicYear}
                 rows={meritListRows}
@@ -975,7 +993,7 @@ export default function ExamPrintModal({
                       examTitle={
                         isCombinedWeeks && activeCombinedExams.length > 0
                           ? `ধারাবাহিক সাপ্তাহিক পরীক্ষা - সমন্বিত প্রগ্রেস রিপোর্ট (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                    : displayTitle
+                    : (pdfTitle || displayTitle)
                       }
                       academicYear={customAcademicYear}
                       batchName={activeBatchName}
@@ -1012,7 +1030,7 @@ export default function ExamPrintModal({
                   title:
                     isCombinedWeeks && activeCombinedExams.length > 0
                       ? `সমন্বিত ট্যাবশুলার শিট (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                    : displayTitle,
+                    : (pdfTitle || displayTitle),
                   total_marks: activeTotalMarks,
                 }}
                 mode={selectedMode}
@@ -1040,7 +1058,7 @@ export default function ExamPrintModal({
                 examTitle={
                   isCombinedWeeks && activeCombinedExams.length > 0
                     ? `সমন্বিত শীর্ষ মেধা (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                    : displayTitle
+                    : (pdfTitle || displayTitle)
                 }
                 batchName={activeBatchName}
                 academicYear={customAcademicYear}
