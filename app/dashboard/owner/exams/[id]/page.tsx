@@ -1069,66 +1069,57 @@ export default function ExamResultsPage() {
   const [publishingCombinedNotice, setPublishingCombinedNotice] = useState(false)
   const [isCombinedNoticeLive, setIsCombinedNoticeLive] = useState(false)
 
-  // Current, Prev, and Next Week calculation + Full Series Slots (Week 1..5+)
+  // Current, Prev, and Next Week calculation + Only Real Added Weeks in Series (No Ghost Slots)
   const { prevWeekExam, nextWeekExam, currentWeekNum, fullSeriesSlots } = useMemo(() => {
     if (!exam) return { prevWeekExam: null, nextWeekExam: null, currentWeekNum: 1, fullSeriesSlots: [] }
     const curNum = extractWeekNumber(exam.title, exam.result_note) || 1
 
-    let maxWeek = Math.max(curNum, 5)
-    weeklySeriesExams.forEach((e) => {
-      const w = extractWeekNumber(e.title, e.result_note)
-      if (w && w > maxWeek) maxWeek = w
+    // Collect ONLY unique real existing exams that have actually been created/added
+    const pool = [exam, ...(weeklySeriesExams || []), ...(combinedWeeksExamsList || [])]
+    const map = new Map<string, any>()
+    pool.forEach((e) => {
+      if (e?.id && !map.has(e.id)) {
+        map.set(e.id, e)
+      }
     })
-    combinedWeeksExamsList.forEach((e) => {
-      const w = extractWeekNumber(e.title, e.result_note)
-      if (w && w > maxWeek) maxWeek = w
+    const existingExams = Array.from(map.values())
+
+    // Sort existing exams by week number or creation timestamp
+    existingExams.sort((a, b) => {
+      const numA = extractWeekNumber(a.title, a.result_note) || 0
+      const numB = extractWeekNumber(b.title, b.result_note) || 0
+      if (numA !== numB && numA > 0 && numB > 0) return numA - numB
+      return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
     })
 
     const slots: Array<{
       weekNum: number
       title: string
-      exam: any | null
+      exam: any
       isCurrent: boolean
-    }> = []
+    }> = existingExams.map((ex, idx) => {
+      const wNum = extractWeekNumber(ex.title, ex.result_note) || idx + 1
+      return {
+        weekNum: wNum,
+        title: ex.title || `WEEKLY-${wNum < 10 ? "0" + wNum : wNum}`,
+        exam: ex,
+        isCurrent: ex.id === exam.id,
+      }
+    })
 
-    for (let w = 1; w <= maxWeek; w++) {
-      const found = (combinedWeeksExamsList || []).find((e) => {
-        const ew = extractWeekNumber(e.title, e.result_note)
-        return ew === w
-      }) || (weeklySeriesExams || []).find((e) => {
-        const ew = extractWeekNumber(e.title, e.result_note)
-        return ew === w
-      }) || (w === curNum ? exam : null)
-
-      const weekLabel = `WEEKLY-${w < 10 ? "0" + w : w}`
-      slots.push({
-        weekNum: w,
-        title: found?.title || weekLabel,
-        exam: found,
-        isCurrent: w === curNum || Boolean(found && found.id === exam.id),
-      })
-    }
-
-    let prev: any = null
-    const prevSlot = slots.find((s) => s.weekNum === curNum - 1)
-    if (prevSlot?.exam) {
-      prev = prevSlot.exam
-    } else if (weeklySeriesExams.length > 0) {
-      const idx = weeklySeriesExams.findIndex((e) => e.id === exam.id)
-      if (idx > 0) prev = weeklySeriesExams[idx - 1]
-    }
-
-    let next: any = null
-    const nextSlot = slots.find((s) => s.weekNum === curNum + 1)
-    if (nextSlot?.exam) {
-      next = nextSlot.exam
-    } else if (weeklySeriesExams.length > 0) {
-      const idx = weeklySeriesExams.findIndex((e) => e.id === exam.id)
-      if (idx >= 0 && idx < weeklySeriesExams.length - 1) next = weeklySeriesExams[idx + 1]
-    }
+    // Find previous and next exam among the actual existing exams
+    const curIdx = slots.findIndex((s) => s.exam.id === exam.id)
+    const prev = curIdx > 0 ? slots[curIdx - 1].exam : null
+    const next = curIdx >= 0 && curIdx < slots.length - 1 ? slots[curIdx + 1].exam : null
 
     return { prevWeekExam: prev, nextWeekExam: next, currentWeekNum: curNum, fullSeriesSlots: slots }
   }, [exam, weeklySeriesExams, combinedWeeksExamsList])
+
+  const nextWeekNumToCreate = useMemo(() => {
+    if (fullSeriesSlots.length === 0) return 1
+    const maxW = Math.max(...fullSeriesSlots.map((s) => s.weekNum), 0)
+    return maxW + 1
+  }, [fullSeriesSlots])
 
   // 1. Immediately load series exams when exam is available
   async function loadWeeklySeriesExams() {
@@ -1318,14 +1309,15 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Reliable list of all available weekly exams for combined calculation
+  // Reliable list of all available weekly exams for combined calculation (Only added weeks)
   const displayCombinedExams = useMemo(() => {
+    if (fullSeriesSlots.length > 0) {
+      return fullSeriesSlots.map((s) => s.exam).filter(Boolean)
+    }
     if (combinedWeeksExamsList.length > 0) return combinedWeeksExamsList
     if (weeklySeriesExams.length > 0) return weeklySeriesExams
-    const fromSlots = fullSeriesSlots.filter((s) => s.exam).map((s) => s.exam)
-    if (fromSlots.length > 0) return fromSlots
     return exam ? [exam] : []
-  }, [combinedWeeksExamsList, weeklySeriesExams, fullSeriesSlots, exam])
+  }, [fullSeriesSlots, combinedWeeksExamsList, weeklySeriesExams, exam])
 
   // Active selected exams for combined calculation
   const activeCombinedExams = useMemo(() => {
@@ -3650,97 +3642,49 @@ export default function ExamResultsPage() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => handleOpenOrCreateWeek(currentWeekNum + 1)}
-                  disabled={creatingWeekNum === currentWeekNum + 1 || creatingNextWeek}
+                  onClick={() => handleOpenOrCreateWeek(nextWeekNumToCreate)}
+                  disabled={creatingWeekNum === nextWeekNumToCreate || creatingNextWeek}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold transition-all shadow-2xs cursor-pointer active:scale-95"
                   title="নতুন সপ্তাহ শুরু করুন"
                 >
-                  {creatingWeekNum === currentWeekNum + 1 || creatingNextWeek ? (
+                  {creatingWeekNum === nextWeekNumToCreate || creatingNextWeek ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <span>+ পরবর্তী সপ্তাহ (WEEKLY-{currentWeekNum + 1 < 10 ? "0" + (currentWeekNum + 1) : currentWeekNum + 1})</span>
+                    <span>+ পরবর্তী সপ্তাহ (WEEKLY-{nextWeekNumToCreate < 10 ? "0" + nextWeekNumToCreate : nextWeekNumToCreate})</span>
                   )}
                 </button>
               )}
             </div>
           </div>
 
-          {/* List of all weeks in series (Week 1..5+) */}
+          {/* List of all weeks in series (Only Real Added Weeks) */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
             {fullSeriesSlots.map((slot) => {
-              if (slot.exam) {
-                const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
-                if (selectedTab === "all_weeks_combined") {
-                  return (
-                    <button
-                      key={`slot-${slot.weekNum}`}
-                      type="button"
-                      onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
-                      className={cn(
-                        "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border shrink-0 cursor-pointer shadow-2xs active:scale-95",
-                        isSel
-                          ? "bg-gradient-to-r from-blue-700 to-indigo-700 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
-                          : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
-                      )}
-                      title={`সমন্বিত ফলাফলে ${slot.title} অন্তর্ভুক্ত/বাদ দিন`}
-                    >
-                      {isSel ? (
-                        <CheckSquare className="w-3.5 h-3.5 text-blue-200 shrink-0" />
-                      ) : (
-                        <Square className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      )}
-                      <span
-                        className={cn(
-                          "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black",
-                          isSel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
-                        )}
-                      >
-                        W{slot.weekNum}
-                      </span>
-                      <span>{slot.title}</span>
-                      {slot.isCurrent && (
-                        <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider shadow-2xs">
-                          বর্তমান
-                        </span>
-                      )}
-                      <span
-                        className={cn(
-                          "text-[9px] px-1.5 py-0.2 rounded font-bold uppercase",
-                          isSel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
-                        )}
-                      >
-                        {isSel ? "যুক্ত" : "বাদ"}
-                      </span>
-                      <span
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setWeekToDelete({ id: slot.exam.id, title: slot.title })
-                        }}
-                        className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition-colors ml-0.5 shrink-0 cursor-pointer"
-                        title={`${slot.title} মুছে ফেলুন (Delete Week)`}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </span>
-                    </button>
-                  )
-                }
-
+              if (!slot.exam) return null
+              const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
+              if (selectedTab === "all_weeks_combined") {
                 return (
-                  <Link
+                  <button
                     key={`slot-${slot.weekNum}`}
-                    href={`/dashboard/owner/exams/${slot.exam.id}`}
+                    type="button"
+                    onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
                     className={cn(
-                      "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border shrink-0",
-                      slot.isCurrent
-                        ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-700 shadow-md ring-2 ring-purple-400/40"
-                        : "bg-white hover:bg-purple-50 text-slate-800 hover:text-purple-900 border-slate-200 hover:border-purple-300 shadow-2xs"
+                      "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border shrink-0 cursor-pointer shadow-2xs active:scale-95",
+                      isSel
+                        ? "bg-gradient-to-r from-blue-700 to-indigo-700 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
+                        : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
                     )}
-                    title={`${slot.title} এ যান ও নম্বর দেখুন/দিন`}
+                    title={`সমন্বিত ফলাফলে ${slot.title} অন্তর্ভুক্ত/বাদ দিন`}
                   >
+                    {isSel ? (
+                      <CheckSquare className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    )}
                     <span
                       className={cn(
                         "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black",
-                        slot.isCurrent ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"
+                        isSel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
                       )}
                     >
                       W{slot.weekNum}
@@ -3748,58 +3692,74 @@ export default function ExamResultsPage() {
                     <span>{slot.title}</span>
                     {slot.isCurrent && (
                       <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider shadow-2xs">
-                        ✓ বর্তমান
+                        বর্তমান
                       </span>
                     )}
                     <span
+                      className={cn(
+                        "text-[9px] px-1.5 py-0.2 rounded font-bold uppercase",
+                        isSel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"
+                      )}
+                    >
+                      {isSel ? "যুক্ত" : "বাদ"}
+                    </span>
+                    <span
                       onClick={(e) => {
-                        e.preventDefault()
                         e.stopPropagation()
                         setWeekToDelete({ id: slot.exam.id, title: slot.title })
                       }}
-                      className={cn(
-                        "p-1 rounded-md transition-colors cursor-pointer shrink-0 ml-0.5",
-                        slot.isCurrent
-                          ? "text-white/70 hover:text-white hover:bg-rose-600/80"
-                          : "text-slate-400 hover:text-rose-600 hover:bg-rose-100"
-                      )}
+                      className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-100 transition-colors ml-0.5 shrink-0 cursor-pointer"
                       title={`${slot.title} মুছে ফেলুন (Delete Week)`}
                     >
                       <Trash2 className="w-3 h-3" />
                     </span>
-                  </Link>
+                  </button>
                 )
               }
 
               return (
-                <button
+                <Link
                   key={`slot-${slot.weekNum}`}
-                  type="button"
-                  onClick={() =>
-                    selectedTab === "all_weeks_combined"
-                      ? handleCreateAndAddWeekToCombined(slot.weekNum)
-                      : handleOpenOrCreateWeek(slot.weekNum)
-                  }
-                  disabled={creatingWeekNum === slot.weekNum}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-1.5 border border-purple-200 hover:border-purple-400 bg-white hover:bg-purple-50 text-purple-900 shrink-0 cursor-pointer shadow-2xs active:scale-95 transition-all"
-                  title={
-                    selectedTab === "all_weeks_combined"
-                      ? `${slot.title} তৈরি করুন এবং সমন্বিত মেধা তালিকায় যোগ করুন`
-                      : `${slot.title} এ যান বা শুরু করুন ও নম্বর দিন`
-                  }
+                  href={`/dashboard/owner/exams/${slot.exam.id}`}
+                  className={cn(
+                    "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border shrink-0",
+                    slot.isCurrent
+                      ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white border-purple-700 shadow-md ring-2 ring-purple-400/40"
+                      : "bg-white hover:bg-purple-50 text-slate-800 hover:text-purple-900 border-slate-200 hover:border-purple-300 shadow-2xs"
+                  )}
+                  title={`${slot.title} এ যান ও নম্বর দেখুন/দিন`}
                 >
-                  {creatingWeekNum === slot.weekNum ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
-                  ) : (
-                    <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black bg-purple-100 text-purple-700">
-                      W{slot.weekNum}
+                  <span
+                    className={cn(
+                      "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black",
+                      slot.isCurrent ? "bg-white/20 text-white" : "bg-purple-100 text-purple-700"
+                    )}
+                  >
+                    W{slot.weekNum}
+                  </span>
+                  <span>{slot.title}</span>
+                  {slot.isCurrent && (
+                    <span className="text-[9px] bg-emerald-500 text-white px-1.5 py-0.2 rounded-full font-black uppercase tracking-wider shadow-2xs">
+                      ✓ বর্তমান
                     </span>
                   )}
-                  <span>{slot.title}</span>
-                  <span className="text-[9px] bg-purple-100 text-purple-700 px-1.5 py-0.2 rounded font-bold">
-                    {selectedTab === "all_weeks_combined" ? "+ তৈরি ও যোগ" : "+ খুলুন"}
+                  <span
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setWeekToDelete({ id: slot.exam.id, title: slot.title })
+                    }}
+                    className={cn(
+                      "p-1 rounded-md transition-colors cursor-pointer shrink-0 ml-0.5",
+                      slot.isCurrent
+                        ? "text-white/70 hover:text-white hover:bg-rose-600/80"
+                        : "text-slate-400 hover:text-rose-600 hover:bg-rose-100"
+                    )}
+                    title={`${slot.title} মুছে ফেলুন (Delete Week)`}
+                  >
+                    <Trash2 className="w-3 h-3" />
                   </span>
-                </button>
+                </Link>
               )
             })}
 
@@ -3807,10 +3767,10 @@ export default function ExamResultsPage() {
               type="button"
               onClick={() =>
                 selectedTab === "all_weeks_combined"
-                  ? handleCreateAndAddWeekToCombined(fullSeriesSlots.length + 1)
-                  : handleOpenOrCreateWeek(fullSeriesSlots.length + 1)
+                  ? handleCreateAndAddWeekToCombined(nextWeekNumToCreate)
+                  : handleOpenOrCreateWeek(nextWeekNumToCreate)
               }
-              disabled={creatingWeekNum === fullSeriesSlots.length + 1}
+              disabled={creatingWeekNum === nextWeekNumToCreate}
               className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1 border border-dashed border-purple-300 bg-purple-50/50 hover:bg-purple-100 text-purple-700 shrink-0 cursor-pointer active:scale-95"
               title={
                 selectedTab === "all_weeks_combined"
@@ -3818,12 +3778,12 @@ export default function ExamResultsPage() {
                   : "নতুন সপ্তাহ শুরু করুন"
               }
             >
-              {creatingWeekNum === fullSeriesSlots.length + 1 ? (
+              {creatingWeekNum === nextWeekNumToCreate ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-600" />
               ) : (
                 <Plus className="w-3.5 h-3.5" />
               )}
-              <span>+ নতুন সপ্তাহ ({fullSeriesSlots.length + 1})</span>
+              <span>+ নতুন সপ্তাহ ({nextWeekNumToCreate})</span>
             </button>
           </div>
         </div>
@@ -4023,170 +3983,87 @@ export default function ExamResultsPage() {
                 </div>
               </div>
 
-              {/* Week Pills Horizontal Row */}
-              <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 pt-0.5">
+              {/* Week Pills Horizontal Row - Compact, Sleek, Minimal */}
+              <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5">
                 {fullSeriesSlots.map((slot) => {
-                  if (slot.exam) {
-                    const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
-                    return (
-                      <button
-                        key={`hub-week-pill-${slot.exam.id}`}
-                        type="button"
-                        onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
-                        className={cn(
-                          "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[145px] sm:min-w-[170px] cursor-pointer shadow-2xs active:scale-95",
-                          isSel
-                            ? "bg-gradient-to-br from-blue-700 via-indigo-700 to-indigo-800 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
-                        )}
-                        title={`সমন্বিত ফলাফলে ${slot.exam.title || slot.title} অন্তর্ভুক্ত বা বাদ দিন`}
-                      >
-                        <div className="flex items-center justify-between w-full gap-2">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span
-                              className={cn(
-                                "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0",
-                                isSel ? "bg-white text-blue-900" : "bg-slate-200 text-slate-600"
-                              )}
-                            >
-                              W{slot.weekNum}
-                            </span>
-                            <span className={cn("text-xs font-black truncate", isSel ? "text-white" : "text-slate-800")}>
-                              {slot.exam.title || slot.title}
-                            </span>
-                          </div>
-
-                          {/* Checkbox Icon */}
-                          {isSel ? (
-                            <CheckSquare className="w-4 h-4 text-emerald-300 shrink-0" />
-                          ) : (
-                            <Square className="w-4 h-4 text-slate-400 shrink-0" />
-                          )}
-                        </div>
-
-                        <div className="flex items-center justify-between w-full text-[11px] mt-1 pt-1 border-t border-white/20">
-                          <span className={cn("font-medium", isSel ? "text-blue-100" : "text-slate-500")}>
-                            পূর্ণমান: {slot.exam.total_marks || 350} নম্বর
-                          </span>
-                          <span
-                            className={cn(
-                              "text-[9px] font-bold px-1.5 py-0.2 rounded font-mono uppercase",
-                              isSel ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
-                            )}
-                          >
-                            {isSel ? "✓ অন্তর্ভুক্ত" : "বাদ"}
-                          </span>
-                        </div>
-                      </button>
-                    )
-                  }
-
+                  if (!slot.exam) return null
+                  const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
                   return (
                     <button
-                      key={`hub-week-uncreated-${slot.weekNum}`}
+                      key={`hub-week-pill-${slot.exam.id}`}
                       type="button"
-                      onClick={() => handleCreateAndAddWeekToCombined(slot.weekNum)}
-                      disabled={creatingWeekNum === slot.weekNum}
-                      className="flex flex-col items-start gap-1 p-3 rounded-xl border border-dashed border-blue-300 hover:border-blue-500 bg-blue-50/40 hover:bg-blue-50 text-left transition-all shrink-0 min-w-[145px] sm:min-w-[170px] cursor-pointer shadow-2xs active:scale-95 group"
-                      title={`Week ${slot.weekNum} (${slot.title}) তৈরি করুন এবং সমন্বিত মেধা তালিকায় যুক্ত করুন`}
+                      onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-2 border shrink-0 cursor-pointer shadow-2xs active:scale-95",
+                        isSel
+                          ? "bg-gradient-to-r from-blue-700 to-indigo-700 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
+                          : "bg-white hover:bg-slate-50 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
+                      )}
+                      title={`সমন্বিত ফলাফলে ${slot.exam.title || slot.title} অন্তর্ভুক্ত বা বাদ দিন`}
                     >
-                      <div className="flex items-center justify-between w-full gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          {creatingWeekNum === slot.weekNum ? (
-                            <Loader2 className="w-5 h-5 animate-spin text-blue-600 shrink-0" />
-                          ) : (
-                            <span className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0 bg-blue-100 text-blue-800 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                              W{slot.weekNum}
-                            </span>
-                          )}
-                          <span className="text-xs font-bold text-slate-800 truncate">
-                            {slot.title}
-                          </span>
-                        </div>
-                        <Plus className="w-4 h-4 text-blue-600 group-hover:scale-110 transition-transform shrink-0" />
-                      </div>
-
-                      <div className="flex items-center justify-between w-full text-[11px] mt-1 pt-1 border-t border-blue-100 text-slate-500">
-                        <span>অনির্ধারিত সপ্তাহ</span>
-                        <span className="text-[9px] font-bold px-1.5 py-0.2 rounded font-mono uppercase bg-blue-100 text-blue-700 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                          + তৈরি ও যোগ
-                        </span>
-                      </div>
+                      {isSel ? (
+                        <CheckSquare className="w-3.5 h-3.5 text-blue-200 shrink-0" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                      )}
+                      <span
+                        className={cn(
+                          "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0",
+                          isSel ? "bg-white/20 text-white" : "bg-slate-100 text-slate-700"
+                        )}
+                      >
+                        W{slot.weekNum}
+                      </span>
+                      <span className="font-extrabold">{slot.exam.title || slot.title}</span>
+                      <span
+                        className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded font-mono font-bold shrink-0",
+                          isSel ? "bg-white/20 text-blue-100" : "bg-slate-100 text-slate-500"
+                        )}
+                      >
+                        {slot.exam.total_marks || 350} নম্বর
+                      </span>
+                      <span
+                        className={cn(
+                          "text-[9px] px-1.5 py-0.2 rounded font-bold uppercase shrink-0",
+                          isSel ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
+                        )}
+                      >
+                        {isSel ? "যুক্ত" : "বাদ"}
+                      </span>
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setWeekToDelete({ id: slot.exam.id, title: slot.exam.title || slot.title })
+                        }}
+                        className={cn(
+                          "p-1 rounded-md transition-colors ml-0.5 shrink-0 cursor-pointer",
+                          isSel
+                            ? "text-white/70 hover:text-white hover:bg-rose-600/80"
+                            : "text-slate-400 hover:text-rose-600 hover:bg-rose-100"
+                        )}
+                        title={`${slot.exam.title || slot.title} মুছে ফেলুন (Delete Week)`}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </span>
                     </button>
                   )
                 })}
 
-                {/* Extra exams in displayCombinedExams not covered in fullSeriesSlots */}
-                {displayCombinedExams
-                  .filter((de) => !fullSeriesSlots.some((s) => s.exam?.id === de.id))
-                  .map((we, wIdx) => {
-                    const isSel = selectedCombinedWeekIds.includes(we.id)
-                    const wNum = extractWeekNumber(we.title, we.result_note) || (fullSeriesSlots.length + wIdx + 1)
-                    return (
-                      <button
-                        key={`hub-week-pill-extra-${we.id}`}
-                        type="button"
-                        onClick={() => toggleCombinedWeekSelection(we.id)}
-                        className={cn(
-                          "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all shrink-0 min-w-[145px] sm:min-w-[170px] cursor-pointer shadow-2xs active:scale-95",
-                          isSel
-                            ? "bg-gradient-to-br from-blue-700 via-indigo-700 to-indigo-800 text-white border-blue-800 shadow-md ring-2 ring-blue-400/40"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300 opacity-60 hover:opacity-100"
-                        )}
-                        title={`সমন্বিত ফলাফলে ${we.title} অন্তর্ভুক্ত বা বাদ দিন`}
-                      >
-                        <div className="flex items-center justify-between w-full gap-2">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span
-                              className={cn(
-                                "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black shrink-0",
-                                isSel ? "bg-white text-blue-900" : "bg-slate-200 text-slate-600"
-                              )}
-                            >
-                              W{wNum}
-                            </span>
-                            <span className={cn("text-xs font-black truncate", isSel ? "text-white" : "text-slate-800")}>
-                              {we.title || `WEEKLY-0${wNum}`}
-                            </span>
-                          </div>
-                          {isSel ? (
-                            <CheckSquare className="w-4 h-4 text-emerald-300 shrink-0" />
-                          ) : (
-                            <Square className="w-4 h-4 text-slate-400 shrink-0" />
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between w-full text-[11px] mt-1 pt-1 border-t border-white/20">
-                          <span className={cn("font-medium", isSel ? "text-blue-100" : "text-slate-500")}>
-                            পূর্ণমান: {we.total_marks || 350} নম্বর
-                          </span>
-                          <span
-                            className={cn(
-                              "text-[9px] font-bold px-1.5 py-0.2 rounded font-mono uppercase",
-                              isSel ? "bg-emerald-500 text-white" : "bg-slate-200 text-slate-600"
-                            )}
-                          >
-                            {isSel ? "✓ অন্তর্ভুক্ত" : "বাদ"}
-                          </span>
-                        </div>
-                      </button>
-                    )
-                  })}
-
-                {/* Dedicated "+ নতুন সপ্তাহ যোগ" Button at end of row */}
+                {/* Minimal Add Next Week Button */}
                 <button
                   type="button"
-                  onClick={() => handleCreateAndAddWeekToCombined(fullSeriesSlots.length + 1)}
-                  disabled={creatingWeekNum === fullSeriesSlots.length + 1}
-                  className="flex flex-col items-center justify-center gap-1 p-3 rounded-xl border-2 border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-100/70 text-indigo-800 transition-all shrink-0 min-w-[140px] cursor-pointer active:scale-95 group shadow-2xs"
+                  onClick={() => handleCreateAndAddWeekToCombined(nextWeekNumToCreate)}
+                  disabled={creatingWeekNum === nextWeekNumToCreate}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 border border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-100/70 text-indigo-700 shrink-0 cursor-pointer active:scale-95 shadow-2xs"
                   title="নতুন পরবর্তী সপ্তাহ তৈরি করে সমন্বিত তালিকায় যুক্ত করুন"
                 >
-                  {creatingWeekNum === fullSeriesSlots.length + 1 ? (
-                    <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
+                  {creatingWeekNum === nextWeekNumToCreate ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
                   ) : (
-                    <Plus className="w-5 h-5 text-indigo-600 group-hover:scale-110 transition-transform" />
+                    <Plus className="w-3.5 h-3.5 text-indigo-600" />
                   )}
-                  <span className="text-xs font-bold whitespace-nowrap">+ নতুন সপ্তাহ ({fullSeriesSlots.length + 1})</span>
-                  <span className="text-[9px] text-indigo-600 font-semibold">তৈরি ও যুক্ত করুন</span>
+                  <span>+ নতুন সপ্তাহ ({nextWeekNumToCreate})</span>
                 </button>
               </div>
             </div>
@@ -4579,110 +4456,52 @@ export default function ExamResultsPage() {
               {/* Checkbox pills */}
               <div className="flex flex-wrap items-center gap-2">
                 {fullSeriesSlots.map((slot) => {
-                  if (slot.exam) {
-                    const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
-                    return (
-                      <button
-                        key={`sel-week-${slot.exam.id}`}
-                        type="button"
-                        onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-xl font-bold text-xs transition-all border flex items-center gap-2 cursor-pointer shadow-2xs active:scale-95",
-                          isSel
-                            ? "bg-blue-600 text-white border-blue-700 shadow-xs"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
-                        )}
-                      >
-                        {isSel ? (
-                          <CheckSquare className="w-3.5 h-3.5 text-blue-200" />
-                        ) : (
-                          <Square className="w-3.5 h-3.5 text-slate-400" />
-                        )}
-                        <span>{slot.exam.title || slot.title}</span>
-                        <span
-                          className={cn(
-                            "text-[10px] px-1.5 py-0.5 rounded font-semibold",
-                            isSel ? "bg-blue-700 text-blue-100" : "bg-slate-200 text-slate-600"
-                          )}
-                        >
-                          {slot.exam.total_marks || 350} নম্বর
-                        </span>
-                      </button>
-                    )
-                  }
-
+                  if (!slot.exam) return null
+                  const isSel = selectedCombinedWeekIds.includes(slot.exam.id)
                   return (
                     <button
-                      key={`sel-week-uncreated-${slot.weekNum}`}
+                      key={`sel-week-${slot.exam.id}`}
                       type="button"
-                      onClick={() => handleCreateAndAddWeekToCombined(slot.weekNum)}
-                      disabled={creatingWeekNum === slot.weekNum}
-                      className="px-3 py-1.5 rounded-xl font-bold text-xs transition-all border border-dashed border-blue-300 hover:border-blue-500 bg-blue-50/50 hover:bg-blue-100 text-blue-800 flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
-                      title={`${slot.title} তৈরি করুন এবং সমন্বিত মেধা তালিকায় যুক্ত করুন`}
-                    >
-                      {creatingWeekNum === slot.weekNum ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
-                      ) : (
-                        <Plus className="w-3.5 h-3.5 text-blue-600" />
+                      onClick={() => toggleCombinedWeekSelection(slot.exam.id)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-xl font-bold text-xs transition-all border flex items-center gap-2 cursor-pointer shadow-2xs active:scale-95",
+                        isSel
+                          ? "bg-blue-600 text-white border-blue-700 shadow-xs"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
                       )}
-                      <span>{slot.title}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 font-semibold">
-                        + তৈরি ও যোগ
+                    >
+                      {isSel ? (
+                        <CheckSquare className="w-3.5 h-3.5 text-blue-200" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                      <span>{slot.exam.title || slot.title}</span>
+                      <span
+                        className={cn(
+                          "text-[10px] px-1.5 py-0.5 rounded font-semibold",
+                          isSel ? "bg-blue-700 text-blue-100" : "bg-slate-200 text-slate-600"
+                        )}
+                      >
+                        {slot.exam.total_marks || 350} নম্বর
                       </span>
                     </button>
                   )
                 })}
 
-                {/* Extra exams not in fullSeriesSlots */}
-                {displayCombinedExams
-                  .filter((de) => !fullSeriesSlots.some((s) => s.exam?.id === de.id))
-                  .map((we, wIdx) => {
-                    const isSel = selectedCombinedWeekIds.includes(we.id)
-                    const wTitle = we.title || `Week ${wIdx + 1}`
-                    return (
-                      <button
-                        key={`sel-week-extra-${we.id}`}
-                        type="button"
-                        onClick={() => toggleCombinedWeekSelection(we.id)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-xl font-bold text-xs transition-all border flex items-center gap-2 cursor-pointer shadow-2xs active:scale-95",
-                          isSel
-                            ? "bg-blue-600 text-white border-blue-700 shadow-xs"
-                            : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-300"
-                        )}
-                      >
-                        {isSel ? (
-                          <CheckSquare className="w-3.5 h-3.5 text-blue-200" />
-                        ) : (
-                          <Square className="w-3.5 h-3.5 text-slate-400" />
-                        )}
-                        <span>{wTitle}</span>
-                        <span
-                          className={cn(
-                            "text-[10px] px-1.5 py-0.5 rounded font-semibold",
-                            isSel ? "bg-blue-700 text-blue-100" : "bg-slate-200 text-slate-600"
-                          )}
-                        >
-                          {we.total_marks || 350} নম্বর
-                        </span>
-                      </button>
-                    )
-                  })}
-
                 {/* Direct Add Next Week Button */}
                 <button
                   type="button"
-                  onClick={() => handleCreateAndAddWeekToCombined(fullSeriesSlots.length + 1)}
-                  disabled={creatingWeekNum === fullSeriesSlots.length + 1}
+                  onClick={() => handleCreateAndAddWeekToCombined(nextWeekNumToCreate)}
+                  disabled={creatingWeekNum === nextWeekNumToCreate}
                   className="px-3 py-1.5 rounded-xl font-bold text-xs transition-all border border-dashed border-indigo-300 hover:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 flex items-center gap-1.5 cursor-pointer shadow-2xs active:scale-95"
                   title="নতুন পরবর্তী সপ্তাহ তৈরি করে যুক্ত করুন"
                 >
-                  {creatingWeekNum === fullSeriesSlots.length + 1 ? (
+                  {creatingWeekNum === nextWeekNumToCreate ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
                   ) : (
                     <Plus className="w-3.5 h-3.5 text-indigo-600" />
                   )}
-                  <span>+ নতুন সপ্তাহ ({fullSeriesSlots.length + 1})</span>
+                  <span>+ নতুন সপ্তাহ ({nextWeekNumToCreate})</span>
                 </button>
               </div>
 
@@ -4704,38 +4523,22 @@ export default function ExamResultsPage() {
               </span>
               <div className="flex items-center gap-1.5 flex-wrap">
                 {fullSeriesSlots.map((slot) => {
-                  if (slot.exam) {
-                    return (
-                      <Link
-                        key={`comb-slot-${slot.weekNum}`}
-                        href={`/dashboard/owner/exams/${slot.exam.id}`}
-                        className={cn(
-                          "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all flex items-center gap-1 border",
-                          slot.isCurrent
-                            ? "bg-blue-600 text-white border-blue-700 shadow-2xs"
-                            : "bg-white hover:bg-blue-100 text-blue-900 border-blue-200"
-                        )}
-                        title={`${slot.title} এ যান`}
-                      >
-                        <span>{slot.title}</span>
-                        {slot.isCurrent && <span className="text-[9px] bg-white/20 px-1 rounded-full">বর্তমান</span>}
-                      </Link>
-                    )
-                  }
+                  if (!slot.exam) return null
                   return (
-                    <button
+                    <Link
                       key={`comb-slot-${slot.weekNum}`}
-                      type="button"
-                      onClick={() => handleOpenOrCreateWeek(slot.weekNum)}
-                      disabled={creatingWeekNum === slot.weekNum}
-                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-blue-200 hover:border-blue-400 bg-white hover:bg-blue-50 text-blue-900 flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
-                      title={`${slot.title} খুলুন ও নম্বর দিন`}
+                      href={`/dashboard/owner/exams/${slot.exam.id}`}
+                      className={cn(
+                        "px-2.5 py-1 rounded-lg font-bold text-[11px] transition-all flex items-center gap-1 border",
+                        slot.isCurrent
+                          ? "bg-blue-600 text-white border-blue-700 shadow-2xs"
+                          : "bg-white hover:bg-blue-100 text-blue-900 border-blue-200"
+                      )}
+                      title={`${slot.title} এ যান`}
                     >
-                      {creatingWeekNum === slot.weekNum ? (
-                        <Loader2 className="w-3 h-3 animate-spin text-blue-600" />
-                      ) : null}
-                      <span>{slot.title} (+ খুলুন)</span>
-                    </button>
+                      <span>{slot.title}</span>
+                      {slot.isCurrent && <span className="text-[9px] bg-white/20 px-1 rounded-full">বর্তমান</span>}
+                    </Link>
                   )
                 })}
               </div>
