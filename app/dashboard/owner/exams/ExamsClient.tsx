@@ -618,7 +618,11 @@ export default function ExamsClient({
       })
 
       const rawSeriesId = extractSeriesId(firstExam.result_note) || extractSeriesId(latest.result_note) || key.replace(/^series_|^legacy_weekly_/, "")
-      const seriesTitle = firstExam.title || `${batchName} — ধারাবাহিক পরীক্ষা`
+      // Find the latest custom title across the series exams (ignoring auto-generated generic labels like WEEKLY-01, WEEKLY-02)
+      const latestCustomTitle = [...examsInGroup].reverse().find(
+        (e) => e.title && !/^weekly-?\d+$/i.test(e.title.trim()) && !/^সাপ্তাহিক-?\d+$/i.test(e.title.trim())
+      )?.title
+      const seriesTitle = latestCustomTitle || firstExam.title || `${batchName} — ধারাবাহিক পরীক্ষা`
 
       seriesGroups.push({
         groupKey: key,
@@ -1019,8 +1023,22 @@ export default function ExamsClient({
       .replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "")
       .trim()
 
+    let initialTitle = exam.title || ""
+    if (isWeekly) {
+      const sId = extractSeriesId(exam.result_note)
+      if (sId) {
+        const seriesSibling = [...exams].reverse().find(e => 
+          e.result_note?.includes(`[SERIES_ID:${sId}]`) && 
+          e.title && !/^weekly-?\d+$/i.test(e.title.trim()) && !/^সাপ্তাহিক-?\d+$/i.test(e.title.trim())
+        )
+        if (seriesSibling?.title) {
+          initialTitle = seriesSibling.title
+        }
+      }
+    }
+
     setForm({
-      title: exam.title || "",
+      title: initialTitle,
       branch_id: exam.branch_id || (selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || "")),
       batch_id: exam.batch_id || targetBatchIds[0] || "",
       batch_ids: targetBatchIds,
@@ -1280,7 +1298,25 @@ export default function ExamsClient({
           batch: matchedBatch ? { name: matchedBatch.name } : editingExam.batch,
         }
 
-        setExams(prev => prev.map(ex => ex.id === editingExam.id ? finalUpdatedExam : ex))
+        const curSeriesId = extractSeriesId(editingExam.result_note)
+        if (curSeriesId) {
+          try {
+            await supabase
+              .from("exams")
+              .update({ title: finalTitle })
+              .ilike("result_note", `%[SERIES_ID:${curSeriesId}]%`)
+          } catch (syncErr) {
+            console.warn("Failed to sync series title to other weeks in series:", syncErr)
+          }
+        }
+
+        setExams(prev => prev.map(ex => {
+          if (ex.id === editingExam.id) return finalUpdatedExam
+          if (curSeriesId && ex.result_note?.includes(`[SERIES_ID:${curSeriesId}]`)) {
+            return { ...ex, title: finalTitle }
+          }
+          return ex
+        }))
         toast.success(`✓ "${finalTitle}" updated successfully! (পরীক্ষা আপডেট সম্পন্ন হয়েছে)`)
         setShowModal(false)
         resetForm()
@@ -2151,9 +2187,9 @@ export default function ExamsClient({
                               </span>
                               <button
                                 type="button"
-                                onClick={() => handleOpenEdit(group.latestExam)}
+                                onClick={() => handleOpenEdit(group.firstExam)}
                                 className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-indigo-200"
-                                title="Edit Latest Week Exam (সপ্তাহ সম্পাদনা)"
+                                title="Edit Exam Series (সিরিজ সম্পাদনা)"
                               >
                                 <Edit2 className="w-3.5 h-3.5 text-indigo-600" />
                               </button>

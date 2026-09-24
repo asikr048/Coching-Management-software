@@ -1139,11 +1139,15 @@ export default function ExamResultsPage() {
     return maxW + 1
   }, [fullSeriesSlots])
 
-  // The series name = the title given at exam creation (stored on W1).
-  // We search for weekNum===1 specifically, not just index 0, so it's correct
-  // even before async weeklySeriesExams has fully loaded.
+  // The series name = the title given at exam creation or updated during edit.
+  // We search for the latest custom title across the series (ignoring generic labels like WEEKLY-01),
+  // falling back to W1's title or the current exam's title.
   const seriesName = useMemo(() => {
     if (!isWeeklyExam || !exam) return undefined
+    const customSlot = [...fullSeriesSlots].reverse().find(
+      (s) => s.exam?.title && !/^weekly-?\d+$/i.test(s.exam.title.trim()) && !/^সাপ্তাহিক-?\d+$/i.test(s.exam.title.trim())
+    )
+    if (customSlot?.exam?.title) return customSlot.exam.title
     const w1 = fullSeriesSlots.find((s) => s.weekNum === 1)
     return w1?.exam?.title || exam.title || undefined
   }, [isWeeklyExam, fullSeriesSlots, exam])
@@ -3009,10 +3013,26 @@ export default function ExamResultsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to update title")
 
-      setExam((prev: any) => (prev ? { ...prev, title: editedTitle.trim() } : prev))
+      const newTitle = editedTitle.trim()
+      setExam((prev: any) => (prev ? { ...prev, title: newTitle } : prev))
       setWeeklySeriesExams((prev: any[]) =>
-        prev.map((w: any) => (w.id === exam.id ? { ...w, title: editedTitle.trim() } : w))
+        prev.map((w: any) => ({ ...w, title: newTitle }))
       )
+
+      if (isWeeklyExam) {
+        const seriesId = extractSeriesId(exam.result_note)
+        if (seriesId) {
+          try {
+            await supabase
+              .from("exams")
+              .update({ title: newTitle })
+              .ilike("result_note", `%[SERIES_ID:${seriesId}]%`)
+          } catch (syncErr) {
+            console.warn("Failed to sync series title:", syncErr)
+          }
+        }
+      }
+
       setIsEditingTitle(false)
       toast.success("পরীক্ষার নাম সফলভাবে আপডেট করা হয়েছে")
     } catch (err: any) {
