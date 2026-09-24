@@ -11,6 +11,7 @@ import {
 import Link from "next/link"
 import type { Branch } from "@/lib/supabase/types"
 import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
+import { useBranding } from "@/components/providers/BrandingContext"
 
 const ALL_WEEK_DAYS = [
   { id: "saturday", bn: "শনিবার", en: "Saturday" },
@@ -118,15 +119,26 @@ export default function HomePage() {
   const [activeBlogModal, setActiveBlogModal] = useState<any | null>(null)
   const [allNoticesModal, setAllNoticesModal] = useState(false)
 
-  // Institutional Site Settings
-  const [contactLink, setContactLink] = useState("https://wa.me/8801302201431")
+  // Institutional Branding & Site Settings
+  const { branding, theme: activeBrandingTheme } = useBranding()
+
+  const [contactLink, setContactLink] = useState(branding.whatsappLink || "https://wa.me/8801700000000")
   const [contactLabel, setContactLabel] = useState("WhatsApp Us")
-  const [contactPhone, setContactPhone] = useState("01302201431")
-  const [contactEmail, setContactEmail] = useState("info@medhashiree.com")
-  const [contactAddress, setContactAddress] = useState("নাচোল, চাঁপাইনবাবগঞ্জ")
+  const [contactPhone, setContactPhone] = useState(branding.phone || "+880 1700-000000")
+  const [contactEmail, setContactEmail] = useState(branding.email || "contact@miisacademy.com")
+  const [contactAddress, setContactAddress] = useState(branding.address || "Rangpur / Dhaka, Bangladesh")
   const [footerAbout, setFooterAbout] = useState(
-    "মেধাশিরী কোচিং সেন্টার - উত্তরবঙ্গের শীর্ষস্থানীয় শিক্ষাপ্রতিষ্ঠান। অভিজ্ঞ শিক্ষক ও মানসম্মত পাঠদানের মাধ্যমে প্রতিটি শিক্ষার্থীর উজ্জ্বল ভবিষ্যৎ নিশ্চিত করাই আমাদের লক্ষ্য।"
+    branding.footerAbout ||
+    "মানসম্মত পাঠদান ও অভিজ্ঞ শিক্ষকমণ্ডলীর নির্দেশনায় প্রতিটি শিক্ষার্থীর সাফল্য নিশ্চিত করাই আমাদের লক্ষ্য।"
   )
+
+  useEffect(() => {
+    if (branding.phone) setContactPhone(branding.phone)
+    if (branding.email) setContactEmail(branding.email)
+    if (branding.address) setContactAddress(branding.address)
+    if (branding.whatsappLink) setContactLink(branding.whatsappLink)
+    if (branding.footerAbout) setFooterAbout(branding.footerAbout)
+  }, [branding])
 
   // Feedback form state
   const [fbName, setFbName] = useState("")
@@ -142,11 +154,11 @@ export default function HomePage() {
     ? null
     : branches.find(b => b.id === selectedBranchId) || null
 
-  // Dynamic Contact information based on branch
-  const displayPhone = currentBranch?.contact_info?.phone || currentBranch?.director_phone || currentBranch?.manager_phone || contactPhone
-  const displayEmail = currentBranch?.contact_info?.email || contactEmail
-  const displayAddress = currentBranch?.location || contactAddress
-  const displayEstablishedYear = currentBranch?.established_year || "২০০৮"
+  // Dynamic Contact information based on branch and active branding
+  const displayPhone = currentBranch?.contact_info?.phone || currentBranch?.director_phone || currentBranch?.manager_phone || branding.phone || contactPhone
+  const displayEmail = currentBranch?.contact_info?.email || branding.email || contactEmail
+  const displayAddress = currentBranch?.location || branding.address || contactAddress
+  const displayEstablishedYear = currentBranch?.established_year || branding.establishedYear || "2024"
 
   useEffect(() => {
     const supabase = createClient()
