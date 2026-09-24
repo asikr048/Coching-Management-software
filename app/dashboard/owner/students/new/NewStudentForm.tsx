@@ -8,7 +8,8 @@ import {
   Loader2, UserPlus, BookOpen, CreditCard, Check, Lock, Search, ShieldAlert, 
   AlertCircle, Printer, Download, RefreshCw, Landmark, DoorOpen, History, 
   Calendar, Filter, Eye, Phone, Mail, UserCheck, ArrowRight, FileText, 
-  CheckCircle2, Clock, DollarSign, ChevronRight, ExternalLink, X, Contact, Sparkles
+  CheckCircle2, Clock, DollarSign, ChevronRight, ExternalLink, X, Contact, Sparkles,
+  Handshake, Smartphone, Split, Tag, Wallet
 } from "lucide-react"
 import { formatCurrency, formatDate, formatDateTime, parseRollQuery, isRollMatch, generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
@@ -65,6 +66,10 @@ interface EnrollmentReceipt {
   date: string
   total_fee: number
   paid_amount: number
+  cash_amount?: number
+  referral_amount?: number
+  referral_person?: string
+  referral_reason?: string
   due_amount: number
   due_date?: string
   payment_method: string
@@ -144,6 +149,17 @@ export default function NewStudentForm({
   const [batchRoll, setBatchRoll] = useState<string>("")
   const [paidAmount, setPaidAmount] = useState("")
   const [dueDate, setDueDate] = useState(() => { const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10); return d.toISOString().split("T")[0] })
+  
+  // Payment methods & referral payment states
+  type PaymentMode = "cash" | "referral" | "split" | "digital"
+  const [paymentMode, setPaymentMode] = useState<PaymentMode>("cash")
+  const [digitalMethod, setDigitalMethod] = useState<"bkash" | "nagad" | "rocket" | "bank">("bkash")
+  const [digitalTrxId, setDigitalTrxId] = useState("")
+  const [cashAmount, setCashAmount] = useState<string>("")
+  const [referralAmount, setReferralAmount] = useState<string>("")
+  const [referralPerson, setReferralPerson] = useState<string>("")
+  const [referralReason, setReferralReason] = useState<string>("")
+  const [paymentNotes, setPaymentNotes] = useState<string>("")
   
   const [enrolledBatchIds, setEnrolledBatchIds] = useState<string[]>([])
   const [allBatches, setAllBatches] = useState<Batch[]>(batches || [])
@@ -513,6 +529,14 @@ export default function NewStudentForm({
     setEnrolledBatchIds([])
     setSearchQuery("")
     setPaidAmount("")
+    setCashAmount("")
+    setReferralAmount("")
+    setReferralPerson("")
+    setReferralReason("")
+    setPaymentNotes("")
+    setDigitalTrxId("")
+    setPaymentMode("cash")
+    setDigitalMethod("bkash")
     setBatchRoll("")
     setMode("new")
     const d = new Date(); d.setMonth(d.getMonth() + 1); d.setDate(10)
@@ -584,15 +608,32 @@ export default function NewStudentForm({
           b.status !== "finished"
         )
         setForm(f => ({ ...f, batch_id: firstOpen ? firstOpen.id : "" }))
-        if (!firstOpen) setPaidAmount("")
+        if (!firstOpen) {
+          setPaidAmount("")
+          setCashAmount("")
+          setReferralAmount("")
+        }
       }
     }
   }, [branchFilteredBatches, form.batch_id, enrolledBatchIds])
 
   const batch = allBatches.find(b => b.id === form.batch_id)
-  const total = batch ? batch.monthly_fee + batch.admission_fee : 0
-  const paid = parseFloat(paidAmount) || 0
-  const due = Math.max(0, total - paid)
+  const total = batch ? (Number(batch.monthly_fee) || 0) + (Number(batch.admission_fee) || 0) : 0
+
+  // Derived effective cash & referral amounts based on paymentMode
+  const effectiveCash = useMemo(() => {
+    if (paymentMode === "referral") return 0
+    return parseFloat(cashAmount) || 0
+  }, [paymentMode, cashAmount])
+
+  const effectiveReferral = useMemo(() => {
+    if (paymentMode === "cash" || paymentMode === "digital") return 0
+    return parseFloat(referralAmount) || 0
+  }, [paymentMode, referralAmount])
+
+  const totalSettled = effectiveCash + effectiveReferral
+  const paid = totalSettled
+  const due = Math.max(0, total - totalSettled)
 
   // Check what info is missing on existing student
   const missingFields = useMemo(() => {
@@ -611,7 +652,8 @@ export default function NewStudentForm({
       ? enr.student
       : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
     const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
-    const matchingPayment = paymentsList.find(p => 
+    const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
+    const matchingPayments = paymentsList.filter(p => 
       (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
       (p.batch_id === enr.batch_id || !p.batch_id)
     )
@@ -620,15 +662,41 @@ export default function NewStudentForm({
       (d.batch_id === enr.batch_id || !d.batch_id)
     )
 
-    const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
-    const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+    const totalFee = (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0) || matchingPayments[0]?.amount || 0
+    
+    // Sum cash/digital vs referral payments
+    const refPayment = matchingPayments.find(p => p.payment_method === "referral" || p.notes?.includes("Referral:"))
+    const cashPayments = matchingPayments.filter(p => p.payment_method !== "referral" && (!p.notes || !p.notes.includes("Referral:")))
+    
+    const cashAmt = cashPayments.reduce((acc, p) => acc + (parseFloat(p.total_paid) || parseFloat(p.amount) || 0), 0)
+    const refAmt = refPayment ? (parseFloat(refPayment.total_paid) || parseFloat(refPayment.amount) || 0) : 0
+    const paidAmt = matchingPayments.length > 0 ? (cashAmt + refAmt) : (matchingDue?.paid_amount || 0)
     const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
+
+    let methodStr = "Cash / Counter"
+    if (cashAmt > 0 && refAmt > 0) {
+      methodStr = `Cash (৳${cashAmt}) + Referral (৳${refAmt})`
+    } else if (refAmt > 0) {
+      methodStr = "Referral Credit"
+    } else if (matchingPayments[0]?.payment_method) {
+      methodStr = matchingPayments[0].payment_method.toUpperCase()
+    }
+
+    let refPerson: string | undefined
+    let refReason: string | undefined
+    if (refPayment?.notes) {
+      const match = refPayment.notes.match(/Referral:\s*([^|]+)(?:\s*\|\s*Reason:\s*([^|]+))?/i)
+      if (match) {
+        refPerson = match[1]?.trim()
+        refReason = match[2]?.trim()
+      }
+    }
 
     const dateStr = enr.created_at
       ? new Date(enr.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
       : new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
 
-    const receiptNo = matchingPayment?.receipt_number || `RCP-${new Date(enr.created_at || Date.now()).getFullYear()}-${(enr.id || '').replace(/-/g, '').slice(-6).toUpperCase()}`
+    const receiptNo = matchingPayments[0]?.receipt_number || `RCP-${new Date(enr.created_at || Date.now()).getFullYear()}-${(enr.id || '').replace(/-/g, '').slice(-6).toUpperCase()}`
 
     const dispStudentId = student.student_id || student.id || "N/A"
     const rollVal = enr.roll_no != null ? String(enr.roll_no) : (student.roll_no != null ? String(student.roll_no) : "01")
@@ -650,13 +718,18 @@ export default function NewStudentForm({
       guardian_phone: student.guardian_phone,
       batch_name: b.name || "Enrolled Batch",
       batch_roll: rollVal,
+      branch_name: branchObj?.name,
       subject: b.subject || b.class_level || "General",
       date: dateStr,
       total_fee: totalFee,
       paid_amount: paidAmt,
+      cash_amount: cashAmt > 0 ? cashAmt : undefined,
+      referral_amount: refAmt > 0 ? refAmt : undefined,
+      referral_person: refPerson,
+      referral_reason: refReason,
       due_amount: dueAmt,
       due_date: matchingDue?.due_date || undefined,
-      payment_method: matchingPayment?.payment_method?.toUpperCase() || "Cash / Counter",
+      payment_method: methodStr,
       qr_data: qrData,
       qr_code: effectiveCode,
     }
@@ -720,7 +793,7 @@ export default function NewStudentForm({
       }
 
       if (historyStatusFilter !== "all") {
-        const matchingPayment = paymentsList.find(p => 
+        const matchingPayments = paymentsList.filter(p => 
           (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
           (p.batch_id === enr.batch_id || !p.batch_id)
         )
@@ -728,8 +801,9 @@ export default function NewStudentForm({
           (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
           (d.batch_id === enr.batch_id || !d.batch_id)
         )
-        const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
-        const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+        const totalFee = (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0) || matchingPayments[0]?.amount || 0
+        const totalPaymentsSum = matchingPayments.reduce((acc, p) => acc + (parseFloat(p.total_paid) || parseFloat(p.amount) || 0), 0)
+        const paidAmt = matchingPayments.length > 0 ? totalPaymentsSum : (matchingDue?.paid_amount || 0)
         const isPaidFull = totalFee > 0 ? (paidAmt >= totalFee) : true
 
         if (historyStatusFilter === "paid" && !isPaidFull) return false
@@ -751,7 +825,7 @@ export default function NewStudentForm({
         ? enr.student
         : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
       const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
-      const matchingPayment = paymentsList.find(p => 
+      const matchingPayments = paymentsList.filter(p => 
         (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
         (p.batch_id === enr.batch_id || !p.batch_id)
       )
@@ -759,8 +833,9 @@ export default function NewStudentForm({
         (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
         (d.batch_id === enr.batch_id || !d.batch_id)
       )
-      const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
-      const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+      const totalFee = (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0) || matchingPayments[0]?.amount || 0
+      const totalPaymentsSum = matchingPayments.reduce((acc, p) => acc + (parseFloat(p.total_paid) || parseFloat(p.amount) || 0), 0)
+      const paidAmt = matchingPayments.length > 0 ? totalPaymentsSum : (matchingDue?.paid_amount || 0)
       const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
 
       totalPaid += paidAmt
@@ -785,6 +860,18 @@ export default function NewStudentForm({
       toast.error("অনুগ্রহ করে একটি আসন ফাঁকা থাকা ব্যাচ নির্বাচন করুন (Please select a batch with open seats)")
       return 
     }
+
+    if (effectiveReferral > 0) {
+      if (!referralPerson.trim()) {
+        toast.error("অনুগ্রহ করে রেফারেল প্রদানকারীর নাম বা স্টুডেন্ট আইডি লিখুন (Please enter Referral Person Name or Student ID)")
+        return
+      }
+      if (!referralReason.trim()) {
+        toast.error("অনুগ্রহ করে রেফারেল প্রদানের কারণ লিখুন (Please enter Referral Reason)")
+        return
+      }
+    }
+
     setLoading(true)
     try {
       // 1. Strict Seat Capacity & Admission Status Verification
@@ -1101,63 +1188,120 @@ export default function NewStudentForm({
         }
       }
 
-      // Record payment
-      let receiptNum = `RCP-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`
-      if (paid > 0) {
-        const { data: pData } = await supabase.from("payments").insert({
+      // Record payment(s)
+      const now = new Date()
+      const paymentMonth = now.toISOString().slice(0, 7)
+      let primaryReceiptNum = `RCP-${now.getFullYear()}-${Date.now().toString().slice(-6)}`
+      let refReceiptNum = `RCP-${now.getFullYear()}-${(Date.now() + 1).toString().slice(-6)}`
+      const newPaymentsToRecord: any[] = []
+
+      // 1. Record Cash / Digital payment if effectiveCash > 0
+      if (effectiveCash > 0) {
+        const cashMethod = paymentMode === "digital" ? digitalMethod : "cash"
+        const { data: pData, error: pErr } = await supabase.from("payments").insert({
           student_id: sid,
           batch_id: form.batch_id,
-          amount: total,
-          total_paid: paid,
-          payment_method: "cash",
+          amount: effectiveCash,
+          total_paid: effectiveCash,
+          payment_method: cashMethod,
           payment_for: "admission",
-          payment_month: new Date().toISOString().slice(0, 7)
+          payment_month: paymentMonth,
+          receipt_number: primaryReceiptNum,
+          transaction_id: paymentMode === "digital" && digitalTrxId.trim() ? digitalTrxId.trim() : null,
+          notes: paymentMode === "split" ? `Split payment: Cash ৳${effectiveCash} (with Referral ৳${effectiveReferral})` : (paymentNotes.trim() || null)
         }).select().maybeSingle()
+
+        if (pErr) console.warn("Error inserting cash payment:", pErr)
         if (pData?.receipt_number) {
-          receiptNum = pData.receipt_number
+          primaryReceiptNum = pData.receipt_number
+        }
+        newPaymentsToRecord.push({
+          id: pData?.id || `pay-cash-${Date.now()}`,
+          student_id: sid,
+          batch_id: form.batch_id,
+          amount: effectiveCash,
+          total_paid: effectiveCash,
+          payment_method: cashMethod,
+          payment_for: "admission",
+          payment_month: paymentMonth,
+          receipt_number: primaryReceiptNum,
+          transaction_id: paymentMode === "digital" && digitalTrxId.trim() ? digitalTrxId.trim() : null,
+          notes: paymentMode === "split" ? `Split payment: Cash ৳${effectiveCash} (with Referral ৳${effectiveReferral})` : (paymentNotes.trim() || null),
+          created_at: new Date().toISOString(),
+        })
+      }
+
+      // 2. Record Referral payment if effectiveReferral > 0
+      if (effectiveReferral > 0) {
+        const refNotes = `Referral: ${referralPerson.trim()} | Reason: ${referralReason.trim()}${paymentNotes.trim() ? ` | ${paymentNotes.trim()}` : ""}`
+        const refTrxId = `REF-${Date.now().toString().slice(-6)}`
+
+        const { data: refData, error: refErr } = await supabase.from("payments").insert({
+          student_id: sid,
+          batch_id: form.batch_id,
+          amount: effectiveReferral,
+          total_paid: effectiveReferral,
+          payment_method: "referral",
+          payment_for: "admission",
+          payment_month: paymentMonth,
+          receipt_number: refReceiptNum,
+          transaction_id: refTrxId,
+          notes: refNotes
+        }).select().maybeSingle()
+
+        if (refErr) console.warn("Error inserting referral payment:", refErr)
+        if (effectiveCash === 0 && refData?.receipt_number) {
+          primaryReceiptNum = refData.receipt_number
+        }
+        newPaymentsToRecord.push({
+          id: refData?.id || `pay-ref-${Date.now()}`,
+          student_id: sid,
+          batch_id: form.batch_id,
+          amount: effectiveReferral,
+          total_paid: effectiveReferral,
+          payment_method: "referral",
+          payment_for: "admission",
+          payment_month: paymentMonth,
+          receipt_number: refData?.receipt_number || refReceiptNum,
+          transaction_id: refTrxId,
+          notes: refNotes,
+          created_at: new Date().toISOString(),
+        })
+      }
+
+      // 3. Record Fee Dues (accurately reflecting full program fee & total settled amount)
+      const dueMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`
+      const { data: existingDue } = await supabase
+        .from("fee_dues")
+        .select("id, due_amount, paid_amount")
+        .eq("student_id", sid)
+        .eq("batch_id", form.batch_id)
+        .eq("due_month", dueMonth)
+        .maybeSingle()
+
+      if (existingDue) {
+        await supabase.from("fee_dues").update({
+          due_amount: Math.max(existingDue.due_amount, total),
+          paid_amount: existingDue.paid_amount + totalSettled,
+          due_date: dueDate,
+          status: (existingDue.paid_amount + totalSettled) >= total ? "paid" : "partial"
+        }).eq("id", existingDue.id)
+      } else {
+        const { error: dueErr } = await supabase.from("fee_dues").insert({
+          student_id: sid,
+          batch_id: form.batch_id,
+          due_month: dueMonth,
+          due_amount: total,
+          paid_amount: totalSettled,
+          due_date: dueDate,
+          status: totalSettled >= total ? "paid" : (totalSettled > 0 ? "partial" : "pending")
+        })
+        if (dueErr && !dueErr.message.includes("duplicate") && dueErr.code !== "23505") {
+          console.warn("Could not insert fee due:", dueErr)
         }
       }
 
-      // Record dues (safely upsert or ignore if already existing for this month)
-      if (due > 0) {
-        const n = new Date()
-        const dueMonth = `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}`
-        
-        // Check if a fee_due already exists for this student, batch, and month
-        const { data: existingDue } = await supabase
-          .from("fee_dues")
-          .select("id, due_amount, paid_amount")
-          .eq("student_id", sid)
-          .eq("batch_id", form.batch_id)
-          .eq("due_month", dueMonth)
-          .maybeSingle()
-
-        if (existingDue) {
-          // Update existing due
-          await supabase.from("fee_dues").update({
-            due_amount: Math.max(existingDue.due_amount, total),
-            paid_amount: existingDue.paid_amount + paid,
-            due_date: dueDate,
-            status: (existingDue.paid_amount + paid) >= total ? "paid" : "partial"
-          }).eq("id", existingDue.id)
-        } else {
-          // Insert new due
-          const { error: dueErr } = await supabase.from("fee_dues").insert({
-            student_id: sid,
-            batch_id: form.batch_id,
-            due_month: dueMonth,
-            due_amount: total,
-            paid_amount: paid,
-            due_date: dueDate,
-            status: paid > 0 ? "partial" : "pending"
-          })
-          if (dueErr && !dueErr.message.includes("duplicate") && dueErr.code !== "23505") {
-            console.warn("Could not insert fee due:", dueErr)
-          }
-        }
-      }
-
-      // Referral handling
+      // Referral commission tracking
       if (form.referred_by_code.trim()) {
         const refText = form.referred_by_code.trim()
         const { data: r } = await supabase
@@ -1185,11 +1329,21 @@ export default function NewStudentForm({
 
       toast.success(`Enrolled successfully! ID: ${dispId}`)
 
+      // Method description for receipt
+      let methodDescription = "Cash / Counter"
+      if (paymentMode === "split") {
+        methodDescription = `Cash (৳${effectiveCash}) + Referral (৳${effectiveReferral})`
+      } else if (paymentMode === "referral") {
+        methodDescription = `Referral Credit (${referralPerson.trim() || "Approved"})`
+      } else if (paymentMode === "digital") {
+        methodDescription = `${digitalMethod.toUpperCase()}${digitalTrxId ? ` (Trx: ${digitalTrxId})` : ""}`
+      }
+
       // Display receipt modal with print & save options, staying on this page
       const branchName = selectedBranchId ? branches.find(b => b.id === selectedBranchId)?.name : (batch?.branch_id ? branches.find(b => b.id === batch.branch_id)?.name : undefined)
       const qrData = getStudentVerificationUrl(enrQrCode)
       setReceipt({
-        receipt_number: receiptNum,
+        receipt_number: primaryReceiptNum,
         student_name: studentName,
         student_id: dispId,
         password: recordedPassword || undefined,
@@ -1203,10 +1357,14 @@ export default function NewStudentForm({
         subject: batch?.subject || batch?.class_level || "General",
         date: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
         total_fee: total,
-        paid_amount: paid,
+        paid_amount: totalSettled,
+        cash_amount: effectiveCash > 0 ? effectiveCash : undefined,
+        referral_amount: effectiveReferral > 0 ? effectiveReferral : undefined,
+        referral_person: referralPerson.trim() || undefined,
+        referral_reason: referralReason.trim() || undefined,
         due_amount: due,
         due_date: due > 0 ? dueDate : undefined,
-        payment_method: "Cash / Counter",
+        payment_method: methodDescription,
         qr_data: qrData,
         qr_code: enrQrCode,
       })
@@ -1240,31 +1398,19 @@ export default function NewStudentForm({
       setEnrollmentsList(prev => [newEnrItem, ...prev])
       setBatchRoll(String((enrollPayload.roll_no || finalRoll || 1) + 1))
 
-      if (paid > 0) {
-        setPaymentsList(prev => [{
-          id: `pay-${Date.now()}`,
-          student_id: sid,
-          batch_id: form.batch_id,
-          amount: total,
-          total_paid: paid,
-          payment_method: "cash",
-          payment_for: "admission",
-          receipt_number: receiptNum,
-          created_at: new Date().toISOString(),
-        }, ...prev])
+      if (newPaymentsToRecord.length > 0) {
+        setPaymentsList(prev => [...newPaymentsToRecord, ...prev])
       }
 
-      if (due > 0) {
-        setDuesList(prev => [{
-          id: `due-${Date.now()}`,
-          student_id: sid,
-          batch_id: form.batch_id,
-          due_amount: total,
-          paid_amount: paid,
-          due_date: dueDate,
-          status: paid > 0 ? "partial" : "pending",
-        }, ...prev])
-      }
+      setDuesList(prev => [{
+        id: `due-${Date.now()}`,
+        student_id: sid,
+        batch_id: form.batch_id,
+        due_amount: total,
+        paid_amount: totalSettled,
+        due_date: dueDate,
+        status: totalSettled >= total ? "paid" : (totalSettled > 0 ? "partial" : "pending"),
+      }, ...prev])
 
     } catch (err: any) {
       toast.error(err?.message || "Failed")
@@ -1385,7 +1531,15 @@ export default function NewStudentForm({
       <div class="section-title">Payment Breakdown</div>
       <div class="summary-box">
         <div class="row"><span class="label">Total Fee:</span><span class="value">৳${target.total_fee.toLocaleString("en-BD")}</span></div>
-        <div class="row"><span class="label">Paid Amount:</span><span class="value paid-text">৳${target.paid_amount.toLocaleString("en-BD")}</span></div>
+        <div class="row"><span class="label">Payment Method:</span><span class="value" style="font-size: 12px; color: #4338ca;">${target.payment_method}</span></div>
+        ${target.cash_amount != null && target.referral_amount != null && target.cash_amount > 0 && target.referral_amount > 0 ? `
+          <div class="row" style="font-size: 12px; padding-left: 8px;"><span class="label">↳ Cash Received:</span><span class="value paid-text">৳${target.cash_amount.toLocaleString("en-BD")}</span></div>
+          <div class="row" style="font-size: 12px; padding-left: 8px;"><span class="label">↳ Referral Credit:</span><span class="value" style="color: #4f46e5;">৳${target.referral_amount.toLocaleString("en-BD")}${target.referral_person ? ` (${target.referral_person})` : ''}</span></div>
+        ` : ''}
+        ${target.referral_amount != null && target.referral_amount > 0 && (!target.cash_amount || target.cash_amount === 0) ? `
+          <div class="row"><span class="label">Referral Credit:</span><span class="value" style="color: #4f46e5;">৳${target.referral_amount.toLocaleString("en-BD")}${target.referral_person ? ` (${target.referral_person})` : ''}</span></div>
+        ` : ''}
+        <div class="row"><span class="label">Total Settled:</span><span class="value paid-text">৳${target.paid_amount.toLocaleString("en-BD")}</span></div>
         <div class="total-row"><span class="label">Due Amount:</span><span class="value ${target.due_amount > 0 ? 'due-text' : 'paid-text'}">৳${target.due_amount.toLocaleString("en-BD")}</span></div>
         ${target.due_date ? `<div class="row"><span class="label">Due Date:</span><span class="value due-text">${target.due_date}</span></div>` : ''}
         <div class="row" style="margin-top: 5px; font-size: 11px; color: #64748b;"><span class="label">Receipt Ref:</span><span>${target.receipt_number}</span></div>
@@ -1464,20 +1618,40 @@ export default function NewStudentForm({
       y += 6
 
       doc.setFillColor(248, 250, 252)
-      doc.roundedRect(10, y, 85, 22, 2, 2, "F")
-      doc.text("Total Fee: ৳" + target.total_fee.toLocaleString("en-BD"), 13, y + 6)
-      doc.setTextColor(22, 163, 74)
-      doc.text("Paid: ৳" + target.paid_amount.toLocaleString("en-BD"), 13, y + 11)
-      doc.setTextColor(target.due_amount > 0 ? 220 : 22, target.due_amount > 0 ? 38 : 163, target.due_amount > 0 ? 38 : 74)
-      doc.setFont("helvetica", "bold")
-      doc.text("Due: ৳" + target.due_amount.toLocaleString("en-BD"), 13, y + 17)
-      if (target.due_date) {
-        doc.setFontSize(7)
-        doc.setTextColor(180, 83, 9)
-        doc.text("Due Date: " + target.due_date, 55, y + 17)
+      const hasSplit = Boolean(target.cash_amount && target.referral_amount)
+      const boxHeight = hasSplit ? 28 : 22
+      doc.roundedRect(10, y, 85, boxHeight, 2, 2, "F")
+      doc.text("Total Fee: ৳" + target.total_fee.toLocaleString("en-BD"), 13, y + 5)
+      
+      if (hasSplit) {
+        doc.setFontSize(7.5)
+        doc.setTextColor(22, 163, 74)
+        doc.text("Cash: ৳" + target.cash_amount!.toLocaleString("en-BD") + "  |  Ref: ৳" + target.referral_amount!.toLocaleString("en-BD"), 13, y + 10)
+        doc.setFontSize(9)
+        doc.text("Settled: ৳" + target.paid_amount.toLocaleString("en-BD"), 13, y + 16)
+        doc.setTextColor(target.due_amount > 0 ? 220 : 22, target.due_amount > 0 ? 38 : 163, target.due_amount > 0 ? 38 : 74)
+        doc.setFont("helvetica", "bold")
+        doc.text("Due: ৳" + target.due_amount.toLocaleString("en-BD"), 13, y + 22)
+        if (target.due_date) {
+          doc.setFontSize(7)
+          doc.setTextColor(180, 83, 9)
+          doc.text("Due Date: " + target.due_date, 55, y + 22)
+        }
+        y += boxHeight + 4
+      } else {
+        doc.setTextColor(22, 163, 74)
+        const paidLabel = target.referral_amount ? "Referral: ৳" : "Paid: ৳"
+        doc.text(paidLabel + target.paid_amount.toLocaleString("en-BD"), 13, y + 11)
+        doc.setTextColor(target.due_amount > 0 ? 220 : 22, target.due_amount > 0 ? 38 : 163, target.due_amount > 0 ? 38 : 74)
+        doc.setFont("helvetica", "bold")
+        doc.text("Due: ৳" + target.due_amount.toLocaleString("en-BD"), 13, y + 17)
+        if (target.due_date) {
+          doc.setFontSize(7)
+          doc.setTextColor(180, 83, 9)
+          doc.text("Due Date: " + target.due_date, 55, y + 17)
+        }
+        y += 26
       }
-
-      y += 26
       // Add QR code image
       const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(target.qr_data)}`
       const img = new Image()
@@ -1907,16 +2081,31 @@ export default function NewStudentForm({
           )}
         </div>
 
-        {/* Payment */}
+        {/* Payment & Admission Fee */}
         {batch && (mode === "new" || selectedStudent) && (
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5">
-            <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs mb-4 p-3 bg-slate-50 rounded-xl border border-slate-200/80">
-              <CreditCard className="w-4 h-4 text-amber-600 flex-shrink-0" />
-              <span className="text-slate-600">Monthly Fee: <b className="text-slate-900">{formatCurrency(batch.monthly_fee)}</b></span>
-              <span className="text-slate-600">Admission Fee: <b className="text-slate-900">{formatCurrency(batch.admission_fee)}</b></span>
-              <span className="sm:ml-auto text-amber-700 font-black text-sm w-full sm:w-auto text-right">Total Payable: {formatCurrency(total)}</span>
+          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5 space-y-4">
+            {/* Top Fee Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200/80">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-black text-slate-900 uppercase tracking-wider">ফি নির্ধারণ ও পেমেন্ট পদ্ধতি</h4>
+                  <div className="flex items-center gap-3 text-xs text-slate-600 mt-0.5">
+                    <span>মাসিক ফি: <b className="text-slate-900 font-bold">{formatCurrency(batch.monthly_fee)}</b></span>
+                    <span>• ভর্তি ফি: <b className="text-slate-900 font-bold">{formatCurrency(batch.admission_fee)}</b></span>
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-[11px] font-bold text-amber-800 uppercase block">Total Payable (মোট প্রদেয়)</span>
+                <span className="text-base font-black text-amber-950 font-mono">{formatCurrency(total)}</span>
+              </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+
+            {/* Row: Batch Roll & Due Date */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className={labelCls}>Batch Roll (রোল নং) *</label>
@@ -1943,9 +2132,473 @@ export default function NewStudentForm({
                   পূর্ববর্তী সর্বোচ্চ রোলের পরবর্তী নম্বরটি স্বয়ংক্রিয়ভাবে নির্ধারিত।
                 </p>
               </div>
-              <div><label className={labelCls}>Paid Amount (৳) *</label><input type="number" value={paidAmount} onChange={e => setPaidAmount(e.target.value)} className={`${ic} font-bold text-slate-900`} placeholder="0" min="0" /></div>
-              <div><label className={labelCls}>Remaining Due</label><div className={`px-3.5 py-2.5 rounded-xl text-sm font-black text-center ${due > 0 ? "bg-rose-50 text-rose-700 border border-rose-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"}`}>{formatCurrency(due)}</div></div>
-              <div><label className={labelCls}>Due Date</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className={ic} /></div>
+
+              <div>
+                <label className={labelCls}>Due Date (বকেয়া পরিশোধের তারিখ)</label>
+                <input 
+                  type="date" 
+                  value={dueDate} 
+                  onChange={e => setDueDate(e.target.value)} 
+                  className={ic} 
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  বকেয়া থাকলে এই তারিখটি রসিদ ও একাউন্ট্যান্টের তালিকায় প্রদর্শিত হবে।
+                </p>
+              </div>
+            </div>
+
+            {/* Payment Method / Mode Selector */}
+            <div className="pt-2 border-t border-slate-100">
+              <label className="block text-xs font-black text-slate-800 mb-2">
+                পেমেন্ট মাধ্যম নির্বাচন করুন (Select Payment Method) *
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {/* Cash option */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMode("cash")
+                    if (!cashAmount && total > 0) setCashAmount(String(total))
+                    setReferralAmount("")
+                  }}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    paymentMode === "cash"
+                      ? "border-emerald-500 bg-emerald-50/80 text-emerald-950 ring-2 ring-emerald-500/20 shadow-xs"
+                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-base">💵</span>
+                    {paymentMode === "cash" && <Check className="w-3.5 h-3.5 text-emerald-600 font-bold" />}
+                  </div>
+                  <div className="mt-2">
+                    <p className="text-xs font-black">Cash (নগদ)</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">কাউন্টারে সরাসরি নগদ গ্রহণ</p>
+                  </div>
+                </button>
+
+                {/* Referral option */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMode("referral")
+                    if (!referralAmount && total > 0) setReferralAmount(String(total))
+                    setCashAmount("")
+                  }}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    paymentMode === "referral"
+                      ? "border-indigo-500 bg-indigo-50/80 text-indigo-950 ring-2 ring-indigo-500/20 shadow-xs"
+                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-base">🤝</span>
+                    {paymentMode === "referral" && <Check className="w-3.5 h-3.5 text-indigo-600 font-bold" />}
+                  </div>
+                  <div className="mt-2">
+                    <p className="text-xs font-black">Referral (রেফারেল)</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">রেফারেল ক্রেডিট বা বিশেষ ছাড়</p>
+                  </div>
+                </button>
+
+                {/* Split Cash + Referral */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMode("split")
+                    if (!cashAmount && !referralAmount && total > 0) {
+                      const half = Math.round(total / 2)
+                      setCashAmount(String(half))
+                      setReferralAmount(String(total - half))
+                    }
+                  }}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    paymentMode === "split"
+                      ? "border-amber-500 bg-amber-50/80 text-amber-950 ring-2 ring-amber-500/20 shadow-xs"
+                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-base">⚖️</span>
+                    {paymentMode === "split" && <Check className="w-3.5 h-3.5 text-amber-600 font-bold" />}
+                  </div>
+                  <div className="mt-2">
+                    <p className="text-xs font-black">Cash + Refer (সমন্বয়)</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">কিছু নগদ + বাকি রেফারেল</p>
+                  </div>
+                </button>
+
+                {/* Digital / Online option */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMode("digital")
+                    if (!cashAmount && total > 0) setCashAmount(String(total))
+                    setReferralAmount("")
+                  }}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    paymentMode === "digital"
+                      ? "border-violet-500 bg-violet-50/80 text-violet-950 ring-2 ring-violet-500/20 shadow-xs"
+                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-100/60 text-slate-700"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-base">📱</span>
+                    {paymentMode === "digital" && <Check className="w-3.5 h-3.5 text-violet-600 font-bold" />}
+                  </div>
+                  <div className="mt-2">
+                    <p className="text-xs font-black">Digital (বিকাশ/নগদ)</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">বিকাশ, নগদ বা ব্যাংক ট্রান্সফার</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Mode 1: Cash Only Form */}
+            {paymentMode === "cash" && (
+              <div className="p-4 rounded-xl bg-emerald-50/40 border border-emerald-200/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                    <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Cash Amount (নগদ প্রাপ্ত টাকা ৳) *</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCashAmount(String(total))}
+                      className="text-[11px] font-bold text-emerald-700 bg-emerald-100 hover:bg-emerald-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      সম্পূর্ণ ফি (৳{total})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCashAmount("")}
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-700 px-1.5 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      ক্লিয়ার
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max={total}
+                  value={cashAmount}
+                  onChange={e => setCashAmount(e.target.value)}
+                  placeholder={`যেমন: ${total}`}
+                  className={`${ic} font-mono font-bold text-slate-900 text-sm`}
+                />
+              </div>
+            )}
+
+            {/* Mode 2: Referral Only Form */}
+            {paymentMode === "referral" && (
+              <div className="p-4 rounded-xl bg-indigo-50/40 border border-indigo-200/80 space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                    <Handshake className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Referral Credit Amount (রেফারেল ফি সমন্বয় ৳) *</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setReferralAmount(String(total))}
+                    className="text-[11px] font-bold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                  >
+                    সম্পূর্ণ রেফারেল (৳{total})
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max={total}
+                  value={referralAmount}
+                  onChange={e => setReferralAmount(e.target.value)}
+                  placeholder={`যেমন: ${total}`}
+                  className={`${ic} font-mono font-bold text-slate-900 text-sm`}
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className={labelCls}>
+                      Referral Person Name or ID (রেফারেলকারী ব্যক্তি/স্টুডেন্ট) *
+                    </label>
+                    <input
+                      type="text"
+                      value={referralPerson}
+                      onChange={e => setReferralPerson(e.target.value)}
+                      placeholder="যেমন: Rahim (MS-1002) বা শিক্ষক নাম"
+                      className={ic}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>
+                      Referral Reason (রেফারেল বা ছাড়ের কারণ) *
+                    </label>
+                    <input
+                      type="text"
+                      value={referralReason}
+                      onChange={e => setReferralReason(e.target.value)}
+                      placeholder="যেমন: স্টুডেন্ট রেফারেল / স্পেশাল ওয়েভার"
+                      className={ic}
+                    />
+                  </div>
+                </div>
+
+                {/* Quick reason chips */}
+                <div className="flex flex-wrap gap-1.5 items-center text-[10px]">
+                  <span className="text-slate-500 font-semibold">কুইক কারণ:</span>
+                  {[
+                    "Student Referral (স্টুডেন্ট রেফারেল)",
+                    "Special Waiver (বিশেষ ওয়েভার)",
+                    "Teacher Recommendation (শিক্ষকের সুপারিশ)",
+                    "Scholarship (মেধা বৃত্তি)",
+                    "Financial Aid (দরিদ্র তহবিল)"
+                  ].map(chip => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setReferralReason(chip)}
+                      className={`px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                        referralReason === chip 
+                          ? "bg-indigo-600 text-white border-indigo-600 font-bold" 
+                          : "bg-white text-indigo-900 border-indigo-200 hover:bg-indigo-100"
+                      }`}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mode 3: Cash + Referral Split Form */}
+            {paymentMode === "split" && (
+              <div className="p-4 rounded-xl bg-amber-50/40 border border-amber-200/80 space-y-3.5">
+                <div className="flex items-center justify-between text-xs text-amber-900 font-bold bg-amber-100/60 px-3 py-1.5 rounded-lg border border-amber-200">
+                  <span className="flex items-center gap-1.5">
+                    <Split className="w-3.5 h-3.5 text-amber-700" />
+                    <span>নগদ টাকা এবং রেফারেল ক্রেডিট একত্রে সমন্বয় করুন</span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const half = Math.round(total / 2)
+                        setCashAmount(String(half))
+                        setReferralAmount(String(total - half))
+                      }}
+                      className="text-[10px] font-bold bg-white text-amber-900 border border-amber-300 hover:bg-amber-100 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                    >
+                      ৫০/৫০ ভাগ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const curCash = parseFloat(cashAmount) || 0
+                        setReferralAmount(String(Math.max(0, total - curCash)))
+                      }}
+                      className="text-[10px] font-bold bg-white text-indigo-900 border border-indigo-300 hover:bg-indigo-50 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      title="বাকি থাকা সম্পূর্ণ টাকা রেফারেলে সমন্বয় করুন"
+                    >
+                      বাকি রেফারেল
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const curRef = parseFloat(referralAmount) || 0
+                        setCashAmount(String(Math.max(0, total - curRef)))
+                      }}
+                      className="text-[10px] font-bold bg-white text-emerald-900 border border-emerald-300 hover:bg-emerald-50 px-2 py-0.5 rounded cursor-pointer transition-colors"
+                      title="বাকি থাকা সম্পূর্ণ টাকা নগদে নিন"
+                    >
+                      বাকি নগদ
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>
+                      💵 Cash Paid (নগদ গ্রহণ ৳)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={cashAmount}
+                      onChange={e => setCashAmount(e.target.value)}
+                      placeholder="0"
+                      className={`${ic} font-mono font-bold text-slate-900`}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>
+                      🤝 Referral Credit (রেফারেল টাকা ৳) *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={referralAmount}
+                      onChange={e => setReferralAmount(e.target.value)}
+                      placeholder="0"
+                      className={`${ic} font-mono font-bold text-indigo-900`}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className={labelCls}>
+                      Referral Person Name or ID (রেফারেলকারী ব্যক্তি/স্টুডেন্ট) *
+                    </label>
+                    <input
+                      type="text"
+                      value={referralPerson}
+                      onChange={e => setReferralPerson(e.target.value)}
+                      placeholder="যেমন: Rahim (MS-1002) বা শিক্ষক নাম"
+                      className={ic}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>
+                      Referral Reason (রেফারেল বা ছাড়ের কারণ) *
+                    </label>
+                    <input
+                      type="text"
+                      value={referralReason}
+                      onChange={e => setReferralReason(e.target.value)}
+                      placeholder="যেমন: স্টুডেন্ট রেফারেল / স্পেশাল ওয়েভার"
+                      className={ic}
+                    />
+                  </div>
+                </div>
+
+                {/* Quick reason chips */}
+                <div className="flex flex-wrap gap-1.5 items-center text-[10px]">
+                  <span className="text-slate-500 font-semibold">কুইক কারণ:</span>
+                  {[
+                    "Student Referral (স্টুডেন্ট রেফারেল)",
+                    "Special Waiver (বিশেষ ওয়েভার)",
+                    "Teacher Recommendation (শিক্ষকের সুপারিশ)",
+                    "Scholarship (মেধা বৃত্তি)",
+                    "Financial Aid (দরিদ্র তহবিল)"
+                  ].map(chip => (
+                    <button
+                      key={chip}
+                      type="button"
+                      onClick={() => setReferralReason(chip)}
+                      className={`px-2 py-0.5 rounded-full border transition-all cursor-pointer ${
+                        referralReason === chip 
+                          ? "bg-amber-600 text-white border-amber-600 font-bold" 
+                          : "bg-white text-amber-900 border-amber-200 hover:bg-amber-100"
+                      }`}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Mode 4: Digital Form */}
+            {paymentMode === "digital" && (
+              <div className="p-4 rounded-xl bg-violet-50/40 border border-violet-200/80 space-y-3.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs font-bold text-violet-950 mr-1">ডিজিটাল গেটওয়ে:</label>
+                  {(["bkash", "nagad", "rocket", "bank"] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setDigitalMethod(m)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                        digitalMethod === m
+                          ? "bg-violet-600 text-white border-violet-600 shadow-xs"
+                          : "bg-white text-slate-700 border-slate-200 hover:bg-violet-50"
+                      }`}
+                    >
+                      {m === "bkash" ? "bKash (বিকাশ)" : m === "nagad" ? "Nagad (নগদ)" : m === "rocket" ? "Rocket (রকেট)" : "Bank Transfer (ব্যাংক)"}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className={labelCls}>Paid Amount (পরিশোধিত টাকা ৳) *</label>
+                      <button
+                        type="button"
+                        onClick={() => setCashAmount(String(total))}
+                        className="text-[11px] font-bold text-violet-700 bg-violet-100 hover:bg-violet-200 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                      >
+                        সম্পূর্ণ (৳{total})
+                      </button>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      max={total}
+                      value={cashAmount}
+                      onChange={e => setCashAmount(e.target.value)}
+                      placeholder={`যেমন: ${total}`}
+                      className={`${ic} font-mono font-bold text-slate-900`}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Transaction ID / TrxID (ঐচ্ছিক)</label>
+                    <input
+                      type="text"
+                      value={digitalTrxId}
+                      onChange={e => setDigitalTrxId(e.target.value)}
+                      placeholder="যেমন: TRXB123XYZ"
+                      className={`${ic} font-mono uppercase`}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Live Settlement Summary Card */}
+            <div className="p-3.5 bg-slate-50/90 rounded-xl border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between text-xs font-black text-slate-800 border-b border-slate-200/80 pb-2">
+                <span>হিসাব ও সমন্বয় সারসংক্ষেপ (Settlement Summary)</span>
+                {due === 0 ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
+                    ✓ সম্পূর্ণ পরিশোধিত (Fully Paid)
+                  </span>
+                ) : totalSettled > 0 ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-700 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-full">
+                    ⏳ আংশিক বকেয়া (Partial Due)
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-700 bg-rose-100 border border-rose-300 px-2 py-0.5 rounded-full">
+                    ✕ সম্পূর্ণ বকেয়া (Unpaid Due)
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+                <div className="p-2 bg-white rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-500 font-bold block">মোট ফি (Total)</span>
+                  <span className="font-mono font-black text-slate-900 text-sm mt-0.5 block">{formatCurrency(total)}</span>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-emerald-600 font-bold block">নগদ/ডিজিটাল (Cash)</span>
+                  <span className="font-mono font-black text-emerald-700 text-sm mt-0.5 block">{formatCurrency(effectiveCash)}</span>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-indigo-600 font-bold block">রেফারেল (Referral)</span>
+                  <span className="font-mono font-black text-indigo-700 text-sm mt-0.5 block">{formatCurrency(effectiveReferral)}</span>
+                </div>
+                <div className="p-2 bg-white rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-700 font-bold block">মোট সমন্বিত (Settled)</span>
+                  <span className="font-mono font-black text-slate-900 text-sm mt-0.5 block">{formatCurrency(totalSettled)}</span>
+                </div>
+                <div className={`p-2 rounded-lg border col-span-2 sm:col-span-1 ${
+                  due > 0 ? "bg-rose-50 border-rose-200 text-rose-700" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                }`}>
+                  <span className="text-[10px] font-bold block">বকেয়া (Remaining Due)</span>
+                  <span className="font-mono font-black text-sm mt-0.5 block">{formatCurrency(due)}</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -2009,7 +2662,7 @@ export default function NewStudentForm({
                   ? enr.student
                   : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
                 const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
-                const matchingPayment = paymentsList.find(p => 
+                const matchingPayments = paymentsList.filter(p => 
                   (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
                   (p.batch_id === enr.batch_id || !p.batch_id)
                 )
@@ -2017,8 +2670,12 @@ export default function NewStudentForm({
                   (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
                   (d.batch_id === enr.batch_id || !d.batch_id)
                 )
-                const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
-                const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+                const totalFee = (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0) || matchingPayments[0]?.amount || 0
+                const refPayment = matchingPayments.find(p => p.payment_method === "referral" || p.notes?.includes("Referral:"))
+                const refAmt = refPayment ? (parseFloat(refPayment.total_paid) || parseFloat(refPayment.amount) || 0) : 0
+                const cashPayments = matchingPayments.filter(p => p.payment_method !== "referral" && (!p.notes || !p.notes.includes("Referral:")))
+                const cashAmt = cashPayments.reduce((acc, p) => acc + (parseFloat(p.total_paid) || parseFloat(p.amount) || 0), 0)
+                const paidAmt = matchingPayments.length > 0 ? (cashAmt + refAmt) : (matchingDue?.paid_amount || 0)
                 const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
                 const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
 
@@ -2037,9 +2694,14 @@ export default function NewStudentForm({
                         )}
                         <span className="text-xs font-semibold text-slate-600">• {b.name || "Batch"}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                      <div className="flex items-center gap-2 text-[11px] text-slate-400 flex-wrap">
                         <span>{formatDate(enr.created_at)}</span>
                         <span>• Paid: <b className="text-emerald-600">{formatCurrency(paidAmt)}</b></span>
+                        {refAmt > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded">
+                            🤝 Ref: {formatCurrency(refAmt)}
+                          </span>
+                        )}
                         {dueAmt > 0 && <span>• Due: <b className="text-rose-600">{formatCurrency(dueAmt)}</b></span>}
                       </div>
                     </div>
@@ -2221,7 +2883,7 @@ export default function NewStudentForm({
                         : students.find(s => s.id === enr.student_id || s.student_id === enr.student_id) || enr.student || {}
                       const b = enr.batch || allBatches.find(bat => bat.id === enr.batch_id) || {}
                       const branchObj = effectiveBranches.find(br => br.id === enr.branch_id || br.id === b.branch_id)
-                      const matchingPayment = paymentsList.find(p => 
+                      const matchingPayments = paymentsList.filter(p => 
                         (p.student_id === enr.student_id || (student?.id && p.student_id === student.id) || (student?.student_id && p.student_id === student.student_id)) && 
                         (p.batch_id === enr.batch_id || !p.batch_id)
                       )
@@ -2229,8 +2891,12 @@ export default function NewStudentForm({
                         (d.student_id === enr.student_id || (student?.id && d.student_id === student.id) || (student?.student_id && d.student_id === student.student_id)) && 
                         (d.batch_id === enr.batch_id || !d.batch_id)
                       )
-                      const totalFee = matchingPayment?.amount || (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0)
-                      const paidAmt = matchingPayment?.total_paid ?? (matchingDue?.paid_amount || 0)
+                      const totalFee = (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0) || matchingPayments[0]?.amount || 0
+                      const refPayment = matchingPayments.find(p => p.payment_method === "referral" || p.notes?.includes("Referral:"))
+                      const refAmt = refPayment ? (parseFloat(refPayment.total_paid) || parseFloat(refPayment.amount) || 0) : 0
+                      const cashPayments = matchingPayments.filter(p => p.payment_method !== "referral" && (!p.notes || !p.notes.includes("Referral:")))
+                      const cashAmt = cashPayments.reduce((acc, p) => acc + (parseFloat(p.total_paid) || parseFloat(p.amount) || 0), 0)
+                      const paidAmt = matchingPayments.length > 0 ? (cashAmt + refAmt) : (matchingDue?.paid_amount || 0)
                       const dueAmt = matchingDue ? Math.max(0, (matchingDue.due_amount || totalFee) - (matchingDue.paid_amount || paidAmt)) : Math.max(0, totalFee - paidAmt)
                       const isPaid = totalFee > 0 ? paidAmt >= totalFee : true
                       const roll = enr.roll_no ?? student.roll_no ?? student.batch_roll
@@ -2301,6 +2967,11 @@ export default function NewStudentForm({
                             </div>
                             <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
                               <span className="text-emerald-600 font-semibold">Paid: {formatCurrency(paidAmt)}</span>
+                              {refAmt > 0 && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded">
+                                  🤝 Ref: {formatCurrency(refAmt)}
+                                </span>
+                              )}
                               {dueAmt > 0 && <span className="text-rose-600 font-semibold">• Due: {formatCurrency(dueAmt)}</span>}
                             </div>
                           </td>
@@ -2457,7 +3128,33 @@ export default function NewStudentForm({
 
                   <div className="border-t border-dashed border-slate-300 pt-3 space-y-1 text-xs">
                     <div className="flex justify-between"><span className="text-slate-500">Total Program Fee:</span><span className="font-bold text-slate-900">{formatCurrency(receipt.total_fee)}</span></div>
-                    <div className="flex justify-between"><span className="text-slate-500">Amount Paid:</span><span className="font-bold text-emerald-700">{formatCurrency(receipt.paid_amount)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-500">Payment Method:</span><span className="font-semibold text-indigo-900">{receipt.payment_method}</span></div>
+                    
+                    {receipt.cash_amount != null && receipt.referral_amount != null && receipt.cash_amount > 0 && receipt.referral_amount > 0 ? (
+                      <>
+                        <div className="flex justify-between text-slate-600 pl-2"><span>↳ Cash Received:</span><span className="font-bold text-emerald-700">{formatCurrency(receipt.cash_amount)}</span></div>
+                        <div className="flex justify-between text-indigo-700 pl-2">
+                          <span>↳ Referral Credit:</span>
+                          <span className="font-bold">{formatCurrency(receipt.referral_amount)}</span>
+                        </div>
+                        {receipt.referral_person && (
+                          <div className="text-[10px] text-indigo-600 text-right pr-1">Ref: {receipt.referral_person} {receipt.referral_reason ? `(${receipt.referral_reason})` : ""}</div>
+                        )}
+                        <div className="flex justify-between font-bold text-emerald-800 pt-0.5 border-t border-slate-100">
+                          <span>Total Settled:</span><span>{formatCurrency(receipt.paid_amount)}</span>
+                        </div>
+                      </>
+                    ) : receipt.referral_amount != null && receipt.referral_amount > 0 ? (
+                      <>
+                        <div className="flex justify-between"><span className="text-indigo-700 font-semibold">Referral Credit:</span><span className="font-bold text-indigo-700">{formatCurrency(receipt.referral_amount)}</span></div>
+                        {receipt.referral_person && (
+                          <div className="text-[10px] text-indigo-600 text-right pr-1">Ref: {receipt.referral_person} {receipt.referral_reason ? `(${receipt.referral_reason})` : ""}</div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="flex justify-between"><span className="text-slate-500">Amount Paid:</span><span className="font-bold text-emerald-700">{formatCurrency(receipt.paid_amount)}</span></div>
+                    )}
+
                     <div className="flex justify-between text-sm font-black pt-1">
                       <span className="text-slate-700">Due Remaining:</span>
                       <span className={receipt.due_amount > 0 ? "text-rose-600" : "text-emerald-700"}>{formatCurrency(receipt.due_amount)}</span>
