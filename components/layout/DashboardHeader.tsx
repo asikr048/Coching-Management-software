@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Bell, LogOut, User, ChevronDown, Menu, Landmark, Building2, Check, Sparkles, ShieldAlert } from "lucide-react"
 import type { Staff } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
+import { useBranding } from "@/components/providers/BrandingContext"
 import { cn } from "@/lib/utils"
 import NotificationDropdown from "./NotificationDropdown"
 
@@ -19,6 +20,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
   const router = useRouter()
   const supabase = createClient()
   const { selectedBranchId, setSelectedBranchId, branches, currentBranch, isAllBranchesPermitted, permittedBranchIds } = useBranch()
+  const { branding, theme } = useBranding()
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -60,9 +62,9 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
             <h1 className="text-sm sm:text-lg font-black text-[#1e1b4b] tracking-tight truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">
               {roleLabel[user.role] || user.role} Panel
             </h1>
-            <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs">
-              <Sparkles className="w-3 h-3 mr-1 text-amber-500" />
-              MedhaShiree
+            <span className={cn("hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border shadow-2xs truncate max-w-[180px]", theme.badgeClass)}>
+              <Sparkles className="w-3 h-3 mr-1 flex-shrink-0" />
+              <span className="truncate">{branding.name}</span>
             </span>
           </div>
           <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden xs:block">

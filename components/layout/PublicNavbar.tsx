@@ -3,12 +3,14 @@ import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { User } from "lucide-react"
+import { useBranding } from "@/components/providers/BrandingContext"
 
 export default function PublicNavbar() {
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
   const supabase = createClient()
+  const { branding, theme } = useBranding()
 
   useEffect(() => {
     async function checkAuth() {
@@ -36,10 +38,12 @@ export default function PublicNavbar() {
     <nav className="bg-white border-b border-gray-100 px-3 sm:px-4 py-3 sm:py-4">
       <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
         <Link href="/" className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-full border border-indigo-200 overflow-hidden flex items-center justify-center bg-white shadow-xs flex-shrink-0">
-            <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+          <div className="w-8 h-8 rounded-full border border-slate-200 overflow-hidden flex items-center justify-center bg-white shadow-xs flex-shrink-0">
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={`${branding.name} Logo`} className="w-full h-full object-cover rounded-full" />
+            ) : null}
           </div>
-          <span className="text-base sm:text-lg font-bold bg-gradient-to-r from-indigo-700 to-purple-700 bg-clip-text text-transparent truncate">MedhaShiree</span>
+          <span className="text-base sm:text-lg font-bold text-slate-900 truncate">{branding.name}</span>
         </Link>
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {loaded && currentUser ? (

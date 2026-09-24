@@ -82,8 +82,8 @@ export function calculateCoachingGrade(marks: number, fullMarks: number): { grad
 }
 
 export default function StudentProgressReport({
-  instituteName = "Medhashiree Coaching Center",
-  instituteBranch = "Rangpur Sadar",
+  instituteName = "MIIS ACADEMY",
+  instituteBranch = "Academic Care",
   instituteLogoUrl = "/logo.jpg",
   examTitle,
   academicYear = new Date().getFullYear().toString(),
@@ -153,10 +153,10 @@ export default function StudentProgressReport({
       >
         <div className="text-center">
           <div className="text-7xl sm:text-8xl font-black tracking-widest text-slate-900 uppercase">
-            মেধাসিঁড়ি
+            {instituteName}
           </div>
           <p className="text-2xl font-bold tracking-widest text-slate-700 mt-2">
-            MEDHASHIREE COACHING
+            ACADEMIC CARE &amp; ADMISSION
           </p>
         </div>
       </div>

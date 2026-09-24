@@ -53,6 +53,8 @@ export interface PrintableExamSheetProps {
   showSignatures?: boolean
   instituteName?: string
   instituteBranch?: string
+  instituteLogoUrl?: string
+  tagline?: string
 }
 
 function getDayMarkItemHelper(
@@ -89,8 +91,10 @@ export default function PrintableExamSheet({
   showPodium = true,
   showSubjectToppers = true,
   showSignatures = true,
-  instituteName = "মেধাশিরী কোচিং সেন্টার",
+  instituteName = "MIIS ACADEMY",
   instituteBranch,
+  instituteLogoUrl,
+  tagline,
 }: PrintableExamSheetProps) {
   const isWeeklyAggregate = mode === "weekly_aggregate"
   const isWeeklyDay = mode === "weekly_day"
@@ -391,15 +395,21 @@ export default function PrintableExamSheet({
       <div className="border-b-2 border-slate-900 pb-4 mb-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black shadow-sm shrink-0 print:border print:border-slate-800">
-              <GraduationCap className="w-8 h-8" />
+            <div className="w-14 h-14 rounded-2xl bg-white text-slate-900 flex items-center justify-center font-black shadow-sm shrink-0 overflow-hidden border border-slate-300 print:border print:border-slate-800">
+              {instituteLogoUrl ? (
+                <img src={instituteLogoUrl} alt={`${instituteName} Logo`} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full bg-emerald-600 text-white flex items-center justify-center">
+                  <GraduationCap className="w-8 h-8" />
+                </div>
+              )}
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tight text-slate-950 uppercase leading-none">
                 {instituteName}
               </h1>
-              <p className="text-xs font-bold text-amber-700 tracking-wider mt-1 uppercase">
-                Academic &amp; Admission Care • {displayBranch}
+              <p className="text-xs font-bold text-slate-700 tracking-wider mt-1 uppercase">
+                {tagline || "Academic & Admission Care"} • {displayBranch}
               </p>
               {exam.branch?.address && (
                 <p className="text-[11px] text-slate-500 mt-0.5">{exam.branch.address}</p>

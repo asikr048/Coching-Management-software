@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { formatCurrency, formatDateTime, formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
+import { useBranding } from "@/components/providers/BrandingContext"
 import Link from "next/link"
 
 interface StudentOpt { 
@@ -108,6 +109,7 @@ export default function PaymentsClient({
   batches: BatchOpt[]; 
   dues?: DueRow[];
 }) {
+  const { branding } = useBranding()
   const [payments, setPayments] = useState(initial)
   const [dues, setDues] = useState(initialDues)
   const [showRecordModal, setShowRecordModal] = useState(false)
@@ -622,8 +624,8 @@ export default function PaymentsClient({
       .footer { text-align: center; margin-top: 15px; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
     </style></head><body>
       <div class="header">
-        <h1>MedhaShiree Coaching</h1>
-        <p>Official Fee Payment Receipt</p>
+        <h1>${branding.name}</h1>
+        <p>${branding.tagline || "Official Fee Payment Receipt"}</p>
         <span class="badge">${receiptModal.receipt_number}</span>
       </div>
 
@@ -657,8 +659,8 @@ export default function PaymentsClient({
       </div>
 
       <div class="footer">
-        <p>Thank you for your payment!</p>
-        <p>MedhaShiree — Empowering Modern Education</p>
+        <p>${branding.receiptFooterNote || "Thank you for your payment!"}</p>
+        <p>${branding.name} — ${branding.tagline || "Empowering Modern Education"}</p>
       </div>
     </body></html>`)
     win.document.close()
@@ -676,12 +678,12 @@ export default function PaymentsClient({
       doc.setFont("helvetica", "bold")
       doc.setFontSize(14)
       doc.setTextColor(5, 150, 105)
-      doc.text("MedhaShiree Coaching", 52.5, 12, { align: "center" })
+      doc.text(branding.name, 52.5, 12, { align: "center" })
 
       doc.setFont("helvetica", "normal")
       doc.setFontSize(8)
       doc.setTextColor(100, 116, 139)
-      doc.text("Official Fee Payment Receipt", 52.5, 17, { align: "center" })
+      doc.text(branding.tagline || "Official Fee Payment Receipt", 52.5, 17, { align: "center" })
       doc.line(10, 20, 95, 20)
 
       let y = 26
@@ -1560,8 +1562,8 @@ export default function PaymentsClient({
             <div className="p-6 space-y-4">
               <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-4 bg-white text-slate-900 space-y-3 shadow-inner">
                 <div className="text-center border-b border-dashed border-gray-300 pb-2.5">
-                  <h4 className="font-extrabold text-slate-900 text-sm">MedhaShiree Coaching</h4>
-                  <p className="text-[10px] text-gray-500">Official Fee Payment Receipt</p>
+                  <h4 className="font-extrabold text-slate-900 text-sm">{branding.name}</h4>
+                  <p className="text-[10px] text-gray-500">{branding.tagline || "Official Fee Payment Receipt"}</p>
                   <span className="inline-block bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 font-mono">
                     {receiptModal.receipt_number}
                   </span>

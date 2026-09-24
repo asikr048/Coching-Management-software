@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
 import { Eye, EyeOff, Loader2, Lock, Users, TrendingUp, Star, ArrowRight, UserPlus, BookOpen, IdCard, AlertCircle } from "lucide-react"
 import Link from "next/link"
+import { useBranding } from "@/components/providers/BrandingContext"
 
 function LoginFormContent() {
   const searchParams = useSearchParams()
@@ -208,20 +209,24 @@ function LoginFormContent() {
     }
   }
 
-  return (
-    <div className="w-full max-w-[420px] space-y-7">
-      <div className="lg:hidden text-center mb-4">
-        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full overflow-hidden mb-3 border border-indigo-200 bg-white shadow-sm">
-          <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+    const { branding } = useBranding()
+
+    return (
+      <div className="w-full max-w-[420px] space-y-7">
+        <div className="lg:hidden text-center mb-4">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-full overflow-hidden mb-3 border border-slate-200 bg-white shadow-sm">
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={`${branding.name} Logo`} className="w-full h-full object-cover rounded-full" />
+            ) : null}
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">{branding.name}</h1>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Medha<span className="text-indigo-600">Shiree</span></h1>
-      </div>
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">Welcome back</h2>
-          <p className="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">Sign in to your MedhaShiree portal</p>
-        </div>
+        {/* Header */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">Welcome back</h2>
+            <p className="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">Sign in to your {branding.name} portal</p>
+          </div>
         <Link
           href="/signup"
           className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs sm:text-sm font-semibold hover:bg-indigo-100 transition-colors shrink-0"
@@ -329,26 +334,30 @@ function LoginFormContent() {
 }
 
 export default function LoginPage() {
+  const { branding, theme } = useBranding()
+
   return (
     <div className="min-h-screen flex">
       {/* LEFT — Branding Panel */}
-      <div className="hidden lg:flex lg:w-[52%] relative bg-gradient-to-br from-indigo-900 via-violet-900 to-purple-900 overflow-hidden">
+      <div className="hidden lg:flex lg:w-[52%] relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIj48Y2lyY2xlIGN4PSIyMCIgY3k9IjIwIiByPSIxIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDgpIi8+PC9nPjwvc3ZnPg==')] opacity-60" />
-        <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-indigo-500/20 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] bg-violet-500/20 rounded-full blur-[80px]" />
-        <div className="absolute top-[40%] left-[30%] w-[300px] h-[300px] bg-purple-400/10 rounded-full blur-[60px]" />
+        <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/20 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] bg-teal-500/20 rounded-full blur-[80px]" />
+        <div className="absolute top-[40%] left-[30%] w-[300px] h-[300px] bg-indigo-400/10 rounded-full blur-[60px]" />
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-full overflow-hidden flex items-center justify-center border border-white/20 bg-white">
-              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+              {branding.logoUrl ? (
+                <img src={branding.logoUrl} alt={`${branding.name} Logo`} className="w-full h-full object-cover rounded-full" />
+              ) : null}
             </div>
-            <span className="text-2xl font-bold text-white tracking-tight">Medha<span className="text-indigo-300">Shiree</span></span>
+            <span className="text-2xl font-bold text-white tracking-tight">{branding.name}</span>
           </div>
 
           <div className="space-y-8 max-w-md">
             <h2 className="text-4xl font-extrabold text-white leading-tight">Empowering Modern Education &amp; Streamlined Coaching</h2>
-            <p className="text-indigo-200/80 text-lg leading-relaxed">Manage batches, track attendance, handle fees, and monitor student progress — all from one powerful platform.</p>
+            <p className="text-slate-300 text-lg leading-relaxed">Manage batches, track attendance, handle fees, and monitor student progress — all from one powerful platform.</p>
 
             <div className="bg-white/[0.08] backdrop-blur-xl border border-white/[0.12] rounded-2xl p-6 space-y-4">
               <div className="flex items-center gap-3">
@@ -381,12 +390,12 @@ export default function LoginPage() {
                   <Star key={i} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                 ))}
               </div>
-              <p className="text-white/70 text-sm italic leading-relaxed">&ldquo;MedhaShiree transformed how we manage our coaching center. Attendance, fees, and results — everything is automated now.&rdquo;</p>
-              <p className="text-white/40 text-xs mt-3">&mdash; Coaching Center Director, Rajshahi</p>
+              <p className="text-white/70 text-sm italic leading-relaxed">&ldquo;{branding.name} transformed how we manage our coaching center. Attendance, fees, and results — everything is automated now.&rdquo;</p>
+              <p className="text-white/40 text-xs mt-3">&mdash; Academic Administration</p>
             </div>
           </div>
 
-          <p className="text-white/30 text-xs">&copy; {new Date().getFullYear()} MedhaShiree. All rights reserved.</p>
+          <p className="text-white/30 text-xs">&copy; {new Date().getFullYear()} {branding.name}. All rights reserved.</p>
         </div>
       </div>
 

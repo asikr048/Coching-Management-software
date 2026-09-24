@@ -25,8 +25,8 @@ export interface SectionWiseMeritListProps {
 }
 
 export default function SectionWiseMeritList({
-  instituteName = "Medhashiree Coaching Center",
-  instituteBranch = "Rangpur Sadar",
+  instituteName = "MIIS ACADEMY",
+  instituteBranch = "Academic Care",
   instituteLogoUrl = "/logo.jpg",
   sectionName,
   examTitle,

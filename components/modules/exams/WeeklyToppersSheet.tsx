@@ -46,8 +46,8 @@ export interface WeeklyToppersSheetProps {
 }
 
 export default function WeeklyToppersSheet({
-  instituteName = "Medhashiree Coaching Center",
-  instituteBranch = "Rangpur Sadar",
+  instituteName = "MIIS ACADEMY",
+  instituteBranch = "Academic Care",
   instituteLogoUrl = "/logo.jpg",
   examTitle,
   batchName,

@@ -1,4 +1,5 @@
 import { generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
+import { getActiveBranding } from "@/lib/branding"
 
 export interface StudentIdCardData {
   student_name: string
@@ -18,9 +19,17 @@ export interface StudentIdCardData {
   avatar_url?: string
   qr_data?: string
   qr_code?: string
+  institute_name?: string
+  institute_name_bn?: string
+  institute_sublogo?: string
+  institute_logo_url?: string
 }
 
 export function getStudentIdCardHtml(card: StudentIdCardData): string {
+  const branding = getActiveBranding()
+  const instName = card.institute_name || branding.name || "MIIS ACADEMY"
+  const instNameBn = card.institute_name_bn || branding.nameBn || instName
+  const instTagline = card.institute_sublogo || branding.tagline || "Academic & Admission Care"
   const rollStr = card.batch_roll != null && String(card.batch_roll).trim() !== "" 
     ? String(card.batch_roll) 
     : "01"
@@ -301,8 +310,8 @@ export function getStudentIdCardHtml(card: StudentIdCardData): string {
     <!-- FRONT SIDE -->
     <div class="id-card">
       <div class="id-header">
-        <div class="id-logo-text">মেধা সিঁড়ি কোচিং</div>
-        <div class="id-sublogo">MedhaShiree Academic Care</div>
+        <div class="id-logo-text">${instNameBn}</div>
+        <div class="id-sublogo">${instName} • ${instTagline}</div>
         <div class="id-tagline">STUDENT IDENTIFICATION CARD</div>
       </div>
 
@@ -374,14 +383,14 @@ export function getStudentIdCardHtml(card: StudentIdCardData): string {
 
       <div>
         <div class="auth-sign-box">
-          <div style="font-family: 'Brush Script MT', cursive, sans-serif; font-size: 18px; color: #1e1b4b; height: 24px;">MedhaShiree</div>
+          <div style="font-family: 'Brush Script MT', cursive, sans-serif; font-size: 18px; color: #1e1b4b; height: 24px;">${instName}</div>
           <div class="sign-title">কর্তৃপক্ষের স্বাক্ষর (Authorized Signatory)</div>
         </div>
 
         <div class="inst-contact">
-          <b>মেধা সিঁড়ি কোচিং (MedhaShiree Coaching)</b><br>
-          📞 হটলাইন: +880 1800-000000 | 🌐 www.medhashiree.com<br>
-          যেকোনো প্রয়োজনে কোচিং রিসেপশনে যোগাযোগ করুন।
+          <b>${instNameBn} (${instName})</b><br>
+          📞 হটলাইন: ${branding.phone || "+880 1700-000000"} | 🌐 ${branding.website || "www.miisacademy.com"}<br>
+          ${branding.address || card.branch_name || "যেকোনো প্রয়োজনে কোচিং রিসেপশনে যোগাযোগ করুন।"}
         </div>
       </div>
     </div>
@@ -411,6 +420,10 @@ export function printStudentIdCard(data: StudentIdCardData, autoPrint = true) {
 }
 
 export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardData) {
+  const branding = getActiveBranding()
+  const instName = idCardData.institute_name || branding.name || "MIIS ACADEMY"
+  const instNameBn = idCardData.institute_name_bn || branding.nameBn || instName
+  const instTagline = idCardData.institute_sublogo || branding.tagline || "Academic & Admission Care"
   const rollStr = idCardData.batch_roll != null && String(idCardData.batch_roll).trim() !== "" ? String(idCardData.batch_roll) : "01"
   const effectiveCardCode = idCardData.qr_code || generateStudentQrCode({
     studentId: idCardData.student_id,
@@ -566,8 +579,8 @@ export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardD
     <!-- 1. ADMISSION RECEIPT -->
     <div class="receipt-sheet">
       <div class="header">
-        <h1>MedhaShiree Coaching</h1>
-        <p>Enrollment & Fee Confirmation Slip (ভর্তি ও ফি রসিদ)</p>
+        <h1>${instName}</h1>
+        <p>${instTagline} • Enrollment &amp; Fee Confirmation Slip (ভর্তি ও ফি রসিদ)</p>
         <span class="badge">Official Admission Copy</span>
       </div>
       
@@ -619,8 +632,8 @@ export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardD
         <!-- Front -->
         <div class="id-card">
           <div class="id-header">
-            <div class="id-logo-text">মেধা সিঁড়ি কোচিং</div>
-            <div class="id-sublogo">MedhaShiree Academic Care</div>
+            <div class="id-logo-text">${instNameBn}</div>
+            <div class="id-sublogo">${instName} • ${instTagline}</div>
             <div class="id-tagline">STUDENT ID CARD</div>
           </div>
           <div class="id-body">
@@ -657,12 +670,12 @@ export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardD
           </div>
           <div>
             <div class="auth-sign-box">
-              <div style="font-family: 'Brush Script MT', cursive, sans-serif; font-size: 16px; color: #1e1b4b; height: 20px;">MedhaShiree</div>
+              <div style="font-family: 'Brush Script MT', cursive, sans-serif; font-size: 16px; color: #1e1b4b; height: 20px;">${instName}</div>
               <div class="sign-title">কর্তৃপক্ষের স্বাক্ষর</div>
             </div>
             <div class="inst-contact">
-              <b>মেধা সিঁড়ি কোচিং</b><br>
-              📞 +880 1800-000000 | 🌐 medhashiree.com
+              <b>${instNameBn}</b><br>
+              📞 ${branding.phone || "+880 1700-000000"} | 🌐 ${branding.website || "www.miisacademy.com"}
             </div>
           </div>
         </div>

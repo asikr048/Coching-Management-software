@@ -11,6 +11,7 @@ import {
   X, Globe, Landmark, Sparkles, Bell, Calculator
 } from "lucide-react"
 import type { Role } from "@/lib/supabase/types"
+import { useBranding } from "@/components/providers/BrandingContext"
 
 const ownerNav = [
   { href: "/dashboard/owner", icon: LayoutDashboard, label: "Dashboard", exact: true },
@@ -82,22 +83,27 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
   const nav = navByRole[role] || ownerNav
+  const { branding, theme } = useBranding()
 
   const sidebarContent = (isMobileView: boolean) => (
     <>
       {/* Brand Header */}
       <div className="flex items-center justify-between p-4 border-b border-slate-800/80 bg-slate-950/40">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-white border border-amber-400/40 shadow-md shadow-amber-500/20 flex-shrink-0">
-            <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-white border border-slate-700 shadow-md flex-shrink-0">
+            {branding.logoUrl ? (
+              <img src={branding.logoUrl} alt={`${branding.name} Logo`} className="w-full h-full object-cover rounded-full" />
+            ) : (
+              <GraduationCap className="w-4 h-4 text-amber-500" />
+            )}
           </div>
           {(!collapsed || isMobileView) && (
             <div className="min-w-0">
-              <span className="font-extrabold text-base text-white tracking-tight leading-none block">
-                MedhaShiree
+              <span className="font-extrabold text-base text-white tracking-tight leading-none block truncate" title={branding.name}>
+                {branding.name}
               </span>
-              <span className="text-[10px] font-bold text-amber-400 tracking-wider uppercase mt-0.5 block">
-                Coaching Portal
+              <span className={cn("text-[10px] font-bold tracking-wider uppercase mt-0.5 block truncate", theme.accentTextClass)}>
+                {branding.tagline || "Coaching Portal"}
               </span>
             </div>
           )}

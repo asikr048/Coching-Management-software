@@ -27,6 +27,7 @@ import StudentProgressReport, {
 import SectionWiseMeritList, { SectionWiseMeritRow } from "./SectionWiseMeritList"
 import WeeklyToppersSheet, { GrandTopperItem, SubjectTopperItem } from "./WeeklyToppersSheet"
 import { cn, getGrade } from "@/lib/utils"
+import { useBranding } from "@/components/providers/BrandingContext"
 
 export type PrintTemplateType = "merit_list" | "progress_report" | "tabulation" | "toppers_sheet"
 
@@ -96,6 +97,7 @@ export default function ExamPrintModal({
   totalToppers = [],
   subjectToppers = [],
 }: ExamPrintModalProps) {
+  const { branding, theme } = useBranding()
   // 1. Template Type: Merit List (Pic 2), Progress Report (Pic 1), Tabulation, or Toppers Sheet
   const [template, setTemplate] = useState<PrintTemplateType>(defaultTemplate)
 
@@ -768,6 +770,9 @@ export default function ExamPrintModal({
             {/* TEMPLATE 1: SECTION WISE MERIT LIST (Picture 2) */}
             {template === "merit_list" && (
               <SectionWiseMeritList
+                instituteName={branding.nameBn || branding.name}
+                instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
+                instituteLogoUrl={branding.logoUrl}
                 sectionName={activeBatchName}
                 examTitle={customExamTitle || exam.title}
                 academicYear={customAcademicYear}
@@ -785,6 +790,9 @@ export default function ExamPrintModal({
                   return (
                     <StudentProgressReport
                       key={st.id}
+                      instituteName={branding.nameBn || branding.name}
+                      instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
+                      instituteLogoUrl={branding.logoUrl}
                       examTitle={customExamTitle || exam.title}
                       academicYear={customAcademicYear}
                       batchName={activeBatchName}
@@ -812,6 +820,10 @@ export default function ExamPrintModal({
             {/* TEMPLATE 3: COMPREHENSIVE TABULATION SHEET */}
             {template === "tabulation" && (
               <PrintableExamSheet
+                instituteName={branding.nameBn || branding.name}
+                instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
+                instituteLogoUrl={branding.logoUrl}
+                tagline={branding.tagline}
                 exam={{ ...exam, title: customExamTitle || exam.title }}
                 mode={selectedMode === "all_weeks_combined" ? "weekly_aggregate" : selectedMode}
                 weeklyDays={weeklyDays}
@@ -830,6 +842,9 @@ export default function ExamPrintModal({
             {/* TEMPLATE 4: TOPPERS & SUBJECT MERIT SUMMARY SHEET (Pic 2 Toppers & Subject-Wise) */}
             {template === "toppers_sheet" && (
               <WeeklyToppersSheet
+                instituteName={branding.nameBn || branding.name}
+                instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
+                instituteLogoUrl={branding.logoUrl}
                 examTitle={customExamTitle || exam.title}
                 batchName={activeBatchName}
                 academicYear={customAcademicYear}
