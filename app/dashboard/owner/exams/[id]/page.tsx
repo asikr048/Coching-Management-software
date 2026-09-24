@@ -4418,7 +4418,7 @@ export default function ExamResultsPage() {
                       সমন্বিত মেধা তালিকা নোটিশ বোর্ডে ও অনলাইন রেজাল্ট পোর্টালে সক্রিয় রয়েছে
                     </p>
                     <p className="text-[10px] text-emerald-700 font-semibold">
-                      নির্বাচিত সপ্তাহ: {activeCombinedExams.map((e) => e.title).join(", ")}
+                      নির্বাচিত সপ্তাহ: {activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")}
                     </p>
                   </div>
                 </div>
@@ -4520,7 +4520,7 @@ export default function ExamResultsPage() {
 
               <div className="flex flex-wrap items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100 gap-2">
                 <span>
-                  বর্তমানে নির্বাচিত: <strong className="text-blue-900 font-extrabold">{activeCombinedExams.length}টি সপ্তাহ</strong> ({activeCombinedExams.map((e) => e.title).join(", ")})
+                  বর্তমানে নির্বাচিত: <strong className="text-blue-900 font-extrabold">{activeCombinedExams.length}টি সপ্তাহ</strong> ({activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})
                 </span>
                 <span className="font-bold text-slate-800">
                   নির্বাচিত সপ্তাহের সমন্বিত পূর্ণমান: <strong className="text-amber-700 font-extrabold">{activeCombinedExams.reduce((acc, e) => acc + (Number(e.total_marks) || 100), 0)} নম্বর</strong>
@@ -4594,7 +4594,8 @@ export default function ExamResultsPage() {
                       <th className="px-4 py-3 min-w-[160px]">শিক্ষার্থীর নাম</th>
                       {/* Week-by-week marks breakdown columns for ACTIVE selected weeks */}
                       {activeCombinedExams.map((we, wIdx) => {
-                        const shortTitle = (we.title || "").replace(/weekly[-\s_]?/i, "W").replace(/সাপ্তাহিক[-\s_]?/, "W").trim() || `W${wIdx + 1}`
+                        const weekNum = (we.result_note ? extractSeriesWeek(we.result_note, we.title) : 0) || (wIdx + 1)
+                        const shortTitle = `Week ${weekNum}`
                         return (
                           <th key={we.id} className="px-2.5 py-3 text-center font-mono text-[11px] bg-slate-100/80 border-x border-slate-200 whitespace-nowrap" title={we.title}>
                             {shortTitle}

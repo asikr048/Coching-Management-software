@@ -2,7 +2,7 @@
 
 import React, { useMemo } from "react"
 import { Trophy, Award, CheckCircle2, Users, BookOpen, Calendar, GraduationCap } from "lucide-react"
-import { getGrade, cn } from "@/lib/utils"
+import { getGrade, cn, extractSeriesWeek } from "@/lib/utils"
 
 export interface PrintableExamSheetProps {
   exam: {
@@ -744,12 +744,15 @@ export default function PrintableExamSheet({
 
               {/* All Weeks Combined: Active Weeks Columns */}
               {isAllWeeksCombined &&
-                activeCombinedExams.map((we: any) => (
-                  <th key={we.id} className="border border-slate-400 py-1.5 px-2 text-center whitespace-nowrap min-w-[70px]">
-                    <span className="block font-black text-[11px] leading-tight">{we.title}</span>
-                    <span className="text-[9px] text-amber-900 font-bold block leading-tight">({we.total_marks || 350})</span>
-                  </th>
-                ))}
+                activeCombinedExams.map((we: any, idx: number) => {
+                  const weekNum = (we.result_note ? extractSeriesWeek(we.result_note, we.title) : 0) || (idx + 1)
+                  return (
+                    <th key={we.id} className="border border-slate-400 py-1.5 px-2 text-center whitespace-nowrap min-w-[70px]">
+                      <span className="block font-black text-[11px] leading-tight">{`Week ${weekNum}`}</span>
+                      <span className="text-[9px] text-amber-900 font-bold block leading-tight">({we.total_marks || 350})</span>
+                    </th>
+                  )
+                })}
 
               <th className="border border-slate-400 py-1.5 px-2 bg-amber-50/70 print:bg-transparent text-center whitespace-nowrap w-20 min-w-[70px]">
                 <span className="block font-black text-[11px] leading-tight">

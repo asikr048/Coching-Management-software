@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import React, { useState, useEffect, useMemo } from "react"
 import {
@@ -24,7 +24,7 @@ import StudentProgressReport, {
 } from "./StudentProgressReport"
 import SectionWiseMeritList, { SectionWiseMeritRow } from "./SectionWiseMeritList"
 import WeeklyToppersSheet, { GrandTopperItem, SubjectTopperItem } from "./WeeklyToppersSheet"
-import { cn, getGrade } from "@/lib/utils"
+import { cn, getGrade, extractSeriesWeek } from "@/lib/utils"
 import { useBranding } from "@/components/providers/BrandingContext"
 
 export type PrintTemplateType = "merit_list" | "progress_report" | "tabulation" | "toppers_sheet"
@@ -433,9 +433,12 @@ export default function ExamPrintModal({
       const scode = targetStudent?.student_id || ""
 
       activeCombinedExams.forEach((we, wIdx) => {
+        const weekNum = (we.result_note ? extractSeriesWeek(we.result_note, we.title) : 0) || (wIdx + 1)
+        const weekLabel = `Week ${weekNum}`
+
         // 1. Add week header row
         allSubjects.push({
-          name: `📅 ${we.title || `সপ্তাহ ${wIdx + 1}`} (পূর্ণমান: ${we.total_marks || 350} নম্বর)`,
+          name: `🗓️ ${weekLabel} (পূর্ণমান: ${we.total_marks || 350} নম্বর)`,
           fullMarks: Number(we.total_marks) || 350,
           highestMarks: 0,
           wrMarks: 0,
@@ -443,7 +446,7 @@ export default function ExamPrintModal({
           totalMarks: 0,
           grade: "",
           gp: 0,
-          weekTitle: we.title,
+          weekTitle: weekLabel,
           weekId: we.id,
           isWeekHeader: true,
         })
@@ -538,7 +541,7 @@ export default function ExamPrintModal({
               totalMarks: score,
               grade: gradeInfo.grade,
               gp: gradeInfo.gp,
-              weekTitle: we.title,
+              weekTitle: weekLabel,
               weekId: we.id,
             })
           })
@@ -551,7 +554,7 @@ export default function ExamPrintModal({
           // Add week subtotal row
           const weekGradeInfo = calculateCoachingGrade(weekObtainedSum, weekFullSum)
           allSubjects.push({
-            name: `${we.title || "সপ্তাহ"} সর্বমোট নম্বর (Subtotal)`,
+            name: `${weekLabel} সর্বমোট নম্বর (Subtotal)`,
             fullMarks: weekFullSum,
             highestMarks: 0,
             wrMarks: 0,
@@ -559,7 +562,7 @@ export default function ExamPrintModal({
             totalMarks: weekObtainedSum,
             grade: weekGradeInfo.grade,
             gp: weekDaysCount > 0 ? Number((weekGpSum / weekDaysCount).toFixed(1)) : 0,
-            weekTitle: we.title,
+            weekTitle: weekLabel,
             weekId: we.id,
             isWeekSubtotal: true,
           })
@@ -569,7 +572,7 @@ export default function ExamPrintModal({
           const weekMax = Number(we.total_marks) || 350
           const gradeInfo = calculateCoachingGrade(weekMark, weekMax)
           allSubjects.push({
-            name: `${we.title || "সাপ্তাহিক মূল্যায়ন"} - প্রাপ্ত নম্বর`,
+            name: `${weekLabel} - প্রাপ্ত নম্বর`,
             fullMarks: weekMax,
             highestMarks: weekMax,
             wrMarks: 0,
@@ -577,7 +580,7 @@ export default function ExamPrintModal({
             totalMarks: weekMark,
             grade: gradeInfo.grade,
             gp: gradeInfo.gp,
-            weekTitle: we.title,
+            weekTitle: weekLabel,
             weekId: we.id,
           })
         }
@@ -969,7 +972,7 @@ export default function ExamPrintModal({
                 sectionName={activeBatchName}
                 examTitle={
                   isCombinedWeeks && activeCombinedExams.length > 0
-                    ? `সমন্বিত মেধা তালিকা (${activeCombinedExams.map((e) => e.title).join(", ")})`
+                    ? `${pdfTitle || displayTitle} (${activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})`
                     : (pdfTitle || displayTitle)
                 }
                 academicYear={customAcademicYear}
@@ -990,11 +993,7 @@ export default function ExamPrintModal({
                       instituteName={branding.nameBn || branding.name}
                       instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                       instituteLogoUrl={branding.logoUrl}
-                      examTitle={
-                        isCombinedWeeks && activeCombinedExams.length > 0
-                          ? `ধারাবাহিক সাপ্তাহিক পরীক্ষা - সমন্বিত প্রগ্রেস রিপোর্ট (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                    : (pdfTitle || displayTitle)
-                      }
+                      examTitle={pdfTitle || displayTitle}
                       academicYear={customAcademicYear}
                       batchName={activeBatchName}
                       groupName={st.group || "HUMANITIES"}
@@ -1029,8 +1028,8 @@ export default function ExamPrintModal({
                   ...exam,
                   title:
                     isCombinedWeeks && activeCombinedExams.length > 0
-                      ? `সমন্বিত ট্যাবশুলার শিট (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                    : (pdfTitle || displayTitle),
+                      ? `${pdfTitle || displayTitle} (${activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})`
+                      : (pdfTitle || displayTitle),
                   total_marks: activeTotalMarks,
                 }}
                 mode={selectedMode}
@@ -1057,7 +1056,7 @@ export default function ExamPrintModal({
                 instituteLogoUrl={branding.logoUrl}
                 examTitle={
                   isCombinedWeeks && activeCombinedExams.length > 0
-                    ? `সমন্বিত শীর্ষ মেধা (${activeCombinedExams.map((e) => e.title).join(", ")})`
+                    ? `${pdfTitle || displayTitle} (${activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})`
                     : (pdfTitle || displayTitle)
                 }
                 batchName={activeBatchName}
