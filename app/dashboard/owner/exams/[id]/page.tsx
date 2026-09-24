@@ -2824,8 +2824,8 @@ export default function ExamResultsPage() {
     try {
       const res = await fetch(`/api/exams/${exam.id}`, { method: "DELETE" })
       if (!res.ok) {
-        const { error: delErr } = await supabase.from("exams").delete().eq("id", exam.id)
-        if (delErr) throw delErr
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.error || "Failed to delete exam from server")
       }
       toast.success(`Exam "${exam.title}" deleted successfully`)
       setShowDeleteModal(false)
@@ -2838,6 +2838,31 @@ export default function ExamResultsPage() {
       }
     } catch (err: any) {
       toast.error(err.message || "Failed to delete exam")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  // Delete Entire Weekly Exam Series (all weeks)
+  async function handleDeleteEntireSeries() {
+    if (!exam) return
+    const toDeleteExams = weeklySeriesExams.length > 0 ? weeklySeriesExams : [exam]
+    setDeleting(true)
+    try {
+      await Promise.all(
+        toDeleteExams.map((w) =>
+          fetch(`/api/exams/${w.id}`, { method: "DELETE" }).then((res) => {
+            if (!res.ok) throw new Error("Failed to delete week in series")
+            return res.json().catch(() => ({}))
+          })
+        )
+      )
+      toast.success(`✓ "${seriesName}" পরীক্ষার সকল সপ্তাহ সফলভাবে মুছে ফেলা হয়েছে!`)
+      setShowDeleteModal(false)
+      router.push(backUrl)
+    } catch (err: any) {
+      console.error("Delete series error:", err)
+      toast.error(err.message || "পরীক্ষা মুছে ফেলতে সমস্যা হয়েছে")
     } finally {
       setDeleting(false)
     }
@@ -5765,36 +5790,72 @@ export default function ExamResultsPage() {
       {/* DELETE MODAL */}
       {showDeleteModal && exam && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl p-6 border border-slate-200 space-y-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">Delete Exam?</h3>
-                <p className="text-xs text-slate-500 mt-1">
-                  আপনি কি নিশ্চিত যে &ldquo;{exam.title}&rdquo; মুছে ফেলতে চান? সকল প্রশ্ন ও শিক্ষার্থীদের ফলাফল স্থায়ীভাবে মুছে যাবে।
+                <h3 className="text-base font-extrabold text-slate-900">
+                  {weeklySeriesExams.length > 1 ? `Delete Exam: "${seriesName}"?` : `Delete Exam?`}
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  {weeklySeriesExams.length > 1 ? (
+                    <>
+                      এই সাপ্তাহিক পরীক্ষার অধীনে মোট <strong className="text-slate-800 font-bold">{weeklySeriesExams.length}টি সপ্তাহ</strong> রয়েছে। আপনি কি সম্পূর্ণ পরীক্ষার সিরিজটি মুছে ফেলতে চান, নাকি শুধুমাত্র বর্তমান সপ্তাহটি (<strong className="text-slate-800 font-bold">{exam.title}</strong>) মুছে ফেলবেন?
+                    </>
+                  ) : (
+                    <>
+                      আপনি কি নিশ্চিত যে <strong className="text-slate-800 font-bold">&quot;{exam.title}&quot;</strong> পরীক্ষাটি মুছে ফেলতে চান? সকল প্রশ্ন ও শিক্ষার্থীদের ফলাফল স্থায়ীভাবে মুছে যাবে।
+                    </>
+                  )}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 type="button"
                 onClick={() => setShowDeleteModal(false)}
                 disabled={deleting}
-                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer text-center"
               >
-                Cancel
+                Cancel (বাতিল)
               </button>
+
+              {weeklySeriesExams.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleDeleteExam}
+                  disabled={deleting}
+                  className="w-full sm:w-auto px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  title="শুধুমাত্র এই সপ্তাহটি মুছে ফেলুন, আগের/অন্যান্য সপ্তাহগুলো থাকবে"
+                >
+                  {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5 text-amber-700" />}
+                  <span>শুধু এই সপ্তাহ মুছুন ({exam.title})</span>
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={handleDeleteExam}
+                onClick={weeklySeriesExams.length > 1 ? handleDeleteEntireSeries : handleDeleteExam}
                 disabled={deleting}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                className="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20 disabled:opacity-50 cursor-pointer"
               >
-                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                <span>Delete Permanently</span>
+                {deleting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>
+                      {weeklySeriesExams.length > 1
+                        ? `পুরো সিরিজ মুছুন (${weeklySeriesExams.length} Weeks)`
+                        : "Delete Permanently"}
+                    </span>
+                  </>
+                )}
               </button>
             </div>
           </div>

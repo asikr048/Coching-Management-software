@@ -121,6 +121,7 @@ export default function ExamsClient({
   const [loading, setLoading] = useState(false)
   const [publishing, setPublishing] = useState<string | null>(null)
   const [deleteConfirmExam, setDeleteConfirmExam] = useState<ExamRow | null>(null)
+  const [deleteConfirmSeries, setDeleteConfirmSeries] = useState<any | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pausingId, setPausingId] = useState<string | null>(null)
   const { selectedBranchId, currentBranch } = useBranch()
@@ -1510,10 +1511,45 @@ export default function ExamsClient({
 
       toast.success("✓ Exam deleted successfully! (পরীক্ষা সফলভাবে মুছে ফেলা হয়েছে)")
       setDeleteConfirmExam(null)
+      setDeleteConfirmSeries(null)
       router.refresh()
     } catch (err: any) {
       console.error("Delete exam error:", err)
       toast.error(err?.message || "Failed to delete exam")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  async function handleDeleteEntireSeries(group: any) {
+    if (!group || !group.allWeeks || group.allWeeks.length === 0) return
+    const weekIds = group.allWeeks.map((w: any) => w.id)
+    setDeletingId(group.groupKey)
+    try {
+      await Promise.all(
+        weekIds.map((id: string) =>
+          fetch(`/api/exams/${id}`, { method: "DELETE" }).then((res) => {
+            if (!res.ok) throw new Error("Failed to delete exam from server")
+            return res.json().catch(() => ({}))
+          })
+        )
+      )
+
+      // Remove from local state
+      setExams((prev) => prev.filter((e) => !weekIds.includes(e.id)))
+
+      // Clean up linked notices
+      if (group.allNotices && group.allNotices.length > 0) {
+        const noticeIds = group.allNotices.map((n: any) => n.id)
+        setNotices((prev) => prev.filter((n) => !noticeIds.includes(n.id)))
+      }
+
+      toast.success(`✓ "${group.seriesTitle}" পরীক্ষার সকল সপ্তাহ সফলভাবে মুছে ফেলা হয়েছে!`)
+      setDeleteConfirmSeries(null)
+      router.refresh()
+    } catch (err: any) {
+      console.error("Failed to delete exam series:", err)
+      toast.error(err?.message || "Failed to delete exam series")
     } finally {
       setDeletingId(null)
     }
@@ -2221,12 +2257,12 @@ export default function ExamsClient({
                               </button>
                               <button
                                 type="button"
-                                onClick={() => setDeleteConfirmExam(group.latestExam)}
-                                disabled={deletingId === group.latestExam.id}
+                                onClick={() => setDeleteConfirmSeries(group)}
+                                disabled={deletingId === group.groupKey}
                                 className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer border border-transparent hover:border-rose-200"
-                                title={`Delete ${group.latestExam.title}`}
+                                title={`Delete ${group.seriesTitle}`}
                               >
-                                {deletingId === group.latestExam.id ? (
+                                {deletingId === group.groupKey ? (
                                   <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-600" />
                                 ) : (
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -2581,6 +2617,85 @@ export default function ExamsClient({
                 ) : (
                   <>
                     <Trash2 className="w-3.5 h-3.5" /> Delete Permanently
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Exam Series Confirmation Modal */}
+      {deleteConfirmSeries && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl p-6 border border-slate-200 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Delete &quot;{deleteConfirmSeries.seriesTitle}&quot;?
+                </h3>
+                <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                  {deleteConfirmSeries.allWeeks.length > 1 ? (
+                    <>
+                      এই পরীক্ষাটিতে মোট <strong className="text-slate-800 font-bold">{deleteConfirmSeries.allWeeks.length}টি সপ্তাহ</strong> রয়েছে (Week 1 থেকে Week {deleteConfirmSeries.allWeeks.length})। আপনি কি পুরো সিরিজ ও সকল সপ্তাহের নম্বর মুছে ফেলতে চান, নাকি শুধুমাত্র সর্বশেষ সপ্তাহটি মুছবেন?
+                    </>
+                  ) : (
+                    <>
+                      আপনি কি নিশ্চিত যে <strong className="text-slate-800 font-bold">&quot;{deleteConfirmSeries.seriesTitle}&quot;</strong> পরীক্ষাটি মুছে ফেলতে চান? সকল প্রশ্ন ও শিক্ষার্থীদের ফলাফল স্থায়ীভাবে মুছে যাবে।
+                    </>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-end gap-2 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmSeries(null)}
+                disabled={deletingId === deleteConfirmSeries.groupKey || deletingId === deleteConfirmSeries.latestExam?.id}
+                className="w-full sm:w-auto px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer text-center"
+              >
+                Cancel (বাতিল)
+              </button>
+
+              {deleteConfirmSeries.allWeeks.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleDeleteExam(deleteConfirmSeries.latestExam.id)}
+                  disabled={deletingId === deleteConfirmSeries.groupKey || deletingId === deleteConfirmSeries.latestExam?.id}
+                  className="w-full sm:w-auto px-3.5 py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  title="শুধুমাত্র শেষ সপ্তাহটি মুছে ফেলুন, আগের সপ্তাহগুলো থাকবে"
+                >
+                  {deletingId === deleteConfirmSeries.latestExam?.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5 text-amber-700" />
+                  )}
+                  <span>শুধু শেষ সপ্তাহ মুছুন ({deleteConfirmSeries.latestExam.title})</span>
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => handleDeleteEntireSeries(deleteConfirmSeries)}
+                disabled={deletingId === deleteConfirmSeries.groupKey || deletingId === deleteConfirmSeries.latestExam?.id}
+                className="w-full sm:w-auto px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/20 disabled:opacity-50 cursor-pointer"
+              >
+                {deletingId === deleteConfirmSeries.groupKey ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Deleting All...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>
+                      {deleteConfirmSeries.allWeeks.length > 1
+                        ? `পুরো সিরিজ মুছুন (${deleteConfirmSeries.allWeeks.length} Weeks)`
+                        : "Delete Permanently"}
+                    </span>
                   </>
                 )}
               </button>

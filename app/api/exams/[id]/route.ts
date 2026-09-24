@@ -292,7 +292,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const authResult = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+    const authResult = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "teacher", "admin"])
     if (isAuthError(authResult)) return authResult
 
     const resolvedParams = await params
@@ -510,7 +510,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const authResult = await requireStaffRole(["owner", "super_manager", "manager", "teacher"])
+    const authResult = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "teacher", "receptionist", "admin"])
     if (isAuthError(authResult)) return authResult
 
     const resolvedParams = await params
@@ -521,63 +521,92 @@ export async function DELETE(
 
     const admin = createAdminClient()
 
-    // 0. Fetch the exam details to get linked notices and title
-    const { data: targetExam } = await admin
-      .from("exams")
-      .select("id, title, schedule_notice_id, branch_id")
-      .eq("id", examId)
-      .maybeSingle()
+    // 0. Fetch the exam details cleanly
+    let targetExam: any = null
+    try {
+      const { data: ex } = await admin
+        .from("exams")
+        .select("*")
+        .eq("id", examId)
+        .maybeSingle()
+      targetExam = ex
+    } catch (e) {
+      console.warn("Fetch exam before delete note:", e)
+    }
 
     // 1. Delete student answers for questions belonging to this exam
-    // (Prevents FK violation when exam_questions are deleted)
-    const { data: questions } = await admin
-      .from("exam_questions")
-      .select("id")
-      .eq("exam_id", examId)
+    try {
+      const { data: questions } = await admin
+        .from("exam_questions")
+        .select("id")
+        .eq("exam_id", examId)
 
-    if (questions && questions.length > 0) {
-      const qIds = questions.map((q) => q.id)
-      await admin.from("exam_answers").delete().in("question_id", qIds)
+      if (questions && questions.length > 0) {
+        const qIds = questions.map((q) => q.id)
+        await admin.from("exam_answers").delete().in("question_id", qIds)
+      }
+    } catch (e) {
+      console.warn("Delete questions answers warning:", e)
     }
 
     // 2. Delete student answers for any submissions of this exam
-    const { data: submissions } = await admin
-      .from("exam_submissions")
-      .select("id")
-      .eq("exam_id", examId)
+    try {
+      const { data: submissions } = await admin
+        .from("exam_submissions")
+        .select("id")
+        .eq("exam_id", examId)
 
-    if (submissions && submissions.length > 0) {
-      const subIds = submissions.map((s) => s.id)
-      await admin.from("exam_answers").delete().in("submission_id", subIds)
+      if (submissions && submissions.length > 0) {
+        const subIds = submissions.map((s) => s.id)
+        await admin.from("exam_answers").delete().in("submission_id", subIds)
+      }
+    } catch (e) {
+      console.warn("Delete submissions answers warning:", e)
     }
 
     // 3. Delete exam submissions
-    await admin.from("exam_submissions").delete().eq("exam_id", examId)
-
-    // 4. Delete exam questions
-    await admin.from("exam_questions").delete().eq("exam_id", examId)
-
-    // 5. Delete exam results
-    await admin.from("exam_results").delete().eq("exam_id", examId)
-
-    // 6. Clean up linked notice if present
-    if (targetExam?.schedule_notice_id) {
-      try {
-        await admin.from("exams").update({ schedule_notice_id: null }).eq("id", examId)
-        await admin.from("notices").delete().eq("id", targetExam.schedule_notice_id)
-      } catch (nErr) {
-        console.warn("Failed to delete linked notice:", nErr)
-      }
+    try {
+      await admin.from("exam_submissions").delete().eq("exam_id", examId)
+    } catch (e) {
+      console.warn("Delete submissions warning:", e)
     }
 
-    // Also clean up any notices created specifically for this exam by title
-    if (targetExam?.title) {
-      try {
-        await admin
-          .from("notices")
-          .delete()
-          .or(`title.eq.📋 পরীক্ষার রুটিন নোটিশ: ${targetExam.title},title.eq.🏆 পরীক্ষার ফলাফল ও মেরিট লিস্ট: ${targetExam.title},title.eq.🏆 সামগ্রিক সাপ্তাহিক ফলাফল ও মেরিট তালিকা: ${targetExam.title}`)
-      } catch {}
+    // 4. Delete exam questions
+    try {
+      await admin.from("exam_questions").delete().eq("exam_id", examId)
+    } catch (e) {
+      console.warn("Delete questions warning:", e)
+    }
+
+    // 5. Delete exam results
+    try {
+      await admin.from("exam_results").delete().eq("exam_id", examId)
+    } catch (e) {
+      console.warn("Delete results warning:", e)
+    }
+
+    // 6. Clean up linked notices safely by ID without breaking filter syntax
+    try {
+      const { data: allNotices } = await admin.from("notices").select("id, title, content")
+      if (allNotices && allNotices.length > 0) {
+        const exTitleClean = (targetExam?.title || "").trim().toLowerCase()
+        const toDelete = allNotices
+          .filter((n: any) => {
+            const t = (n.title || "").toLowerCase()
+            const c = (n.content || "").toLowerCase()
+            return (
+              (targetExam?.schedule_notice_id && n.id === targetExam.schedule_notice_id) ||
+              (exTitleClean.length >= 4 && (t.includes(exTitleClean) || c.includes(exTitleClean))) ||
+              c.includes(examId)
+            )
+          })
+          .map((n: any) => n.id)
+        if (toDelete.length > 0) {
+          await admin.from("notices").delete().in("id", toDelete)
+        }
+      }
+    } catch (nErr) {
+      console.warn("Failed to delete linked notices:", nErr)
     }
 
     // 7. Delete the exam record itself
