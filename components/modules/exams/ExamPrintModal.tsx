@@ -15,7 +15,6 @@ import {
   Users,
   Award,
   Layers,
-  Edit2,
 } from "lucide-react"
 import PrintableExamSheet, { PrintableExamSheetProps } from "./PrintableExamSheet"
 import StudentProgressReport, {
@@ -150,23 +149,17 @@ export default function ExamPrintModal({
   const [showSubjectToppers, setShowSubjectToppers] = useState<boolean>(true)
   const [showSignatures, setShowSignatures] = useState<boolean>(true)
 
-  // 6. Custom Exam Title and Academic Year (Directly editable for Result Sheet & PDF ONLY)
-  //    NOTE: This is purely LOCAL — it only affects what appears on the printed/PDF sheet.
-  //          It does NOT save to the database. To permanently rename the exam, use the
-  //          title edit button (✏️) on the main exam page.
-  const [customExamTitle, setCustomExamTitle] = useState<string>(exam.title || "")
+  // 6. Academic Year (editable for result sheets — e.g. 2026)
   const [customAcademicYear, setCustomAcademicYear] = useState<string>(
     exam.exam_date ? new Date(exam.exam_date).getFullYear().toString() : new Date().getFullYear().toString()
   )
 
-  // Keep custom title & year synced if exam prop changes (e.g. navigating between weeks)
-  // but ONLY reset if the modal is not currently showing user-entered overrides.
+  // Keep academic year synced if exam changes (e.g. navigating between weeks)
   useEffect(() => {
-    setCustomExamTitle(exam.title || "")
     if (exam.exam_date) {
       setCustomAcademicYear(new Date(exam.exam_date).getFullYear().toString())
     }
-  }, [exam.id, exam.title, exam.exam_date])
+  }, [exam.id, exam.exam_date])
 
   // Sync mode and orientation when defaultMode changes
   useEffect(() => {
@@ -688,7 +681,7 @@ export default function ExamPrintModal({
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500">
-                  {customExamTitle || exam.title} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
+                  {exam.title || exam.title} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
                 </p>
               </div>
             </div>
@@ -772,21 +765,17 @@ export default function ExamPrintModal({
               </button>
             </div>
 
-            {/* Editable Exam Name & Academic Year (PDF printout only — does NOT change the saved exam name) */}
+            {/* Exam Name Display (always shows the saved exam title — to change it, use ✏️ on the main page) */}
             <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
-              <Edit2 className="w-3.5 h-3.5 text-slate-500 ml-1" />
-              <label className="text-slate-600 font-bold text-[11px] whitespace-nowrap">
-                PDF নাম (শুধু প্রিন্টের জন্য):
-              </label>
-              <input
-                type="text"
-                value={customExamTitle}
-                onChange={(e) => setCustomExamTitle(e.target.value)}
-                className="px-2 py-0.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 w-32 sm:w-40 focus:w-52 transition-all focus:outline-hidden focus:ring-1 focus:ring-amber-500"
-                placeholder="e.g. WEEKLY-05"
-                title="শুধুমাত্র রেজাল্ট শিট ও PDF-এ নাম পরিবর্তন হবে। পরীক্ষার আসল নাম পরিবর্তন করতে মূল পৃষ্ঠায় সম্পাদনা (✏️) বাটন ব্যবহার করুন।"
-              />
-              <label className="text-slate-600 font-bold text-[11px] whitespace-nowrap ml-1">শিক্ষাবর্ষ:</label>
+              <FileText className="w-3.5 h-3.5 text-slate-400 ml-1 shrink-0" />
+              <label className="text-slate-500 font-bold text-[11px] whitespace-nowrap">পরীক্ষার নাম:</label>
+              <span
+                className="px-2 py-0.5 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-900 min-w-[80px] truncate max-w-[200px]"
+                title={exam.title || ""}
+              >
+                {exam.title || "—"}
+              </span>
+              <label className="text-slate-500 font-bold text-[11px] whitespace-nowrap ml-1">শিক্ষাবর্ষ:</label>
               <input
                 type="text"
                 value={customAcademicYear}
@@ -795,9 +784,6 @@ export default function ExamPrintModal({
                 placeholder="2026"
                 title="রেজাল্ট শিটে শিক্ষাবর্ষ পরিবর্তন করুন"
               />
-              <span className="text-[9px] text-slate-400 font-medium italic ml-0.5 hidden sm:inline">
-                (PDF-only)
-              </span>
             </div>
 
             {/* 2. Multi-Batch Selector (When multi-batch exists) */}
@@ -955,7 +941,7 @@ export default function ExamPrintModal({
                 instituteLogoUrl={branding.logoUrl}
                 sectionName={activeBatchName}
                 examTitle={
-                  customExamTitle ||
+                  exam.title ||
                   (isCombinedWeeks && activeCombinedExams.length > 0
                     ? `সমন্বিত মেধা তালিকা (${activeCombinedExams.map((e) => e.title).join(", ")})`
                     : exam.title)
@@ -979,7 +965,7 @@ export default function ExamPrintModal({
                       instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                       instituteLogoUrl={branding.logoUrl}
                       examTitle={
-                        customExamTitle ||
+                        exam.title ||
                         (isCombinedWeeks && activeCombinedExams.length > 0
                           ? `ধারাবাহিক সাপ্তাহিক পরীক্ষা - সমন্বিত প্রগ্রেস রিপোর্ট (${activeCombinedExams.map((e) => e.title).join(", ")})`
                           : exam.title)
@@ -1017,7 +1003,7 @@ export default function ExamPrintModal({
                 exam={{
                   ...exam,
                   title:
-                    customExamTitle ||
+                    exam.title ||
                     (isCombinedWeeks && activeCombinedExams.length > 0
                       ? `সমন্বিত ট্যাবশুলার শিট (${activeCombinedExams.map((e) => e.title).join(", ")})`
                       : exam.title),
@@ -1046,7 +1032,7 @@ export default function ExamPrintModal({
                 instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                 instituteLogoUrl={branding.logoUrl}
                 examTitle={
-                  customExamTitle ||
+                  exam.title ||
                   (isCombinedWeeks && activeCombinedExams.length > 0
                     ? `সমন্বিত শীর্ষ মেধা (${activeCombinedExams.map((e) => e.title).join(", ")})`
                     : exam.title)
@@ -1093,3 +1079,5 @@ export default function ExamPrintModal({
     </div>
   )
 }
+
+
