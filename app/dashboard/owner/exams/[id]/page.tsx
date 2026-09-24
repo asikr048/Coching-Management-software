@@ -42,7 +42,7 @@ import {
   Square,
   RotateCcw,
 } from "lucide-react"
-import { getGrade, getGradePoint, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch } from "@/lib/utils"
+import { getGrade, getGradePoint, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch, extractSeriesId, extractSeriesWeek, getExamSeriesKey } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
 import ExamPrintModal, { PrintTemplateType } from "@/components/modules/exams/ExamPrintModal"
 import { calculateCoachingGrade } from "@/components/modules/exams/StudentProgressReport"
@@ -842,7 +842,8 @@ export default function ExamResultsPage() {
       }
 
       // Build rich metadata string in result_note
-      let updatedNote = `[SERIES_WEEK:${nextWeekNum}] [SHOW_ALL_RESULTS:true]`
+      const curSeriesId = extractSeriesId(exam.result_note) || getExamSeriesKey(exam).replace(/^series_|^legacy_weekly_/, "")
+      let updatedNote = `[SERIES_ID:${curSeriesId}] [SERIES_WEEK:${nextWeekNum}] [SHOW_ALL_RESULTS:true]`
       if (batchIdsList.length > 0) {
         updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
       }
@@ -999,7 +1000,9 @@ export default function ExamResultsPage() {
         if (schedPass > 0) newPassMarks = schedPass
       }
 
-      let updatedNote = `[SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
+      const curSeriesKey = getExamSeriesKey(exam)
+      const seriesId = extractSeriesId(exam.result_note) || curSeriesKey.replace(/^series_|^legacy_weekly_/, "")
+      let updatedNote = `[SERIES_ID:${seriesId}] [SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
       if (batchIdsList.length > 0) {
         updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
       }
@@ -1085,40 +1088,43 @@ export default function ExamResultsPage() {
   const { prevWeekExam, nextWeekExam, currentWeekNum, fullSeriesSlots } = useMemo(() => {
     if (!exam) return { prevWeekExam: null, nextWeekExam: null, currentWeekNum: 1, fullSeriesSlots: [] }
 
-    // Collect ONLY unique real existing exams that have actually been created/added
-    const pool = [exam, ...(weeklySeriesExams || []), ...(combinedWeeksExamsList || [])]
+    const curSeriesKey = getExamSeriesKey(exam)
+    // Collect ONLY unique real existing exams that belong to this EXACT series
+    const rawPool = [exam, ...(weeklySeriesExams || []), ...(combinedWeeksExamsList || [])]
     const map = new Map<string, any>()
-    pool.forEach((e) => {
-      if (e?.id && !map.has(e.id)) {
+    rawPool.forEach((e) => {
+      if (e?.id && !map.has(e.id) && getExamSeriesKey(e) === curSeriesKey) {
         map.set(e.id, e)
       }
     })
     const existingExams = Array.from(map.values())
 
-    // Sort by creation timestamp to establish sequential order
+    // Sort by series week number or creation timestamp
     existingExams.sort((a, b) => {
+      const numA = extractSeriesWeek(a.result_note, a.title) || 0
+      const numB = extractSeriesWeek(b.result_note, b.title) || 0
+      if (numA !== numB && numA > 0 && numB > 0) return numA - numB
       return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
     })
 
-    // Assign sequential week numbers (1, 2, 3...) based on creation order
     const slots: Array<{
       weekNum: number
       title: string
       exam: any
       isCurrent: boolean
     }> = existingExams.map((ex, idx) => {
-      const seqNum = idx + 1
+      const wNum = extractSeriesWeek(ex.result_note, ex.title) || idx + 1
       return {
-        weekNum: seqNum,
-        title: ex.title || `WEEKLY-${seqNum < 10 ? "0" + seqNum : seqNum}`,
+        weekNum: wNum,
+        title: ex.title || `WEEKLY-${wNum < 10 ? "0" + wNum : wNum}`,
         exam: ex,
         isCurrent: ex.id === exam.id,
       }
     })
 
-    // Find current exam's sequential week number
+    // Find current exam's slot
     const curIdx = slots.findIndex((s) => s.exam.id === exam.id)
-    const curNum = curIdx >= 0 ? slots[curIdx].weekNum : 1
+    const curNum = curIdx >= 0 ? slots[curIdx].weekNum : (extractSeriesWeek(exam.result_note, exam.title) || 1)
 
     // Find previous and next exam among the actual existing exams
     const prev = curIdx > 0 ? slots[curIdx - 1].exam : null
@@ -1128,8 +1134,9 @@ export default function ExamResultsPage() {
   }, [exam, weeklySeriesExams, combinedWeeksExamsList])
 
   const nextWeekNumToCreate = useMemo(() => {
-    // Simply the next sequential number after all existing exams
-    return fullSeriesSlots.length + 1
+    if (fullSeriesSlots.length === 0) return 1
+    const maxW = Math.max(...fullSeriesSlots.map((s) => s.weekNum), 0)
+    return maxW + 1
   }, [fullSeriesSlots])
 
   // 1. Immediately load series exams when exam is available
@@ -1154,40 +1161,22 @@ export default function ExamResultsPage() {
         .select("*")
         .order("created_at", { ascending: true })
 
-      const curBatchId = exam.batch_id
-      const curBranchId = exam.branch_id
-
       const pool = [...seriesFromApi, ...(allExams || [])]
       const uniqueExams = Array.from(new Map(pool.map((e) => [e.id, e])).values())
 
+      const curSeriesKey = getExamSeriesKey(exam)
       const weeklyExams = uniqueExams.filter((e) => {
         const isWeekly =
           e.exam_schedule_type === "weekly" ||
           (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
           (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
-          (e.result_note && (e.result_note.includes("[SERIES_WEEK:") || e.result_note.includes("[WEEKLY_SCHEDULE:"))) ||
+          (e.result_note && (e.result_note.includes("[SERIES_WEEK:") || e.result_note.includes("[WEEKLY_SCHEDULE:") || e.result_note.includes("[SERIES_ID:"))) ||
           (Number(e.total_marks) === 350 && !e.exam_date)
 
         if (!isWeekly) return false
 
-        // Don't drop exams if branch_id is null; only drop if both have explicit different branches
-        if (curBranchId && e.branch_id && e.branch_id !== curBranchId) {
-          return false
-        }
-
-        // Batch matching: strictly match the same batch
-        if (curBatchId) {
-          const eBatchIds = Array.isArray(e.batch_ids) && e.batch_ids.length > 0 ? e.batch_ids : (e.batch_id ? [e.batch_id] : [])
-          const curBatchIds = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? exam.batch_ids : (exam.batch_id ? [exam.batch_id] : [])
-          const hasCommonBatch = eBatchIds.some((b: string) => curBatchIds.includes(b)) || e.batch_id === curBatchId
-          const noteMatch = (e.result_note && e.result_note.includes(curBatchId)) || (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id))
-
-          if (!hasCommonBatch && !noteMatch) {
-            return false
-          }
-        }
-
-        return true
+        // Strictly match the same series key!
+        return getExamSeriesKey(e) === curSeriesKey
       })
 
       if (!weeklyExams.some((e) => e.id === exam.id)) {
@@ -1195,6 +1184,9 @@ export default function ExamResultsPage() {
       }
 
       weeklyExams.sort((a, b) => {
+        const numA = extractSeriesWeek(a.result_note, a.title) || 0
+        const numB = extractSeriesWeek(b.result_note, b.title) || 0
+        if (numA !== numB && numA > 0 && numB > 0) return numA - numB
         return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
       })
 
@@ -1212,13 +1204,15 @@ export default function ExamResultsPage() {
     if (!exam) return
     setLoadingCombinedWeeks(true)
     try {
-      // Collect all unique available exams from all series sources
+      const curSeriesKey = getExamSeriesKey(exam)
+      // Collect all unique available exams from all series sources matching curSeriesKey
       const allPool = [
         exam,
         ...(fullSeriesSlots.map((s) => s.exam).filter(Boolean) || []),
         ...(combinedWeeksExamsList || []),
         ...(weeklySeriesExams || []),
-      ]
+      ].filter((e) => e?.id && getExamSeriesKey(e) === curSeriesKey)
+
       const examMap = new Map<string, any>()
       allPool.forEach((e) => {
         if (e?.id && !examMap.has(e.id)) {
@@ -1227,53 +1221,15 @@ export default function ExamResultsPage() {
       })
       let targetExams = Array.from(examMap.values())
 
-      if (targetExams.length <= 1) {
-        const { data: allExams } = await supabase
-          .from("exams")
-          .select("*")
-          .order("created_at", { ascending: true })
+      targetExams.sort((a, b) => {
+        const numA = extractSeriesWeek(a.result_note, a.title) || 0
+        const numB = extractSeriesWeek(b.result_note, b.title) || 0
+        if (numA !== numB && numA > 0 && numB > 0) return numA - numB
+        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+      })
 
-        const curBatchId = exam.batch_id
-        const curBranchId = exam.branch_id
-
-        const foundExams = (allExams || []).filter((e) => {
-          const isWeekly =
-            e.exam_schedule_type === "weekly" ||
-            (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
-            (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
-            (e.result_note && (e.result_note.includes("[SERIES_WEEK:") || e.result_note.includes("[WEEKLY_SCHEDULE:"))) ||
-            (Number(e.total_marks) === 350 && !e.exam_date)
-
-          if (!isWeekly) return false
-          if (curBranchId && e.branch_id && e.branch_id !== curBranchId) return false
-          if (curBatchId) {
-            const eBatchIds = Array.isArray(e.batch_ids) && e.batch_ids.length > 0 ? e.batch_ids : (e.batch_id ? [e.batch_id] : [])
-            const curBatchIds = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? exam.batch_ids : (exam.batch_id ? [exam.batch_id] : [])
-            const hasCommonBatch = eBatchIds.some((b: string) => curBatchIds.includes(b)) || e.batch_id === curBatchId
-            const noteMatch = (e.result_note && e.result_note.includes(curBatchId)) || (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id))
-
-            if (!hasCommonBatch && !noteMatch) {
-              return false
-            }
-          }
-          return true
-        })
-
-        foundExams.forEach((e) => {
-          if (!examMap.has(e.id)) examMap.set(e.id, e)
-        })
-        targetExams = Array.from(examMap.values())
-
-        targetExams.sort((a, b) => {
-          const numA = extractWeekNumber(a.title, a.result_note) || 0
-          const numB = extractWeekNumber(b.title, b.result_note) || 0
-          if (numA !== numB && numA > 0 && numB > 0) return numA - numB
-          return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
-        })
-
-        setWeeklySeriesExams(targetExams)
-        setCombinedWeeksExamsList(targetExams)
-      }
+      setWeeklySeriesExams(targetExams)
+      setCombinedWeeksExamsList(targetExams)
 
       if (targetExams.length === 0) {
         setCombinedWeekData([])

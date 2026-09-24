@@ -118,7 +118,74 @@ export function cleanWeeklyScheduleFromNote(note?: string | null): string {
     .replace(/\[WEEKLY_SCHEDULE:(\[[\s\S]*?\])\]/g, "")
     .replace(/\[WEEKLY_SCHEDULE:[^\]]*\]\]?/g, "")
     .replace(/\[WEEKLY_DAYS:[^\]]*\]/g, "")
-    .trim()
+}
+
+/**
+ * Extract series ID from exam result_note
+ */
+export function extractSeriesId(note?: string | null): string | null {
+  if (!note || typeof note !== "string") return null
+  const m = note.match(/\[SERIES_ID:([^\]\s]+)\]/)
+  return m && m[1] ? m[1].trim() : null
+}
+
+/**
+ * Extract series week number from result_note or title
+ */
+export function extractSeriesWeek(note?: string | null, title?: string | null): number | null {
+  if (note && typeof note === "string") {
+    const nm = note.match(/\[SERIES_WEEK:(\d+)\]/)
+    if (nm && nm[1]) return parseInt(nm[1], 10)
+  }
+  if (title && typeof title === "string") {
+    const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+    const m = normalized.match(/weekly[-_\s]0*(\d+)/i) || normalized.match(/সাপ্তাহিক[-_\s]0*(\d+)/)
+    if (m && m[1]) {
+      const beforeNum = normalized.substring(0, normalized.indexOf(m[0]) + m[0].indexOf(m[1]))
+      if (!/class\s*$/i.test(beforeNum) && !/ক্লাস\s*$/.test(beforeNum)) {
+        return parseInt(m[1], 10)
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Get unique series key for grouping an exam into its series.
+ * - If an explicit [SERIES_ID:xxx] exists, returns `series_${seriesId}`.
+ * - For legacy exams:
+ *   If title is formatted like WEEKLY-01, WEEKLY-02, etc. (standard auto-created weekly names),
+ *   group them by batch: `legacy_weekly_${branchId}::${batchId}`.
+ *   OTHERWISE (e.g. custom titles like "Science", "Math", "mm"), each exam is its own independent series: `exam_${exam.id}`.
+ */
+export function getExamSeriesKey(exam: {
+  id?: string
+  batch_id?: string | null
+  batch_ids?: string[] | null
+  branch_id?: string | null
+  result_note?: string | null
+  title?: string | null
+}): string {
+  if (!exam) return ""
+  const explicit = extractSeriesId(exam.result_note)
+  if (explicit) return `series_${explicit}`
+
+  // Legacy fallback:
+  const title = (exam.title || "").trim()
+  const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+  const isGenericWeeklyPattern =
+    /^weekly[-_\s]?0*\d+$/i.test(normalized) ||
+    /^সাপ্তাহিক[-_\s]?0*\d+$/.test(normalized) ||
+    /^week[-_\s]?0*\d+$/i.test(normalized)
+
+  if (isGenericWeeklyPattern) {
+    const bId = exam.batch_id || (Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? [...exam.batch_ids].sort().join(",") : "all_batches")
+    const brId = exam.branch_id || "all_branches"
+    return `legacy_weekly_${brId}::${bId}`
+  }
+
+  // Any custom-titled exam or one without generic weekly title is its own series!
+  return `exam_${exam.id || Math.random().toString(36).slice(2)}`
 }
 
 const BN_TO_EN_DIGITS: Record<string, string> = {

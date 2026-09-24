@@ -8,7 +8,7 @@ import {
   Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle, Search, ExternalLink, Filter,
   Check, RefreshCw, Layers, Award
 } from "lucide-react"
-import { formatDate, cn, extractWeeklyScheduleFromNote, cleanWeeklyScheduleFromNote } from "@/lib/utils"
+import { formatDate, cn, extractWeeklyScheduleFromNote, cleanWeeklyScheduleFromNote, extractSeriesId, extractSeriesWeek, getExamSeriesKey } from "@/lib/utils"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useBranch } from "@/components/providers/BranchContext"
@@ -63,6 +63,7 @@ interface ExamRow {
   is_weekly_published?: boolean
   schedule_notice_id?: string | null
   result_note?: string | null
+  created_at?: string
 }
 
 export interface WeeklyDayConfig {
@@ -257,89 +258,123 @@ export default function ExamsClient({
     setShowModal(true)
   }
 
-  // Quick Continuous Weekly Exam Creator (Auto increments week number, clones subjects/marks)
+  // Quick Continuous Weekly Exam Creator (Starts fresh at Week 1 with independent series ID)
   function handleOpenNewWeeklyExam() {
     resetForm()
 
-    const targetBatchId = batchFilter !== "all" ? batchFilter : ""
-
-    let weeklyCount = 0
-    let lastWeeklyExam: any = null
-
-    for (const ex of exams) {
-      const isWeekly =
-        ex.exam_schedule_type === "weekly" ||
-        (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
-        (ex.title && (ex.title.includes("সাপ্তাহিক") || ex.title.toLowerCase().includes("weekly")))
-      if (!isWeekly) continue
-
-      // Only count exams from the same batch
-      if (targetBatchId) {
-        const exBatchIds = Array.isArray(ex.batch_ids) && ex.batch_ids.length > 0
-          ? ex.batch_ids : (ex.batch_id ? [ex.batch_id] : [])
-        if (!exBatchIds.includes(targetBatchId) && ex.batch_id !== targetBatchId) continue
-      }
-
-      lastWeeklyExam = ex
-      weeklyCount++
-    }
-
-    const nextWeekNum = weeklyCount + 1
-    const suggestedTitle = `WEEKLY-${nextWeekNum < 10 ? "0" + nextWeekNum : nextWeekNum}`
+    const newSeriesId = `series_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
     const initialBatchId =
-      batchFilter !== "all" ? batchFilter : (lastWeeklyExam?.batch_id || batches[0]?.id || "")
+      batchFilter !== "all" ? batchFilter : (batches[0]?.id || "")
+
+    // Pre-populate all 7 days with 50 marks each (350 total)
+    const initialSchedule = defaultWeeklySchedule()
+    WEEK_DAYS.forEach((w) => {
+      initialSchedule[w.id as keyof typeof initialSchedule] = {
+        selected: true,
+        exam_name: `${w.bn}ের পরীক্ষা`,
+        subject: "বিষয় ভিত্তিক পরীক্ষা",
+        total_marks: "50",
+        pass_marks: "20",
+      }
+    })
+    setWeeklySchedule(initialSchedule)
 
     setForm((prev) => ({
       ...prev,
-      title: suggestedTitle,
-      subject: lastWeeklyExam?.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+      title: "WEEKLY-01",
+      subject: "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
       batch_id: initialBatchId,
       batch_ids: initialBatchId ? [initialBatchId] : [],
       exam_schedule_type: "weekly",
       recurring_days: [],
-      total_marks: lastWeeklyExam?.total_marks ? String(lastWeeklyExam.total_marks) : "100",
-      pass_marks: lastWeeklyExam?.pass_marks ? String(lastWeeklyExam.pass_marks) : "40",
+      total_marks: "350",
+      pass_marks: "140",
       exam_date: new Date().toISOString().split("T")[0],
       duration_minutes: "60",
       show_results_immediately: true,
       show_all_results: true,
-      result_note: `[SERIES_WEEK:${nextWeekNum}]`,
+      result_note: `[SERIES_ID:${newSeriesId}] [SERIES_WEEK:1]`,
     }))
-
-    // Clone recurring days schedule from last weekly exam if available
-    if (lastWeeklyExam?.recurring_days) {
-      let recDays: any[] = []
-      if (Array.isArray(lastWeeklyExam.recurring_days)) recDays = lastWeeklyExam.recurring_days
-      else if (typeof lastWeeklyExam.recurring_days === "string") {
-        try {
-          recDays = JSON.parse(lastWeeklyExam.recurring_days)
-        } catch {}
-      }
-
-      if (recDays.length > 0) {
-        const clonedSchedule = defaultWeeklySchedule()
-        recDays.forEach((item: any) => {
-          const rawKey =
-            typeof item === "object" && item !== null ? item.day || item.day_bn || item.day_en || "" : item
-          const matched = WEEK_DAYS.find(
-            (w) => w.id === String(rawKey).toLowerCase() || w.bn === rawKey
-          )
-          if (matched && clonedSchedule[matched.id as keyof typeof clonedSchedule]) {
-            clonedSchedule[matched.id as keyof typeof clonedSchedule] = {
-              selected: true,
-              exam_name: item.exam_name || `${matched.bn}ের পরীক্ষা`,
-              subject: item.subject || "",
-              total_marks: item.total_marks != null ? String(item.total_marks) : "50",
-              pass_marks: item.pass_marks != null ? String(item.pass_marks) : "20",
-            }
-          }
-        })
-        setWeeklySchedule(clonedSchedule)
-      }
-    }
 
     setExamMode("offline")
     setShowModal(true)
+  }
+
+  // Directly create the next sequential week for a specific series card
+  const [creatingWeekForSeriesId, setCreatingWeekForSeriesId] = useState<string | null>(null)
+  async function handleCreateNextWeekForSeries(group: any) {
+    if (!group || !group.firstExam) return
+    setCreatingWeekForSeriesId(group.groupKey)
+    try {
+      const nextWeekNum = group.allWeeks.length + 1
+      const weekLabel = `WEEKLY-${nextWeekNum < 10 ? "0" + nextWeekNum : nextWeekNum}`
+      const srcExam = group.latestExam || group.firstExam
+      const seriesId = extractSeriesId(srcExam.result_note) || extractSeriesId(group.firstExam.result_note) || group.groupKey.replace("series_", "")
+
+      // Extract schedule from source exam
+      let scheduleToCopy: any[] = []
+      const fromNote = extractWeeklyScheduleFromNote(srcExam.result_note)
+      if (Array.isArray(fromNote) && fromNote.length > 0) {
+        scheduleToCopy = fromNote
+      } else if (Array.isArray(srcExam.recurring_days) && srcExam.recurring_days.length > 0) {
+        scheduleToCopy = srcExam.recurring_days
+      }
+
+      let newTotalMarks = Number(srcExam.total_marks) || 350
+      let newPassMarks = Number(srcExam.pass_marks) || 140
+      if (scheduleToCopy.length > 0) {
+        const schedTotal = scheduleToCopy.reduce((acc: number, d: any) => acc + (Number(d.total_marks) || 0), 0)
+        const schedPass = scheduleToCopy.reduce((acc: number, d: any) => acc + (Number(d.pass_marks) || 0), 0)
+        if (schedTotal > 0) newTotalMarks = schedTotal
+        if (schedPass > 0) newPassMarks = schedPass
+      }
+
+      const batchIdsList = Array.isArray(srcExam.batch_ids) && srcExam.batch_ids.length > 0
+        ? srcExam.batch_ids
+        : srcExam.batch_id ? [srcExam.batch_id] : []
+
+      let updatedNote = `[SERIES_ID:${seriesId}] [SERIES_WEEK:${nextWeekNum}] [SHOW_ALL_RESULTS:true]`
+      if (batchIdsList.length > 0) {
+        updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
+      }
+      if (scheduleToCopy.length > 0) {
+        updatedNote += ` [WEEKLY_SCHEDULE:${JSON.stringify(scheduleToCopy)}]`
+        updatedNote += ` [WEEKLY_DAYS:${scheduleToCopy.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`
+      }
+
+      const payload: any = {
+        title: weekLabel,
+        batch_id: srcExam.batch_id,
+        subject: srcExam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
+        total_marks: newTotalMarks,
+        pass_marks: newPassMarks,
+        exam_date: new Date().toISOString().split("T")[0],
+        result_note: updatedNote,
+        is_published: false,
+      }
+      if (srcExam.branch_id) payload.branch_id = srcExam.branch_id
+      if (srcExam.exam_schedule_type) payload.exam_schedule_type = "weekly"
+      if (scheduleToCopy.length > 0) payload.recurring_days = scheduleToCopy
+      if (srcExam.duration_minutes) payload.duration_minutes = Number(srcExam.duration_minutes) || 60
+
+      const { data: inserted, error: insErr } = await supabase
+        .from("exams")
+        .insert(payload)
+        .select("id")
+        .single()
+
+      if (insErr) throw insErr
+
+      if (inserted?.id) {
+        toast.success(`✓ Week ${nextWeekNum} সফলভাবে তৈরি হয়েছে! নম্বর প্রদান পেজে নিয়ে যাওয়া হচ্ছে...`)
+        router.push(`/dashboard/owner/exams/${inserted.id}`)
+      }
+    } catch (err: any) {
+      console.error("Failed to create next week:", err)
+      toast.error(err?.message || "Failed to create next week")
+    } finally {
+      setCreatingWeekForSeriesId(null)
+    }
   }
 
   // Weekly Day-by-Day Schedule State
@@ -529,41 +564,25 @@ export default function ExamsClient({
       }
     })
 
-    // Group weekly exams by batch and branch
+    // Group weekly exams by explicit series key
     const groupMap = new Map<string, ExamRow[]>()
     weeklyList.forEach((ex) => {
-      const bId = ex.batch_id || (Array.isArray(ex.batch_ids) && ex.batch_ids.length > 0 ? [...ex.batch_ids].sort().join(",") : "all_batches")
-      const brId = ex.branch_id || "all_branches"
-      const key = `${brId}::${bId}`
+      const key = getExamSeriesKey(ex)
       if (!groupMap.has(key)) {
         groupMap.set(key, [])
       }
       groupMap.get(key)!.push(ex)
     })
 
-    const parseWeekNum = (ex: ExamRow) => {
-      const title = ex.title || ""
-      const note = ex.result_note || ""
-      const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
-      const m = normalized.match(/weekly[-\s_]?0*(\d+)/i) || normalized.match(/সাপ্তাহিক[-\s_]?0*(\d+)/) || normalized.match(/week[-\s_]?0*(\d+)/i)
-      if (m && m[1]) return parseInt(m[1], 10)
-      if (note) {
-        const nm = note.match(/\[SERIES_WEEK:(\d+)\]/)
-        if (nm && nm[1]) return parseInt(nm[1], 10)
-      }
-      const numOnly = normalized.match(/(\d+)/)
-      if (numOnly && numOnly[1] && (normalized.toLowerCase().includes("week") || normalized.includes("সাপ্তাহিক"))) {
-        return parseInt(numOnly[1], 10)
-      }
-      return 1
-    }
-
     const seriesGroups: Array<{
       groupKey: string
+      seriesId: string
+      seriesTitle: string
       batchId: string | null
       batchName: string
       branchId: string | null
       branchName: string | null
+      firstExam: ExamRow
       latestExam: ExamRow
       allWeeks: ExamRow[]
       totalWeeksCount: number
@@ -573,30 +592,43 @@ export default function ExamsClient({
     }> = []
 
     groupMap.forEach((examsInGroup, key) => {
-      examsInGroup.sort((a, b) => parseWeekNum(a) - parseWeekNum(b))
+      // Sort exams chronologically or by series week
+      examsInGroup.sort((a, b) => {
+        const wA = extractSeriesWeek(a.result_note, a.title) || 0
+        const wB = extractSeriesWeek(b.result_note, b.title) || 0
+        if (wA !== wB && wA > 0 && wB > 0) return wA - wB
+        return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+      })
+      const firstExam = examsInGroup[0]
       const latest = examsInGroup[examsInGroup.length - 1]
 
       const batchName =
-        latest.batch?.name ||
-        batches.find((b) => b.id === latest.batch_id)?.name ||
-        (Array.isArray(latest.batch_ids) && latest.batch_ids.length > 0
-          ? latest.batch_ids.map((id) => batches.find((b) => b.id === id)?.name).filter(Boolean).join(", ")
+        firstExam.batch?.name ||
+        batches.find((b) => b.id === firstExam.batch_id)?.name ||
+        (Array.isArray(firstExam.batch_ids) && firstExam.batch_ids.length > 0
+          ? firstExam.batch_ids.map((id) => batches.find((b) => b.id === id)?.name).filter(Boolean).join(", ")
           : null) ||
         "সকল ব্যাচ (সমন্বিত সিরিজ)"
 
-      const branchName = latest.branch?.name || branches.find((br) => br.id === latest.branch_id)?.name || null
+      const branchName = firstExam.branch?.name || branches.find((br) => br.id === firstExam.branch_id)?.name || null
 
       const linkedNoticesSet = new Map<string, NoticeRow>()
       examsInGroup.forEach((ex) => {
         getLinkedNotices(ex, notices).forEach((n) => linkedNoticesSet.set(n.id, n))
       })
 
+      const rawSeriesId = extractSeriesId(firstExam.result_note) || extractSeriesId(latest.result_note) || key.replace(/^series_|^legacy_weekly_/, "")
+      const seriesTitle = firstExam.title || `${batchName} — ধারাবাহিক পরীক্ষা`
+
       seriesGroups.push({
         groupKey: key,
-        batchId: latest.batch_id || null,
+        seriesId: rawSeriesId,
+        seriesTitle,
+        batchId: firstExam.batch_id || null,
         batchName,
-        branchId: latest.branch_id || null,
+        branchId: firstExam.branch_id || null,
         branchName,
+        firstExam,
         latestExam: latest,
         allWeeks: examsInGroup,
         totalWeeksCount: examsInGroup.length,
@@ -1284,11 +1316,18 @@ export default function ExamsClient({
         duration_minutes: examMode === "offline" ? parseInt(form.duration_minutes) : null,
         show_results_immediately: form.show_results_immediately,
         show_all_results: form.show_all_results,
-        result_note: (form.result_note ? form.result_note + " " : "") + 
-          `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
-          (form.exam_schedule_type === "weekly" 
-            ? ` [WEEKLY_SCHEDULE:${JSON.stringify(activeWeeklyDays)}] [WEEKLY_DAYS:${activeWeeklyDays.map(d => d.day).join(",")}]` 
-            : ""),
+        result_note: (() => {
+          let baseNote = form.result_note ? form.result_note.trim() + " " : ""
+          if (form.exam_schedule_type === "weekly" && !baseNote.includes("[SERIES_ID:")) {
+            const newSeriesId = `series_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+            baseNote = `[SERIES_ID:${newSeriesId}] [SERIES_WEEK:1] ` + baseNote
+          }
+          return (baseNote + 
+            `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
+            (form.exam_schedule_type === "weekly" 
+              ? ` [WEEKLY_SCHEDULE:${JSON.stringify(activeWeeklyDays)}] [WEEKLY_DAYS:${activeWeeklyDays.map(d => d.day).join(",")}]` 
+              : "")).trim()
+        })(),
         is_published: false
       }
 
@@ -2078,7 +2117,7 @@ export default function ExamsClient({
                                 )}
                               </div>
                               <h3 className="font-extrabold text-slate-900 text-base leading-snug mt-1">
-                                {group.latestExam.title || `${group.batchName} — ধারাবাহিক পরীক্ষা`}
+                                {group.seriesTitle}
                               </h3>
                               <p className="text-xs text-purple-700 font-semibold mt-0.5">
                                 {group.batchName} • মোট {group.totalWeeksCount}টি সপ্তাহ সক্রিয় • প্রতি সপ্তাহ {group.latestExam.total_marks || 350} নম্বর
@@ -2147,12 +2186,8 @@ export default function ExamsClient({
                             </span>
                           </div>
                           <div className="flex flex-wrap items-center gap-1.5">
-                            {group.allWeeks.map((we) => {
-                              const title = we.title || ""
-                              const note = we.result_note || ""
-                              const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
-                              const m = normalized.match(/weekly[-\s_]?0*(\d+)/i) || normalized.match(/সাপ্তাহিক[-\s_]?0*(\d+)/) || normalized.match(/week[-\s_]?0*(\d+)/i)
-                              const wNum = (m && m[1]) ? parseInt(m[1], 10) : (note.match(/\[SERIES_WEEK:(\d+)\]/)?.[1] ? parseInt(note.match(/\[SERIES_WEEK:(\d+)\]/)![1], 10) : 1)
+                            {group.allWeeks.map((we, idx) => {
+                              const wNum = extractSeriesWeek(we.result_note, we.title) || idx + 1
                               const isPub = isExamPublished(we)
                               return (
                                 <Link
@@ -2174,12 +2209,17 @@ export default function ExamsClient({
 
                             <button
                               type="button"
-                              onClick={handleOpenNewWeeklyExam}
-                              className="px-2 py-1 rounded-lg text-xs font-bold bg-white hover:bg-purple-100 text-purple-700 border border-purple-300 border-dashed flex items-center gap-1 transition-all cursor-pointer"
-                              title="নতুন সপ্তাহ যোগ করুন"
+                              disabled={creatingWeekForSeriesId === group.groupKey}
+                              onClick={() => handleCreateNextWeekForSeries(group)}
+                              className="px-2 py-1 rounded-lg text-xs font-bold bg-white hover:bg-purple-100 text-purple-700 border border-purple-300 border-dashed flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                              title="পরবর্তী সপ্তাহ যোগ করুন"
                             >
-                              <Plus className="w-3 h-3 text-purple-600" />
-                              <span>+ নতুন সপ্তাহ</span>
+                              {creatingWeekForSeriesId === group.groupKey ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-purple-600" />
+                              ) : (
+                                <Plus className="w-3 h-3 text-purple-600" />
+                              )}
+                              <span>নতুন সপ্তাহ</span>
                             </button>
                           </div>
                         </div>

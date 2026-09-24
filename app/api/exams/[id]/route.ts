@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import { cleanWeeklyScheduleFromNote } from "@/lib/utils"
+import { cleanWeeklyScheduleFromNote, getExamSeriesKey } from "@/lib/utils"
 import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 export async function GET(
@@ -251,30 +251,18 @@ export async function GET(
           if (fbData) rawSeries = fbData
         }
 
+        const curSeriesKey = getExamSeriesKey(exam)
         seriesExams = rawSeries.filter((e) => {
           const ewIsWeekly =
             e.exam_schedule_type === "weekly" ||
             (e.title && (e.title.toLowerCase().includes("weekly") || e.title.includes("সাপ্তাহিক") || e.title.toLowerCase().includes("week"))) ||
-            (e.result_note && (e.result_note.includes("[SERIES_WEEK:") || e.result_note.includes("[WEEKLY_SCHEDULE:"))) ||
+            (e.result_note && (e.result_note.includes("[SERIES_WEEK:") || e.result_note.includes("[WEEKLY_SCHEDULE:") || e.result_note.includes("[SERIES_ID:"))) ||
             (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
             (Number(e.total_marks) === 350 && !e.exam_date)
 
           if (!ewIsWeekly) return false
 
-          if (exam.branch_id && e.branch_id && e.branch_id !== exam.branch_id) {
-            return false
-          }
-
-          if (exam.batch_id) {
-            const eBatchIds = Array.isArray(e.batch_ids) && e.batch_ids.length > 0 ? e.batch_ids : (e.batch_id ? [e.batch_id] : [])
-            const curBatchIds = Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0 ? exam.batch_ids : (exam.batch_id ? [exam.batch_id] : [])
-            const hasCommonBatch = eBatchIds.some((b: string) => curBatchIds.includes(b)) || e.batch_id === exam.batch_id
-            const noteHasBatch = (e.result_note && e.result_note.includes(exam.batch_id)) || (exam.result_note && e.batch_id && exam.result_note.includes(e.batch_id))
-            if (!hasCommonBatch && !noteHasBatch) {
-              return false
-            }
-          }
-          return true
+          return getExamSeriesKey(e) === curSeriesKey
         })
 
         if (!seriesExams.some((e) => e.id === exam.id)) {
