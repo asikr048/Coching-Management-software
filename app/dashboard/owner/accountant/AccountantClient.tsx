@@ -1770,15 +1770,38 @@ export default function AccountantClient({
                           <p className="font-bold text-emerald-600">
                             {formatCurrency(item.paidAmount)}
                           </p>
-                          {item.hasReferral && (
-                            <div
-                              className="mt-0.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-black"
-                              title={item.referralNotes || "Referral Applied"}
-                            >
-                              <Sparkles className="w-2.5 h-2.5 text-purple-600 shrink-0" />
-                              <span>Referral: ৳{item.referralAmount}</span>
-                            </div>
-                          )}
+                          {item.hasReferral && (() => {
+                            let refName = ""
+                            let refReason = ""
+                            if (item.referralNotes) {
+                              const match = item.referralNotes.match(/Referral:\s*([^|]+)(?:\s*\|\s*Reason:\s*([^|]+))?/)
+                              if (match) {
+                                refName = match[1]?.trim() || ""
+                                refReason = match[2]?.trim() || ""
+                              }
+                            }
+                            return (
+                              <div className="mt-1 space-y-0.5">
+                                <div
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-purple-100 text-purple-800 border border-purple-200 text-[10px] font-black"
+                                  title={item.referralNotes || "Referral Applied"}
+                                >
+                                  <Sparkles className="w-2.5 h-2.5 text-purple-600 shrink-0" />
+                                  <span>Referral: ৳{item.referralAmount}</span>
+                                </div>
+                                {refName && (
+                                  <p className="text-[10px] text-purple-900 font-semibold truncate max-w-[140px]" title={`Referrer: ${refName}`}>
+                                    Ref: <span className="font-bold">{refName}</span>
+                                  </p>
+                                )}
+                                {refReason && (
+                                  <p className="text-[9px] text-purple-700 truncate max-w-[140px]" title={`Reason: ${refReason}`}>
+                                    {refReason}
+                                  </p>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
 
                         {/* Outstanding Due */}

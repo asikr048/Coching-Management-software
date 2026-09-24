@@ -2673,6 +2673,15 @@ export default function NewStudentForm({
                 const totalFee = (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0) || matchingPayments[0]?.amount || 0
                 const refPayment = matchingPayments.find(p => p.payment_method === "referral" || p.notes?.includes("Referral:"))
                 const refAmt = refPayment ? (parseFloat(refPayment.total_paid) || parseFloat(refPayment.amount) || 0) : 0
+                let refPerson = ""
+                let refReason = ""
+                if (refPayment?.notes) {
+                  const match = refPayment.notes.match(/Referral:\s*([^|]+)(?:\s*\|\s*Reason:\s*([^|]+))?/)
+                  if (match) {
+                    refPerson = match[1]?.trim() || ""
+                    refReason = match[2]?.trim() || ""
+                  }
+                }
                 const cashPayments = matchingPayments.filter(p => p.payment_method !== "referral" && (!p.notes || !p.notes.includes("Referral:")))
                 const cashAmt = cashPayments.reduce((acc, p) => acc + (parseFloat(p.total_paid) || parseFloat(p.amount) || 0), 0)
                 const paidAmt = matchingPayments.length > 0 ? (cashAmt + refAmt) : (matchingDue?.paid_amount || 0)
@@ -2698,12 +2707,21 @@ export default function NewStudentForm({
                         <span>{formatDate(enr.created_at)}</span>
                         <span>• Paid: <b className="text-emerald-600">{formatCurrency(paidAmt)}</b></span>
                         {refAmt > 0 && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded">
+                          <span
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded"
+                            title={`Referral: ${refPerson || "N/A"} | Reason: ${refReason || "N/A"}`}
+                          >
                             🤝 Ref: {formatCurrency(refAmt)}
+                            {refPerson && <span className="font-semibold text-indigo-950">({refPerson})</span>}
                           </span>
                         )}
                         {dueAmt > 0 && <span>• Due: <b className="text-rose-600">{formatCurrency(dueAmt)}</b></span>}
                       </div>
+                      {refReason && (
+                        <div className="text-[10px] text-slate-500 italic pl-1">
+                          রেফারেল কারণ: {refReason}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0 flex-wrap">
                       <button
@@ -2894,6 +2912,15 @@ export default function NewStudentForm({
                       const totalFee = (b.monthly_fee ? (b.monthly_fee + (b.admission_fee || 0)) : 0) || (matchingDue?.due_amount || 0) || matchingPayments[0]?.amount || 0
                       const refPayment = matchingPayments.find(p => p.payment_method === "referral" || p.notes?.includes("Referral:"))
                       const refAmt = refPayment ? (parseFloat(refPayment.total_paid) || parseFloat(refPayment.amount) || 0) : 0
+                      let refPerson = ""
+                      let refReason = ""
+                      if (refPayment?.notes) {
+                        const match = refPayment.notes.match(/Referral:\s*([^|]+)(?:\s*\|\s*Reason:\s*([^|]+))?/)
+                        if (match) {
+                          refPerson = match[1]?.trim() || ""
+                          refReason = match[2]?.trim() || ""
+                        }
+                      }
                       const cashPayments = matchingPayments.filter(p => p.payment_method !== "referral" && (!p.notes || !p.notes.includes("Referral:")))
                       const cashAmt = cashPayments.reduce((acc, p) => acc + (parseFloat(p.total_paid) || parseFloat(p.amount) || 0), 0)
                       const paidAmt = matchingPayments.length > 0 ? (cashAmt + refAmt) : (matchingDue?.paid_amount || 0)
@@ -2967,13 +2994,24 @@ export default function NewStudentForm({
                             </div>
                             <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
                               <span className="text-emerald-600 font-semibold">Paid: {formatCurrency(paidAmt)}</span>
-                              {refAmt > 0 && (
-                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 rounded">
-                                  🤝 Ref: {formatCurrency(refAmt)}
-                                </span>
-                              )}
                               {dueAmt > 0 && <span className="text-rose-600 font-semibold">• Due: {formatCurrency(dueAmt)}</span>}
                             </div>
+                            {refAmt > 0 && (
+                              <div className="mt-1 space-y-0.5">
+                                <span
+                                  className="inline-flex items-center gap-1 text-[10px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded"
+                                  title={`Referral: ${refPerson || "N/A"} | Reason: ${refReason || "N/A"}`}
+                                >
+                                  🤝 Ref: {formatCurrency(refAmt)}
+                                  {refPerson && <span className="font-semibold text-indigo-950">({refPerson})</span>}
+                                </span>
+                                {refReason && (
+                                  <div className="text-[9px] text-slate-500 italic truncate max-w-[200px]" title={refReason}>
+                                    কারণ: {refReason}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </td>
 
                           <td className="px-4 py-3.5 text-right whitespace-nowrap">
