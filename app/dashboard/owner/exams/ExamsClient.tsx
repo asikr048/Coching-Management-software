@@ -342,7 +342,19 @@ export default function ExamsClient({
         updatedNote += ` [WEEKLY_DAYS:${scheduleToCopy.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`
       }
 
-      const payload: any = {
+      // Ensure the first/root exam also has this SERIES_ID in its note if it was missing
+      if (group.firstExam?.id && !group.firstExam.result_note?.includes("[SERIES_ID:")) {
+        try {
+          await supabase
+            .from("exams")
+            .update({
+              result_note: `[SERIES_ID:${seriesId}] [SERIES_WEEK:1] ` + (group.firstExam.result_note || "")
+            })
+            .eq("id", group.firstExam.id)
+        } catch {}
+      }
+
+      const corePayload = {
         title: weekLabel,
         batch_id: srcExam.batch_id,
         subject: srcExam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
@@ -352,22 +364,36 @@ export default function ExamsClient({
         result_note: updatedNote,
         is_published: false,
       }
-      if (srcExam.branch_id) payload.branch_id = srcExam.branch_id
-      if (srcExam.exam_schedule_type) payload.exam_schedule_type = "weekly"
-      if (scheduleToCopy.length > 0) payload.recurring_days = scheduleToCopy
-      if (srcExam.duration_minutes) payload.duration_minutes = Number(srcExam.duration_minutes) || 60
+
+      const fullPayload: any = { ...corePayload }
+      if (srcExam.branch_id) fullPayload.branch_id = srcExam.branch_id
+      if (srcExam.duration_minutes) fullPayload.duration_minutes = Number(srcExam.duration_minutes) || 60
+
+      let insertedId: string | null = null
 
       const { data: inserted, error: insErr } = await supabase
         .from("exams")
-        .insert(payload)
+        .insert(fullPayload)
         .select("id")
         .single()
 
-      if (insErr) throw insErr
+      if (!insErr && inserted?.id) {
+        insertedId = inserted.id
+      } else {
+        console.warn("Standard insert failed, falling back to minimal payload:", insErr)
+        const { data: fbExam, error: fbErr } = await supabase
+          .from("exams")
+          .insert(corePayload)
+          .select("id")
+          .single()
 
-      if (inserted?.id) {
+        if (fbErr) throw fbErr
+        if (fbExam?.id) insertedId = fbExam.id
+      }
+
+      if (insertedId) {
         toast.success(`✓ Week ${nextWeekNum} সফলভাবে তৈরি হয়েছে! নম্বর প্রদান পেজে নিয়ে যাওয়া হচ্ছে...`)
-        router.push(`/dashboard/owner/exams/${inserted.id}`)
+        router.push(`/dashboard/owner/exams/${insertedId}`)
       }
     } catch (err: any) {
       console.error("Failed to create next week:", err)

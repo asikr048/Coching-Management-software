@@ -911,7 +911,7 @@ export default function ExamResultsPage() {
         } catch {}
       }
 
-      const payload: any = {
+      const minimalPayload = {
         title: weekLabel,
         batch_id: targetBatchId,
         subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
@@ -922,10 +922,8 @@ export default function ExamResultsPage() {
         is_published: false,
       }
 
+      const payload: any = { ...minimalPayload }
       if (exam.branch_id) payload.branch_id = exam.branch_id
-      if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
-      if (scheduleToCopy.length > 0) payload.recurring_days = scheduleToCopy
-      else if (exam.recurring_days) payload.recurring_days = exam.recurring_days
       if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
 
       let insertedId: string | null = null
@@ -940,17 +938,6 @@ export default function ExamResultsPage() {
         insertedId = inserted.id
       } else {
         console.warn("Standard insert failed, attempting minimal fallback:", insErr)
-        const minimalPayload = {
-          title: weekLabel,
-          batch_id: targetBatchId,
-          subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-          total_marks: newTotalMarks,
-          pass_marks: newPassMarks,
-          exam_date: new Date().toISOString().split("T")[0],
-          result_note: updatedNote,
-          is_published: false,
-        }
-
         const { data: fbExam, error: fbErr } = await supabase
           .from("exams")
           .insert(minimalPayload)
@@ -1515,7 +1502,7 @@ export default function ExamResultsPage() {
         updatedNote += ` [WEEKLY_DAYS:${scheduleToCopy.map((d: any) => typeof d === "object" ? d.day : d).join(",")}]`
       }
 
-      const payload: any = {
+      const minimalPayload = {
         title: weekLabel,
         batch_id: targetBatchId,
         subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
@@ -1526,10 +1513,8 @@ export default function ExamResultsPage() {
         is_published: false,
       }
 
+      const payload: any = { ...minimalPayload }
       if (exam.branch_id) payload.branch_id = exam.branch_id
-      if (exam.exam_schedule_type) payload.exam_schedule_type = "weekly"
-      if (scheduleToCopy.length > 0) payload.recurring_days = scheduleToCopy
-      else if (exam.recurring_days) payload.recurring_days = exam.recurring_days
       if (exam.duration_minutes) payload.duration_minutes = Number(exam.duration_minutes) || 60
 
       let insertedExam: any = null
@@ -1543,16 +1528,6 @@ export default function ExamResultsPage() {
       if (!insErr && inserted?.id) {
         insertedExam = inserted
       } else {
-        const minimalPayload = {
-          title: weekLabel,
-          batch_id: targetBatchId,
-          subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
-          total_marks: newTotalMarks,
-          pass_marks: newPassMarks,
-          exam_date: new Date().toISOString().split("T")[0],
-          result_note: updatedNote,
-          is_published: false,
-        }
         const { data: fbExam, error: fbErr } = await supabase
           .from("exams")
           .insert(minimalPayload)

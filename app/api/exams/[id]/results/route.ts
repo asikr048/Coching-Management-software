@@ -501,7 +501,7 @@ export async function POST(
     // 1. Fetch current exam
     const { data: currentExam, error: examErr } = await admin
       .from("exams")
-      .select("id, title, total_marks, recurring_days, exam_schedule_type, result_note")
+      .select("*")
       .eq("id", examId)
       .maybeSingle()
 

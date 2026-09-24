@@ -84,7 +84,7 @@ export async function GET(req: NextRequest) {
     try {
       const { data: exData } = await admin
         .from("exams")
-        .select("id, title, subject, exam_date, exam_schedule_type, created_at")
+        .select("id, title, subject, exam_date, result_note, created_at")
         .order("created_at", { ascending: false })
         .limit(8)
       if (exData) recentExams = exData
@@ -154,7 +154,8 @@ export async function GET(req: NextRequest) {
 
     // Process recent exams (Student feed)
     recentExams.forEach((e) => {
-      const dateInfo = e.exam_date || (e.exam_schedule_type === "weekly" ? "সাপ্তাহিক রুটিন" : "নির্ধারিত তারিখ")
+      const isWeekly = e.result_note?.includes("[WEEKLY_SCHEDULE:") || e.title?.includes("সাপ্তাহিক")
+      const dateInfo = e.exam_date || (isWeekly ? "সাপ্তাহিক রুটিন" : "নির্ধারিত তারিখ")
       studentItems.push({
         id: `exam-${e.id}`,
         title: `পরীক্ষার সময়সূচি: ${e.title}`,
