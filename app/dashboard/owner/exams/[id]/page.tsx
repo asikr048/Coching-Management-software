@@ -1012,7 +1012,7 @@ export default function ExamResultsPage() {
       }
 
       const payload: any = {
-        title: exam.title,
+        title: weekLabel,
         batch_id: targetBatchId,
         subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
         total_marks: newTotalMarks,
@@ -1041,7 +1041,7 @@ export default function ExamResultsPage() {
       } else {
         console.warn("Standard insert failed, attempting minimal fallback:", insErr)
         const minimalPayload = {
-          title: exam.title,
+          title: weekLabel,
           batch_id: targetBatchId,
           subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
           total_marks: newTotalMarks,
@@ -1588,9 +1588,7 @@ export default function ExamResultsPage() {
         if (schedPass > 0) newPassMarks = schedPass
       }
 
-      const curSeriesKeyCombined = getExamSeriesKey(exam)
-      const seriesIdCombined = extractSeriesId(exam.result_note) || curSeriesKeyCombined.replace(/^series_|^legacy_weekly_/, "")
-      let updatedNote = `[SERIES_ID:${seriesIdCombined}] [SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
+      let updatedNote = `[SERIES_WEEK:${targetWeekNum}] [SHOW_ALL_RESULTS:true]`
       if (batchIdsList.length > 0) {
         updatedNote += ` [BATCH_IDS:${JSON.stringify(batchIdsList)}]`
       }
@@ -1600,7 +1598,7 @@ export default function ExamResultsPage() {
       }
 
       const payload: any = {
-        title: exam.title,
+        title: weekLabel,
         batch_id: targetBatchId,
         subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
         total_marks: newTotalMarks,
@@ -1628,7 +1626,7 @@ export default function ExamResultsPage() {
         insertedExam = inserted
       } else {
         const minimalPayload = {
-          title: exam.title,
+          title: weekLabel,
           batch_id: targetBatchId,
           subject: exam.subject || "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)",
           total_marks: newTotalMarks,
@@ -6002,6 +6000,7 @@ export default function ExamResultsPage() {
         combinedWeeksMarks={rawStudentWeekMarks}
         defaultTemplate={printModalDefaultTemplate}
         totalToppers={printableTotalToppers}
+        seriesTitle={isWeeklyExam ? (fullSeriesSlots[0]?.exam?.title || exam.title) : undefined}
         subjectToppers={printableSubjectToppers}
       />
     </>

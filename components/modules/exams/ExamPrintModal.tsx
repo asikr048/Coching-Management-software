@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import React, { useState, useEffect, useMemo } from "react"
 import {
@@ -79,6 +79,10 @@ export interface ExamPrintModalProps {
   defaultTemplate?: PrintTemplateType
   totalToppers?: GrandTopperItem[]
   subjectToppers?: SubjectTopperItem[]
+  /** The Weekly Routine Title / series name typed at exam creation (W1's title).
+   *  For weekly exams this is what should appear as the exam name everywhere.
+   *  Undefined for one-time exams. */
+  seriesTitle?: string
 }
 
 function getDayMarkItemHelper(
@@ -123,8 +127,13 @@ export default function ExamPrintModal({
   defaultTemplate = "merit_list",
   totalToppers = [],
   subjectToppers = [],
+  seriesTitle,
 }: ExamPrintModalProps) {
   const { branding, theme } = useBranding()
+
+  // For weekly exams, the display name is always the series/routine title (typed at creation).
+  // For one-time exams, it's just the exam title.
+  const displayTitle = (isWeeklyExam && seriesTitle) ? seriesTitle : (exam.title || "")
   // 1. Template Type: Merit List (Pic 2), Progress Report (Pic 1), Tabulation, or Toppers Sheet
   const [template, setTemplate] = useState<PrintTemplateType>(defaultTemplate)
 
@@ -681,7 +690,7 @@ export default function ExamPrintModal({
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500">
-                  {exam.title || exam.title} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
+                  {displayTitle} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
                 </p>
               </div>
             </div>
@@ -771,9 +780,9 @@ export default function ExamPrintModal({
               <label className="text-slate-500 font-bold text-[11px] whitespace-nowrap">পরীক্ষার নাম:</label>
               <span
                 className="px-2 py-0.5 bg-white border border-slate-200 rounded-lg text-xs font-black text-slate-900 min-w-[80px] truncate max-w-[200px]"
-                title={exam.title || ""}
+                title={displayTitle}
               >
-                {exam.title || "—"}
+                {displayTitle || "—"}
               </span>
               <label className="text-slate-500 font-bold text-[11px] whitespace-nowrap ml-1">শিক্ষাবর্ষ:</label>
               <input
@@ -941,10 +950,9 @@ export default function ExamPrintModal({
                 instituteLogoUrl={branding.logoUrl}
                 sectionName={activeBatchName}
                 examTitle={
-                  exam.title ||
-                  (isCombinedWeeks && activeCombinedExams.length > 0
+                  isCombinedWeeks && activeCombinedExams.length > 0
                     ? `সমন্বিত মেধা তালিকা (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                    : exam.title)
+                    : displayTitle
                 }
                 academicYear={customAcademicYear}
                 rows={meritListRows}
@@ -965,10 +973,9 @@ export default function ExamPrintModal({
                       instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                       instituteLogoUrl={branding.logoUrl}
                       examTitle={
-                        exam.title ||
-                        (isCombinedWeeks && activeCombinedExams.length > 0
+                        isCombinedWeeks && activeCombinedExams.length > 0
                           ? `ধারাবাহিক সাপ্তাহিক পরীক্ষা - সমন্বিত প্রগ্রেস রিপোর্ট (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                          : exam.title)
+                    : displayTitle
                       }
                       academicYear={customAcademicYear}
                       batchName={activeBatchName}
@@ -1003,10 +1010,9 @@ export default function ExamPrintModal({
                 exam={{
                   ...exam,
                   title:
-                    exam.title ||
-                    (isCombinedWeeks && activeCombinedExams.length > 0
+                    isCombinedWeeks && activeCombinedExams.length > 0
                       ? `সমন্বিত ট্যাবশুলার শিট (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                      : exam.title),
+                    : displayTitle,
                   total_marks: activeTotalMarks,
                 }}
                 mode={selectedMode}
@@ -1032,10 +1038,9 @@ export default function ExamPrintModal({
                 instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                 instituteLogoUrl={branding.logoUrl}
                 examTitle={
-                  exam.title ||
-                  (isCombinedWeeks && activeCombinedExams.length > 0
+                  isCombinedWeeks && activeCombinedExams.length > 0
                     ? `সমন্বিত শীর্ষ মেধা (${activeCombinedExams.map((e) => e.title).join(", ")})`
-                    : exam.title)
+                    : displayTitle
                 }
                 batchName={activeBatchName}
                 academicYear={customAcademicYear}
@@ -1079,5 +1084,8 @@ export default function ExamPrintModal({
     </div>
   )
 }
+
+
+
 
 
