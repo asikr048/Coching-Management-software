@@ -293,7 +293,7 @@ function LoginFormContent() {
             />
             <span className="text-sm text-gray-600">Remember me</span>
           </label>
-          <button type="button" className="text-sm text-indigo-600 font-medium hover:text-indigo-700">
+          <button type="button" className="text-sm text-brand-primary font-medium hover:underline">
             Forgot password?
           </button>
         </div>
@@ -301,7 +301,7 @@ function LoginFormContent() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 disabled:opacity-60 text-white font-semibold rounded-xl shadow-lg shadow-indigo-200 transition-all flex items-center justify-center gap-2 text-sm"
+          className="w-full py-3.5 brand-btn-primary disabled:opacity-60 text-white font-bold rounded-xl transition-all flex items-center justify-center gap-2 text-sm cursor-pointer"
         >
           {loading ? (
             <>
@@ -318,13 +318,13 @@ function LoginFormContent() {
       <div className="flex items-center justify-center gap-3 pt-2">
         <Link
           href="/parent-portal"
-          className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all"
+          className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-brand-primary hover:text-brand-primary transition-all"
         >
           Parent Portal
         </Link>
         <Link
           href="/marketplace"
-          className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-indigo-200 hover:text-indigo-600 transition-all"
+          className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-brand-primary hover:text-brand-primary transition-all"
         >
           Courses
         </Link>
@@ -341,9 +341,9 @@ export default function LoginPage() {
       {/* LEFT — Branding Panel */}
       <div className="hidden lg:flex lg:w-[52%] relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIj48Y2lyY2xlIGN4PSIyMCIgY3k9IjIwIiByPSIxIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMDgpIi8+PC9nPjwvc3ZnPg==')] opacity-60" />
-        <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-emerald-500/20 rounded-full blur-[100px]" />
-        <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] bg-teal-500/20 rounded-full blur-[80px]" />
-        <div className="absolute top-[40%] left-[30%] w-[300px] h-[300px] bg-indigo-400/10 rounded-full blur-[60px]" />
+        <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full blur-[100px]" style={{ backgroundColor: `${theme.primaryHex}35` }} />
+        <div className="absolute bottom-[-15%] left-[-5%] w-[400px] h-[400px] rounded-full blur-[80px]" style={{ backgroundColor: `${theme.secondaryHex}35` }} />
+        <div className="absolute top-[40%] left-[30%] w-[300px] h-[300px] rounded-full blur-[60px]" style={{ backgroundColor: `${theme.primaryHex}20` }} />
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">

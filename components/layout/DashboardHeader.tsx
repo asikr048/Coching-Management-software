@@ -91,14 +91,14 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
                   ? "border-red-400 bg-red-50 text-red-900 hover:bg-red-100 ring-2 ring-red-400/30 animate-pulse"
                   : anyBranchPendingDeletion && selectedBranchId === "all"
                   ? "border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100"
-                  : "border-indigo-200 bg-gradient-to-r from-indigo-50/90 to-amber-50/70 hover:from-indigo-100 hover:to-amber-100 text-indigo-950"
+                  : "border-brand-light bg-brand-light text-brand-dark hover:brightness-95"
               )}
               title={isCurrentPendingDeletion ? "This branch is scheduled for deletion" : "Change active branch"}
             >
               {isCurrentPendingDeletion ? (
                 <ShieldAlert className="w-4 h-4 text-red-600 flex-shrink-0 animate-bounce" />
               ) : (
-                <Building2 className="w-4 h-4 text-indigo-700 flex-shrink-0" />
+                <Building2 className="w-4 h-4 text-brand-primary flex-shrink-0" />
               )}
               <span className="truncate max-w-[80px] xs:max-w-[120px] sm:max-w-[190px]">
                 {selectedBranchId === "all"

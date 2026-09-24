@@ -27,12 +27,16 @@ export default function PublicNavbar() {
 
   const dashboardHref = ["owner", "branch_director", "super_manager", "manager"].includes(userRole || "")
     ? "/dashboard/owner"
-    : userRole === "teacher" ? "/dashboard/teacher"
-    : userRole === "receptionist" ? "/dashboard/reception"
+    : (userRole === "teacher" || userRole === "course_teacher") ? "/dashboard/teacher"
+    : (userRole === "receptionist" || userRole === "reception") ? "/dashboard/reception"
     : userRole === "accountant" ? "/dashboard/accountant"
     : "/student/profile"
 
-  const buttonLabel = ["owner", "branch_director", "super_manager", "manager"].includes(userRole || "") ? "Admin Panel" : "My Profile"
+  const buttonLabel = ["owner", "branch_director", "super_manager", "manager"].includes(userRole || "")
+    ? "Admin Panel"
+    : ["teacher", "course_teacher", "receptionist", "reception", "accountant"].includes(userRole || "")
+    ? "Dashboard"
+    : "My Profile"
 
   return (
     <nav className="bg-white border-b border-gray-100 px-3 sm:px-4 py-3 sm:py-4">
@@ -47,13 +51,26 @@ export default function PublicNavbar() {
         </Link>
         <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {loaded && currentUser ? (
-            <Link href={dashboardHref} className="px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl transition-all flex items-center gap-1.5 border border-indigo-200/80">
-              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> {buttonLabel}
+            <Link
+              href={dashboardHref}
+              className="px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-1.5 brand-badge shadow-2xs"
+            >
+              <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-primary" /> {buttonLabel}
             </Link>
           ) : loaded ? (
-            <Link href="/login" className="px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium text-indigo-600 hover:bg-indigo-50 rounded-lg">Sign In</Link>
+            <Link
+              href="/login"
+              className="px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-brand-primary hover:bg-brand-light rounded-xl transition-colors"
+            >
+              Sign In
+            </Link>
           ) : null}
-          <Link href="/#batches" className="px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">View Batches</Link>
+          <Link
+            href="/#batches"
+            className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold brand-btn-primary rounded-xl transition-all"
+          >
+            View Batches
+          </Link>
         </div>
       </div>
     </nav>

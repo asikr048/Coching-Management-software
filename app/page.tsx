@@ -160,6 +160,20 @@ export default function HomePage() {
   const displayAddress = currentBranch?.location || branding.address || contactAddress
   const displayEstablishedYear = currentBranch?.established_year || branding.establishedYear || "2024"
 
+  const dashboardHref = !currentUser
+    ? "/login"
+    : ["owner", "branch_director", "super_manager", "manager"].includes(userRole || "")
+    ? "/dashboard/owner"
+    : (userRole === "teacher" || userRole === "course_teacher")
+    ? "/dashboard/teacher"
+    : (userRole === "receptionist" || userRole === "reception")
+    ? "/dashboard/reception"
+    : userRole === "accountant"
+    ? "/dashboard/accountant"
+    : userRole === "student"
+    ? "/student/profile"
+    : "/dashboard"
+
   useEffect(() => {
     const supabase = createClient()
 
@@ -705,11 +719,14 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-4">
           {/* Logo & Typography */}
           <Link href="/" className="flex items-center gap-2 sm:gap-4 group min-w-0">
-            <div className="w-10 h-10 sm:w-16 sm:h-16 rounded-full border-2 border-indigo-700 p-0.5 shadow-md flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden">
+            <div
+              className="w-10 h-10 sm:w-16 sm:h-16 rounded-full border-2 p-0.5 shadow-md flex items-center justify-center bg-white flex-shrink-0 group-hover:scale-105 transition-transform overflow-hidden"
+              style={{ borderColor: activeBrandingTheme.primaryHex }}
+            >
               <img
                 src={branding.logoUrl || "/logo.jpg"}
                 alt={`${branding.name || "Institute"} Logo`}
-                className="w-full h-full object-contain rounded-full"
+                className="w-full h-full object-cover rounded-full"
                 onError={(e) => {
                   ;(e.target as HTMLImageElement).src = "/logo.jpg"
                 }}
@@ -717,11 +734,13 @@ export default function HomePage() {
             </div>
 
             <div className="min-w-0">
-              <h1 className="text-lg sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight leading-tight group-hover:text-indigo-700 transition-colors truncate">
-                {branding.name || "MedhaShiree"}
+              <h1
+                className="text-lg sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight leading-tight transition-colors truncate"
+              >
+                {branding.name || "MIIS ACADEMY"}
               </h1>
               <p className="text-[11px] sm:text-sm font-semibold text-gray-600 mt-0.5 truncate">
-                {currentBranch ? currentBranch.name : (branding.tagline || branding.nameBn || "প্রধান ক্যাম্পাস ও সকল শাখা")} • {displayAddress}
+                {branding.taglineBn || branding.tagline || (currentBranch ? currentBranch.name : "প্রধান ক্যাম্পাস ও সকল শাখা")} {displayAddress ? `• ${displayAddress}` : ""}
               </p>
             </div>
           </Link>
@@ -733,13 +752,13 @@ export default function HomePage() {
                 <button
                   type="button"
                   onClick={() => setBranchDropdownOpen(!branchDropdownOpen)}
-                  className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 bg-gradient-to-r from-indigo-50 to-amber-50/50 hover:from-indigo-100 hover:to-amber-100/70 border border-indigo-200 rounded-xl text-xs sm:text-sm font-bold text-indigo-950 transition-all shadow-xs"
+                  className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 brand-badge rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs"
                 >
-                  <Landmark className="w-4 h-4 text-indigo-700 flex-shrink-0" />
+                  <Landmark className="w-4 h-4 text-brand-primary flex-shrink-0" />
                   <span className="truncate max-w-[75px] xs:max-w-[110px] sm:max-w-[170px]">
                     {selectedBranchId === "all" ? "সকল শাখা" : (currentBranch?.name || "শাখা")}
                   </span>
-                  <ChevronDown className="w-3.5 h-3.5 text-indigo-600 flex-shrink-0" />
+                  <ChevronDown className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
                 </button>
 
                 {branchDropdownOpen && (
@@ -805,37 +824,44 @@ export default function HomePage() {
             {/* Online Result Quick Link */}
             <Link
               href="/online-result"
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-200 rounded-xl text-xs sm:text-sm font-extrabold shadow-xs transition-all flex-shrink-0 cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 brand-badge hover:brightness-95 rounded-xl text-xs sm:text-sm font-extrabold shadow-xs transition-all flex-shrink-0 cursor-pointer"
             >
-              <Trophy className="w-4 h-4 text-amber-500" />
+              <Trophy className="w-4 h-4 text-brand-primary" />
               <span className="hidden sm:inline">অনলাইন রেজাল্ট</span>
               <span className="sm:hidden">রেজাল্ট</span>
             </Link>
 
             {/* Student/Staff Login Portal Link */}
             <Link
-              href={currentUser ? `/dashboard/${userRole || "owner"}` : "/login"}
-              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all flex-shrink-0 cursor-pointer"
+              href={dashboardHref}
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 brand-btn-primary rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all flex-shrink-0 cursor-pointer"
             >
               <User className="w-4 h-4" />
-              <span>{currentUser ? "ড্যাশবোর্ড" : "লগইন"}</span>
+              <span>{currentUser ? (userRole === "student" ? "প্রোফাইল" : "ড্যাশবোর্ড") : "লগইন"}</span>
             </Link>
           </div>
         </div>
       </header>
 
       {/* ========================================================================= */}
-      {/* 3. ROYAL INSTITUTIONAL NAVIGATION BAR (Gold Highlight Border) */}
+      {/* 3. ROYAL INSTITUTIONAL NAVIGATION BAR (Dynamic Brand Color) */}
       {/* ========================================================================= */}
-      <nav className="bg-[#4c1d95] text-white shadow-md border-b-2 border-amber-400 relative z-30 overflow-x-auto scrollbar-none">
+      <nav
+        className="text-white shadow-md relative z-30 overflow-x-auto scrollbar-none border-b-2"
+        style={{
+          backgroundColor: activeBrandingTheme.primaryHex,
+          borderBottomColor: activeBrandingTheme.secondaryHex,
+        }}
+      >
         <div className="max-w-7xl mx-auto px-3 sm:px-8 flex items-center justify-between">
           <div className="flex items-center space-x-1 sm:space-x-2 py-1 text-xs sm:text-sm font-semibold whitespace-nowrap">
-            <Link href="/" className="px-3 py-2.5 rounded-lg bg-white/10 text-amber-300 font-bold">
+            <Link href="/" className="px-3 py-2.5 rounded-lg bg-black/20 text-white font-bold">
               মূল পাতা (Home)
             </Link>
             <Link 
               href="/online-result" 
-              className="px-3.5 py-2 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black flex items-center gap-1.5 shadow-md shadow-amber-400/20 transition-all cursor-pointer"
+              className="px-3.5 py-2 rounded-lg text-slate-950 font-black flex items-center gap-1.5 shadow-md transition-all cursor-pointer"
+              style={{ backgroundColor: activeBrandingTheme.secondaryHex }}
             >
               <Trophy className="w-3.5 h-3.5 text-slate-950" />
               <span>অনলাইন রেজাল্ট (Online Result)</span>
@@ -845,9 +871,9 @@ export default function HomePage() {
             </a>
             <Link 
               href="/online-result" 
-              className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-amber-300 font-bold transition-colors flex items-center gap-1"
+              className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white font-bold transition-colors flex items-center gap-1"
             >
-              <Trophy className="w-3.5 h-3.5 text-amber-300" />
+              <Trophy className="w-3.5 h-3.5 text-white/90" />
               <span>পরীক্ষার রেজাল্ট (Results)</span>
             </Link>
             <a href="#courses" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
@@ -870,11 +896,12 @@ export default function HomePage() {
           <div className="hidden lg:flex items-center gap-2 py-1">
             <Link
               href="/online-result"
-              className="text-xs text-slate-950 font-black bg-amber-400 hover:bg-amber-300 px-3 py-1 rounded-full flex items-center gap-1 shadow-xs transition-colors"
+              className="text-xs text-slate-950 font-black px-3 py-1 rounded-full flex items-center gap-1 shadow-xs transition-colors"
+              style={{ backgroundColor: activeBrandingTheme.secondaryHex }}
             >
               <Trophy className="w-3.5 h-3.5 text-slate-950" /> মেরিট লিস্ট
             </Link>
-            <span className="text-xs text-amber-300 font-bold bg-white/10 px-2.5 py-1 rounded-full flex items-center gap-1">
+            <span className="text-xs text-white font-bold bg-white/15 px-2.5 py-1 rounded-full flex items-center gap-1">
               <Sparkles className="w-3 h-3" /> ভর্তি চলছে
             </span>
           </div>
@@ -1627,20 +1654,27 @@ export default function HomePage() {
           {/* Col 1: About */}
           <div>
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-full border border-indigo-400/30 overflow-hidden flex items-center justify-center bg-white flex-shrink-0">
+              <div
+                className="w-9 h-9 rounded-full border overflow-hidden flex items-center justify-center bg-white flex-shrink-0"
+                style={{ borderColor: activeBrandingTheme.borderHex }}
+              >
                 <img
                   src={branding.logoUrl || "/logo.jpg"}
                   alt={`${branding.name || "Institute"} Logo`}
-                  className="w-full h-full object-contain rounded-full"
+                  className="w-full h-full object-cover rounded-full"
                   onError={(e) => {
                     ;(e.target as HTMLImageElement).src = "/logo.jpg"
                   }}
                 />
               </div>
-              <h3 className="font-bold text-white text-base">{branding.name || "MedhaShiree"}</h3>
+              <h3 className="font-bold text-white text-base">{branding.name || "MIIS ACADEMY"}</h3>
             </div>
-            <p className="text-gray-400 leading-relaxed text-[11px] mb-3">{branding.footerAbout || footerAbout}</p>
-            <p className="text-amber-400 font-bold">স্থাপিত: {branding.establishedYear || displayEstablishedYear}ইং</p>
+            <p className="text-gray-400 leading-relaxed text-[11px] mb-3">
+              {footerAbout || branding.footerAbout || "মানসম্মত পাঠদান ও অভিজ্ঞ শিক্ষকমণ্ডলীর নির্দেশনায় প্রতিটি শিক্ষার্থীর সাফল্য নিশ্চিত করাই আমাদের লক্ষ্য।"}
+            </p>
+            <p className="font-bold" style={{ color: activeBrandingTheme.secondaryHex }}>
+              স্থাপিত: {branding.establishedYear || displayEstablishedYear}ইং
+            </p>
           </div>
 
           {/* Col 2: Active Branch & Contacts */}

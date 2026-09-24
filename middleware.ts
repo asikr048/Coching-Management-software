@@ -72,15 +72,33 @@ export async function middleware(request: NextRequest) {
     }
 
     const role = staff.role
-    // Accountant desk can be accessed by owner, super_manager, manager, and accountant
-    if (pathname.startsWith("/dashboard/owner/accountant") && !["owner", "super_manager", "manager", "accountant"].includes(role)) {
+
+    // Redirect role-specific alias paths to canonical dashboard routes
+    if (pathname === "/dashboard/super_manager" || pathname.startsWith("/dashboard/super_manager/")) {
+      return NextResponse.redirect(new URL(pathname.replace("/dashboard/super_manager", "/dashboard/owner"), request.url))
+    }
+    if (pathname === "/dashboard/manager" || pathname.startsWith("/dashboard/manager/")) {
+      return NextResponse.redirect(new URL(pathname.replace("/dashboard/manager", "/dashboard/owner"), request.url))
+    }
+    if (pathname === "/dashboard/branch_director" || pathname.startsWith("/dashboard/branch_director/")) {
+      return NextResponse.redirect(new URL(pathname.replace("/dashboard/branch_director", "/dashboard/owner"), request.url))
+    }
+    if (pathname === "/dashboard/receptionist" || pathname.startsWith("/dashboard/receptionist/")) {
+      return NextResponse.redirect(new URL(pathname.replace("/dashboard/receptionist", "/dashboard/reception"), request.url))
+    }
+    if (pathname === "/dashboard/student" || pathname.startsWith("/dashboard/student/")) {
+      return NextResponse.redirect(new URL("/student/profile", request.url))
+    }
+
+    // Accountant desk can be accessed by owner, branch_director, super_manager, manager, and accountant
+    if (pathname.startsWith("/dashboard/owner/accountant") && !["owner", "branch_director", "super_manager", "manager", "accountant"].includes(role)) {
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
-    // Owner, Super Manager, and Manager can access /dashboard/owner
-    if (pathname.startsWith("/dashboard/owner") && !pathname.startsWith("/dashboard/owner/accountant") && !["owner", "super_manager", "manager"].includes(role)) {
+    // Owner, Branch Director, Super Manager, and Manager can access /dashboard/owner
+    if (pathname.startsWith("/dashboard/owner") && !pathname.startsWith("/dashboard/owner/accountant") && !["owner", "branch_director", "super_manager", "manager"].includes(role)) {
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
-    if (pathname.startsWith("/dashboard/accountant") && !["owner", "super_manager", "manager", "accountant"].includes(role)) {
+    if (pathname.startsWith("/dashboard/accountant") && !["owner", "branch_director", "super_manager", "manager", "accountant"].includes(role)) {
       return NextResponse.redirect(new URL("/dashboard", request.url))
     }
   } catch {

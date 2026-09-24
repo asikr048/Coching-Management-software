@@ -132,8 +132,8 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
       {(!collapsed || isMobileView) && (
         <div className="p-3 mx-2 my-2.5 bg-slate-900/80 rounded-xl border border-slate-800/90 shadow-xs">
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+            <p className={cn("text-[10px] font-bold uppercase tracking-wider flex items-center gap-1", theme.accentTextClass)}>
+              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: theme.primaryHex }}></span>
               {role === "branch_director"
                 ? "Branch Director"
                 : role === "super_manager"
@@ -150,7 +150,7 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
         </div>
       )}
 
-      {/* Nav Items with Gold Accents */}
+      {/* Nav Items with Dynamic Brand Theme */}
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {nav.map(item => {
           const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href)
@@ -164,15 +164,16 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-xl transition-all text-xs sm:text-sm font-medium",
                 isActive
-                  ? "bg-gradient-to-r from-amber-500/20 via-amber-500/10 to-transparent border-l-4 border-amber-400 text-amber-300 font-bold shadow-md shadow-amber-500/5"
+                  ? "brand-active-nav font-bold shadow-md"
                   : "text-slate-400 hover:bg-slate-800/70 hover:text-white"
               )}
             >
               <item.icon
                 className={cn(
                   "w-4 h-4 flex-shrink-0 transition-colors",
-                  isActive ? "text-amber-400" : "text-slate-400 group-hover:text-white"
+                  isActive ? "text-brand-secondary" : "text-slate-400 group-hover:text-white"
                 )}
+                style={isActive ? { color: theme.secondaryHex } : undefined}
               />
               {(!collapsed || isMobileView) && <span className="truncate">{item.label}</span>}
             </Link>
@@ -187,9 +188,9 @@ export default function DashboardSidebar({ role, name, mobileOpen = false, onMob
           onClick={() => {
             if (isMobileView && onMobileClose) onMobileClose()
           }}
-          className="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-amber-300 transition-all text-xs sm:text-sm font-semibold"
+          className="flex items-center gap-3 px-3 py-2 rounded-xl text-slate-400 hover:bg-slate-800 hover:text-white transition-all text-xs sm:text-sm font-semibold group"
         >
-          <Home className="w-4 h-4 flex-shrink-0 text-amber-400" />
+          <Home className="w-4 h-4 flex-shrink-0 text-brand-secondary" style={{ color: theme.secondaryHex }} />
           {(!collapsed || isMobileView) && <span>Public Homepage</span>}
         </Link>
       </div>

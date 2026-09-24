@@ -5,10 +5,12 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { GraduationCap, BookOpen, LogOut } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { useBranding } from "@/components/providers/BrandingContext"
 
 export default function StudentLayout({ children }: { children: ReactNode }) {
   const supabase = createClient()
   const router = useRouter()
+  const { branding, theme } = useBranding()
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -20,14 +22,21 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
       <header className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
           <Link href="/" className="flex items-center gap-2 sm:gap-2.5 min-w-0">
-            <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border border-indigo-200 overflow-hidden flex items-center justify-center bg-white shadow-sm flex-shrink-0">
-              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+            <div
+              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full border overflow-hidden flex items-center justify-center bg-white shadow-sm flex-shrink-0"
+              style={{ borderColor: theme.borderHex }}
+            >
+              {branding.logoUrl ? (
+                <img src={branding.logoUrl} alt={`${branding.name} Logo`} className="w-full h-full object-cover rounded-full" />
+              ) : (
+                <GraduationCap className="w-5 h-5 text-brand-primary" />
+              )}
             </div>
             <div className="min-w-0">
-              <span className="text-base sm:text-lg font-bold text-gray-900 tracking-tight truncate">
-                Medha<span className="text-indigo-600">Shiree</span>
+              <span className="text-base sm:text-lg font-bold text-gray-900 tracking-tight truncate block">
+                {branding.name}
               </span>
-              <span className="hidden xs:inline-block ml-1.5 sm:ml-2 text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 font-semibold rounded-full border border-indigo-100">
+              <span className="hidden xs:inline-block text-xs px-2 py-0.5 brand-badge font-semibold rounded-full">
                 Student Portal
               </span>
             </div>
@@ -37,7 +46,7 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
               href="/marketplace"
               className="px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 sm:gap-2 transition-colors shadow-2xs"
             >
-              <BookOpen className="w-4 h-4 text-indigo-600" />
+              <BookOpen className="w-4 h-4 text-brand-primary" />
               <span className="hidden sm:inline">Browse Courses</span>
               <span className="sm:hidden">Courses</span>
             </Link>

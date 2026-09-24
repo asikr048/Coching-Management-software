@@ -7,12 +7,12 @@ import {
   Phone, Mail, MapPin, MessageSquare, Save, Sliders, Info, ExternalLink,
   Globe, Bell, Trophy, BookOpen, Award, Tag, Calendar, User, CheckCircle2,
   Landmark, ArrowUpRight, Star, Search, CalendarDays, Palette, Check,
-  RotateCcw, Link2, LayoutTemplate
+  RotateCcw, Link2, LayoutTemplate, Upload
 } from "lucide-react"
 import type { Branch, Blog, Achievement, Notice } from "@/lib/supabase/types"
 import { extractWeeklyScheduleFromNote } from "@/lib/utils"
 import { useBranding } from "@/components/providers/BrandingContext"
-import { THEME_PALETTES, PRESET_LOGOS, type ThemeColor, type InstituteBranding } from "@/lib/branding"
+import { THEME_PALETTES, PRESET_LOGOS, isPresetLogoUrl, hexToRgb, type ThemeColor, type InstituteBranding } from "@/lib/branding"
 
 interface Slide {
   id: string
@@ -217,8 +217,15 @@ export default function SliderClient({
   const [instShortName, setInstShortName] = useState(branding.shortName || "MIIS")
   const [instTagline, setInstTagline] = useState(branding.tagline || "Academic & Admission Care")
   const [instTaglineBn, setInstTaglineBn] = useState(branding.taglineBn || "উন্নত ও নির্ভরযোগ্য শিক্ষা সেবা")
+  const isCustomLogo = !!branding.logoUrl && !isPresetLogoUrl(branding.logoUrl)
+  const isDefaultFavicon = !branding.faviconUrl || isPresetLogoUrl(branding.faviconUrl)
+  const initialFavicon = (isCustomLogo && isDefaultFavicon) ? (branding.logoUrl || PRESET_LOGOS[0].url) : (branding.faviconUrl || branding.logoUrl || PRESET_LOGOS[0].url)
+
   const [instLogoUrl, setInstLogoUrl] = useState(branding.logoUrl || PRESET_LOGOS[0].url)
-  const [instFaviconUrl, setInstFaviconUrl] = useState(branding.faviconUrl || branding.logoUrl || PRESET_LOGOS[0].url)
+  const [instFaviconUrl, setInstFaviconUrl] = useState(initialFavicon)
+  const [syncFaviconWithLogo, setSyncFaviconWithLogo] = useState(
+    !branding.faviconUrl || branding.faviconUrl === branding.logoUrl || (isCustomLogo && isDefaultFavicon)
+  )
   const [instThemeColor, setInstThemeColor] = useState<ThemeColor>(branding.themeColor || "emerald")
   const [instWebsite, setInstWebsite] = useState(branding.website || "www.miisacademy.com")
   const [instEstablishedYear, setInstEstablishedYear] = useState(branding.establishedYear || "2024")
@@ -247,7 +254,15 @@ export default function SliderClient({
       setInstTagline(branding.tagline || "")
       setInstTaglineBn(branding.taglineBn || "")
       setInstLogoUrl(branding.logoUrl || "")
-      setInstFaviconUrl(branding.faviconUrl || branding.logoUrl || "")
+
+      const isCustom = !!branding.logoUrl && !isPresetLogoUrl(branding.logoUrl)
+      const isDefFav = !branding.faviconUrl || isPresetLogoUrl(branding.faviconUrl)
+      const effFavicon = (isCustom && isDefFav) ? (branding.logoUrl || "") : (branding.faviconUrl || branding.logoUrl || "")
+      setInstFaviconUrl(effFavicon)
+      if (!branding.faviconUrl || branding.faviconUrl === branding.logoUrl || (isCustom && isDefFav)) {
+        setSyncFaviconWithLogo(true)
+      }
+
       setInstThemeColor(branding.themeColor || "emerald")
       setInstWebsite(branding.website || "")
       setInstEstablishedYear(branding.establishedYear || "")
@@ -259,6 +274,48 @@ export default function SliderClient({
       if (branding.footerAbout) setFooterAbout(branding.footerAbout)
     }
   }, [branding])
+
+  const handleLogoUrlChange = (newUrl: string) => {
+    setInstLogoUrl(newUrl)
+    if (syncFaviconWithLogo) {
+      setInstFaviconUrl(newUrl)
+    }
+  }
+
+  const handleLogoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please upload an image file (PNG, JPG, SVG, WebP)")
+      return
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image file should be smaller than 2MB")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const result = event.target?.result as string
+      if (result) {
+        setInstLogoUrl(result)
+        if (syncFaviconWithLogo) {
+          setInstFaviconUrl(result)
+        }
+        toast.success("Logo uploaded! It is set as both Main Logo and Mini URL Favicon.")
+      }
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleSelectLogoPreset = (presetUrl: string) => {
+    setInstLogoUrl(presetUrl)
+    if (syncFaviconWithLogo || !instFaviconUrl || instFaviconUrl === instLogoUrl || isPresetLogoUrl(instFaviconUrl)) {
+      setInstFaviconUrl(presetUrl)
+    }
+  }
 
   // --- FEEDBACK STATE ---
   const [feedback, setFeedback] = useState<any[]>(initialFeedback)
@@ -928,7 +985,7 @@ export default function SliderClient({
         tagline: instTagline.trim(),
         taglineBn: instTaglineBn.trim(),
         logoUrl: instLogoUrl.trim() || PRESET_LOGOS[0].url,
-        faviconUrl: (instFaviconUrl || instLogoUrl).trim() || PRESET_LOGOS[0].url,
+        faviconUrl: (syncFaviconWithLogo ? instLogoUrl : (instFaviconUrl || instLogoUrl)).trim() || PRESET_LOGOS[0].url,
         logoShape: branding.logoShape || "circle",
         themeColor: instThemeColor,
         phone: contactPhone.trim(),
@@ -2121,9 +2178,16 @@ export default function SliderClient({
 
                 {/* Main Logo URL Input */}
                 <div className="space-y-3">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Main Logo Image URL
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Main Logo Image URL
+                    </label>
+                    <label className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-2xs shrink-0">
+                      <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Upload Logo File</span>
+                      <input type="file" accept="image/*" onChange={handleLogoFileUpload} className="hidden" />
+                    </label>
+                  </div>
                   <div className="flex items-center gap-3">
                     <div className="w-14 h-14 rounded-2xl border-2 border-indigo-200 p-1 bg-white flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
                       {instLogoUrl ? (
@@ -2139,15 +2203,15 @@ export default function SliderClient({
                         <Image className="w-6 h-6 text-slate-300" />
                       )}
                     </div>
-                    <div className="flex-1">
+                    <div className="flex-1 space-y-1">
                       <input
                         type="url"
                         value={instLogoUrl}
-                        onChange={e => setInstLogoUrl(e.target.value)}
+                        onChange={e => handleLogoUrlChange(e.target.value)}
                         placeholder="https://example.com/logo.png or select preset below"
                         className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900 font-mono"
                       />
-                      <p className="text-[11px] text-slate-400 mt-1">Recommended: 256x256 transparent PNG or SVG URL</p>
+                      <p className="text-[11px] text-slate-400">Recommended: 256x256 transparent PNG or SVG URL (or click Upload Logo File)</p>
                     </div>
                   </div>
 
@@ -2161,12 +2225,7 @@ export default function SliderClient({
                           <button
                             key={preset.id}
                             type="button"
-                            onClick={() => {
-                              setInstLogoUrl(preset.url)
-                              if (!instFaviconUrl || instFaviconUrl === instLogoUrl) {
-                                setInstFaviconUrl(preset.url)
-                              }
-                            }}
+                            onClick={() => handleSelectLogoPreset(preset.url)}
                             className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-center cursor-pointer ${
                               isSelected
                                 ? "border-indigo-600 bg-indigo-50/70 shadow-sm ring-2 ring-indigo-500/20"
@@ -2202,17 +2261,53 @@ export default function SliderClient({
                     </div>
                     <button
                       type="button"
-                      onClick={() => setInstFaviconUrl(instLogoUrl)}
+                      onClick={() => {
+                        setSyncFaviconWithLogo(true)
+                        setInstFaviconUrl(instLogoUrl)
+                        toast.success("Main Logo applied to Mini URL Logo!")
+                      }}
                       className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-all"
                     >
                       Use Main Logo
                     </button>
                   </div>
 
+                  {/* Auto-Sync Checkbox Banner */}
+                  <div className="flex items-center justify-between p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-2xl">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={syncFaviconWithLogo}
+                        onChange={(e) => {
+                          const checked = e.target.checked
+                          setSyncFaviconWithLogo(checked)
+                          if (checked) {
+                            setInstFaviconUrl(instLogoUrl)
+                            toast.info("Mini URL logo auto-synced with Main Logo!")
+                          }
+                        }}
+                        className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
+                      />
+                      <div>
+                        <span className="text-xs font-bold text-indigo-950 block">
+                          Always use Main Logo as Mini Favicon (স্বয়ংক্রিয় সিঙ্ক)
+                        </span>
+                        <span className="text-[11px] text-slate-500 block">
+                          Main Logo পরিবর্তন হলে এই মিনি লোগোটিও স্বয়ংক্রিয়ভাবে আপডেট হবে
+                        </span>
+                      </div>
+                    </label>
+                    {syncFaviconWithLogo && (
+                      <span className="text-[10px] font-extrabold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-200 shrink-0">
+                        Synced ✓
+                      </span>
+                    )}
+                  </div>
+
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl border border-slate-300 p-1 bg-white flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
                       <img
-                        src={instFaviconUrl || instLogoUrl}
+                        src={(syncFaviconWithLogo ? instLogoUrl : instFaviconUrl) || instLogoUrl || PRESET_LOGOS[0].url}
                         alt="Favicon Preview"
                         className="w-full h-full object-contain"
                         onError={(e) => {
@@ -2220,13 +2315,23 @@ export default function SliderClient({
                         }}
                       />
                     </div>
-                    <input
-                      type="url"
-                      value={instFaviconUrl}
-                      onChange={e => setInstFaviconUrl(e.target.value)}
-                      placeholder="https://example.com/favicon.ico or .png"
-                      className="flex-1 px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900 font-mono"
-                    />
+                    <div className="flex-1">
+                      <input
+                        type="url"
+                        value={syncFaviconWithLogo ? instLogoUrl : instFaviconUrl}
+                        onChange={e => {
+                          setInstFaviconUrl(e.target.value)
+                          setSyncFaviconWithLogo(false)
+                        }}
+                        placeholder="https://example.com/favicon.ico or .png"
+                        className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900 font-mono"
+                      />
+                      {syncFaviconWithLogo && (
+                        <p className="text-[11px] text-indigo-600 font-medium mt-1">
+                          ✓ Currently mirroring Main Logo Image URL above.
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Browser Tab Live Mockup */}
@@ -2236,7 +2341,7 @@ export default function SliderClient({
                     </p>
                     <div className="inline-flex items-center gap-2.5 bg-slate-800 text-slate-200 px-3.5 py-1.5 rounded-t-xl border-t border-l border-r border-slate-700 max-w-full">
                       <img
-                        src={instFaviconUrl || instLogoUrl || PRESET_LOGOS[0].url}
+                        src={(syncFaviconWithLogo ? instLogoUrl : instFaviconUrl) || instLogoUrl || PRESET_LOGOS[0].url}
                         alt="Mini Tab Favicon"
                         className="w-4 h-4 object-contain rounded-xs"
                       />
@@ -2269,7 +2374,19 @@ export default function SliderClient({
                       <button
                         key={themeKey}
                         type="button"
-                        onClick={() => setInstThemeColor(themeKey)}
+                        onClick={() => {
+                          setInstThemeColor(themeKey)
+                          if (pal && typeof document !== "undefined") {
+                            const root = document.documentElement
+                            root.style.setProperty("--brand-primary", pal.primaryHex)
+                            root.style.setProperty("--brand-secondary", pal.secondaryHex)
+                            root.style.setProperty("--brand-bg-light", pal.bgLightHex)
+                            root.style.setProperty("--brand-border", pal.borderHex)
+                            root.style.setProperty("--brand-text", pal.textHex)
+                            root.style.setProperty("--brand-primary-rgb", hexToRgb(pal.primaryHex))
+                            root.style.setProperty("--brand-secondary-rgb", hexToRgb(pal.secondaryHex))
+                          }
+                        }}
                         className={`p-3.5 rounded-2xl border text-left flex items-start justify-between transition-all cursor-pointer ${
                           isSelected
                             ? "border-slate-900 bg-slate-50 shadow-md ring-2 ring-slate-900/10"

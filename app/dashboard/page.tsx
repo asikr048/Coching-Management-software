@@ -26,8 +26,8 @@ export default async function DashboardPage() {
 
   const role = staff?.role
   if (role === "owner" || role === "branch_director" || role === "super_manager" || role === "manager") redirect("/dashboard/owner")
-  else if (role === "receptionist") redirect("/dashboard/reception")
-  else if (role === "teacher") redirect("/dashboard/teacher")
+  else if (role === "receptionist" || role === "reception") redirect("/dashboard/reception")
+  else if (role === "teacher" || role === "course_teacher") redirect("/dashboard/teacher")
   else if (role === "accountant") redirect("/dashboard/accountant")
   else redirect("/student/profile")
 }

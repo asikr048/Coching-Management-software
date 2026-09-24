@@ -9,7 +9,9 @@ import {
   getActiveBranding,
   saveActiveBranding,
   getThemeConfig,
+  hexToRgb,
   BRANDING_UPDATE_EVENT,
+  isPresetLogoUrl,
 } from "@/lib/branding"
 
 interface BrandingContextType {
@@ -112,16 +114,24 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       root.style.setProperty("--brand-secondary", theme.secondaryHex)
       root.style.setProperty("--brand-bg-light", theme.bgLightHex)
       root.style.setProperty("--brand-border", theme.borderHex)
+      root.style.setProperty("--brand-text", theme.textHex)
+      root.style.setProperty("--brand-primary-rgb", hexToRgb(theme.primaryHex))
+      root.style.setProperty("--brand-secondary-rgb", hexToRgb(theme.secondaryHex))
     }
   }, [theme])
 
   // Apply Favicon (mini URL logo) and Page Title dynamically for browser tab
   useEffect(() => {
     if (typeof document !== "undefined") {
-      const iconUrl = branding.faviconUrl || branding.logoUrl
+      const isCustomLogo = !!branding.logoUrl && !isPresetLogoUrl(branding.logoUrl)
+      const isDefaultFavicon = !branding.faviconUrl || isPresetLogoUrl(branding.faviconUrl)
+      const iconUrl = (isCustomLogo && isDefaultFavicon)
+        ? branding.logoUrl
+        : (branding.faviconUrl || branding.logoUrl)
+
       if (iconUrl) {
         // Update all icon links
-        const existingLinks = document.querySelectorAll("link[rel*='icon']")
+        const existingLinks = document.querySelectorAll("link[rel*='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']")
         if (existingLinks.length > 0) {
           existingLinks.forEach((link) => {
             ;(link as HTMLLinkElement).href = iconUrl

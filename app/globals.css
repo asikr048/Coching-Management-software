@@ -4,6 +4,15 @@
   color-scheme: light;
   --background: #ffffff;
   --foreground: #111827;
+
+  /* Dynamic Branding Palette Variables (defaults to Emerald) */
+  --brand-primary: #059669;
+  --brand-secondary: #10b981;
+  --brand-bg-light: #ecfdf5;
+  --brand-border: #a7f3d0;
+  --brand-text: #065f46;
+  --brand-primary-rgb: 5, 150, 105;
+  --brand-secondary-rgb: 16, 185, 129;
 }
 
 @theme inline {
@@ -11,6 +20,96 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-brand-primary: var(--brand-primary);
+  --color-brand-secondary: var(--brand-secondary);
+  --color-brand-light: var(--brand-bg-light);
+  --color-brand-border: var(--brand-border);
+  --color-brand-text: var(--brand-text);
+}
+
+/* =========================================================================
+   DYNAMIC BRANDING UTILITY CLASSES (Universal Dynamic Theme Styling)
+   ========================================================================= */
+
+.bg-brand-primary {
+  background-color: var(--brand-primary) !important;
+}
+
+.text-brand-primary {
+  color: var(--brand-primary) !important;
+}
+
+.border-brand-primary {
+  border-color: var(--brand-primary) !important;
+}
+
+.bg-brand-secondary {
+  background-color: var(--brand-secondary) !important;
+}
+
+.text-brand-secondary {
+  color: var(--brand-secondary) !important;
+}
+
+.bg-brand-light {
+  background-color: var(--brand-bg-light) !important;
+}
+
+.border-brand-light {
+  border-color: var(--brand-border) !important;
+}
+
+.text-brand-dark {
+  color: var(--brand-text) !important;
+}
+
+.brand-gradient {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary)) !important;
+}
+
+.brand-gradient-text {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.brand-btn-primary {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-secondary));
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px 0 rgba(var(--brand-primary-rgb), 0.3);
+  transition: all 0.2s ease;
+}
+
+.brand-btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 6px 20px 0 rgba(var(--brand-primary-rgb), 0.4);
+  transform: translateY(-1px);
+}
+
+.brand-btn-primary:active {
+  transform: translateY(0);
+}
+
+.brand-badge {
+  background-color: var(--brand-bg-light) !important;
+  color: var(--brand-text) !important;
+  border: 1px solid var(--brand-border) !important;
+}
+
+.brand-card-hover {
+  transition: all 0.2s ease;
+}
+
+.brand-card-hover:hover {
+  border-color: var(--brand-border) !important;
+  box-shadow: 0 10px 25px -5px rgba(var(--brand-primary-rgb), 0.12);
+}
+
+.brand-active-nav {
+  background: linear-gradient(90deg, rgba(var(--brand-primary-rgb), 0.22) 0%, rgba(var(--brand-primary-rgb), 0.06) 100%) !important;
+  border-left: 4px solid var(--brand-primary) !important;
+  color: #ffffff !important;
 }
 
 html {

@@ -17,6 +17,8 @@ import {
   PRESET_LOGOS,
   DEFAULT_BRANDING,
   InstituteBranding,
+  isPresetLogoUrl,
+  hexToRgb,
 } from "@/lib/branding"
 
 interface PaymentAccount {
@@ -107,7 +109,11 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
     reader.onload = (event) => {
       const result = event.target?.result as string
       if (result) {
-        setFormData(prev => ({ ...prev, logoUrl: result }))
+        setFormData(prev => ({
+          ...prev,
+          logoUrl: result,
+          faviconUrl: (!prev.faviconUrl || prev.faviconUrl === prev.logoUrl || isPresetLogoUrl(prev.faviconUrl)) ? result : prev.faviconUrl
+        }))
         toast.success("Logo uploaded for preview! Click 'Save Branding' to apply.")
       }
     }
@@ -380,7 +386,11 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                         <button
                           key={preset.id}
                           type="button"
-                          onClick={() => setFormData({ ...formData, logoUrl: preset.url })}
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            logoUrl: preset.url,
+                            faviconUrl: (!prev.faviconUrl || prev.faviconUrl === prev.logoUrl || isPresetLogoUrl(prev.faviconUrl)) ? preset.url : prev.faviconUrl
+                          }))}
                           className={cn(
                             "flex flex-col items-center p-2 rounded-xl border transition-all text-center group cursor-pointer",
                             isSelected
@@ -427,7 +437,14 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                     <input
                       type="text"
                       value={formData.logoUrl}
-                      onChange={e => setFormData({ ...formData, logoUrl: e.target.value })}
+                      onChange={e => {
+                        const val = e.target.value
+                        setFormData(prev => ({
+                          ...prev,
+                          logoUrl: val,
+                          faviconUrl: (!prev.faviconUrl || prev.faviconUrl === prev.logoUrl || isPresetLogoUrl(prev.faviconUrl)) ? val : prev.faviconUrl
+                        }))
+                      }}
                       placeholder="https://example.com/logo.png or /logo.jpg"
                       className={inputClass}
                     />

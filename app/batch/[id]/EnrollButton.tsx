@@ -119,9 +119,9 @@ export default function EnrollButton({
   if (status === "is_staff") {
     const dashboardHref = ["owner", "branch_director", "super_manager", "manager"].includes(staffRole)
       ? "/dashboard/owner"
-      : staffRole === "teacher"
+      : (staffRole === "teacher" || staffRole === "course_teacher")
       ? "/dashboard/teacher"
-      : staffRole === "receptionist"
+      : (staffRole === "receptionist" || staffRole === "reception")
       ? "/dashboard/reception"
       : staffRole === "accountant"
       ? "/dashboard/accountant"

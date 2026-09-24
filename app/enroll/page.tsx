@@ -13,6 +13,7 @@ import {
   Eye, EyeOff, LogIn, UserCheck, KeyRound, Landmark, DoorOpen
 } from "lucide-react"
 import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
+import { useBranding } from "@/components/providers/BrandingContext"
 
 interface Batch {
   id: string
@@ -59,6 +60,7 @@ const DEFAULT_GATEWAYS: Gateways = {
 }
 
 function EnrollContent() {
+  const { branding, theme } = useBranding()
   const searchParams = useSearchParams()
   const batchIdParam = searchParams.get("batchId") || searchParams.get("batch") || ""
   const courseIdParam = searchParams.get("courseId") || searchParams.get("course") || ""
@@ -767,11 +769,18 @@ function EnrollContent() {
           {/* Logo */}
           <div className="flex justify-center mb-8">
             <Link href="/" className="inline-flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-full border border-cyan-400/40 overflow-hidden flex items-center justify-center bg-white shadow-lg shadow-cyan-500/20">
-                <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+              <div
+                className="w-10 h-10 rounded-full border overflow-hidden flex items-center justify-center bg-white shadow-lg"
+                style={{ borderColor: theme.borderHex }}
+              >
+                <img
+                  src={branding.logoUrl || "/logo.jpg"}
+                  alt={`${branding.name} Logo`}
+                  className="w-full h-full object-cover rounded-full"
+                />
               </div>
-              <span className="text-2xl font-black bg-gradient-to-r from-white via-indigo-200 to-cyan-400 bg-clip-text text-transparent">
-                MedhaShiree
+              <span className="text-2xl font-black text-white">
+                {branding.name}
               </span>
             </Link>
           </div>
@@ -895,7 +904,7 @@ function EnrollContent() {
         </div>
 
         <footer className="text-center text-xs text-gray-500 pb-4">
-          © {new Date().getFullYear()} MedhaShiree Coaching Management. All rights reserved.
+          © {new Date().getFullYear()} {branding.name}. All rights reserved.
         </footer>
       </div>
     )
@@ -1329,11 +1338,18 @@ function EnrollContent() {
       <nav className="bg-white/95 backdrop-blur-md border-b border-gray-100 sticky top-0 z-30 shadow-xs">
         <div className="max-w-5xl mx-auto px-4 py-3.5 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-full border border-indigo-200 overflow-hidden flex items-center justify-center bg-white shadow-xs flex-shrink-0">
-              <img src="/logo.jpg" alt="MedhaShiree Logo" className="w-full h-full object-cover rounded-full" />
+            <div
+              className="w-9 h-9 rounded-full border overflow-hidden flex items-center justify-center bg-white shadow-xs flex-shrink-0"
+              style={{ borderColor: theme.borderHex }}
+            >
+              <img
+                src={branding.logoUrl || "/logo.jpg"}
+                alt={`${branding.name} Logo`}
+                className="w-full h-full object-cover rounded-full"
+              />
             </div>
-            <span className="text-xl font-black bg-gradient-to-r from-indigo-700 to-violet-700 bg-clip-text text-transparent">
-              MedhaShiree
+            <span className="text-xl font-black text-slate-900">
+              {branding.name}
             </span>
           </Link>
 
@@ -2189,7 +2205,7 @@ function EnrollContent() {
         </form>
 
         <p className="text-center text-gray-400 text-xs mt-10">
-          © {new Date().getFullYear()} MedhaShiree · All rights reserved
+          © {new Date().getFullYear()} {branding.name} · All rights reserved
         </p>
       </div>
     </div>
