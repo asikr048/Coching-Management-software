@@ -7,6 +7,7 @@ export interface InstituteBranding {
   tagline: string
   taglineBn: string
   logoUrl: string
+  faviconUrl?: string
   logoShape: "circle" | "rounded" | "square"
   themeColor: ThemeColor
   phone: string
@@ -15,6 +16,8 @@ export interface InstituteBranding {
   address: string
   establishedYear: string
   receiptFooterNote: string
+  whatsappLink?: string
+  footerAbout?: string
 }
 
 export interface ThemePalette {
@@ -245,6 +248,7 @@ export const DEFAULT_BRANDING: InstituteBranding = {
   tagline: "Academic & Admission Care",
   taglineBn: "উন্নত ও নির্ভরযোগ্য শিক্ষা সেবা",
   logoUrl: PRESET_LOGOS[0].url,
+  faviconUrl: PRESET_LOGOS[0].url,
   logoShape: "circle",
   themeColor: "emerald",
   phone: "+880 1700-000000",
@@ -253,6 +257,8 @@ export const DEFAULT_BRANDING: InstituteBranding = {
   address: "Rangpur / Dhaka, Bangladesh",
   establishedYear: "2024",
   receiptFooterNote: "Thank you for your payment! Please preserve this receipt for all future verification.",
+  whatsappLink: "https://wa.me/8801700000000",
+  footerAbout: "Premier academic coaching and admission care providing excellence in education, student mentorship, and proven results across Bangladesh.",
 }
 
 const STORAGE_KEY = "institute_branding_config"

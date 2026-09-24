@@ -115,6 +115,33 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     }
   }, [theme])
 
+  // Apply Favicon (mini URL logo) and Page Title dynamically for browser tab
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      const iconUrl = branding.faviconUrl || branding.logoUrl
+      if (iconUrl) {
+        // Update all icon links
+        const existingLinks = document.querySelectorAll("link[rel*='icon']")
+        if (existingLinks.length > 0) {
+          existingLinks.forEach((link) => {
+            ;(link as HTMLLinkElement).href = iconUrl
+          })
+        } else {
+          const newLink = document.createElement("link")
+          newLink.rel = "icon"
+          newLink.href = iconUrl
+          document.head.appendChild(newLink)
+        }
+      }
+
+      // Update document title if present and not already customized by route
+      if (branding.name && !document.title.includes(branding.name)) {
+        const base = branding.name + (branding.tagline ? ` | ${branding.tagline}` : "")
+        document.title = base
+      }
+    }
+  }, [branding.faviconUrl, branding.logoUrl, branding.name, branding.tagline])
+
   const refreshBranding = async () => {
     try {
       const { data, error } = await supabase

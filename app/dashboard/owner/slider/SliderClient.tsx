@@ -6,10 +6,13 @@ import {
   Plus, Trash2, Image, Loader2, X, Eye, EyeOff, Pencil, Sparkles,
   Phone, Mail, MapPin, MessageSquare, Save, Sliders, Info, ExternalLink,
   Globe, Bell, Trophy, BookOpen, Award, Tag, Calendar, User, CheckCircle2,
-  Landmark, ArrowUpRight, Star, Search, CalendarDays
+  Landmark, ArrowUpRight, Star, Search, CalendarDays, Palette, Check,
+  RotateCcw, Link2, LayoutTemplate
 } from "lucide-react"
 import type { Branch, Blog, Achievement, Notice } from "@/lib/supabase/types"
 import { extractWeeklyScheduleFromNote } from "@/lib/utils"
+import { useBranding } from "@/components/providers/BrandingContext"
+import { THEME_PALETTES, PRESET_LOGOS, type ThemeColor, type InstituteBranding } from "@/lib/branding"
 
 interface Slide {
   id: string
@@ -206,17 +209,56 @@ export default function SliderClient({
     is_published: true,
   })
 
-  // --- CONTACT / BRANDING STATE ---
-  const [contactPhone, setContactPhone] = useState(initialSettings['contact_phone'] || '01302201431')
-  const [contactEmail, setContactEmail] = useState(initialSettings['contact_email'] || 'info@medhashiree.com')
-  const [contactAddress, setContactAddress] = useState(initialSettings['contact_address'] || 'Rajshahi, Bangladesh')
-  const [contactLink, setContactLink] = useState(initialSettings['contact_link'] || 'https://wa.me/8801302201431')
+  // --- CONTACT & WHITE-LABEL BRANDING STATE ---
+  const { branding, theme: activeBrandingTheme, updateBranding, resetToDefaults } = useBranding()
+
+  const [instName, setInstName] = useState(branding.name || "MIIS ACADEMY")
+  const [instNameBn, setInstNameBn] = useState(branding.nameBn || "এমআইআইএস একাডেমি")
+  const [instShortName, setInstShortName] = useState(branding.shortName || "MIIS")
+  const [instTagline, setInstTagline] = useState(branding.tagline || "Academic & Admission Care")
+  const [instTaglineBn, setInstTaglineBn] = useState(branding.taglineBn || "উন্নত ও নির্ভরযোগ্য শিক্ষা সেবা")
+  const [instLogoUrl, setInstLogoUrl] = useState(branding.logoUrl || PRESET_LOGOS[0].url)
+  const [instFaviconUrl, setInstFaviconUrl] = useState(branding.faviconUrl || branding.logoUrl || PRESET_LOGOS[0].url)
+  const [instThemeColor, setInstThemeColor] = useState<ThemeColor>(branding.themeColor || "emerald")
+  const [instWebsite, setInstWebsite] = useState(branding.website || "www.miisacademy.com")
+  const [instEstablishedYear, setInstEstablishedYear] = useState(branding.establishedYear || "2024")
+  const [instReceiptFooterNote, setInstReceiptFooterNote] = useState(
+    branding.receiptFooterNote || "Thank you for your payment! Please preserve this receipt for all future verification."
+  )
+
+  const [contactPhone, setContactPhone] = useState(branding.phone || initialSettings['contact_phone'] || '+880 1700-000000')
+  const [contactEmail, setContactEmail] = useState(branding.email || initialSettings['contact_email'] || 'contact@miisacademy.com')
+  const [contactAddress, setContactAddress] = useState(branding.address || initialSettings['contact_address'] || 'Rangpur / Dhaka, Bangladesh')
+  const [contactLink, setContactLink] = useState(branding.whatsappLink || initialSettings['contact_link'] || 'https://wa.me/8801700000000')
   const [contactLabel, setContactLabel] = useState(initialSettings['contact_label'] || 'WhatsApp Us')
   const [footerAbout, setFooterAbout] = useState(
+    branding.footerAbout ||
     initialSettings['footer_about'] ||
-    "Rajshahi's premier coaching center. Quality education, expert teachers, and a proven track record of student success."
+    "Premier academic coaching and admission care providing excellence in education, student mentorship, and proven results across Bangladesh."
   )
   const [savingContact, setSavingContact] = useState(false)
+
+  // Sync state when branding context changes
+  useEffect(() => {
+    if (branding) {
+      setInstName(branding.name || "")
+      setInstNameBn(branding.nameBn || "")
+      setInstShortName(branding.shortName || "")
+      setInstTagline(branding.tagline || "")
+      setInstTaglineBn(branding.taglineBn || "")
+      setInstLogoUrl(branding.logoUrl || "")
+      setInstFaviconUrl(branding.faviconUrl || branding.logoUrl || "")
+      setInstThemeColor(branding.themeColor || "emerald")
+      setInstWebsite(branding.website || "")
+      setInstEstablishedYear(branding.establishedYear || "")
+      setInstReceiptFooterNote(branding.receiptFooterNote || "")
+      if (branding.phone) setContactPhone(branding.phone)
+      if (branding.email) setContactEmail(branding.email)
+      if (branding.address) setContactAddress(branding.address)
+      if (branding.whatsappLink) setContactLink(branding.whatsappLink)
+      if (branding.footerAbout) setFooterAbout(branding.footerAbout)
+    }
+  }, [branding])
 
   // --- FEEDBACK STATE ---
   const [feedback, setFeedback] = useState<any[]>(initialFeedback)
@@ -873,11 +915,36 @@ export default function SliderClient({
   }
 
   // ----------------------------------------------------
-  // CONTACT INFO SAVE
+  // WHITE-LABEL BRANDING & CONTACT INFO SAVE
   // ----------------------------------------------------
   async function handleSaveContact() {
     setSavingContact(true)
     try {
+      const updatedBranding: InstituteBranding = {
+        ...branding,
+        name: instName.trim() || "MIIS ACADEMY",
+        nameBn: instNameBn.trim() || instName.trim(),
+        shortName: instShortName.trim() || "MIIS",
+        tagline: instTagline.trim(),
+        taglineBn: instTaglineBn.trim(),
+        logoUrl: instLogoUrl.trim() || PRESET_LOGOS[0].url,
+        faviconUrl: (instFaviconUrl || instLogoUrl).trim() || PRESET_LOGOS[0].url,
+        logoShape: branding.logoShape || "circle",
+        themeColor: instThemeColor,
+        phone: contactPhone.trim(),
+        email: contactEmail.trim(),
+        address: contactAddress.trim(),
+        website: instWebsite.trim(),
+        establishedYear: instEstablishedYear.trim(),
+        receiptFooterNote: instReceiptFooterNote.trim(),
+        whatsappLink: contactLink.trim(),
+        footerAbout: footerAbout.trim(),
+      }
+
+      // 1. Update branding context (updates UI, localStorage, and triggers live cross-tab events)
+      await updateBranding(updatedBranding)
+
+      // 2. Also persist individual keys to site_settings for legacy backward compatibility
       const pairs = [
         { key: 'contact_phone', value: contactPhone },
         { key: 'contact_email', value: contactEmail },
@@ -885,6 +952,7 @@ export default function SliderClient({
         { key: 'contact_link', value: contactLink },
         { key: 'contact_label', value: contactLabel },
         { key: 'footer_about', value: footerAbout },
+        { key: 'institute_branding', value: JSON.stringify(updatedBranding) },
       ]
       for (const p of pairs) {
         await supabase.from("site_settings").upsert(p, { onConflict: 'key' })
@@ -897,7 +965,7 @@ export default function SliderClient({
         localStorage.setItem('medhashiree_contact_label', contactLabel)
         localStorage.setItem('medhashiree_footer_about', footerAbout)
       }
-      toast.success("Institutional settings saved successfully!")
+      toast.success("Institutional Branding, Favicon & Settings saved successfully! All views updated.")
     } catch (err: any) {
       toast.error(err.message || "Failed to save settings")
     } finally {
@@ -1102,11 +1170,15 @@ export default function SliderClient({
           onClick={() => setActiveTab('contact')}
           className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'contact'
-              ? 'bg-amber-600 text-white shadow-sm'
+              ? 'bg-emerald-600 text-white shadow-sm'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          <Globe className="w-4 h-4" /> Institutional Contacts
+          <Palette className="w-4 h-4 text-amber-300" />
+          <span>Branding & Contacts</span>
+          <span className="px-1.5 py-0.5 text-[10px] bg-amber-400 text-slate-950 rounded-md font-extrabold uppercase tracking-wider">
+            White-Label
+          </span>
         </button>
       </div>
 
@@ -1880,81 +1952,630 @@ export default function SliderClient({
       )}
 
       {/* ---------------------------------------------------- */}
-      {/* 6. INSTITUTIONAL CONTACTS & BRANDING */}
+      {/* 6. WHITE-LABEL BRANDING & INSTITUTIONAL CONTACTS */}
       {/* ---------------------------------------------------- */}
       {activeTab === 'contact' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5 max-w-2xl">
-          <div>
-            <h3 className="text-base font-extrabold text-slate-900">Institutional Contact & Branding</h3>
-            <p className="text-xs text-slate-500 font-medium">
-              Default coaching contact details displayed on the top utility bar and footer
-            </p>
-          </div>
-
-          <div className="space-y-4">
+        <div className="space-y-8">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 sm:p-8 text-white shadow-xl border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Helpline Phone Number</label>
-              <input
-                type="text"
-                value={contactPhone}
-                onChange={e => setContactPhone(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-500 focus:outline-none placeholder:text-slate-400"
-                placeholder="01302201431"
-              />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 border border-amber-400/30 text-amber-300 text-xs font-bold mb-3 uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5" /> White-Label Rebranding & Style Studio
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+                Customize Institute Identity & Style
+              </h2>
+              <p className="text-slate-300 text-xs sm:text-sm mt-1.5 max-w-2xl leading-relaxed">
+                Rebrand the entire coaching management platform instantly. Change your institute name, logo, browser tab favicon, and primary theme style to sell or deploy to any educational institution.
+              </p>
             </div>
 
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Official Email Address</label>
-              <input
-                type="email"
-                value={contactEmail}
-                onChange={e => setContactEmail(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-500 focus:outline-none placeholder:text-slate-400"
-                placeholder="info@medhashiree.com"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Central Head Office Address</label>
-              <input
-                type="text"
-                value={contactAddress}
-                onChange={e => setContactAddress(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-500 focus:outline-none placeholder:text-slate-400"
-                placeholder="নাচোল, চাঁপাইনবাবগঞ্জ"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">WhatsApp Helpline Link</label>
-              <input
-                type="text"
-                value={contactLink}
-                onChange={e => setContactLink(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-500 focus:outline-none placeholder:text-slate-400"
-                placeholder="https://wa.me/8801302201431"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Footer About Synopsis</label>
-              <textarea
-                rows={3}
-                value={footerAbout}
-                onChange={e => setFooterAbout(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-sm bg-white border border-slate-300 text-slate-900 rounded-xl focus:border-amber-500 focus:outline-none placeholder:text-slate-400"
-              />
-            </div>
-
-            <div className="pt-2">
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
               <button
+                type="button"
+                onClick={async () => {
+                  if (confirm("Reset branding to default MIIS Academy settings?")) {
+                    await resetToDefaults()
+                    toast.info("Branding reset to defaults")
+                  }
+                }}
+                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" /> Reset Defaults
+              </button>
+
+              <button
+                type="button"
                 onClick={handleSaveContact}
                 disabled={savingContact}
-                className="flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-sm font-bold rounded-xl shadow-md shadow-amber-500/20 transition-all hover:scale-[1.02] cursor-pointer"
+                className="flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-lg shadow-emerald-500/25 transition-all hover:scale-[1.02] cursor-pointer flex-1 md:flex-initial"
               >
                 {savingContact ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Branding Settings
+                Save & Apply Everywhere
               </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Left Column: Form Settings (7 cols) */}
+            <div className="lg:col-span-7 space-y-6">
+              {/* Card 1: Core Institute Name & Identifiers */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-700">
+                    <Landmark className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Institute Name & Identity</h3>
+                    <p className="text-xs text-slate-500">Appears on Dashboard, Navbar, Results, Slips & Cards</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Institute Full Name (English) *
+                    </label>
+                    <input
+                      type="text"
+                      value={instName}
+                      onChange={e => setInstName(e.target.value)}
+                      placeholder="e.g. MIIS ACADEMY / MedhaShiree Coaching"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all font-semibold text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Institute Name (Bengali)
+                    </label>
+                    <input
+                      type="text"
+                      value={instNameBn}
+                      onChange={e => setInstNameBn(e.target.value)}
+                      placeholder="যেমন: এমআইআইএস একাডেমি"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Short Name / Code (e.g. MIIS, MSC) *
+                    </label>
+                    <input
+                      type="text"
+                      value={instShortName}
+                      onChange={e => setInstShortName(e.target.value)}
+                      placeholder="e.g. MIIS"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all uppercase font-bold text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Tagline / Slogan (English)
+                    </label>
+                    <input
+                      type="text"
+                      value={instTagline}
+                      onChange={e => setInstTagline(e.target.value)}
+                      placeholder="e.g. Academic & Admission Care"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Tagline (Bengali)
+                    </label>
+                    <input
+                      type="text"
+                      value={instTaglineBn}
+                      onChange={e => setInstTaglineBn(e.target.value)}
+                      placeholder="যেমন: উন্নত ও নির্ভরযোগ্য শিক্ষা সেবা"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Established Year
+                    </label>
+                    <input
+                      type="text"
+                      value={instEstablishedYear}
+                      onChange={e => setInstEstablishedYear(e.target.value)}
+                      placeholder="2024"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Official Website
+                    </label>
+                    <input
+                      type="text"
+                      value={instWebsite}
+                      onChange={e => setInstWebsite(e.target.value)}
+                      placeholder="www.miisacademy.com"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Main Logo & Mini URL Logo (Browser Favicon) */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700">
+                      <Image className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900">Logo & Mini Favicon Studio</h3>
+                      <p className="text-xs text-slate-500">Provide image URLs or select professional presets</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Main Logo URL Input */}
+                <div className="space-y-3">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Main Logo Image URL
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl border-2 border-indigo-200 p-1 bg-white flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                      {instLogoUrl ? (
+                        <img
+                          src={instLogoUrl}
+                          alt="Logo Preview"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            ;(e.target as HTMLImageElement).src = PRESET_LOGOS[0].url
+                          }}
+                        />
+                      ) : (
+                        <Image className="w-6 h-6 text-slate-300" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <input
+                        type="url"
+                        value={instLogoUrl}
+                        onChange={e => setInstLogoUrl(e.target.value)}
+                        placeholder="https://example.com/logo.png or select preset below"
+                        className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900 font-mono"
+                      />
+                      <p className="text-[11px] text-slate-400 mt-1">Recommended: 256x256 transparent PNG or SVG URL</p>
+                    </div>
+                  </div>
+
+                  {/* 1-Click SVG Presets */}
+                  <div className="pt-2">
+                    <p className="text-xs font-bold text-slate-700 mb-2">Or select from 5 Built-in Educational Crest Presets:</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                      {PRESET_LOGOS.map((preset) => {
+                        const isSelected = instLogoUrl === preset.url
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => {
+                              setInstLogoUrl(preset.url)
+                              if (!instFaviconUrl || instFaviconUrl === instLogoUrl) {
+                                setInstFaviconUrl(preset.url)
+                              }
+                            }}
+                            className={`p-2.5 rounded-xl border flex flex-col items-center gap-1.5 transition-all text-center cursor-pointer ${
+                              isSelected
+                                ? "border-indigo-600 bg-indigo-50/70 shadow-sm ring-2 ring-indigo-500/20"
+                                : "border-slate-200 hover:border-slate-300 hover:bg-slate-50"
+                            }`}
+                          >
+                            <img src={preset.url} alt={preset.title} className="w-9 h-9 object-contain" />
+                            <span className="text-[10px] font-bold text-slate-700 truncate w-full">
+                              {preset.title}
+                            </span>
+                            {isSelected && (
+                              <span className="text-[9px] font-extrabold text-indigo-700 bg-indigo-100 px-1.5 py-0.5 rounded-full">
+                                Selected
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mini URL Logo / Browser Tab Favicon */}
+                <div className="pt-4 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-800">
+                        Mini URL Logo (Browser Favicon) *
+                      </label>
+                      <p className="text-[11px] text-slate-500">
+                        The miniature icon displayed on the browser tab title
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setInstFaviconUrl(instLogoUrl)}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg transition-all"
+                    >
+                      Use Main Logo
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl border border-slate-300 p-1 bg-white flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                      <img
+                        src={instFaviconUrl || instLogoUrl}
+                        alt="Favicon Preview"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          ;(e.target as HTMLImageElement).src = PRESET_LOGOS[0].url
+                        }}
+                      />
+                    </div>
+                    <input
+                      type="url"
+                      value={instFaviconUrl}
+                      onChange={e => setInstFaviconUrl(e.target.value)}
+                      placeholder="https://example.com/favicon.ico or .png"
+                      className="flex-1 px-3.5 py-2.5 text-xs sm:text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900 font-mono"
+                    />
+                  </div>
+
+                  {/* Browser Tab Live Mockup */}
+                  <div className="bg-slate-900 rounded-2xl p-3 border border-slate-800">
+                    <p className="text-[10px] uppercase font-bold text-slate-400 mb-2 tracking-wider flex items-center gap-1.5">
+                      <Globe className="w-3 h-3 text-indigo-400" /> Browser Tab Mockup Preview:
+                    </p>
+                    <div className="inline-flex items-center gap-2.5 bg-slate-800 text-slate-200 px-3.5 py-1.5 rounded-t-xl border-t border-l border-r border-slate-700 max-w-full">
+                      <img
+                        src={instFaviconUrl || instLogoUrl || PRESET_LOGOS[0].url}
+                        alt="Mini Tab Favicon"
+                        className="w-4 h-4 object-contain rounded-xs"
+                      />
+                      <span className="text-xs font-semibold text-slate-200 truncate max-w-[220px]">
+                        {instName || "MIIS ACADEMY"} | {instTagline || "Coaching Management"}
+                      </span>
+                      <span className="text-slate-400 text-xs ml-1 hover:text-white cursor-default">✕</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Color Palette & Visual Theme Style Selection */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+                    <Palette className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Color Palette & Theme Style</h3>
+                    <p className="text-xs text-slate-500">Pick a branded primary color scheme for buttons, badges, and accents</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {(Object.keys(THEME_PALETTES) as ThemeColor[]).map((themeKey) => {
+                    const pal = THEME_PALETTES[themeKey]
+                    const isSelected = instThemeColor === themeKey
+                    return (
+                      <button
+                        key={themeKey}
+                        type="button"
+                        onClick={() => setInstThemeColor(themeKey)}
+                        className={`p-3.5 rounded-2xl border text-left flex items-start justify-between transition-all cursor-pointer ${
+                          isSelected
+                            ? "border-slate-900 bg-slate-50 shadow-md ring-2 ring-slate-900/10"
+                            : "border-slate-200 hover:border-slate-300 hover:bg-slate-50/50"
+                        }`}
+                      >
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-4 h-4 rounded-full border border-black/10 shrink-0"
+                              style={{ backgroundColor: pal.primaryHex }}
+                            />
+                            <span className="text-xs font-bold text-slate-900">{pal.name}</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <div
+                              className="h-2 w-12 rounded-full"
+                              style={{ backgroundColor: pal.primaryHex }}
+                            />
+                            <div
+                              className="h-2 w-8 rounded-full"
+                              style={{ backgroundColor: pal.secondaryHex }}
+                            />
+                            <div
+                              className="h-2 w-5 rounded-full border"
+                              style={{ backgroundColor: pal.bgLightHex, borderColor: pal.borderHex }}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="mt-0.5">
+                          {isSelected ? (
+                            <span className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center">
+                              <Check className="w-3 h-3" />
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-full border border-slate-300" />
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Card 4: Institutional Contacts & Helpline */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
+                    <Phone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Helpline & Branch Contacts</h3>
+                    <p className="text-xs text-slate-500">Displayed on public landing page navbar and footer</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Helpline Phone Number *
+                    </label>
+                    <input
+                      type="text"
+                      value={contactPhone}
+                      onChange={e => setContactPhone(e.target.value)}
+                      placeholder="+880 1700-000000"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Official Support Email *
+                    </label>
+                    <input
+                      type="email"
+                      value={contactEmail}
+                      onChange={e => setContactEmail(e.target.value)}
+                      placeholder="contact@miisacademy.com"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Central Campus / Head Office Address
+                    </label>
+                    <input
+                      type="text"
+                      value={contactAddress}
+                      onChange={e => setContactAddress(e.target.value)}
+                      placeholder="Campus Address, District, Bangladesh"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      WhatsApp Helpline Link
+                    </label>
+                    <input
+                      type="text"
+                      value={contactLink}
+                      onChange={e => setContactLink(e.target.value)}
+                      placeholder="https://wa.me/8801700000000"
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 5: Marksheet / Receipt Notes & Footer Synopsis */}
+              <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 space-y-5">
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-700">
+                    <LayoutTemplate className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Receipt Notes & Footer Content</h3>
+                    <p className="text-xs text-slate-500">Appears on official printables and homepage bottom section</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Payment Receipt Verification Note
+                    </label>
+                    <input
+                      type="text"
+                      value={instReceiptFooterNote}
+                      onChange={e => setInstReceiptFooterNote(e.target.value)}
+                      placeholder="Thank you for your payment! Please preserve this receipt for all future verification."
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Homepage Footer About Synopsis
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={footerAbout}
+                      onChange={e => setFooterAbout(e.target.value)}
+                      placeholder="Premier academic coaching and admission care..."
+                      className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sticky Save Action Bar */}
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleSaveContact}
+                  disabled={savingContact}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white text-base font-extrabold rounded-2xl shadow-xl shadow-emerald-600/30 transition-all hover:scale-[1.01] cursor-pointer"
+                >
+                  {savingContact ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Saving & Broadcasting Changes...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-5 h-5" />
+                      <span>Save Branding, Logo & Theme Style Everywhere</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Right Column: Live Interactive Preview (5 cols) */}
+            <div className="lg:col-span-5 space-y-6">
+              <div className="sticky top-6 space-y-6">
+                <div className="bg-slate-900 rounded-3xl border border-slate-800 p-6 text-white shadow-xl space-y-5">
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                      <Eye className="w-4 h-4 text-emerald-400" />
+                      <h4 className="text-sm font-bold text-white uppercase tracking-wider">Live System Preview</h4>
+                    </div>
+                    <span
+                      className="text-[10px] font-bold px-2.5 py-1 rounded-full text-white uppercase tracking-wider"
+                      style={{ backgroundColor: THEME_PALETTES[instThemeColor]?.primaryHex || "#059669" }}
+                    >
+                      {THEME_PALETTES[instThemeColor]?.name || "Theme"}
+                    </span>
+                  </div>
+
+                  {/* 1. Dashboard Header Mockup */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 mb-2">1. Dashboard Top Header</p>
+                    <div className="bg-white rounded-2xl p-3 border border-slate-200 text-slate-900 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <img
+                          src={instLogoUrl || PRESET_LOGOS[0].url}
+                          alt="Logo"
+                          className="w-9 h-9 rounded-xl object-contain border border-slate-200 p-0.5 shrink-0"
+                          onError={(e) => {
+                            ;(e.target as HTMLImageElement).src = PRESET_LOGOS[0].url
+                          }}
+                        />
+                        <div className="min-w-0">
+                          <h5 className="text-xs font-black text-slate-900 truncate">
+                            {instName || "MIIS ACADEMY"}
+                          </h5>
+                          <p className="text-[10px] text-slate-500 font-medium truncate">
+                            {instTagline || "Academic & Admission Care"}
+                          </p>
+                        </div>
+                      </div>
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white shrink-0"
+                        style={{ backgroundColor: THEME_PALETTES[instThemeColor]?.primaryHex || "#059669" }}
+                      >
+                        {instShortName || "CAMPUS"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 2. Public Homepage Header Mockup */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 mb-2">2. Public Homepage Navbar</p>
+                    <div className="bg-slate-950 rounded-2xl p-3 border border-slate-800 flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-full border border-amber-400/40 p-0.5 bg-white flex items-center justify-center shrink-0 overflow-hidden">
+                          <img
+                            src={instLogoUrl || PRESET_LOGOS[0].url}
+                            alt="Logo"
+                            className="w-full h-full object-contain"
+                          />
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-black text-white truncate block">
+                            {instName || "MIIS ACADEMY"}
+                          </span>
+                          <span className="text-[9px] text-slate-400 truncate block">
+                            {instNameBn || "এমআইআইএস একাডেমি"}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 text-[10px] font-bold bg-amber-500 text-slate-950 rounded-lg shrink-0">
+                        লগইন
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 3. Marksheet / Exam Result Header Mockup */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 mb-2">3. Printable Result / Marksheet Header</p>
+                    <div className="bg-white rounded-2xl p-3.5 border-2 border-slate-200 text-slate-900 shadow-sm text-center space-y-1">
+                      <div className="flex items-center justify-center gap-2">
+                        <img
+                          src={instLogoUrl || PRESET_LOGOS[0].url}
+                          alt="Watermark Logo"
+                          className="w-7 h-7 object-contain rounded-full"
+                        />
+                        <h6
+                          className="text-xs font-black tracking-tight"
+                          style={{ color: THEME_PALETTES[instThemeColor]?.primaryHex || "#059669" }}
+                        >
+                          {instName || "MIIS ACADEMY"}
+                        </h6>
+                      </div>
+                      <p className="text-[9px] text-slate-600 font-semibold">
+                        {instTagline || "Academic Excellence & Admission Care"}
+                      </p>
+                      <div className="text-[8px] text-slate-400 flex items-center justify-center gap-2 border-t border-slate-100 pt-1">
+                        <span>📞 {contactPhone || "+880 1700-000000"}</span>
+                        <span>🌐 {instWebsite || "www.miisacademy.com"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4. Student ID Card Mockup */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-400 mb-2">4. Student Smart ID Card Header</p>
+                    <div
+                      className="rounded-2xl p-3 text-white shadow-md relative overflow-hidden"
+                      style={{
+                        background: `linear-gradient(135deg, ${THEME_PALETTES[instThemeColor]?.primaryHex || "#059669"}, #0f172a)`
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={instLogoUrl || PRESET_LOGOS[0].url}
+                          alt="ID Logo"
+                          className="w-6 h-6 rounded-full bg-white p-0.5 object-contain"
+                        />
+                        <div>
+                          <div className="text-[11px] font-black uppercase tracking-tight">{instName}</div>
+                          <div className="text-[8px] text-slate-200 opacity-90">{instTagline}</div>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 pt-2 border-t border-white/20 flex items-center justify-between text-[9px]">
+                        <span className="text-amber-300 font-bold">STUDENT ID CARD</span>
+                        <span className="opacity-75">{contactPhone}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
