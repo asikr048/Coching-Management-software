@@ -127,18 +127,24 @@ function getDayMarkItem(
 }
 
 function extractWeekNumber(title?: string | null, note?: string | null): number | null {
-  if (title) {
-    const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
-    const m = normalized.match(/weekly[-\s_]?0*(\d+)/i) || normalized.match(/সাপ্তাহিক[-\s_]?0*(\d+)/) || normalized.match(/week[-\s_]?0*(\d+)/i)
-    if (m && m[1]) return parseInt(m[1], 10)
-    const numOnly = normalized.match(/(\d+)/)
-    if (numOnly && numOnly[1] && (normalized.toLowerCase().includes("week") || normalized.includes("সাপ্তাহিক"))) {
-      return parseInt(numOnly[1], 10)
-    }
-  }
+  // First check result_note for explicit SERIES_WEEK tag (most reliable)
   if (note) {
     const nm = note.match(/\[SERIES_WEEK:(\d+)\]/)
     if (nm && nm[1]) return parseInt(nm[1], 10)
+  }
+  if (title) {
+    const normalized = title.replace(/[০-৯]/g, (c) => String("০১২৩৪৫৬৭৮৯".indexOf(c)))
+    // Only match explicit patterns like WEEKLY-01, WEEKLY_02, সাপ্তাহিক-01
+    // Require a separator (hyphen, underscore, or space) between keyword and number
+    const m = normalized.match(/weekly[-_\s]0*(\d+)/i) || normalized.match(/সাপ্তাহিক[-_\s]0*(\d+)/)
+    if (m && m[1]) {
+      // Reject if preceded by "class" or "ক্লাস" (e.g., "Weekly Class 5" — 5 is class number not week)
+      const beforeNum = normalized.substring(0, normalized.indexOf(m[0]) + m[0].indexOf(m[1]))
+      if (/class\s*$/i.test(beforeNum) || /ক্লাস\s*$/.test(beforeNum)) {
+        return null
+      }
+      return parseInt(m[1], 10)
+    }
   }
   return null
 }
@@ -915,11 +921,9 @@ export default function ExamResultsPage() {
   async function handleOpenOrCreateWeek(targetWeekNum: number) {
     if (!exam || targetWeekNum < 1) return
 
-    // 1. Check if the target week exam already exists in memory
-    const existing = weeklySeriesExams.find((e) => {
-      const w = extractWeekNumber(e.title, e.result_note)
-      return w === targetWeekNum
-    })
+    // 1. Check if the target week exam already exists in the series slots (sequential order)
+    const existingSlot = fullSeriesSlots.find((s) => s.weekNum === targetWeekNum)
+    const existing = existingSlot?.exam
 
     if (existing?.id) {
       if (existing.id === exam.id) {
@@ -936,14 +940,21 @@ export default function ExamResultsPage() {
       const weekLabel = `WEEKLY-${targetWeekNum < 10 ? "0" + targetWeekNum : targetWeekNum}`
 
       // 2. Query Supabase directly in case it exists in database but wasn't in state
-      const { data: foundExams } = await supabase
+      const targetBatchIdForQuery = exam.batch_id || (Array.isArray(exam.batch_ids) ? exam.batch_ids[0] : null)
+      let query = supabase
         .from("exams")
         .select("id, title, result_note, branch_id, batch_id")
         .or(`title.ilike.%${weekLabel}%,result_note.ilike.%[SERIES_WEEK:${targetWeekNum}]%`)
+      if (targetBatchIdForQuery) {
+        query = query.eq("batch_id", targetBatchIdForQuery)
+      }
+      const { data: foundExams } = await query
 
       const matched = (foundExams || []).find((e) => {
-        const w = extractWeekNumber(e.title, e.result_note)
-        return w === targetWeekNum
+        // Match by exact title or SERIES_WEEK tag
+        const titleMatch = e.title && e.title.toUpperCase().includes(weekLabel)
+        const noteMatch = e.result_note && e.result_note.includes(`[SERIES_WEEK:${targetWeekNum}]`)
+        return titleMatch || noteMatch
       })
 
       if (matched?.id) {
@@ -1073,7 +1084,6 @@ export default function ExamResultsPage() {
   // Current, Prev, and Next Week calculation + Only Real Added Weeks in Series (No Ghost Slots)
   const { prevWeekExam, nextWeekExam, currentWeekNum, fullSeriesSlots } = useMemo(() => {
     if (!exam) return { prevWeekExam: null, nextWeekExam: null, currentWeekNum: 1, fullSeriesSlots: [] }
-    const curNum = extractWeekNumber(exam.title, exam.result_note) || 1
 
     // Collect ONLY unique real existing exams that have actually been created/added
     const pool = [exam, ...(weeklySeriesExams || []), ...(combinedWeeksExamsList || [])]
@@ -1085,31 +1095,32 @@ export default function ExamResultsPage() {
     })
     const existingExams = Array.from(map.values())
 
-    // Sort existing exams by week number or creation timestamp
+    // Sort by creation timestamp to establish sequential order
     existingExams.sort((a, b) => {
-      const numA = extractWeekNumber(a.title, a.result_note) || 0
-      const numB = extractWeekNumber(b.title, b.result_note) || 0
-      if (numA !== numB && numA > 0 && numB > 0) return numA - numB
       return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
     })
 
+    // Assign sequential week numbers (1, 2, 3...) based on creation order
     const slots: Array<{
       weekNum: number
       title: string
       exam: any
       isCurrent: boolean
     }> = existingExams.map((ex, idx) => {
-      const wNum = extractWeekNumber(ex.title, ex.result_note) || idx + 1
+      const seqNum = idx + 1
       return {
-        weekNum: wNum,
-        title: ex.title || `WEEKLY-${wNum < 10 ? "0" + wNum : wNum}`,
+        weekNum: seqNum,
+        title: ex.title || `WEEKLY-${seqNum < 10 ? "0" + seqNum : seqNum}`,
         exam: ex,
         isCurrent: ex.id === exam.id,
       }
     })
 
-    // Find previous and next exam among the actual existing exams
+    // Find current exam's sequential week number
     const curIdx = slots.findIndex((s) => s.exam.id === exam.id)
+    const curNum = curIdx >= 0 ? slots[curIdx].weekNum : 1
+
+    // Find previous and next exam among the actual existing exams
     const prev = curIdx > 0 ? slots[curIdx - 1].exam : null
     const next = curIdx >= 0 && curIdx < slots.length - 1 ? slots[curIdx + 1].exam : null
 
@@ -1117,9 +1128,8 @@ export default function ExamResultsPage() {
   }, [exam, weeklySeriesExams, combinedWeeksExamsList])
 
   const nextWeekNumToCreate = useMemo(() => {
-    if (fullSeriesSlots.length === 0) return 1
-    const maxW = Math.max(...fullSeriesSlots.map((s) => s.weekNum), 0)
-    return maxW + 1
+    // Simply the next sequential number after all existing exams
+    return fullSeriesSlots.length + 1
   }, [fullSeriesSlots])
 
   // 1. Immediately load series exams when exam is available
@@ -1185,9 +1195,6 @@ export default function ExamResultsPage() {
       }
 
       weeklyExams.sort((a, b) => {
-        const numA = extractWeekNumber(a.title, a.result_note) || 0
-        const numB = extractWeekNumber(b.title, b.result_note) || 0
-        if (numA !== numB && numA > 0 && numB > 0) return numA - numB
         return new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
       })
 

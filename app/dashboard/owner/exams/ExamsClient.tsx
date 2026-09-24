@@ -261,7 +261,9 @@ export default function ExamsClient({
   function handleOpenNewWeeklyExam() {
     resetForm()
 
-    let highestWeek = 0
+    const targetBatchId = batchFilter !== "all" ? batchFilter : ""
+
+    let weeklyCount = 0
     let lastWeeklyExam: any = null
 
     for (const ex of exams) {
@@ -269,17 +271,20 @@ export default function ExamsClient({
         ex.exam_schedule_type === "weekly" ||
         (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
         (ex.title && (ex.title.includes("সাপ্তাহিক") || ex.title.toLowerCase().includes("weekly")))
-      if (isWeekly) {
-        lastWeeklyExam = ex
-        const m = (ex.title || "").match(/weekly[-\s_]?(\d+)/i) || (ex.title || "").match(/সাপ্তাহিক[-\s_]?(\d+)/)
-        if (m && m[1]) {
-          const num = parseInt(m[1])
-          if (num > highestWeek) highestWeek = num
-        }
+      if (!isWeekly) continue
+
+      // Only count exams from the same batch
+      if (targetBatchId) {
+        const exBatchIds = Array.isArray(ex.batch_ids) && ex.batch_ids.length > 0
+          ? ex.batch_ids : (ex.batch_id ? [ex.batch_id] : [])
+        if (!exBatchIds.includes(targetBatchId) && ex.batch_id !== targetBatchId) continue
       }
+
+      lastWeeklyExam = ex
+      weeklyCount++
     }
 
-    const nextWeekNum = highestWeek + 1
+    const nextWeekNum = weeklyCount + 1
     const suggestedTitle = `WEEKLY-${nextWeekNum < 10 ? "0" + nextWeekNum : nextWeekNum}`
     const initialBatchId =
       batchFilter !== "all" ? batchFilter : (lastWeeklyExam?.batch_id || batches[0]?.id || "")
