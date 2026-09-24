@@ -16,7 +16,6 @@ import {
   Award,
   Layers,
   Edit2,
-  Check,
 } from "lucide-react"
 import PrintableExamSheet, { PrintableExamSheetProps } from "./PrintableExamSheet"
 import StudentProgressReport, {
@@ -151,38 +150,23 @@ export default function ExamPrintModal({
   const [showSubjectToppers, setShowSubjectToppers] = useState<boolean>(true)
   const [showSignatures, setShowSignatures] = useState<boolean>(true)
 
-  // 6. Custom Exam Title and Academic Year (Directly editable for Result Sheet & PDF)
+  // 6. Custom Exam Title and Academic Year (Directly editable for Result Sheet & PDF ONLY)
+  //    NOTE: This is purely LOCAL — it only affects what appears on the printed/PDF sheet.
+  //          It does NOT save to the database. To permanently rename the exam, use the
+  //          title edit button (✏️) on the main exam page.
   const [customExamTitle, setCustomExamTitle] = useState<string>(exam.title || "")
   const [customAcademicYear, setCustomAcademicYear] = useState<string>(
     exam.exam_date ? new Date(exam.exam_date).getFullYear().toString() : new Date().getFullYear().toString()
   )
-  const [isSavingTitle, setIsSavingTitle] = useState<boolean>(false)
-  const [titleSavedSuccess, setTitleSavedSuccess] = useState<boolean>(false)
 
-  // Keep custom title & year synced if exam prop changes
+  // Keep custom title & year synced if exam prop changes (e.g. navigating between weeks)
+  // but ONLY reset if the modal is not currently showing user-entered overrides.
   useEffect(() => {
     setCustomExamTitle(exam.title || "")
     if (exam.exam_date) {
       setCustomAcademicYear(new Date(exam.exam_date).getFullYear().toString())
     }
   }, [exam.id, exam.title, exam.exam_date])
-
-  async function handleSaveCustomTitle() {
-    if (!exam.id || !customExamTitle.trim() || customExamTitle.trim() === exam.title) return
-    setIsSavingTitle(true)
-    try {
-      const res = await fetch(`/api/exams/${exam.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: customExamTitle.trim() }),
-      })
-      if (res.ok) {
-        setTitleSavedSuccess(true)
-        setTimeout(() => setTitleSavedSuccess(false), 2500)
-      }
-    } catch {}
-    setIsSavingTitle(false)
-  }
 
   // Sync mode and orientation when defaultMode changes
   useEffect(() => {
@@ -788,18 +772,19 @@ export default function ExamPrintModal({
               </button>
             </div>
 
-            {/* Editable Exam Name & Academic Year (for printout customization) */}
+            {/* Editable Exam Name & Academic Year (PDF printout only — does NOT change the saved exam name) */}
             <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
               <Edit2 className="w-3.5 h-3.5 text-slate-500 ml-1" />
-              <label className="text-slate-600 font-bold text-[11px] whitespace-nowrap">পরীক্ষার নাম (Edit):</label>
+              <label className="text-slate-600 font-bold text-[11px] whitespace-nowrap">
+                PDF নাম (শুধু প্রিন্টের জন্য):
+              </label>
               <input
                 type="text"
                 value={customExamTitle}
                 onChange={(e) => setCustomExamTitle(e.target.value)}
-                onBlur={handleSaveCustomTitle}
                 className="px-2 py-0.5 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 w-32 sm:w-40 focus:w-52 transition-all focus:outline-hidden focus:ring-1 focus:ring-amber-500"
                 placeholder="e.g. WEEKLY-05"
-                title="রেজাল্ট শিটে পরীক্ষার নাম পরিবর্তন করতে এখানে লিখুন"
+                title="শুধুমাত্র রেজাল্ট শিট ও PDF-এ নাম পরিবর্তন হবে। পরীক্ষার আসল নাম পরিবর্তন করতে মূল পৃষ্ঠায় সম্পাদনা (✏️) বাটন ব্যবহার করুন।"
               />
               <label className="text-slate-600 font-bold text-[11px] whitespace-nowrap ml-1">শিক্ষাবর্ষ:</label>
               <input
@@ -810,17 +795,9 @@ export default function ExamPrintModal({
                 placeholder="2026"
                 title="রেজাল্ট শিটে শিক্ষাবর্ষ পরিবর্তন করুন"
               />
-              {customExamTitle.trim() !== (exam.title || "").trim() && (
-                <button
-                  type="button"
-                  onClick={handleSaveCustomTitle}
-                  disabled={isSavingTitle}
-                  className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-[10px] font-bold cursor-pointer transition-all shrink-0 flex items-center gap-1"
-                  title="ডাটাবেসে পরীক্ষার নাম সংরক্ষণ করুন"
-                >
-                  {isSavingTitle ? "..." : titleSavedSuccess ? <Check className="w-3 h-3 text-white" /> : "সংরক্ষণ"}
-                </button>
-              )}
+              <span className="text-[9px] text-slate-400 font-medium italic ml-0.5 hidden sm:inline">
+                (PDF-only)
+              </span>
             </div>
 
             {/* 2. Multi-Batch Selector (When multi-batch exists) */}
