@@ -17,7 +17,7 @@ export interface PrintableExamSheetProps {
     branch?: { name: string; address?: string | null; phone?: string | null } | null
     exam_schedule_type?: string | null
   }
-  mode: "one_time" | "weekly_aggregate" | "weekly_day"
+  mode: "one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined"
   weeklyDays?: Array<{
     key: string
     day_bn: string
@@ -47,6 +47,8 @@ export interface PrintableExamSheetProps {
   }>
   savedResults?: Record<string, { obtained_marks: string; grade: string }>
   dayMarksMap?: Record<string, Record<string, { marks: number; total: number; grade: string; subject?: string; exam_name?: string }>>
+  activeCombinedExams?: any[]
+  combinedWeekData?: any[]
   sortBy?: "rank" | "roll"
   showPodium?: boolean
   showSubjectToppers?: boolean
@@ -87,6 +89,8 @@ export default function PrintableExamSheet({
   students = [],
   savedResults = {},
   dayMarksMap = {},
+  activeCombinedExams = [],
+  combinedWeekData = [],
   sortBy = "rank",
   showPodium = true,
   showSubjectToppers = true,
@@ -98,21 +102,28 @@ export default function PrintableExamSheet({
 }: PrintableExamSheetProps) {
   const isWeeklyAggregate = mode === "weekly_aggregate"
   const isWeeklyDay = mode === "weekly_day"
+  const isAllWeeksCombined = mode === "all_weeks_combined"
 
   // Active marks thresholds
-  const activeTotalMarks = isWeeklyAggregate
+  const activeTotalMarks = isAllWeeksCombined
+    ? totalWeeklyMaxMarks
+    : isWeeklyAggregate
     ? totalWeeklyMaxMarks
     : isWeeklyDay
     ? activeDayConfig?.total_marks || 50
     : exam.total_marks || 100
 
-  const activePassMarks = isWeeklyAggregate
+  const activePassMarks = isAllWeeksCombined
+    ? Math.round(totalWeeklyMaxMarks * 0.4)
+    : isWeeklyAggregate
     ? Math.round(totalWeeklyMaxMarks * 0.4)
     : isWeeklyDay
     ? activeDayConfig?.pass_marks || 20
     : exam.pass_marks || 33
 
-  const displaySubject = isWeeklyAggregate
+  const displaySubject = isAllWeeksCombined
+    ? "সকল সপ্তাহের সমন্বিত মূল্যায়ন"
+    : isWeeklyAggregate
     ? "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)"
     : isWeeklyDay
     ? activeDayConfig?.subject || activeDayConfig?.exam_name || "বিষয়"
@@ -129,7 +140,38 @@ export default function PrintableExamSheet({
     const rawList = students.map((s, originalIdx) => {
       const rollNumber = s.roll_no || s.batch_roll || originalIdx + 1
 
-      if (isWeeklyAggregate) {
+      if (isAllWeeksCombined) {
+        const found = combinedWeekData?.find(
+          (c: any) => c.id === s.id || c.student_id === s.student_id || c.student_id === s.id
+        )
+        const hasMark = Boolean(found && Number(found.total_marks) > 0)
+        const mark = hasMark ? Number(found.total_marks) : null
+        const pct = mark !== null ? Math.round((mark / activeTotalMarks) * 100) : null
+        const grade = hasMark ? found.grade : "—"
+        const isPass = mark !== null && mark >= activePassMarks
+
+        const weekBreakdown: Record<string, { marks: number | null; total: number }> = {}
+        if (activeCombinedExams && activeCombinedExams.length > 0) {
+          activeCombinedExams.forEach((we: any) => {
+            const wScore = found?.weekMarks?.[we.id]
+            weekBreakdown[we.id] = {
+              marks: wScore !== undefined && !isNaN(Number(wScore)) ? Number(wScore) : null,
+              total: Number(we.total_marks) || 100,
+            }
+          })
+        }
+
+        return {
+          student: s,
+          rollNumber,
+          mark,
+          pct,
+          grade,
+          isPass,
+          dayBreakdown: weekBreakdown,
+          hasEvaluated: hasMark,
+        }
+      } else if (isWeeklyAggregate) {
         const studentDays = dayMarksMap[s.id] || {}
         let sumMarks = 0
         let hasAnyDayMark = false
@@ -255,7 +297,7 @@ export default function PrintableExamSheet({
     }
 
     return withRank
-  }, [students, isWeeklyAggregate, isWeeklyDay, activeDayConfig, totalWeeklyMaxMarks, activeTotalMarks, activePassMarks, dayMarksMap, weeklyDays, savedResults, exam.total_marks, exam.pass_marks, sortBy])
+  }, [students, isAllWeeksCombined, activeCombinedExams, combinedWeekData, isWeeklyAggregate, isWeeklyDay, activeDayConfig, totalWeeklyMaxMarks, activeTotalMarks, activePassMarks, dayMarksMap, weeklyDays, savedResults, exam.total_marks, exam.pass_marks, sortBy])
 
   // Summary KPIs
   const summary = useMemo(() => {
@@ -419,7 +461,9 @@ export default function PrintableExamSheet({
 
           <div className="text-right shrink-0">
             <span className="inline-block px-3 py-1 rounded-lg border-2 border-slate-900 text-slate-900 font-black text-xs uppercase tracking-wider bg-slate-50 print:bg-transparent">
-              {isWeeklyAggregate
+              {isAllWeeksCombined
+                ? "সকল সপ্তাহের সমন্বিত মেধা ও ফলাফল বিবরণী"
+                : isWeeklyAggregate
                 ? "সাপ্তাহিক সামগ্রিক মেধা তালিকা"
                 : isWeeklyDay
                 ? `সাপ্তাহিক পরীক্ষা: ${activeDayConfig?.day_bn || "দিন"}`
@@ -698,6 +742,15 @@ export default function PrintableExamSheet({
                   </th>
                 ))}
 
+              {/* All Weeks Combined: Active Weeks Columns */}
+              {isAllWeeksCombined &&
+                activeCombinedExams.map((we: any) => (
+                  <th key={we.id} className="border border-slate-400 py-1.5 px-2 text-center whitespace-nowrap min-w-[70px]">
+                    <span className="block font-black text-[11px] leading-tight">{we.title}</span>
+                    <span className="text-[9px] text-amber-900 font-bold block leading-tight">({we.total_marks || 350})</span>
+                  </th>
+                ))}
+
               <th className="border border-slate-400 py-1.5 px-2 bg-amber-50/70 print:bg-transparent text-center whitespace-nowrap w-20 min-w-[70px]">
                 <span className="block font-black text-[11px] leading-tight">
                   {isWeeklyAggregate ? "মোট প্রাপ্ত" : "প্রাপ্ত নম্বর"}
@@ -785,6 +838,29 @@ export default function PrintableExamSheet({
                             </span>
                           ) : (
                             <span className="text-slate-300 text-[10px]">abs</span>
+                          )}
+                        </td>
+                      )
+                    })}
+
+                  {/* Week marks if all weeks combined */}
+                  {isAllWeeksCombined &&
+                    activeCombinedExams.map((we: any) => {
+                      const weekVal = row.dayBreakdown[we.id]?.marks
+                      const isZero = weekVal === 0
+                      const hasVal = weekVal !== null && weekVal !== undefined
+
+                      return (
+                        <td
+                          key={we.id}
+                          className="border border-slate-300 py-1 px-2 text-center font-mono font-bold whitespace-nowrap"
+                        >
+                          {hasVal ? (
+                            <span className={cn(isZero ? "text-slate-400" : "text-slate-900 font-bold")}>
+                              {weekVal}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-normal">—</span>
                           )}
                         </td>
                       )

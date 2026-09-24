@@ -74,9 +74,34 @@ export interface ExamPrintModalProps {
   defaultMode?: "one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined"
   availableBatches?: BatchItem[]
   combinedWeekData?: CombinedWeekSummary[]
+  activeCombinedExams?: any[]
+  allCombinedExams?: any[]
+  combinedWeeksDayMarks?: Record<string, Record<string, Record<string, any>>>
+  combinedWeeksMarks?: Record<string, Record<string, number>>
   defaultTemplate?: PrintTemplateType
   totalToppers?: GrandTopperItem[]
   subjectToppers?: SubjectTopperItem[]
+}
+
+function getDayMarkItemHelper(
+  studentDays: Record<string, any> | undefined,
+  dayKey?: string,
+  dayBn?: string,
+  dayEn?: string
+) {
+  if (!studentDays || typeof studentDays !== "object") return undefined
+  if (dayKey && studentDays[dayKey] !== undefined) return studentDays[dayKey]
+  const lKey = dayKey?.toLowerCase()
+  if (lKey && studentDays[lKey] !== undefined) return studentDays[lKey]
+  if (dayBn && studentDays[dayBn] !== undefined) return studentDays[dayBn]
+  if (dayEn && studentDays[dayEn] !== undefined) return studentDays[dayEn]
+  for (const [k, v] of Object.entries(studentDays)) {
+    const lk = k.toLowerCase()
+    if ((lKey && lk === lKey) || (dayBn && k === dayBn) || (dayEn && lk === dayEn.toLowerCase())) {
+      return v
+    }
+  }
+  return undefined
 }
 
 export default function ExamPrintModal({
@@ -93,6 +118,10 @@ export default function ExamPrintModal({
   defaultMode = "one_time",
   availableBatches = [],
   combinedWeekData = [],
+  activeCombinedExams = [],
+  allCombinedExams = [],
+  combinedWeeksDayMarks = {},
+  combinedWeeksMarks = {},
   defaultTemplate = "merit_list",
   totalToppers = [],
   subjectToppers = [],
@@ -245,7 +274,19 @@ export default function ExamPrintModal({
   const isWeeklyDay = selectedMode === "weekly_day"
   const isCombinedWeeks = selectedMode === "all_weeks_combined"
 
-  const activeTotalMarks = isWeeklyAggregate
+  const combinedTotalMaxMarks = useMemo(() => {
+    if (activeCombinedExams && activeCombinedExams.length > 0) {
+      return activeCombinedExams.reduce((acc, curr) => acc + (Number(curr.total_marks) || 100), 0)
+    }
+    if (combinedWeekData && combinedWeekData.length > 0) {
+      return Number(combinedWeekData[0].total_max_marks) || totalWeeklyMaxMarks
+    }
+    return totalWeeklyMaxMarks
+  }, [activeCombinedExams, combinedWeekData, totalWeeklyMaxMarks])
+
+  const activeTotalMarks = isCombinedWeeks
+    ? combinedTotalMaxMarks
+    : isWeeklyAggregate
     ? totalWeeklyMaxMarks
     : isWeeklyDay
     ? activeDayConfig?.total_marks || 50
@@ -257,15 +298,17 @@ export default function ExamPrintModal({
       const rollNumber = s.roll_no || s.batch_roll || idx + 1
 
       if (isCombinedWeeks && combinedWeekData.length > 0) {
-        const found = combinedWeekData.find((c) => c.student_id === s.id)
+        const found = combinedWeekData.find(
+          (c: any) => c.id === s.id || c.student_id === s.student_id || c.student_id === s.id
+        )
         if (found) {
           return {
             student: s,
             rollNumber,
-            totalMarks: found.total_marks,
+            totalMarks: Number(found.total_marks) || 0,
             grade: found.grade,
             gpa: found.gpa,
-            hasEvaluated: true,
+            hasEvaluated: Number(found.total_marks) > 0,
           }
         }
       }
@@ -392,6 +435,166 @@ export default function ExamPrintModal({
 
   // Build subject list for an individual student in Progress Report mode
   function getStudentProgressSubjects(studentId: string): ProgressReportSubject[] {
+    if (isCombinedWeeks && activeCombinedExams && activeCombinedExams.length > 0) {
+      const allSubjects: ProgressReportSubject[] = []
+      const targetStudent = students.find((s) => s.id === studentId || s.student_id === studentId)
+      const sid = targetStudent?.id || studentId
+      const scode = targetStudent?.student_id || ""
+
+      activeCombinedExams.forEach((we, wIdx) => {
+        // 1. Add week header row
+        allSubjects.push({
+          name: `📅 ${we.title || `সপ্তাহ ${wIdx + 1}`} (পূর্ণমান: ${we.total_marks || 350} নম্বর)`,
+          fullMarks: Number(we.total_marks) || 350,
+          highestMarks: 0,
+          wrMarks: 0,
+          mcqMarks: 0,
+          totalMarks: 0,
+          grade: "",
+          gp: 0,
+          weekTitle: we.title,
+          weekId: we.id,
+          isWeekHeader: true,
+        })
+
+        // 2. Parse daily schedule of this week
+        let examDays: Array<{ key: string; day_bn: string; subject?: string; exam_name?: string; total_marks: number; pass_marks: number }> = []
+        if (Array.isArray(we.recurring_days) && we.recurring_days.length > 0) {
+          examDays = we.recurring_days.map((d: any) => ({
+            key: typeof d === "object" ? d.day || d.key : d,
+            day_bn: typeof d === "object" ? d.day_bn || d.day : d,
+            subject: typeof d === "object" ? d.subject : "",
+            exam_name: typeof d === "object" ? d.exam_name : "",
+            total_marks: typeof d === "object" ? Number(d.total_marks) || 50 : 50,
+            pass_marks: typeof d === "object" ? Number(d.pass_marks) || 20 : 20,
+          }))
+        } else if (we.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+          try {
+            const m = we.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+            if (m && m[1]) {
+              const parsed = JSON.parse(m[1])
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                examDays = parsed.map((d: any) => ({
+                  key: d.day || d.key,
+                  day_bn: d.day_bn || d.day,
+                  subject: d.subject || "",
+                  exam_name: d.exam_name || "",
+                  total_marks: Number(d.total_marks) || 50,
+                  pass_marks: Number(d.pass_marks) || 20,
+                }))
+              }
+            }
+          } catch {}
+        }
+
+        if (examDays.length === 0 && weeklyDays.length > 0) {
+          examDays = weeklyDays
+        }
+
+        // Student's day marks for this week
+        const stDays =
+          combinedWeeksDayMarks?.[sid]?.[we.id] ||
+          (scode ? combinedWeeksDayMarks?.[scode]?.[we.id] : undefined) ||
+          (we.id === exam.id ? (dayMarksMap[sid] || (scode ? dayMarksMap[scode] : undefined)) : undefined) ||
+          {}
+
+        let weekObtainedSum = 0
+        let weekFullSum = 0
+        let weekGpSum = 0
+        let weekDaysCount = 0
+
+        const weekTotalFallback =
+          combinedWeeksMarks?.[sid]?.[we.id] ??
+          (scode ? combinedWeeksMarks?.[scode]?.[we.id] : undefined) ??
+          (we.id === exam.id ? parseFloat(savedResults[sid]?.obtained_marks || (scode ? savedResults[scode]?.obtained_marks : "0") || "0") : 0)
+
+        if (examDays.length > 0) {
+          examDays.forEach((d) => {
+            const item = getDayMarkItemHelper(stDays, d.key, d.day_bn, (d as any).day_en)
+            const hasMark = item !== undefined && item !== null && !isNaN(Number(item?.marks ?? item))
+            const score = hasMark ? Number(item?.marks ?? item) : 0
+            const dayMax = d.total_marks || 50
+            const gradeInfo = calculateCoachingGrade(score, dayMax)
+
+            // Find highest marks across all students for this day in this exam
+            let dayHighest = score
+            if (students.length > 0) {
+              let h = 0
+              for (const s of students) {
+                const sDays =
+                  combinedWeeksDayMarks?.[s.id]?.[we.id] ||
+                  (s.student_id ? combinedWeeksDayMarks?.[s.student_id]?.[we.id] : undefined) ||
+                  (we.id === exam.id ? (dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined)) : undefined) ||
+                  {}
+                const sItem = getDayMarkItemHelper(sDays, d.key, d.day_bn, (d as any).day_en)
+                const val = sItem !== undefined && sItem !== null ? Number(sItem?.marks ?? sItem) : 0
+                if (!isNaN(val) && val > h) h = val
+              }
+              if (h > 0) dayHighest = h
+            }
+
+            weekObtainedSum += score
+            weekFullSum += dayMax
+            weekGpSum += gradeInfo.gp
+            weekDaysCount++
+
+            allSubjects.push({
+              name: `${d.day_bn || d.key}: ${d.subject || d.exam_name || "সাপ্তাহিক মূল্যায়ন"}`,
+              fullMarks: dayMax,
+              highestMarks: dayHighest,
+              wrMarks: 0,
+              mcqMarks: score,
+              totalMarks: score,
+              grade: gradeInfo.grade,
+              gp: gradeInfo.gp,
+              weekTitle: we.title,
+              weekId: we.id,
+            })
+          })
+
+          // If no daily marks were entered individually, but a total week score exists
+          if (weekObtainedSum === 0 && weekTotalFallback > 0) {
+            weekObtainedSum = weekTotalFallback
+          }
+
+          // Add week subtotal row
+          const weekGradeInfo = calculateCoachingGrade(weekObtainedSum, weekFullSum)
+          allSubjects.push({
+            name: `${we.title || "সপ্তাহ"} সর্বমোট নম্বর (Subtotal)`,
+            fullMarks: weekFullSum,
+            highestMarks: 0,
+            wrMarks: 0,
+            mcqMarks: 0,
+            totalMarks: weekObtainedSum,
+            grade: weekGradeInfo.grade,
+            gp: weekDaysCount > 0 ? Number((weekGpSum / weekDaysCount).toFixed(1)) : 0,
+            weekTitle: we.title,
+            weekId: we.id,
+            isWeekSubtotal: true,
+          })
+        } else {
+          // No days defined: add week total row
+          const weekMark = weekTotalFallback
+          const weekMax = Number(we.total_marks) || 350
+          const gradeInfo = calculateCoachingGrade(weekMark, weekMax)
+          allSubjects.push({
+            name: `${we.title || "সাপ্তাহিক মূল্যায়ন"} - প্রাপ্ত নম্বর`,
+            fullMarks: weekMax,
+            highestMarks: weekMax,
+            wrMarks: 0,
+            mcqMarks: weekMark,
+            totalMarks: weekMark,
+            grade: gradeInfo.grade,
+            gp: gradeInfo.gp,
+            weekTitle: we.title,
+            weekId: we.id,
+          })
+        }
+      })
+
+      return allSubjects
+    }
+
     if (isWeeklyAggregate && weeklyDays.length > 0) {
       const sDays = dayMarksMap[studentId] || {}
       return weeklyDays.map((d) => {
@@ -774,7 +977,12 @@ export default function ExamPrintModal({
                 instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                 instituteLogoUrl={branding.logoUrl}
                 sectionName={activeBatchName}
-                examTitle={customExamTitle || exam.title}
+                examTitle={
+                  customExamTitle ||
+                  (isCombinedWeeks && activeCombinedExams.length > 0
+                    ? `সমন্বিত মেধা তালিকা (${activeCombinedExams.map((e) => e.title).join(", ")})`
+                    : exam.title)
+                }
                 academicYear={customAcademicYear}
                 rows={meritListRows}
               />
@@ -793,7 +1001,12 @@ export default function ExamPrintModal({
                       instituteName={branding.nameBn || branding.name}
                       instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                       instituteLogoUrl={branding.logoUrl}
-                      examTitle={customExamTitle || exam.title}
+                      examTitle={
+                        customExamTitle ||
+                        (isCombinedWeeks && activeCombinedExams.length > 0
+                          ? `ধারাবাহিক সাপ্তাহিক পরীক্ষা - সমন্বিত প্রগ্রেস রিপোর্ট (${activeCombinedExams.map((e) => e.title).join(", ")})`
+                          : exam.title)
+                      }
                       academicYear={customAcademicYear}
                       batchName={activeBatchName}
                       groupName={st.group || "HUMANITIES"}
@@ -824,14 +1037,24 @@ export default function ExamPrintModal({
                 instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                 instituteLogoUrl={branding.logoUrl}
                 tagline={branding.tagline}
-                exam={{ ...exam, title: customExamTitle || exam.title }}
-                mode={selectedMode === "all_weeks_combined" ? "weekly_aggregate" : selectedMode}
+                exam={{
+                  ...exam,
+                  title:
+                    customExamTitle ||
+                    (isCombinedWeeks && activeCombinedExams.length > 0
+                      ? `সমন্বিত ট্যাবশুলার শিট (${activeCombinedExams.map((e) => e.title).join(", ")})`
+                      : exam.title),
+                  total_marks: activeTotalMarks,
+                }}
+                mode={selectedMode}
                 weeklyDays={weeklyDays}
                 activeDayConfig={currentDayConfig}
-                totalWeeklyMaxMarks={totalWeeklyMaxMarks}
+                totalWeeklyMaxMarks={activeTotalMarks}
                 students={filteredStudents}
                 savedResults={savedResults}
                 dayMarksMap={dayMarksMap}
+                activeCombinedExams={activeCombinedExams}
+                combinedWeekData={combinedWeekData}
                 sortBy={sortBy}
                 showPodium={showPodium}
                 showSubjectToppers={showSubjectToppers}
@@ -845,7 +1068,12 @@ export default function ExamPrintModal({
                 instituteName={branding.nameBn || branding.name}
                 instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
                 instituteLogoUrl={branding.logoUrl}
-                examTitle={customExamTitle || exam.title}
+                examTitle={
+                  customExamTitle ||
+                  (isCombinedWeeks && activeCombinedExams.length > 0
+                    ? `সমন্বিত শীর্ষ মেধা (${activeCombinedExams.map((e) => e.title).join(", ")})`
+                    : exam.title)
+                }
                 batchName={activeBatchName}
                 academicYear={customAcademicYear}
                 totalWeeklyMaxMarks={activeTotalMarks}

@@ -65,6 +65,43 @@ export async function GET(
 
     const admin = createAdminClient()
 
+    // Support multi-exam combined results query for Weekly Series
+    const { searchParams } = new URL(req.url)
+    const combinedExamIdsRaw = searchParams.get("combined_exam_ids") || searchParams.get("exam_ids")
+    if (combinedExamIdsRaw) {
+      const targetExamIds = Array.from(new Set(combinedExamIdsRaw.split(",").map((s) => s.trim()).filter(Boolean)))
+      if (targetExamIds.length > 0) {
+        const { data: targetExams } = await admin
+          .from("exams")
+          .select("*")
+          .in("id", targetExamIds)
+
+        const { data: allCombinedResults } = await admin
+          .from("exam_results")
+          .select("id, exam_id, student_id, obtained_marks, grade, rank, day_marks, created_at, student:students(id, name, student_id, roll_no, batch_roll)")
+          .in("exam_id", targetExamIds)
+
+        const fallbackDayMarksByExam: Record<string, Record<string, any>> = {}
+        for (const ex of targetExams || []) {
+          if (ex.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+            try {
+              const match = ex.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+              if (match && match[1]) {
+                fallbackDayMarksByExam[ex.id] = JSON.parse(match[1])
+              }
+            } catch {}
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          combined_results: allCombinedResults || [],
+          target_exams: targetExams || [],
+          fallback_day_marks_by_exam: fallbackDayMarksByExam,
+        })
+      }
+    }
+
     // 1. Fetch exam details
     const { data: exam, error: examErr } = await admin
       .from("exams")

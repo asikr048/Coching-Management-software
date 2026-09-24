@@ -25,6 +25,10 @@ export interface ProgressReportSubject {
   totalMarks: number
   grade: string
   gp: number
+  weekTitle?: string
+  weekId?: string
+  isWeekHeader?: boolean
+  isWeekSubtotal?: boolean
 }
 
 export interface StudentProgressReportProps {
@@ -101,18 +105,21 @@ export default function StudentProgressReport({
     let totalFull = 0
     let totalObtained = 0
     let gpSum = 0
+    let subjectCount = 0
     let failedCount = 0
 
     subjects.forEach((sub) => {
+      if (sub.isWeekHeader || sub.isWeekSubtotal) return
       totalFull += sub.fullMarks || 0
       totalObtained += sub.totalMarks || 0
       gpSum += sub.gp || 0
+      subjectCount++
       if ((sub.totalMarks || 0) < Math.round((sub.fullMarks || 50) * 0.33)) {
         failedCount++
       }
     })
 
-    const averageGp = subjects.length > 0 ? Number((gpSum / subjects.length).toFixed(1)) : 0
+    const averageGp = subjectCount > 0 ? Number((gpSum / subjectCount).toFixed(1)) : 0
     const overallGradeInfo = calculateCoachingGrade(totalObtained, totalFull)
     const isPassed = failedCount === 0 && totalObtained >= Math.round(totalFull * 0.33)
 
@@ -348,28 +355,54 @@ export default function StudentProgressReport({
                 </tr>
               </thead>
               <tbody>
-                {subjects.map((sub, idx) => (
-                  <tr key={idx} className="border-b border-black text-center font-mono">
-                    <td className="border border-black py-1 px-2 text-left font-sans font-bold text-black">
-                      {sub.name}
-                    </td>
-                    <td className="border border-black py-1 px-1">{sub.fullMarks}</td>
-                    <td className="border border-black py-1 px-1 font-bold">{sub.highestMarks}</td>
-                    <td className="border border-black py-1 px-1">{sub.wrMarks || 0}</td>
-                    <td className="border border-black py-1 px-1">{sub.mcqMarks || sub.totalMarks}</td>
-                    <td className="border border-black py-1 px-1 font-bold text-black">
-                      {sub.totalMarks}
-                    </td>
-                    <td className="border border-black py-1 px-1 font-sans font-bold">
-                      {sub.grade}
-                    </td>
-                    <td className="border border-black py-1 px-1 font-bold">
-                      {sub.gp ? sub.gp.toFixed(1) : "0.0"}
-                    </td>
-                  </tr>
-                ))}
+                {subjects.map((sub, idx) => {
+                  if (sub.isWeekHeader) {
+                    return (
+                      <tr key={`header-${idx}`} className="border-b-2 border-black bg-slate-200/90 print:bg-slate-200 text-left font-bold">
+                        <td colSpan={8} className="py-1 px-2.5 text-xs font-black uppercase tracking-wider text-black">
+                          {sub.name}
+                        </td>
+                      </tr>
+                    )
+                  }
+                  if (sub.isWeekSubtotal) {
+                    return (
+                      <tr key={`subtotal-${idx}`} className="border-b-2 border-black bg-blue-50/70 print:bg-blue-50/70 text-center font-mono text-[11px]">
+                        <td className="border border-black py-1 px-2 text-left font-sans font-black text-black">
+                          {sub.name}
+                        </td>
+                        <td className="border border-black py-1 px-1 font-bold">{sub.fullMarks}</td>
+                        <td className="border border-black py-1 px-1 text-slate-400">—</td>
+                        <td colSpan={2} className="border border-black py-1 px-1 font-sans text-[10px] text-slate-600 font-bold">সপ্তাহের মোট</td>
+                        <td className="border border-black py-1 px-1 font-black text-black">{sub.totalMarks}</td>
+                        <td className="border border-black py-1 px-1 font-sans font-black">{sub.grade}</td>
+                        <td className="border border-black py-1 px-1 font-bold">{sub.gp ? sub.gp.toFixed(1) : "0.0"}</td>
+                      </tr>
+                    )
+                  }
+                  return (
+                    <tr key={idx} className="border-b border-black text-center font-mono">
+                      <td className="border border-black py-1 px-2 text-left font-sans font-bold text-black">
+                        {sub.name}
+                      </td>
+                      <td className="border border-black py-1 px-1">{sub.fullMarks}</td>
+                      <td className="border border-black py-1 px-1 font-bold">{sub.highestMarks}</td>
+                      <td className="border border-black py-1 px-1">{sub.wrMarks || 0}</td>
+                      <td className="border border-black py-1 px-1">{sub.mcqMarks || sub.totalMarks}</td>
+                      <td className="border border-black py-1 px-1 font-bold text-black">
+                        {sub.totalMarks}
+                      </td>
+                      <td className="border border-black py-1 px-1 font-sans font-bold">
+                        {sub.grade}
+                      </td>
+                      <td className="border border-black py-1 px-1 font-bold">
+                        {sub.gp ? sub.gp.toFixed(1) : "0.0"}
+                      </td>
+                    </tr>
+                  )
+                })}
 
-                {/* Fill empty rows if less than 5 subjects for visual structure */}
+                {/* Fill empty rows only if single exam with very few subjects */}
                 {subjects.length < 5 &&
                   Array.from({ length: 5 - subjects.length }).map((_, i) => (
                     <tr key={`empty-${i}`} className="border-b border-black text-center h-6">

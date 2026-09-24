@@ -1066,6 +1066,7 @@ export default function ExamResultsPage() {
   const [loadingCombinedWeeks, setLoadingCombinedWeeks] = useState(false)
   const [selectedCombinedWeekIds, setSelectedCombinedWeekIds] = useState<string[]>([])
   const [rawStudentWeekMarks, setRawStudentWeekMarks] = useState<Record<string, Record<string, number>>>({})
+  const [rawStudentWeekDayMarks, setRawStudentWeekDayMarks] = useState<Record<string, Record<string, Record<string, any>>>>({})
   const [publishingCombinedNotice, setPublishingCombinedNotice] = useState(false)
   const [isCombinedNoticeLive, setIsCombinedNoticeLive] = useState(false)
 
@@ -1204,7 +1205,21 @@ export default function ExamResultsPage() {
     if (!exam) return
     setLoadingCombinedWeeks(true)
     try {
-      let targetExams = weeklySeriesExams
+      // Collect all unique available exams from all series sources
+      const allPool = [
+        exam,
+        ...(fullSeriesSlots.map((s) => s.exam).filter(Boolean) || []),
+        ...(combinedWeeksExamsList || []),
+        ...(weeklySeriesExams || []),
+      ]
+      const examMap = new Map<string, any>()
+      allPool.forEach((e) => {
+        if (e?.id && !examMap.has(e.id)) {
+          examMap.set(e.id, e)
+        }
+      })
+      let targetExams = Array.from(examMap.values())
+
       if (targetExams.length <= 1) {
         const { data: allExams } = await supabase
           .from("exams")
@@ -1214,7 +1229,7 @@ export default function ExamResultsPage() {
         const curBatchId = exam.batch_id
         const curBranchId = exam.branch_id
 
-        targetExams = (allExams || []).filter((e) => {
+        const foundExams = (allExams || []).filter((e) => {
           const isWeekly =
             e.exam_schedule_type === "weekly" ||
             (Array.isArray(e.recurring_days) && e.recurring_days.length > 0) ||
@@ -1235,9 +1250,10 @@ export default function ExamResultsPage() {
           )
         })
 
-        if (!targetExams.some((e) => e.id === exam.id)) {
-          targetExams.push(exam)
-        }
+        foundExams.forEach((e) => {
+          if (!examMap.has(e.id)) examMap.set(e.id, e)
+        })
+        targetExams = Array.from(examMap.values())
 
         targetExams.sort((a, b) => {
           const numA = extractWeekNumber(a.title, a.result_note) || 0
@@ -1257,30 +1273,105 @@ export default function ExamResultsPage() {
       }
 
       const examIds = targetExams.map((e) => e.id)
-      const { data: allResults } = await supabase
-        .from("exam_results")
-        .select("exam_id, student_id, obtained_marks, day_marks, grade")
-        .in("exam_id", examIds)
+      let allResults: any[] = []
+      let fallbackNoteMap: Record<string, Record<string, any>> = {}
 
-      // Map: studentId -> { [examId]: number }
+      // Try server API first with combined_exam_ids (bypasses RLS with admin client)
+      try {
+        const res = await fetch(`/api/exams/${exam.id}/results?combined_exam_ids=${examIds.join(",")}`)
+        if (res.ok) {
+          const d = await res.json()
+          if (Array.isArray(d.combined_results)) {
+            allResults = d.combined_results
+          }
+          if (d.fallback_day_marks_by_exam) {
+            fallbackNoteMap = d.fallback_day_marks_by_exam
+          }
+        }
+      } catch (err) {
+        console.warn("API combined results load fallback:", err)
+      }
+
+      // If API returned nothing, fallback to direct Supabase query
+      if (allResults.length === 0) {
+        const { data: fbResults } = await supabase
+          .from("exam_results")
+          .select("exam_id, student_id, obtained_marks, day_marks, grade")
+          .in("exam_id", examIds)
+        allResults = fbResults || []
+      }
+
+      // Map: studentId -> { [examId]: number } and studentId -> { [examId]: { [dayKey]: dayMarkItem } }
       const studentMarksMap: Record<string, Record<string, number>> = {}
+      const studentDayMarksMap: Record<string, Record<string, Record<string, any>>> = {}
 
-      ;(allResults || []).forEach((r) => {
+      const recordScore = (targetId: string, exId: string, markVal: number, dMarksObj?: any) => {
+        if (!studentMarksMap[targetId]) studentMarksMap[targetId] = {}
+        studentMarksMap[targetId][exId] = markVal
+
+        if (dMarksObj && typeof dMarksObj === "object") {
+          if (!studentDayMarksMap[targetId]) studentDayMarksMap[targetId] = {}
+          studentDayMarksMap[targetId][exId] = {
+            ...(studentDayMarksMap[targetId][exId] || {}),
+            ...dMarksObj,
+          }
+        }
+      }
+
+      // 1. Process exam_results rows
+      allResults.forEach((r) => {
+        let dMarks: any = r.day_marks
+        if (typeof dMarks === "string") {
+          try { dMarks = JSON.parse(dMarks) } catch {}
+        }
+
         let mark = Number(r.obtained_marks) || 0
-        if (mark === 0 && r.day_marks && typeof r.day_marks === "object") {
-          const dayValues = Object.values(r.day_marks) as any[]
-          const sumDay = dayValues.reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
-          if (sumDay > 0) mark = sumDay
+        let daySum = 0
+        if (dMarks && typeof dMarks === "object") {
+          for (const val of Object.values(dMarks)) {
+            const m = typeof val === "object" && val !== null ? Number((val as any).marks) : Number(val)
+            if (!isNaN(m) && m > 0) {
+              daySum += m
+            }
+          }
+        }
+        if (mark === 0 && daySum > 0) {
+          mark = daySum
         }
 
         const sid = r.student_id
-        if (!studentMarksMap[sid]) {
-          studentMarksMap[sid] = {}
+        recordScore(sid, r.exam_id, mark, dMarks)
+
+        const match = students.find((s) => s.id === sid || s.student_id === sid)
+        if (match) {
+          recordScore(match.id, r.exam_id, mark, dMarks)
+          if (match.student_id) recordScore(match.student_id, r.exam_id, mark, dMarks)
         }
-        studentMarksMap[sid][r.exam_id] = mark
       })
 
+      // 2. Process fallback day marks from exam result_notes
+      for (const [exId, stMap] of Object.entries(fallbackNoteMap)) {
+        for (const [stId, dMarks] of Object.entries(stMap)) {
+          let daySum = 0
+          if (dMarks && typeof dMarks === "object") {
+            for (const val of Object.values(dMarks)) {
+              const m = typeof val === "object" && val !== null ? Number((val as any).marks) : Number(val)
+              if (!isNaN(m) && m > 0) daySum += m
+            }
+          }
+          if (daySum > 0) {
+            recordScore(stId, exId, daySum, dMarks)
+            const match = students.find((s) => s.id === stId || s.student_id === stId)
+            if (match) {
+              recordScore(match.id, exId, daySum, dMarks)
+              if (match.student_id) recordScore(match.student_id, exId, daySum, dMarks)
+            }
+          }
+        }
+      }
+
       setRawStudentWeekMarks(studentMarksMap)
+      setRawStudentWeekDayMarks(studentDayMarksMap)
 
       // Initialize selected week IDs to all if empty or restore saved published selection
       setSelectedCombinedWeekIds((prev) => {
@@ -1340,7 +1431,10 @@ export default function ExamResultsPage() {
 
     const combinedList = students.map((s, idx) => {
       const roll = s.roll_no || s.batch_roll || idx + 1
-      const studentWeekMarks = rawStudentWeekMarks[s.id] || rawStudentWeekMarks[s.student_id] || {}
+      const studentWeekMarks = {
+        ...(rawStudentWeekMarks[s.student_id] || {}),
+        ...(rawStudentWeekMarks[s.id] || {}),
+      }
 
       let studentTotal = 0
       let count = 0
@@ -1356,6 +1450,7 @@ export default function ExamResultsPage() {
       const gradeInfo = calculateCoachingGrade(studentTotal, seriesTotalMaxMarks)
 
       return {
+        id: s.id,
         student_id: s.student_id,
         roll_no: roll,
         name: s.name,
@@ -2983,33 +3078,43 @@ export default function ExamResultsPage() {
   // Statistics for the Active View
   const stats = useMemo(() => {
     const total = students.length
+    const combinedSeriesTotal = activeCombinedExams.reduce((acc, curr) => acc + (Number(curr.total_marks) || 100), 0)
     const activeMax = isWeeklyExam
-      ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+      ? (selectedTab === "all_weeks_combined" ? combinedSeriesTotal : selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
       : (exam?.total_marks || 100)
     const activePass = isWeeklyExam
-      ? (selectedTab === "weekly_aggregate" ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20))
+      ? (selectedTab === "all_weeks_combined" ? Math.round(combinedSeriesTotal * 0.4) : selectedTab === "weekly_aggregate" ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20))
       : (exam?.pass_marks || 33)
 
     let enteredCount = 0
     const marksArr: number[] = []
 
-    for (const s of students) {
-      let markVal: number | null = null
-      if (isWeeklyExam && selectedTab !== "weekly_aggregate" && activeDayConfig) {
-        const dObj = getDayMarkItem(dayMarksMap[s.id], activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
-        if (dObj && !isNaN(Number(dObj.marks))) {
-          markVal = Number(dObj.marks)
-        }
-      } else {
-        const raw = savedResults[s.id]?.obtained_marks
-        if (raw !== undefined && raw !== "" && !isNaN(parseFloat(raw))) {
-          markVal = parseFloat(raw)
+    if (isWeeklyExam && selectedTab === "all_weeks_combined") {
+      for (const item of combinedWeekData) {
+        if (Number(item.total_marks) > 0) {
+          enteredCount++
+          marksArr.push(Number(item.total_marks))
         }
       }
+    } else {
+      for (const s of students) {
+        let markVal: number | null = null
+        if (isWeeklyExam && selectedTab !== "weekly_aggregate" && activeDayConfig) {
+          const dObj = getDayMarkItem(dayMarksMap[s.id], activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
+          if (dObj && !isNaN(Number(dObj.marks))) {
+            markVal = Number(dObj.marks)
+          }
+        } else {
+          const raw = savedResults[s.id]?.obtained_marks
+          if (raw !== undefined && raw !== "" && !isNaN(parseFloat(raw))) {
+            markVal = parseFloat(raw)
+          }
+        }
 
-      if (markVal !== null) {
-        enteredCount++
-        marksArr.push(markVal)
+        if (markVal !== null) {
+          enteredCount++
+          marksArr.push(markVal)
+        }
       }
     }
 
@@ -3019,7 +3124,7 @@ export default function ExamResultsPage() {
     const passRate = marksArr.length ? Math.round((passedCount / marksArr.length) * 100) : 0
 
     return { total, count: enteredCount, avg, highest, passRate, passedCount, failedCount: enteredCount - passedCount, max: activeMax, pass: activePass }
-  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, dayMarksMap, savedResults, exam])
+  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, dayMarksMap, savedResults, exam, activeCombinedExams, combinedWeekData])
 
   // Total Toppers for Weekly View
   // Total Toppers for Weekly View (supports ties and all tied students)
@@ -3218,13 +3323,22 @@ export default function ExamResultsPage() {
 
   const isWeeklyActive = isWeeklyExam && selectedTab === "weekly_aggregate"
   const isCombinedWeeksActive = isWeeklyExam && selectedTab === "all_weeks_combined"
+  const combinedSeriesTotal = activeCombinedExams.reduce((acc, curr) => acc + (Number(curr.total_marks) || 100), 0)
   const isSelectedDayPublished = activeDayConfig
     ? (publishedDays.some((p) => p && activeDayConfig.key && String(p).toLowerCase() === String(activeDayConfig.key).toLowerCase()) ||
        publishedDays.some((p) => p && activeDayConfig.day_bn && String(p).toLowerCase() === String(activeDayConfig.day_bn).toLowerCase()) ||
        (activeDayConfig.day_en ? publishedDays.some((p) => p && String(p).toLowerCase() === String(activeDayConfig.day_en).toLowerCase()) : false))
     : false
-  const activeTotalMarks = isWeeklyExam ? (isWeeklyActive ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50)) : exam.total_marks
-  const activePassMarks = isWeeklyExam ? (isWeeklyActive ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20)) : exam.pass_marks
+  const activeTotalMarks = isCombinedWeeksActive
+    ? combinedSeriesTotal
+    : isWeeklyExam
+    ? (isWeeklyActive ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+    : exam.total_marks
+  const activePassMarks = isCombinedWeeksActive
+    ? Math.round(combinedSeriesTotal * 0.4)
+    : isWeeklyExam
+    ? (isWeeklyActive ? Math.round(totalWeeklyMaxMarks * 0.4) : (activeDayConfig?.pass_marks || 20))
+    : exam.pass_marks
 
   const quickMarkNum = parseFloat(quickMarkInput)
   const isQuickOverMax = !isNaN(quickMarkNum) && quickMarkNum > activeTotalMarks
@@ -5915,6 +6029,10 @@ export default function ExamResultsPage() {
         defaultMode={selectedTab === "all_weeks_combined" ? "all_weeks_combined" : printModalDefaultMode}
         availableBatches={availableBatches}
         combinedWeekData={combinedWeekData}
+        activeCombinedExams={activeCombinedExams}
+        allCombinedExams={displayCombinedExams}
+        combinedWeeksDayMarks={rawStudentWeekDayMarks}
+        combinedWeeksMarks={rawStudentWeekMarks}
         defaultTemplate={printModalDefaultTemplate}
         totalToppers={printableTotalToppers}
         subjectToppers={printableSubjectToppers}
