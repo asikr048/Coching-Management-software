@@ -94,14 +94,30 @@ export default function BatchesClient({
           .order("created_at", { ascending: false })
 
         if (!error && data && data.length > 0) {
-          setBatches(data)
+          setBatches(prev => {
+            return data.map((nb: any) => {
+              const prevBatch = prev.find(p => p.id === nb.id)
+              return {
+                ...nb,
+                current_seats: Math.max(Number(nb.current_seats) || 0, Number(prevBatch?.current_seats) || 0)
+              }
+            })
+          })
         } else {
           const fallback = await supabase
             .from("batches")
             .select("*")
             .order("created_at", { ascending: false })
           if (fallback.data && fallback.data.length > 0) {
-            setBatches(fallback.data)
+            setBatches(prev => {
+              return (fallback.data || []).map((nb: any) => {
+                const prevBatch = prev.find(p => p.id === nb.id)
+                return {
+                  ...nb,
+                  current_seats: Math.max(Number(nb.current_seats) || 0, Number(prevBatch?.current_seats) || 0)
+                }
+              })
+            })
           }
         }
       } catch (e) {
