@@ -35,15 +35,15 @@ async function handleGenerate(req: NextRequest) {
     const targetDueDate = `${targetMonth}-10`
 
     // 1. Fetch active monthly batches
-    const { data: monthlyBatches, error: bErr } = await admin
+    const { data: rawBatches, error: bErr } = await admin
       .from("batches")
       .select("id, name, monthly_fee, branch_id, is_active, status, fee_type")
-      .eq("is_active", true)
-      .gt("monthly_fee", 0)
 
     if (bErr) throw bErr
 
-    const batches = monthlyBatches || []
+    const batches = (rawBatches || []).filter(
+      (b: any) => b.status !== "finished" && b.is_active !== false && (Number(b.monthly_fee) || 0) > 0
+    )
     if (batches.length === 0) {
       return NextResponse.json({
         success: true,
@@ -59,40 +59,24 @@ async function handleGenerate(req: NextRequest) {
     const batchIds = batches.map((b) => b.id)
 
     // 2. Fetch active enrollments in these batches
-    let enrollments: any[] = []
-    const { data: enrData, error: enrErr } = await admin
+    const { data: enrList, error: enrErr } = await admin
       .from("enrollments")
-      .select("id, student_id, batch_id, status, created_at, student:students(id, name, student_id, is_active)")
+      .select("id, student_id, batch_id, status, created_at")
       .in("batch_id", batchIds)
       .eq("status", "active")
 
-    if (enrErr) {
-      console.warn("Retrying enrollments query without student relation:", enrErr.message)
-      const { data: fbEnr, error: fbErr } = await admin
-        .from("enrollments")
-        .select("id, student_id, batch_id, status, created_at")
-        .in("batch_id", batchIds)
-        .eq("status", "active")
+    if (enrErr) throw enrErr
 
-      if (fbErr) throw fbErr
+    const sIds = Array.from(new Set((enrList || []).map((e: any) => e.student_id).filter(Boolean)))
+    const { data: sList } = await admin
+      .from("students")
+      .select("id, name, student_id, is_active")
+      .in("id", sIds)
 
-      const sIds = (fbEnr || []).map((e: any) => e.student_id).filter(Boolean)
-      const { data: sList } = await admin
-        .from("students")
-        .select("id, name, student_id, is_active")
-        .in("id", sIds)
-
-      const sMap = new Map((sList || []).map((s: any) => [s.id, s]))
-      enrollments = (fbEnr || []).map((e: any) => ({
-        ...e,
-        student: sMap.get(e.student_id) || null,
-      }))
-    } else {
-      enrollments = enrData || []
-    }
-
-    const activeEnrollments = (enrollments || []).filter((e: any) => {
-      return e.student && e.student.is_active !== false
+    const sMap = new Map((sList || []).map((s: any) => [String(s.id), s]))
+    const activeEnrollments = (enrList || []).filter((e: any) => {
+      const st = sMap.get(String(e.student_id))
+      return !st || st.is_active !== false
     })
 
     // 3. Fetch existing fee_dues for this target month to prevent duplicates
