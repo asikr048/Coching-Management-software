@@ -148,6 +148,23 @@ export default async function StudentsPage() {
     )
     // Deduplicate any duplicates if both were indexed
     const uniqueEnrs = Array.from(new Map(sEnrs.map((item: any) => [item.id, item])).values())
+
+    // If student has fee_dues for a batch but no enrollment row yet, attach fallback batch info
+    if (uniqueEnrs.length === 0) {
+      const sDues = feeDues.filter((d: any) => String(d.student_id) === String(s.id) || (s.student_id && String(d.student_id) === String(s.student_id)))
+      const dBatchId = sDues.find((d: any) => d.batch_id)?.batch_id
+      if (dBatchId && batchMap.has(dBatchId)) {
+        uniqueEnrs.push({
+          id: `fb-${s.id}`,
+          student_id: s.id,
+          batch_id: dBatchId,
+          roll_no: s.roll_no || s.batch_roll || 1,
+          batch: batchMap.get(dBatchId),
+          status: "active"
+        })
+      }
+    }
+
     const firstRoll = uniqueEnrs.find((e: any) => e.roll_no != null)?.roll_no
     return {
       ...s,
@@ -157,20 +174,43 @@ export default async function StudentsPage() {
     }
   })
 
-  // Auto-heal any enrollments missing roll_no in database in background
+  // Auto-heal any enrollments missing roll_no or missing enrollment rows in database
   const nullRolls = rawEnrollments.filter(e => e.roll_no == null || Number(e.roll_no) <= 0)
-  if (nullRolls.length > 0) {
-    (async () => {
-      try {
+  ;(async () => {
+    try {
+      if (nullRolls.length > 0) {
         for (const e of nullRolls) {
           const r = enrFallbackRollMap.get(e.id)
           if (r) {
             await admin.from("enrollments").update({ roll_no: r }).eq("id", e.id)
           }
         }
-      } catch {}
-    })()
-  }
+      }
+
+      // Auto-heal missing enrollments for students who have fee dues for a batch
+      const activeEnrStudentIds = new Set(rawEnrollments.map((e: any) => String(e.student_id)))
+      const toHeal: any[] = []
+      for (const d of feeDues) {
+        if (d.batch_id && d.student_id && !activeEnrStudentIds.has(String(d.student_id))) {
+          const b = batchMap.get(d.batch_id)
+          const s = rawStudentMap.get(String(d.student_id))
+          toHeal.push({
+            student_id: d.student_id,
+            batch_id: d.batch_id,
+            branch_id: b?.branch_id || s?.branch_id || null,
+            status: "active",
+            roll_no: s?.roll_no || s?.batch_roll || 1,
+            final_monthly_fee: Number(b?.monthly_fee) || 0,
+            enrollment_date: s?.enrollment_date || new Date().toISOString().split("T")[0]
+          })
+          activeEnrStudentIds.add(String(d.student_id))
+        }
+      }
+      if (toHeal.length > 0) {
+        await admin.from("enrollments").insert(toHeal)
+      }
+    } catch {}
+  })()
 
   const { data: staff } = user
     ? await admin.from("staff").select("id, name, email, role").eq("auth_user_id", user.id).maybeSingle()

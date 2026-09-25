@@ -448,29 +448,65 @@ export async function POST(req: NextRequest) {
         qr_code: studentQr,
       }
 
-      let { data: createdStudent, error: sErr } = await db
+      // Check if student already exists by student_id or phone+name
+      let { data: existingStudent } = await db
         .from("students")
-        .insert(studentPayload)
-        .select()
-        .single()
+        .select("*")
+        .eq("student_id", studentIdStr)
+        .maybeSingle()
 
-      if (sErr && (sErr.message?.includes("qr_code") || (sErr as any).code === "PGRST204")) {
-        delete studentPayload.qr_code
-        const retryS = await db.from("students").insert(studentPayload).select().single()
-        createdStudent = retryS.data
-        sErr = retryS.error
+      if (!existingStudent && effectiveStudentPhone && trimmedName) {
+        const { data: byPhone } = await db
+          .from("students")
+          .select("*")
+          .eq("phone", effectiveStudentPhone)
+          .eq("name", trimmedName)
+          .maybeSingle()
+        if (byPhone) existingStudent = byPhone
       }
 
-      if (sErr || !createdStudent) {
-        const retryUser = await auth.supabase.from("students").insert(studentPayload).select().single()
-        if (retryUser.data) {
-          createdStudent = retryUser.data
-          sErr = null
-        } else if (retryUser.error && (retryUser.error.message?.includes("qr_code") || (retryUser.error as any).code === "PGRST204")) {
+      let createdStudent = existingStudent
+      let sErr: any = null
+
+      if (!createdStudent) {
+        const insertRes = await db
+          .from("students")
+          .insert(studentPayload)
+          .select()
+          .single()
+        createdStudent = insertRes.data
+        sErr = insertRes.error
+
+        if (sErr && (sErr.message?.includes("qr_code") || (sErr as any).code === "PGRST204")) {
           delete studentPayload.qr_code
-          const finalRetry = await auth.supabase.from("students").insert(studentPayload).select().single()
-          createdStudent = finalRetry.data
-          sErr = finalRetry.error
+          const retryS = await db.from("students").insert(studentPayload).select().single()
+          createdStudent = retryS.data
+          sErr = retryS.error
+        }
+
+        if (sErr || !createdStudent) {
+          const retryUser = await auth.supabase.from("students").insert(studentPayload).select().single()
+          if (retryUser.data) {
+            createdStudent = retryUser.data
+            sErr = null
+          } else if (retryUser.error && (retryUser.error.message?.includes("qr_code") || (retryUser.error as any).code === "PGRST204")) {
+            delete studentPayload.qr_code
+            const finalRetry = await auth.supabase.from("students").insert(studentPayload).select().single()
+            createdStudent = finalRetry.data
+            sErr = finalRetry.error
+          }
+        }
+
+        if (sErr && ((sErr as any).code === "23505" || sErr.message?.includes("duplicate key"))) {
+          const { data: dupStudent } = await db
+            .from("students")
+            .select("*")
+            .eq("student_id", studentIdStr)
+            .maybeSingle()
+          if (dupStudent) {
+            createdStudent = dupStudent
+            sErr = null
+          }
         }
       }
 
@@ -478,75 +514,101 @@ export async function POST(req: NextRequest) {
         throw new Error(`Failed to create student "${trimmedName}": ${sErr?.message || "Database error"}`)
       }
 
-      // D. Insert into enrollments table
+      // D. Insert or update enrollments table
       const finalMonthlyFee = Number(batch.monthly_fee) || 0
-      const enrPayload: Record<string, any> = {
-        student_id: createdStudent.id,
-        batch_id: cleanBatchId,
-        status: "active",
-        roll_no: assignedRoll,
-        qr_code: studentQr,
-        enrollment_date: admissionDateStr,
-        final_monthly_fee: finalMonthlyFee,
-      }
-      if (effectiveBranchId) {
-        enrPayload.branch_id = effectiveBranchId
-      }
 
-      let { data: createdEnr, error: enrErr } = await db
+      // Check if student is already enrolled in this batch
+      let { data: existingEnr } = await db
         .from("enrollments")
-        .insert(enrPayload)
-        .select()
-        .single()
+        .select("*")
+        .eq("student_id", createdStudent.id)
+        .eq("batch_id", cleanBatchId)
+        .maybeSingle()
 
-      // Fallback if schema cache doesn't have roll_no, branch_id, qr_code, or final_monthly_fee
-      if (enrErr && (
-        enrErr.message?.includes("final_monthly_fee") ||
-        enrErr.message?.includes("enrollment_date") ||
-        enrErr.message?.includes("roll_no") ||
-        enrErr.message?.includes("branch_id") ||
-        enrErr.message?.includes("qr_code") ||
-        (enrErr as any).code === "PGRST204"
-      )) {
-        if (enrErr.message?.includes("final_monthly_fee") && enrErr.message?.includes("does not exist")) {
-          delete enrPayload.final_monthly_fee
-        }
-        if (enrErr.message?.includes("enrollment_date") && enrErr.message?.includes("does not exist")) {
-          delete enrPayload.enrollment_date
-        }
-        delete enrPayload.roll_no
-        delete enrPayload.branch_id
-        delete enrPayload.qr_code
-        const retry = await db.from("enrollments").insert(enrPayload).select().single()
-        createdEnr = retry.data
-        enrErr = retry.error
-      }
+      let createdEnr = existingEnr
+      let enrErr: any = null
 
-      if (enrErr || !createdEnr) {
-        const retryUser = await auth.supabase.from("enrollments").insert(enrPayload).select().single()
-        if (retryUser.data) {
-          createdEnr = retryUser.data
-          enrErr = null
-        } else if (retryUser.error && (
-          retryUser.error.message?.includes("final_monthly_fee") ||
-          retryUser.error.message?.includes("enrollment_date") ||
-          retryUser.error.message?.includes("roll_no") ||
-          retryUser.error.message?.includes("branch_id") ||
-          retryUser.error.message?.includes("qr_code") ||
-          (retryUser.error as any).code === "PGRST204"
+      if (existingEnr) {
+        await db
+          .from("enrollments")
+          .update({
+            status: "active",
+            final_monthly_fee: finalMonthlyFee,
+            roll_no: assignedRoll || existingEnr.roll_no,
+          })
+          .eq("id", existingEnr.id)
+      } else {
+        const enrPayload: Record<string, any> = {
+          student_id: createdStudent.id,
+          batch_id: cleanBatchId,
+          status: "active",
+          roll_no: assignedRoll,
+          qr_code: studentQr,
+          enrollment_date: admissionDateStr,
+          final_monthly_fee: finalMonthlyFee,
+        }
+        if (effectiveBranchId) {
+          enrPayload.branch_id = effectiveBranchId
+        }
+
+        const insertEnr = await db
+          .from("enrollments")
+          .insert(enrPayload)
+          .select()
+          .single()
+
+        createdEnr = insertEnr.data
+        enrErr = insertEnr.error
+
+        // Fallback if schema cache doesn't have roll_no, branch_id, qr_code, or final_monthly_fee
+        if (enrErr && (
+          enrErr.message?.includes("final_monthly_fee") ||
+          enrErr.message?.includes("enrollment_date") ||
+          enrErr.message?.includes("roll_no") ||
+          enrErr.message?.includes("branch_id") ||
+          enrErr.message?.includes("qr_code") ||
+          (enrErr as any).code === "PGRST204"
         )) {
-          if (retryUser.error.message?.includes("final_monthly_fee") && retryUser.error.message?.includes("does not exist")) {
+          if (enrErr.message?.includes("final_monthly_fee") && enrErr.message?.includes("does not exist")) {
             delete enrPayload.final_monthly_fee
           }
-          if (retryUser.error.message?.includes("enrollment_date") && retryUser.error.message?.includes("does not exist")) {
+          if (enrErr.message?.includes("enrollment_date") && enrErr.message?.includes("does not exist")) {
             delete enrPayload.enrollment_date
           }
           delete enrPayload.roll_no
           delete enrPayload.branch_id
           delete enrPayload.qr_code
-          const finalRetry = await auth.supabase.from("enrollments").insert(enrPayload).select().single()
-          createdEnr = finalRetry.data
-          enrErr = finalRetry.error
+          const retry = await db.from("enrollments").insert(enrPayload).select().single()
+          createdEnr = retry.data
+          enrErr = retry.error
+        }
+
+        if (enrErr || !createdEnr) {
+          const retryUser = await auth.supabase.from("enrollments").insert(enrPayload).select().single()
+          if (retryUser.data) {
+            createdEnr = retryUser.data
+            enrErr = null
+          } else if (retryUser.error && (
+            retryUser.error.message?.includes("final_monthly_fee") ||
+            retryUser.error.message?.includes("enrollment_date") ||
+            retryUser.error.message?.includes("roll_no") ||
+            retryUser.error.message?.includes("branch_id") ||
+            retryUser.error.message?.includes("qr_code") ||
+            (retryUser.error as any).code === "PGRST204"
+          )) {
+            if (retryUser.error.message?.includes("final_monthly_fee") && retryUser.error.message?.includes("does not exist")) {
+              delete enrPayload.final_monthly_fee
+            }
+            if (retryUser.error.message?.includes("enrollment_date") && retryUser.error.message?.includes("does not exist")) {
+              delete enrPayload.enrollment_date
+            }
+            delete enrPayload.roll_no
+            delete enrPayload.branch_id
+            delete enrPayload.qr_code
+            const finalRetry = await auth.supabase.from("enrollments").insert(enrPayload).select().single()
+            createdEnr = finalRetry.data
+            enrErr = finalRetry.error
+          }
         }
       }
 
@@ -629,7 +691,18 @@ export async function POST(req: NextRequest) {
     }
 
     // 7. Update batch seat count accurately
-    const finalOccupiedSeats = Math.min(maxSeats, currentOccupied + results.length)
+    let finalOccupiedSeats = Math.min(maxSeats, currentOccupied + results.length)
+    try {
+      const { count: liveActiveCount } = await db
+        .from("enrollments")
+        .select("id", { count: "exact", head: true })
+        .eq("batch_id", cleanBatchId)
+        .eq("status", "active")
+      if (liveActiveCount != null) {
+        finalOccupiedSeats = Math.min(maxSeats, Math.max(liveActiveCount, currentOccupied + results.length))
+      }
+    } catch {}
+
     try {
       const { error: updErr } = await db.from("batches").update({ current_seats: finalOccupiedSeats }).eq("id", cleanBatchId)
       if (updErr) {
