@@ -79,6 +79,41 @@ export default function BatchesClient({
   const supabase = createClient()
   const { selectedBranchId, currentBranch } = useBranch()
 
+  useEffect(() => {
+    if (initialBatches && initialBatches.length > 0) {
+      setBatches(initialBatches)
+    }
+  }, [initialBatches])
+
+  useEffect(() => {
+    async function syncLiveBatches() {
+      try {
+        const { data, error } = await supabase
+          .from("batches")
+          .select("*, teacher:staff(name, subject), branch:branches(id, name)")
+          .order("created_at", { ascending: false })
+
+        if (!error && data && data.length > 0) {
+          setBatches(data)
+        } else {
+          const fallback = await supabase
+            .from("batches")
+            .select("*")
+            .order("created_at", { ascending: false })
+          if (fallback.data && fallback.data.length > 0) {
+            setBatches(fallback.data)
+          }
+        }
+      } catch (e) {
+        console.error("Live batch sync error:", e)
+      }
+    }
+
+    if (!initialBatches || initialBatches.length === 0) {
+      syncLiveBatches()
+    }
+  }, [initialBatches])
+
   const defaultForm = {
     name: "",
     subject: "",
