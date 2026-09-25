@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
-import { requireStaffRole, isAuthError } from "@/lib/api-auth";
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
 
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager"]);
-  if (isAuthError(auth)) return auth;
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager"])
+  if (isAuthError(auth)) return auth
 
   try {
     const body = await req.json()
@@ -34,7 +34,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Batch name is required." }, { status: 400 })
     }
 
-    const admin = createAdminClient()
+    const hasServiceKey = Boolean(
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      !process.env.SUPABASE_SERVICE_ROLE_KEY.includes("placeholder")
+    )
+    const db = hasServiceKey ? createAdminClient() : auth.supabase
+
     const cleanName = name.trim()
     const cleanStatus = status || "ongoing"
     const parsedMaxSeats = parseInt(String(max_seats)) || 30
@@ -63,7 +68,6 @@ export async function POST(req: NextRequest) {
       basePayload.branch_id = branch_id
     }
 
-    // Optional columns: classroom, branch_seats, approval_status
     const extendedPayload = {
       ...basePayload,
       classroom: cleanClassroom,
@@ -75,98 +79,54 @@ export async function POST(req: NextRequest) {
 
     if (id) {
       // 1. UPDATE EXISTING BATCH
-      let updateError: any = null
-      
-      // Try with extended payload first
-      const res1 = await admin
+      let res = await db
         .from("batches")
         .update(extendedPayload)
         .eq("id", id)
         .select()
 
-      if (res1.error) {
-        // Fallback without classroom and branch_seats if columns not yet migrated
-        const res2 = await admin
+      if (res.error) {
+        res = await db
           .from("batches")
           .update(basePayload)
           .eq("id", id)
           .select()
-
-        if (res2.error) {
-          updateError = res2.error
-        }
       }
 
-      if (updateError) {
-        console.error("Batch update error:", updateError)
+      if (res.error) {
+        // Fallback to user supabase client
+        res = await auth.supabase
+          .from("batches")
+          .update(basePayload)
+          .eq("id", id)
+          .select()
+      }
+
+      if (res.error) {
         return NextResponse.json(
-          { error: updateError.message || "Failed to update batch in database." },
+          { error: res.error.message || "Failed to update batch in database." },
           { status: 500 }
         )
       }
-
-      // Handle multi-branch updates / additions
-      if (Array.isArray(selected_branch_ids) && selected_branch_ids.length > 0) {
-        const otherBranchIds = selected_branch_ids.filter(bId => bId && bId !== branch_id)
-        
-        for (const targetBranchId of otherBranchIds) {
-          const branchSpecificSeats = parseInt(String(branch_seats[targetBranchId])) || parsedMaxSeats
-          
-          // Check if cloned batch row already exists for this branch
-          const { data: existingChild } = await admin
-            .from("batches")
-            .select("id")
-            .eq("origin_batch_id", id)
-            .eq("branch_id", targetBranchId)
-            .maybeSingle()
-
-          if (existingChild) {
-            // Update child batch
-            await admin
-              .from("batches")
-              .update({
-                name: cleanName,
-                status: cleanStatus,
-                subject: basePayload.subject,
-                class_level: basePayload.class_level,
-                max_seats: branchSpecificSeats,
-                monthly_fee: parsedMonthlyFee,
-                admission_fee: parsedAdmissionFee,
-                schedule_days: basePayload.schedule_days,
-                schedule_time: basePayload.schedule_time,
-                description: basePayload.description,
-                classroom: cleanClassroom,
-                is_active: cleanStatus !== "finished"
-              })
-              .eq("id", existingChild.id)
-          } else {
-            // Create new child batch for this branch
-            await admin
-              .from("batches")
-              .insert({
-                ...basePayload,
-                branch_id: targetBranchId,
-                max_seats: branchSpecificSeats,
-                classroom: cleanClassroom,
-                origin_branch_id: branch_id || null,
-                origin_batch_id: id,
-                approval_status: "approved",
-                is_active: true
-              })
-          }
-        }
-      }
     } else {
       // 2. CREATE NEW BATCH
-      let createRes = await admin
+      let createRes = await db
         .from("batches")
         .insert(extendedPayload)
         .select()
         .single()
 
       if (createRes.error) {
-        // Fallback without extended fields
-        createRes = await admin
+        createRes = await db
+          .from("batches")
+          .insert(basePayload)
+          .select()
+          .single()
+      }
+
+      if (createRes.error) {
+        // Fallback to authenticated user client
+        createRes = await auth.supabase
           .from("batches")
           .insert(basePayload)
           .select()
@@ -182,74 +142,36 @@ export async function POST(req: NextRequest) {
       }
 
       savedBatchId = createRes.data.id
-
-      // Create linked batches for any other selected branches
-      if (Array.isArray(selected_branch_ids) && selected_branch_ids.length > 0) {
-        const otherBranchIds = selected_branch_ids.filter(bId => bId && bId !== branch_id)
-        for (const targetBranchId of otherBranchIds) {
-          const branchSpecificSeats = parseInt(String(branch_seats[targetBranchId])) || parsedMaxSeats
-          await admin
-            .from("batches")
-            .insert({
-              ...basePayload,
-              branch_id: targetBranchId,
-              max_seats: branchSpecificSeats,
-              classroom: cleanClassroom,
-              origin_branch_id: branch_id || null,
-              origin_batch_id: savedBatchId,
-              approval_status: "approved",
-              is_active: true
-            })
-        }
-      }
     }
 
-    // Fetch the final saved batch with teacher and branch details cleanly
-    const { data: finalBatch, error: fetchErr } = await admin
+    // Fetch the final saved batch cleanly
+    let finalBatch: any = null
+    const fetchRes = await db
       .from("batches")
       .select("*")
       .eq("id", savedBatchId)
-      .single()
+      .maybeSingle()
 
-    if (fetchErr || !finalBatch) {
-      return NextResponse.json({ success: true, id: savedBatchId })
-    }
-
-    // Attach teacher info
-    let teacherObj = null
-    if (finalBatch.teacher_id) {
-      const { data: tData } = await admin
-        .from("staff")
-        .select("id, name, subject")
-        .eq("id", finalBatch.teacher_id)
+    if (fetchRes.data) {
+      finalBatch = fetchRes.data
+    } else {
+      const fb = await auth.supabase
+        .from("batches")
+        .select("*")
+        .eq("id", savedBatchId)
         .maybeSingle()
-      teacherObj = tData
-    }
-
-    // Attach branch info
-    let branchObj = null
-    if (finalBatch.branch_id) {
-      const { data: brData } = await admin
-        .from("branches")
-        .select("id, name")
-        .eq("id", finalBatch.branch_id)
-        .maybeSingle()
-      branchObj = brData
+      finalBatch = fb.data || { id: savedBatchId, ...basePayload }
     }
 
     return NextResponse.json({
       success: true,
-      batch: {
-        ...finalBatch,
-        teacher: teacherObj,
-        branch: branchObj
-      },
-      message: id ? "Batch updated successfully!" : "Batch created successfully!"
+      batch: finalBatch,
+      message: `Batch "${finalBatch.name || cleanName}" saved successfully!`
     })
-  } catch (err: unknown) {
-    console.error("Unexpected error in /api/batches/save:", err)
+  } catch (err: any) {
+    console.error("Batch save server error:", err)
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal server error saving batch." },
+      { error: err.message || "Internal server error saving batch." },
       { status: 500 }
     )
   }

@@ -7,7 +7,11 @@ export const revalidate = 0
 
 export default async function BatchesPage() {
   const supabase = await createClient()
-  const admin = createAdminClient()
+  const hasServiceKey = Boolean(
+    process.env.SUPABASE_SERVICE_ROLE_KEY &&
+    !process.env.SUPABASE_SERVICE_ROLE_KEY.includes("placeholder")
+  )
+  const db = hasServiceKey ? createAdminClient() : supabase
 
   let rawBatches: any[] = []
   let rawTeachers: any[] = []
@@ -18,29 +22,29 @@ export default async function BatchesPage() {
 
   try {
     const [batchesRes, teachersRes, roomsRes, branchesRes, duesRes, enrsRes] = await Promise.all([
-      admin
+      db
         .from("batches")
         .select("*, teacher:staff(name, subject), branch:branches(id, name)")
         .order("created_at", { ascending: false }),
-      admin
+      db
         .from("staff")
         .select("id, name, subject, branch_id")
         .in("role", ["teacher", "course_teacher"])
         .eq("is_active", true),
-      admin
+      db
         .from("rooms")
         .select("id, name, capacity, branch_id")
         .eq("is_active", true),
-      admin
+      db
         .from("branches")
         .select("*")
         .eq("is_active", true)
         .order("name", { ascending: true }),
-      admin
+      db
         .from("fee_dues")
         .select("batch_id, due_amount, paid_amount")
         .in("status", ["pending", "partial"]),
-      admin
+      db
         .from("enrollments")
         .select("id, batch_id, status")
         .eq("status", "active"),
@@ -48,7 +52,7 @@ export default async function BatchesPage() {
 
     if (batchesRes.error || !batchesRes.data) {
       console.warn("Batches relational join query error/empty, falling back to simple select:", batchesRes.error?.message)
-      const simpleRes = await admin
+      const simpleRes = await db
         .from("batches")
         .select("*")
         .order("created_at", { ascending: false })
@@ -56,7 +60,7 @@ export default async function BatchesPage() {
       if (simpleRes.data && simpleRes.data.length > 0) {
         rawBatches = simpleRes.data
       } else {
-        // Secondary fallback to user session client
+        // Fallback to supabase server client
         const { data: userBatches } = await supabase
           .from("batches")
           .select("*")
@@ -73,7 +77,7 @@ export default async function BatchesPage() {
     rawDues = duesRes.data || []
     rawEnrs = enrsRes.data || []
   } catch (err) {
-    console.error("Failed to load batches page data via admin:", err)
+    console.error("Failed to load batches page data:", err)
     try {
       const { data: fbBatches } = await supabase
         .from("batches")
