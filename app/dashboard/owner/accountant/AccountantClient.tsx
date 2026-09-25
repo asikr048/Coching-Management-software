@@ -28,6 +28,8 @@ interface StudentRow {
   class_level?: string | null
   branch_id?: string | null
   enrollments?: any[]
+  enrollment_date?: string | null
+  created_at?: string | null
 }
 
 interface BatchRow {
@@ -615,6 +617,13 @@ export default function AccountantClient({
     return result
   }, [payments, historyMethodFilter, selectedHistoryBatchId])
 
+  // Auto-select first batch for Monthly Sheet if none selected
+  useEffect(() => {
+    if (!monthlySheetBatchId && batches.length > 0) {
+      setMonthlySheetBatchId(batches[0].id)
+    }
+  }, [batches, monthlySheetBatchId])
+
   // Matrix calculation for Monthly Sheet
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
   
@@ -626,6 +635,9 @@ export default function AccountantClient({
       s.enrollments?.some(e => e.batch_id === monthlySheetBatchId || e.batch?.id === monthlySheetBatchId)
     )
 
+    const targetBatch = batches.find(b => b.id === monthlySheetBatchId)
+    const monthlyFee = Number(targetBatch?.monthly_fee) || 0
+
     // Filter dues for the batch and year
     const yearPrefix = `${monthlySheetYear}-`
     const batchDues = dues.filter(d => 
@@ -633,19 +645,54 @@ export default function AccountantClient({
       d.due_month?.startsWith(yearPrefix)
     )
 
+    // Filter payments for the batch and year
+    const batchPayments = payments.filter(p =>
+      (p.batch_id === monthlySheetBatchId || !p.batch_id) &&
+      (p.payment_month?.startsWith(yearPrefix) || p.created_at?.startsWith(yearPrefix))
+    )
+
     const matrixStudents = batchStudents.map(s => {
       const sEnr = s.enrollments?.find(e => e.batch_id === monthlySheetBatchId || e.batch?.id === monthlySheetBatchId)
-      const roll = sEnr?.roll_no || s.roll_no || "-"
+      const roll = sEnr?.roll_no || s.roll_no || s.batch_roll || "-"
+      const enrDate = sEnr?.enrollment_date || s.enrollment_date || sEnr?.created_at || s.created_at
+      const enrMonthStr = enrDate ? String(enrDate).slice(0, 7) : `${monthlySheetYear}-01`
       
       const monthsData: Record<string, any> = {}
       monthNames.forEach((_, i) => {
         const monthStr = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
-        const d = batchDues.find(due => due.student_id === s.id && due.due_month === monthStr)
-        if (d) {
+        
+        // 1. Check fee_dues for this student and month
+        const d = batchDues.find(due => 
+          (due.student_id === s.id || (s.student_id && due.student_id === s.student_id)) && 
+          due.due_month === monthStr
+        )
+
+        // 2. Check payments for this student and month
+        const pList = batchPayments.filter(p =>
+          (p.student_id === s.id || (s.student_id && p.student_id === s.student_id)) &&
+          (p.payment_month === monthStr || (!p.payment_month && p.created_at?.startsWith(monthStr)))
+        )
+        const totalPaidP = pList.reduce((sum, p) => sum + (Number(p.total_paid ?? p.amount) || 0), 0)
+
+        if (d || totalPaidP > 0) {
+          const paidAmt = Math.max(Number(d?.paid_amount || 0), totalPaidP)
+          const dueAmt = d ? Number(d.due_amount || 0) : Math.max(0, monthlyFee - paidAmt)
+          let st = d?.status || (paidAmt >= monthlyFee && monthlyFee > 0 ? "paid" : paidAmt > 0 ? "partial" : "pending")
+          if (paidAmt >= dueAmt && dueAmt > 0) st = "paid"
+
           monthsData[monthStr] = {
-            paid: d.paid_amount,
-            due: d.due_amount,
-            status: d.status
+            paid: paidAmt,
+            due: dueAmt,
+            status: st
+          }
+        } else if (monthlyFee > 0) {
+          // If month is between enrollment month and current month, show as pending due
+          if (monthStr >= enrMonthStr && monthStr <= currentMonthStr) {
+            monthsData[monthStr] = {
+              paid: 0,
+              due: monthlyFee,
+              status: "pending"
+            }
           }
         }
       })
@@ -654,9 +701,10 @@ export default function AccountantClient({
         id: s.id,
         name: s.name,
         roll,
+        rawStudent: s,
         months: monthsData
       }
-    }).sort((a, b) => Number(a.roll) - Number(b.roll))
+    }).sort((a, b) => (Number(a.roll) || 999) - (Number(b.roll) || 999))
 
     const monthTotals: Record<string, number> = {}
     const dueTotals: Record<string, number> = {}
@@ -665,10 +713,13 @@ export default function AccountantClient({
       const monthStr = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
       let totPaid = 0
       let totDue = 0
-      batchDues.forEach(d => {
-        if (d.due_month === monthStr) {
-          totPaid += Number(d.paid_amount || 0)
-          totDue += Number(d.due_amount || 0)
+      matrixStudents.forEach(ms => {
+        const md = ms.months[monthStr]
+        if (md) {
+          totPaid += Number(md.paid || 0)
+          if (md.status !== "paid") {
+            totDue += Math.max(0, Number(md.due || 0) - Number(md.paid || 0))
+          }
         }
       })
       monthTotals[monthStr] = totPaid
@@ -676,7 +727,7 @@ export default function AccountantClient({
     })
 
     return { students: matrixStudents, monthTotals, dueTotals }
-  }, [monthlySheetBatchId, monthlySheetYear, students, dues])
+  }, [monthlySheetBatchId, monthlySheetYear, students, dues, payments, batches, currentMonthStr])
 
   // Chart data for selected batch in Students Tab
   const chartData = useMemo(() => {
@@ -748,7 +799,8 @@ export default function AccountantClient({
     student: StudentRow,
     batch: BatchRow,
     item?: LedgerItem | null,
-    defaultType: "monthly" | "admission" | "course" | "exam" | "other" = "monthly"
+    defaultType: "monthly" | "admission" | "course" | "exam" | "other" = "monthly",
+    targetMonth?: string
   ) {
     setPayModalStudent(student)
     setPayModalBatch(batch)
@@ -756,19 +808,20 @@ export default function AccountantClient({
     const isMonthlyBatch = batch.fee_type === "monthly" || (Number(batch.monthly_fee) || 0) > 0
     const resolvedType = defaultType || (isMonthlyBatch ? "monthly" : "course")
     setPayFeeType(resolvedType)
-    setPayMonth(selectedMonth)
+    const effectiveMonth = targetMonth || selectedMonth
+    setPayMonth(effectiveMonth)
 
     const dueObj =
       item?.dueObj ||
       (resolvedType === "monthly"
-        ? duesMapForSelectedMonth.get(`${student.id}_${batch.id}`) || null
+        ? (dues.find(d => (d.student_id === student.id || (student.student_id && d.student_id === student.student_id)) && d.batch_id === batch.id && d.due_month === effectiveMonth) || null)
         : dues.find(
             (d) =>
-              d.student_id === student.id &&
+              (d.student_id === student.id || (student.student_id && d.student_id === student.student_id)) &&
               d.batch_id === batch.id &&
               (d.status === "pending" || d.status === "partial")
           ) ||
-          dues.find((d) => d.student_id === student.id && d.batch_id === batch.id) ||
+          dues.find((d) => (d.student_id === student.id || (student.student_id && d.student_id === student.student_id)) && d.batch_id === batch.id) ||
           null)
 
     setPayModalDue(dueObj)
@@ -783,7 +836,9 @@ export default function AccountantClient({
     } else if (resolvedType === "monthly") {
       targetFee = dueObj ? Number(dueObj.due_amount) : Number(batch.monthly_fee) || 0
       const monthPayments = payments.filter(
-        (p) => p.student_id === student.id && p.batch_id === batch.id && p.payment_month === selectedMonth
+        (p) => (p.student_id === student.id || (student.student_id && p.student_id === student.student_id)) && 
+               p.batch_id === batch.id && 
+               (p.payment_month === effectiveMonth || (!p.payment_month && p.created_at?.startsWith(effectiveMonth)))
       )
       const paySum = monthPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
       prevPaid = dueObj ? Math.max(Number(dueObj.paid_amount || 0), paySum) : paySum
@@ -2227,34 +2282,46 @@ export default function AccountantClient({
               />
             </div>
             
-            <button
-              onClick={() => {
-                if (!monthlySheetBatchId) return toast.error("Please select a batch first")
-                
-                const wsData: any[][] = [
-                  ["Roll", "Name", ...monthNames]
-                ]
-                
-                monthlyMatrix.students.forEach((s: any) => {
-                  const row = [s.roll, s.name]
-                  monthNames.forEach((_, i) => {
-                    const monthKey = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
-                    const mData = s.months[monthKey]
-                    row.push(mData ? (mData.status === "paid" ? "Paid" : mData.status === "partial" ? "Partial" : "Due") : "-")
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={generatingBilling}
+                onClick={handleRunMonthlyBillingCycle}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${generatingBilling ? "animate-spin" : ""}`} />
+                <span>{generatingBilling ? "Syncing..." : "Sync / Generate Dues"}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (!monthlySheetBatchId) return toast.error("Please select a batch first")
+                  
+                  const wsData: any[][] = [
+                    ["Roll", "Name", ...monthNames]
+                  ]
+                  
+                  monthlyMatrix.students.forEach((s: any) => {
+                    const row = [s.roll, s.name]
+                    monthNames.forEach((_, i) => {
+                      const monthKey = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
+                      const mData = s.months[monthKey]
+                      row.push(mData ? (mData.status === "paid" ? `Paid (৳${mData.paid})` : mData.status === "partial" ? `Partial (৳${mData.paid}/৳${mData.due})` : `Due (৳${mData.due})`) : "-")
+                    })
+                    wsData.push(row)
                   })
-                  wsData.push(row)
-                })
-                
-                const wb = XLSX.utils.book_new()
-                const ws = XLSX.utils.aoa_to_sheet(wsData)
-                XLSX.utils.book_append_sheet(wb, ws, "Monthly Sheet")
-                XLSX.writeFile(wb, `Monthly_Sheet_${monthlySheetYear}.xlsx`)
-              }}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export Excel</span>
-            </button>
+                  
+                  const wb = XLSX.utils.book_new()
+                  const ws = XLSX.utils.aoa_to_sheet(wsData)
+                  XLSX.utils.book_append_sheet(wb, ws, "Monthly Sheet")
+                  XLSX.writeFile(wb, `Monthly_Sheet_${monthlySheetYear}.xlsx`)
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 hover:bg-emerald-200 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Export Excel</span>
+              </button>
+            </div>
           </div>
           
           <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
@@ -2272,28 +2339,53 @@ export default function AccountantClient({
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
                     {monthlyMatrix.students.map((s: any) => (
-                      <tr key={s.id} className="hover:bg-slate-50">
+                      <tr key={s.id} className="hover:bg-slate-50 transition-colors">
                         <td className="p-3 text-slate-700 font-bold">{s.roll}</td>
                         <td className="p-3 text-slate-900 font-medium sticky left-0 bg-white group-hover:bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] z-10">{s.name}</td>
                         {monthNames.map((_, i) => {
                           const monthStr = `${monthlySheetYear}-${String(i + 1).padStart(2, "0")}`
                           const mData = s.months[monthStr]
-                          let bgClass = "bg-slate-100/50"
-                          let content = <span className="text-slate-400">-</span>
+                          let bgClass = "bg-slate-50/50 hover:bg-slate-100"
+                          let content = <span className="text-slate-400 font-medium">-</span>
                           if (mData) {
                             if (mData.status === "paid") {
-                              bgClass = "bg-emerald-100"
-                              content = <span className="text-emerald-700 font-bold text-xs">Paid</span>
+                              bgClass = "bg-emerald-50 hover:bg-emerald-100 border-emerald-200"
+                              content = (
+                                <div className="space-y-0.5">
+                                  <span className="inline-block px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded text-[11px] font-bold">Paid</span>
+                                  {mData.paid > 0 && <span className="block text-[10px] text-emerald-600 font-semibold">{formatCurrency(mData.paid)}</span>}
+                                </div>
+                              )
                             } else if (mData.status === "partial") {
-                              bgClass = "bg-amber-100"
-                              content = <span className="text-amber-700 font-bold text-xs">Partial</span>
+                              bgClass = "bg-amber-50 hover:bg-amber-100 border-amber-200"
+                              content = (
+                                <div className="space-y-0.5">
+                                  <span className="inline-block px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[11px] font-bold">Partial</span>
+                                  <span className="block text-[10px] text-amber-600 font-semibold">{formatCurrency(mData.paid)} / {formatCurrency(mData.due)}</span>
+                                </div>
+                              )
                             } else {
-                              bgClass = "bg-rose-100"
-                              content = <span className="text-rose-700 font-bold text-xs">Due</span>
+                              bgClass = "bg-rose-50 hover:bg-rose-100 border-rose-200"
+                              content = (
+                                <div className="space-y-0.5">
+                                  <span className="inline-block px-1.5 py-0.5 bg-rose-100 text-rose-800 rounded text-[11px] font-bold">Due</span>
+                                  {mData.due > 0 && <span className="block text-[10px] text-rose-600 font-semibold">{formatCurrency(mData.due)}</span>}
+                                </div>
+                              )
                             }
                           }
                           return (
-                            <td key={monthStr} className={`p-2 text-center border-l border-slate-100 ${bgClass}`}>
+                            <td
+                              key={monthStr}
+                              onClick={() => {
+                                const targetBatch = batches.find(b => b.id === monthlySheetBatchId)
+                                if (targetBatch && s.rawStudent) {
+                                  openPayModal(s.rawStudent, targetBatch, null, "monthly", monthStr)
+                                }
+                              }}
+                              title={mData ? `Click to view or collect fee for ${monthStr}` : `Click to record payment for ${monthStr}`}
+                              className={`p-2 text-center border-l border-slate-100 cursor-pointer transition-all ${bgClass}`}
+                            >
                               {content}
                             </td>
                           )
