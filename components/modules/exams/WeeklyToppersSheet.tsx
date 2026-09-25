@@ -43,6 +43,10 @@ export interface WeeklyToppersSheetProps {
   totalWeeklyMaxMarks: number
   totalToppers: GrandTopperItem[]
   subjectToppers: SubjectTopperItem[]
+  documentTitle?: string
+  documentSubtitle?: string
+  toppersHeader1?: string
+  toppersHeader2?: string
 }
 
 export default function WeeklyToppersSheet({
@@ -55,6 +59,10 @@ export default function WeeklyToppersSheet({
   totalWeeklyMaxMarks,
   totalToppers = [],
   subjectToppers = [],
+  documentTitle = "TOPPERS & MERIT SUMMARY",
+  documentSubtitle = "শীর্ষ মেধাবী শিক্ষার্থী তালিকা",
+  toppersHeader1 = "🏆 সামগ্রিক শীর্ষ মেধা (Grand Total Toppers)",
+  toppersHeader2 = "📚 বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী তালিকা (Subject-wise Toppers)",
 }: WeeklyToppersSheetProps) {
   return (
     <div
@@ -94,9 +102,9 @@ export default function WeeklyToppersSheet({
 
         <div className="text-right">
           <h2 className="text-base sm:text-lg font-black tracking-wider uppercase underline underline-offset-4 text-black">
-            Toppers & Merit Summary
+            {documentTitle}
           </h2>
-          <p className="text-[11px] font-bold text-slate-700 mt-0.5">শীর্ষ মেধাবী শিক্ষার্থী তালিকা</p>
+          <p className="text-[11px] font-bold text-slate-700 mt-0.5">{documentSubtitle}</p>
         </div>
       </div>
 
@@ -119,7 +127,7 @@ export default function WeeklyToppersSheet({
       {/* 3. SECTION 1: GRAND TOTAL TOPPERS (১ম, ২য়, ৩য় সামগ্রিক শীর্ষস্থান) */}
       <div className="mb-5">
         <div className="bg-black text-white px-3 py-1 text-xs font-black uppercase tracking-wider mb-2 flex items-center justify-between">
-          <span>🏆 সামগ্রিক শীর্ষ মেধা (Grand Total Toppers)</span>
+          <span>{toppersHeader1}</span>
           <span className="text-[11px] font-normal">পূর্ণমান: {totalWeeklyMaxMarks} নম্বর</span>
         </div>
 
@@ -183,7 +191,7 @@ export default function WeeklyToppersSheet({
       {/* 4. SECTION 2: SUBJECT-WISE TOPPERS TABLE (বিষয়ভিত্তিক শীর্ষ মেধা) */}
       <div className="mb-6">
         <div className="bg-black text-white px-3 py-1 text-xs font-black uppercase tracking-wider mb-2 flex items-center justify-between">
-          <span>📚 বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী তালিকা (Subject-wise Toppers)</span>
+          <span>{toppersHeader2}</span>
           <span className="text-[11px] font-normal">প্রতিটি বিষয়ে সর্বোচ্চ নম্বরধারী</span>
         </div>
 

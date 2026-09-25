@@ -42,6 +42,7 @@ export interface StudentProgressReportProps {
   student: ProgressReportStudent
   subjects: ProgressReportSubject[]
   classPosition: number | string // Rank in batch
+  documentTitle?: string
   attendance?: {
     workingDays?: number
     totalPresent?: number
@@ -96,6 +97,7 @@ export default function StudentProgressReport({
   student,
   subjects = [],
   classPosition,
+  documentTitle = "PROGRESS REPORT",
   attendance = { workingDays: 0, totalPresent: 0, totalAbsent: 0 },
   conductEvaluation = { excellent: false, good: true, average: false, poor: false, comments: "" },
   coCurricular = { sports: false, culturalFunction: false, scoutBncc: false, mathOlympiad: false },
@@ -199,7 +201,7 @@ export default function StudentProgressReport({
                 </p>
                 <div className="mt-1 inline-block border-b-2 border-black pb-0.5">
                   <span className="text-xs sm:text-sm font-black tracking-widest uppercase">
-                    PROGRESS REPORT
+                    {documentTitle}
                   </span>
                 </div>
               </div>

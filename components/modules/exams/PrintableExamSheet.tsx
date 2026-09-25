@@ -57,6 +57,7 @@ export interface PrintableExamSheetProps {
   instituteBranch?: string
   instituteLogoUrl?: string
   tagline?: string
+  documentTitle?: string
 }
 
 function getDayMarkItemHelper(
@@ -99,6 +100,7 @@ export default function PrintableExamSheet({
   instituteBranch,
   instituteLogoUrl,
   tagline,
+  documentTitle,
 }: PrintableExamSheetProps) {
   const isWeeklyAggregate = mode === "weekly_aggregate"
   const isWeeklyDay = mode === "weekly_day"
@@ -461,13 +463,13 @@ export default function PrintableExamSheet({
 
           <div className="text-right shrink-0">
             <span className="inline-block px-3 py-1 rounded-lg border-2 border-slate-900 text-slate-900 font-black text-xs uppercase tracking-wider bg-slate-50 print:bg-transparent">
-              {isAllWeeksCombined
+              {documentTitle || (isAllWeeksCombined
                 ? "সকল সপ্তাহের সমন্বিত মেধা ও ফলাফল বিবরণী"
                 : isWeeklyAggregate
                 ? "সাপ্তাহিক সামগ্রিক মেধা তালিকা"
                 : isWeeklyDay
                 ? `সাপ্তাহিক পরীক্ষা: ${activeDayConfig?.day_bn || "দিন"}`
-                : "ফলাফল ও মেধা তালিকা বিবরণী"}
+                : "ফলাফল ও মেধা তালিকা বিবরণী")}
             </span>
             <p className="text-[10px] text-slate-500 mt-1 font-mono">
               মুদ্রণের সময়: {printTimestamp}
