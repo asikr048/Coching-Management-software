@@ -808,6 +808,8 @@ ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS qr_code TEXT;
 ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS enrollment_date DATE DEFAULT CURRENT_DATE;
 ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
 ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS final_monthly_fee NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.enrollments ALTER COLUMN final_monthly_fee SET DEFAULT 0;
 ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
 -- 4.6 payments columns (CRITICAL: ensure paid_at exists on all existing tables)

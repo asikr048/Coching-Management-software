@@ -1003,6 +1003,8 @@ export async function GET(req: NextRequest) {
               student_id: finalStudentId,
               batch_id: sub.batch_id,
               status: "active",
+              enrollment_date: (sub.approved_at || sub.created_at || new Date().toISOString()).slice(0, 10),
+              final_monthly_fee: Number(batchData?.monthly_fee) || 0,
             }, { onConflict: "student_id,batch_id" }).then()
           }
         }
