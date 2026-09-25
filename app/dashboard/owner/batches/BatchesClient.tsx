@@ -236,33 +236,99 @@ export default function BatchesClient({
         status: form.status || "ongoing"
       }
 
-      const res = await fetch("/api/batches/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      })
+      let savedBatchRecord: any = null
 
-      const data = await res.json()
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Failed to save batch")
+      // 1. Try API route first
+      try {
+        const res = await fetch("/api/batches/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        })
+        const data = await res.json()
+        if (res.ok && data.batch) {
+          savedBatchRecord = data.batch
+        }
+      } catch (apiErr) {
+        console.warn("API batch save failed, attempting direct client save:", apiErr)
+      }
+
+      // 2. If API didn't return saved batch, save directly via Supabase client
+      if (!savedBatchRecord) {
+        const dbPayload: Record<string, any> = {
+          name: payload.name,
+          status: payload.status,
+          subject: payload.subject,
+          class_level: payload.class_level,
+          teacher_id: payload.teacher_id,
+          max_seats: payload.max_seats,
+          monthly_fee: payload.monthly_fee,
+          admission_fee: payload.admission_fee,
+          fee_type: payload.fee_type,
+          schedule_days: payload.schedule_days,
+          schedule_time: payload.schedule_time,
+          description: payload.description,
+          classroom: payload.classroom,
+          is_active: payload.status !== "finished"
+        }
+        if (payload.branch_id) {
+          dbPayload.branch_id = payload.branch_id
+        }
+
+        if (editingBatch) {
+          const { data, error } = await supabase
+            .from("batches")
+            .update(dbPayload)
+            .eq("id", editingBatch.id)
+            .select("*, teacher:staff(name, subject), branch:branches(id, name)")
+            .single()
+
+          if (error) {
+            const fb = await supabase.from("batches").update(dbPayload).eq("id", editingBatch.id).select().single()
+            if (fb.error) throw fb.error
+            savedBatchRecord = fb.data
+          } else {
+            savedBatchRecord = data
+          }
+        } else {
+          const { data, error } = await supabase
+            .from("batches")
+            .insert([dbPayload])
+            .select("*, teacher:staff(name, subject), branch:branches(id, name)")
+            .single()
+
+          if (error) {
+            const fb = await supabase.from("batches").insert([dbPayload]).select().single()
+            if (fb.error) throw fb.error
+            savedBatchRecord = fb.data
+          } else {
+            savedBatchRecord = data
+          }
+        }
+      }
+
+      // 3. Enrich teacher and branch in memory
+      const teacherObj = teachers.find(t => t.id === savedBatchRecord.teacher_id)
+      const branchObj = branches.find(b => b.id === savedBatchRecord.branch_id)
+      const finalEnrichedBatch = {
+        ...savedBatchRecord,
+        teacher: savedBatchRecord.teacher || (teacherObj ? { name: teacherObj.name, subject: teacherObj.subject } : null),
+        branch: savedBatchRecord.branch || (branchObj ? { id: branchObj.id, name: branchObj.name } : null)
       }
 
       if (editingBatch) {
-        if (data.batch) {
-          setBatches(prev => prev.map(b => b.id === editingBatch.id ? { ...b, ...data.batch } : b))
-        }
-        toast.success(data.message || `Batch "${payload.name}" updated successfully!`)
+        setBatches(prev => prev.map(b => b.id === editingBatch.id ? { ...b, ...finalEnrichedBatch } : b))
+        toast.success(`Batch "${payload.name}" updated successfully!`)
       } else {
-        if (data.batch) {
-          setBatches(prev => [data.batch, ...prev])
-        }
-        toast.success(data.message || `Batch "${payload.name}" created successfully!`)
+        setBatches(prev => [finalEnrichedBatch, ...prev.filter(b => b.id !== finalEnrichedBatch.id)])
+        toast.success(`Batch "${payload.name}" created successfully!`)
       }
 
       setShowCreateModal(false)
       setEditingBatch(null)
       setForm(defaultForm)
     } catch (err: unknown) {
+      console.error("Batch save error:", err)
       toast.error(err instanceof Error ? err.message : "Failed to save batch")
     } finally {
       setLoading(false)
