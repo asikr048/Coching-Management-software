@@ -104,7 +104,7 @@ function normalizeBDPhone(raw: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
   if (isAuthError(auth)) return auth;
 
   try {
@@ -128,16 +128,38 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No students provided for bulk enrollment." }, { status: 400 })
     }
 
-    const admin = createAdminClient()
+    const hasServiceKey = Boolean(
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      !process.env.SUPABASE_SERVICE_ROLE_KEY.includes("placeholder")
+    )
+    const admin = hasServiceKey ? createAdminClient() : null
+    const db = admin || auth.supabase
+    const cleanBatchId = String(batch_id).trim()
 
-    // 1. Fetch batch details safely
-    const { data: batch, error: bErr } = await admin
+    // 1. Fetch batch details safely (avoiding fragile embedded joins)
+    let batch: any = null
+    const { data: bData, error: bErr } = await db
       .from("batches")
-      .select("*, branch:branches(id, name)")
-      .eq("id", batch_id)
+      .select("*")
+      .eq("id", cleanBatchId)
       .maybeSingle()
 
-    if (bErr || !batch) {
+    if (bData) {
+      batch = bData
+    } else {
+      const { data: userBatch, error: uErr } = await auth.supabase
+        .from("batches")
+        .select("*")
+        .eq("id", cleanBatchId)
+        .maybeSingle()
+      if (userBatch) {
+        batch = userBatch
+      } else {
+        console.error("Batch lookup error in bulk-enroll:", { cleanBatchId, bErr, uErr })
+      }
+    }
+
+    if (!batch) {
       return NextResponse.json({ error: "Selected batch not found." }, { status: 404 })
     }
 
@@ -146,11 +168,27 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Check seat capacity
-    const { count: liveActiveCount } = await admin
-      .from("enrollments")
-      .select("id", { count: "exact", head: true })
-      .eq("batch_id", batch_id)
-      .eq("status", "active")
+    let liveActiveCount = 0
+    try {
+      const { count } = await db
+        .from("enrollments")
+        .select("id", { count: "exact", head: true })
+        .eq("batch_id", cleanBatchId)
+        .eq("status", "active")
+
+      if (typeof count === "number") {
+        liveActiveCount = count
+      } else {
+        const { count: uCount } = await auth.supabase
+          .from("enrollments")
+          .select("id", { count: "exact", head: true })
+          .eq("batch_id", cleanBatchId)
+          .eq("status", "active")
+        if (typeof uCount === "number") liveActiveCount = uCount
+      }
+    } catch (cntErr) {
+      console.warn("Capacity check notice:", cntErr)
+    }
 
     const maxSeats = batch.max_seats || 50
     const currentOccupied = Math.max(Number(batch.current_seats) || 0, Number(liveActiveCount) || 0)
@@ -162,51 +200,95 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // 3. Fetch branch info
+    // 3. Fetch branch info safely
     const effectiveBranchId = branch_id || batch.branch_id || null
-    let branchName = batch.branch?.name || "Main Branch"
-    if (effectiveBranchId && !batch.branch?.name) {
-      const { data: br } = await admin.from("branches").select("name").eq("id", effectiveBranchId).maybeSingle()
-      if (br?.name) branchName = br.name
+    let branchName = "Main Branch"
+    if (effectiveBranchId) {
+      try {
+        const { data: br } = await db.from("branches").select("name").eq("id", effectiveBranchId).maybeSingle()
+        if (br?.name) {
+          branchName = br.name
+        } else {
+          const { data: uBr } = await auth.supabase.from("branches").select("name").eq("id", effectiveBranchId).maybeSingle()
+          if (uBr?.name) branchName = uBr.name
+        }
+      } catch {}
     }
 
     // 4. Calculate starting roll number for this batch
-    const { data: bEnrs } = await admin
-      .from("enrollments")
-      .select("roll_no")
-      .eq("batch_id", batch_id)
-
     let highestRoll = 0
-    if (bEnrs && bEnrs.length > 0) {
-      bEnrs.forEach((e: any) => {
-        const r = Number(e.roll_no)
-        if (!isNaN(r) && r > highestRoll) highestRoll = r
-      })
-    }
+    try {
+      let bEnrs: any[] | null = null
+      const { data: enrData } = await db
+        .from("enrollments")
+        .select("roll_no")
+        .eq("batch_id", cleanBatchId)
+
+      if (enrData) {
+        bEnrs = enrData
+      } else {
+        const { data: uEnrs } = await auth.supabase
+          .from("enrollments")
+          .select("roll_no")
+          .eq("batch_id", cleanBatchId)
+        bEnrs = uEnrs
+      }
+
+      if (bEnrs && bEnrs.length > 0) {
+        bEnrs.forEach((e: any) => {
+          const r = Number(e.roll_no)
+          if (!isNaN(r) && r > highestRoll) highestRoll = r
+        })
+      }
+    } catch {}
+
     if (highestRoll === 0) {
-      highestRoll = bEnrs?.length || currentOccupied || 0
+      highestRoll = currentOccupied || 0
     }
 
     // 5. Calculate starting Student ID sequence (MS-XXXXX)
-    const { data: lastStudents } = await admin
-      .from("students")
-      .select("student_id")
-      .ilike("student_id", "MS-%")
-      .order("student_id", { ascending: false })
-      .limit(20)
-
     let maxSeq = 0
-    if (lastStudents && lastStudents.length > 0) {
-      for (const s of lastStudents) {
-        const numPart = parseInt(s.student_id.replace(/^MS-/i, ""), 10)
-        if (!isNaN(numPart) && numPart > maxSeq) {
-          maxSeq = numPart
+    try {
+      let lastStudents: any[] | null = null
+      const { data: lsData } = await db
+        .from("students")
+        .select("student_id")
+        .ilike("student_id", "MS-%")
+        .order("student_id", { ascending: false })
+        .limit(20)
+
+      if (lsData) {
+        lastStudents = lsData
+      } else {
+        const { data: uLs } = await auth.supabase
+          .from("students")
+          .select("student_id")
+          .ilike("student_id", "MS-%")
+          .order("student_id", { ascending: false })
+          .limit(20)
+        lastStudents = uLs
+      }
+
+      if (lastStudents && lastStudents.length > 0) {
+        for (const s of lastStudents) {
+          const numPart = parseInt(s.student_id.replace(/^MS-/i, ""), 10)
+          if (!isNaN(numPart) && numPart > maxSeq) {
+            maxSeq = numPart
+          }
         }
       }
-    }
+    } catch {}
+
     if (maxSeq === 0) {
-      const { count } = await admin.from("students").select("*", { count: "exact", head: true })
-      maxSeq = count || 0
+      try {
+        const { count } = await db.from("students").select("*", { count: "exact", head: true })
+        if (typeof count === "number") {
+          maxSeq = count
+        } else {
+          const { count: uCount } = await auth.supabase.from("students").select("*", { count: "exact", head: true })
+          maxSeq = uCount || 0
+        }
+      } catch {}
     }
 
     const today = new Date()
@@ -277,52 +359,63 @@ export async function POST(req: NextRequest) {
       const studentEmail = (row.email || "").trim() || `${studentIdStr.toLowerCase()}@medhashiree.local`
       const assignedRoll = (row.roll_no && Number(row.roll_no) > 0) ? Number(row.roll_no) : nextRollSeq
 
-      // A. Create or update auth user via Supabase Admin Auth
+      // A. Create or update auth user via Supabase Admin Auth (if service key available)
       let authUserId: string | null = null
-      try {
-        const { data: authUser, error: authErr } = await admin.auth.admin.createUser({
-          email: studentEmail,
-          password: password,
-          email_confirm: true,
-          user_metadata: {
-            full_name: trimmedName,
-            user_id: studentIdStr,
-            phone: effectiveStudentPhone,
-            initial_password: password
-          }
-        })
+      if (admin) {
+        try {
+          const { data: authUser, error: authErr } = await admin.auth.admin.createUser({
+            email: studentEmail,
+            password: password,
+            email_confirm: true,
+            user_metadata: {
+              full_name: trimmedName,
+              user_id: studentIdStr,
+              phone: effectiveStudentPhone,
+              initial_password: password
+            }
+          })
 
-        if (!authErr && authUser?.user?.id) {
-          authUserId = authUser.user.id
-        } else if (authErr) {
-          const { data: userList } = await admin.auth.admin.listUsers()
-          const existing = userList?.users?.find(u => u.email?.toLowerCase() === studentEmail.toLowerCase())
-          if (existing) {
-            await admin.auth.admin.updateUserById(existing.id, {
-              password: password,
-              user_metadata: {
-                full_name: trimmedName,
-                user_id: studentIdStr,
-                phone: effectiveStudentPhone,
-                initial_password: password
-              }
-            })
-            authUserId = existing.id
+          if (!authErr && authUser?.user?.id) {
+            authUserId = authUser.user.id
+          } else if (authErr) {
+            const { data: userList } = await admin.auth.admin.listUsers()
+            const existing = userList?.users?.find((u: any) => u.email?.toLowerCase() === studentEmail.toLowerCase())
+            if (existing) {
+              await admin.auth.admin.updateUserById(existing.id, {
+                password: password,
+                user_metadata: {
+                  full_name: trimmedName,
+                  user_id: studentIdStr,
+                  phone: effectiveStudentPhone,
+                  initial_password: password
+                }
+              })
+              authUserId = existing.id
+            }
           }
+        } catch (authException) {
+          console.warn(`Auth user setup notice for ${studentIdStr}:`, authException)
         }
-      } catch (authException) {
-        console.warn(`Auth user setup notice for ${studentIdStr}:`, authException)
       }
 
       // B. Upsert into user_profiles
       try {
-        await admin.from("user_profiles").upsert({
+        const { error: upErr } = await db.from("user_profiles").upsert({
           user_id: studentIdStr,
           email: studentEmail,
           name: trimmedName,
           phone: effectiveStudentPhone,
           auth_user_id: authUserId
         })
+        if (upErr && db !== auth.supabase) {
+          await auth.supabase.from("user_profiles").upsert({
+            user_id: studentIdStr,
+            email: studentEmail,
+            name: trimmedName,
+            phone: effectiveStudentPhone,
+            auth_user_id: authUserId
+          })
+        }
       } catch {}
 
       // C. Insert student record into students table
@@ -355,7 +448,7 @@ export async function POST(req: NextRequest) {
         qr_code: studentQr,
       }
 
-      let { data: createdStudent, error: sErr } = await admin
+      let { data: createdStudent, error: sErr } = await db
         .from("students")
         .insert(studentPayload)
         .select()
@@ -363,9 +456,22 @@ export async function POST(req: NextRequest) {
 
       if (sErr && (sErr.message?.includes("qr_code") || (sErr as any).code === "PGRST204")) {
         delete studentPayload.qr_code
-        const retryS = await admin.from("students").insert(studentPayload).select().single()
+        const retryS = await db.from("students").insert(studentPayload).select().single()
         createdStudent = retryS.data
         sErr = retryS.error
+      }
+
+      if (sErr || !createdStudent) {
+        const retryUser = await auth.supabase.from("students").insert(studentPayload).select().single()
+        if (retryUser.data) {
+          createdStudent = retryUser.data
+          sErr = null
+        } else if (retryUser.error && (retryUser.error.message?.includes("qr_code") || (retryUser.error as any).code === "PGRST204")) {
+          delete studentPayload.qr_code
+          const finalRetry = await auth.supabase.from("students").insert(studentPayload).select().single()
+          createdStudent = finalRetry.data
+          sErr = finalRetry.error
+        }
       }
 
       if (sErr || !createdStudent) {
@@ -375,7 +481,7 @@ export async function POST(req: NextRequest) {
       // D. Insert into enrollments table
       const enrPayload: Record<string, any> = {
         student_id: createdStudent.id,
-        batch_id: batch_id,
+        batch_id: cleanBatchId,
         status: "active",
         roll_no: assignedRoll,
         qr_code: studentQr,
@@ -384,7 +490,7 @@ export async function POST(req: NextRequest) {
         enrPayload.branch_id = effectiveBranchId
       }
 
-      let { data: createdEnr, error: enrErr } = await admin
+      let { data: createdEnr, error: enrErr } = await db
         .from("enrollments")
         .insert(enrPayload)
         .select()
@@ -395,8 +501,23 @@ export async function POST(req: NextRequest) {
         delete enrPayload.roll_no
         delete enrPayload.branch_id
         delete enrPayload.qr_code
-        const retry = await admin.from("enrollments").insert(enrPayload).select().single()
+        const retry = await db.from("enrollments").insert(enrPayload).select().single()
         createdEnr = retry.data
+      }
+
+      if (enrErr || !createdEnr) {
+        const retryUser = await auth.supabase.from("enrollments").insert(enrPayload).select().single()
+        if (retryUser.data) {
+          createdEnr = retryUser.data
+          enrErr = null
+        } else if (retryUser.error && (retryUser.error.message?.includes("roll_no") || retryUser.error.message?.includes("branch_id") || retryUser.error.message?.includes("qr_code") || (retryUser.error as any).code === "PGRST204")) {
+          delete enrPayload.roll_no
+          delete enrPayload.branch_id
+          delete enrPayload.qr_code
+          const finalRetry = await auth.supabase.from("enrollments").insert(enrPayload).select().single()
+          createdEnr = finalRetry.data
+          enrErr = finalRetry.error
+        }
       }
 
       // E. Fee Dues insertion if student has due amount for the month
@@ -404,15 +525,26 @@ export async function POST(req: NextRequest) {
 
       if (studentDue > 0) {
         try {
-          await admin.from("fee_dues").insert({
+          const { error: dueErr } = await db.from("fee_dues").insert({
             student_id: createdStudent.id,
-            batch_id: batch_id,
+            batch_id: cleanBatchId,
             due_month: curMonthStr,
             due_amount: studentDue,
             paid_amount: 0,
             due_date: defaultDueDate,
             status: "pending"
           })
+          if (dueErr) {
+            await auth.supabase.from("fee_dues").insert({
+              student_id: createdStudent.id,
+              batch_id: cleanBatchId,
+              due_month: curMonthStr,
+              due_amount: studentDue,
+              paid_amount: 0,
+              due_date: defaultDueDate,
+              status: "pending"
+            })
+          }
         } catch (dueErr) {
           console.warn("Due insert notice:", dueErr)
         }
@@ -468,7 +600,12 @@ export async function POST(req: NextRequest) {
 
     // 7. Update batch seat count accurately
     const finalOccupiedSeats = Math.min(maxSeats, currentOccupied + results.length)
-    await admin.from("batches").update({ current_seats: finalOccupiedSeats }).eq("id", batch_id)
+    try {
+      const { error: updErr } = await db.from("batches").update({ current_seats: finalOccupiedSeats }).eq("id", cleanBatchId)
+      if (updErr) {
+        await auth.supabase.from("batches").update({ current_seats: finalOccupiedSeats }).eq("id", cleanBatchId)
+      }
+    } catch {}
 
     return NextResponse.json({
       success: true,

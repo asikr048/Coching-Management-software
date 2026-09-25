@@ -17,7 +17,7 @@ const isUUID = (val: any): boolean => {
  * Returns highest roll and next roll (highest + 1) for a batch
  */
 export async function GET(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
   if (isAuthError(auth)) return auth;
 
   try {
@@ -28,16 +28,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Valid batch_id is required" }, { status: 400 })
     }
 
-    const admin = createAdminClient()
+    const hasServiceKey = Boolean(
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      !process.env.SUPABASE_SERVICE_ROLE_KEY.includes("placeholder")
+    )
+    const db = hasServiceKey ? createAdminClient() : auth.supabase
 
     // Query all enrollments for this batch
-    const { data: enrs, error } = await admin
+    let enrs: any[] | null = null
+    const { data: eData, error } = await db
       .from("enrollments")
       .select("id, roll_no, status")
       .eq("batch_id", batchId)
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+    if (eData) {
+      enrs = eData
+    } else {
+      const { data: userEnrs, error: uErr } = await auth.supabase
+        .from("enrollments")
+        .select("id, roll_no, status")
+        .eq("batch_id", batchId)
+      if (userEnrs) {
+        enrs = userEnrs
+      } else if (error || uErr) {
+        return NextResponse.json({ error: error?.message || uErr?.message }, { status: 500 })
+      }
     }
 
     let highestRoll = 0
@@ -77,14 +92,18 @@ export async function GET(req: NextRequest) {
  * 2. action: "add_enrollment" - enrolls student into an additional batch
  */
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
   if (isAuthError(auth)) return auth;
 
   try {
     const body = await req.json()
     const { action = "change_batch", student_id, enrollment_id, new_batch_id, batch_id, custom_roll_no } = body
 
-    const admin = createAdminClient()
+    const hasServiceKey = Boolean(
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      !process.env.SUPABASE_SERVICE_ROLE_KEY.includes("placeholder")
+    )
+    const admin = hasServiceKey ? createAdminClient() : auth.supabase
 
     if (!student_id) {
       return NextResponse.json({ error: "student_id is required." }, { status: 400 })
@@ -359,7 +378,7 @@ export async function POST(req: NextRequest) {
  * - If student has no other active batches, primary roll is cleared to null.
  */
 export async function DELETE(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
   if (isAuthError(auth)) return auth;
 
   try {
@@ -373,7 +392,11 @@ export async function DELETE(req: NextRequest) {
       )
     }
 
-    const admin = createAdminClient()
+    const hasServiceKey = Boolean(
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      !process.env.SUPABASE_SERVICE_ROLE_KEY.includes("placeholder")
+    )
+    const admin = hasServiceKey ? createAdminClient() : auth.supabase
 
     // 1. Verify enrollment exists
     const { data: enr, error: fetchErr } = await admin
