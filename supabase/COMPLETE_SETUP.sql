@@ -1071,6 +1071,50 @@ ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES 
 ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
 ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
+-- 4.23 slider_images columns
+ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS title TEXT NOT NULL DEFAULT '';
+ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS subtitle TEXT DEFAULT '';
+ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS link_url TEXT DEFAULT '';
+ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.24 blogs columns
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS slug TEXT;
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS content TEXT;
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS excerpt TEXT;
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS author_name TEXT;
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.blogs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.25 achievements columns
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS year TEXT;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS sort_order INTEGER DEFAULT 0;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.achievements ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.26 feedback columns
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS student_name TEXT;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS message TEXT;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS rating INTEGER DEFAULT 5;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS is_public BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.27 site_settings columns
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS key TEXT;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS value TEXT;
+ALTER TABLE public.site_settings ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+
 
 -- ==============================================================================
 -- 5. SAFELY UPDATE CHECK CONSTRAINTS
