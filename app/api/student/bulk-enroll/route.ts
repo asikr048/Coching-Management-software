@@ -479,12 +479,15 @@ export async function POST(req: NextRequest) {
       }
 
       // D. Insert into enrollments table
+      const finalMonthlyFee = Number(batch.monthly_fee) || 0
       const enrPayload: Record<string, any> = {
         student_id: createdStudent.id,
         batch_id: cleanBatchId,
         status: "active",
         roll_no: assignedRoll,
         qr_code: studentQr,
+        enrollment_date: admissionDateStr,
+        final_monthly_fee: finalMonthlyFee,
       }
       if (effectiveBranchId) {
         enrPayload.branch_id = effectiveBranchId
@@ -496,13 +499,27 @@ export async function POST(req: NextRequest) {
         .select()
         .single()
 
-      // Fallback if schema cache doesn't have roll_no, branch_id or qr_code
-      if (enrErr && (enrErr.message?.includes("roll_no") || enrErr.message?.includes("branch_id") || enrErr.message?.includes("qr_code") || (enrErr as any).code === "PGRST204")) {
+      // Fallback if schema cache doesn't have roll_no, branch_id, qr_code, or final_monthly_fee
+      if (enrErr && (
+        enrErr.message?.includes("final_monthly_fee") ||
+        enrErr.message?.includes("enrollment_date") ||
+        enrErr.message?.includes("roll_no") ||
+        enrErr.message?.includes("branch_id") ||
+        enrErr.message?.includes("qr_code") ||
+        (enrErr as any).code === "PGRST204"
+      )) {
+        if (enrErr.message?.includes("final_monthly_fee") && enrErr.message?.includes("does not exist")) {
+          delete enrPayload.final_monthly_fee
+        }
+        if (enrErr.message?.includes("enrollment_date") && enrErr.message?.includes("does not exist")) {
+          delete enrPayload.enrollment_date
+        }
         delete enrPayload.roll_no
         delete enrPayload.branch_id
         delete enrPayload.qr_code
         const retry = await db.from("enrollments").insert(enrPayload).select().single()
         createdEnr = retry.data
+        enrErr = retry.error
       }
 
       if (enrErr || !createdEnr) {
@@ -510,7 +527,20 @@ export async function POST(req: NextRequest) {
         if (retryUser.data) {
           createdEnr = retryUser.data
           enrErr = null
-        } else if (retryUser.error && (retryUser.error.message?.includes("roll_no") || retryUser.error.message?.includes("branch_id") || retryUser.error.message?.includes("qr_code") || (retryUser.error as any).code === "PGRST204")) {
+        } else if (retryUser.error && (
+          retryUser.error.message?.includes("final_monthly_fee") ||
+          retryUser.error.message?.includes("enrollment_date") ||
+          retryUser.error.message?.includes("roll_no") ||
+          retryUser.error.message?.includes("branch_id") ||
+          retryUser.error.message?.includes("qr_code") ||
+          (retryUser.error as any).code === "PGRST204"
+        )) {
+          if (retryUser.error.message?.includes("final_monthly_fee") && retryUser.error.message?.includes("does not exist")) {
+            delete enrPayload.final_monthly_fee
+          }
+          if (retryUser.error.message?.includes("enrollment_date") && retryUser.error.message?.includes("does not exist")) {
+            delete enrPayload.enrollment_date
+          }
           delete enrPayload.roll_no
           delete enrPayload.branch_id
           delete enrPayload.qr_code

@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
       // Verify batch exists
       const { data: batch, error: bErr } = await admin
         .from("batches")
-        .select("id, name, branch_id, current_seats, max_seats")
+        .select("id, name, branch_id, current_seats, max_seats, monthly_fee")
         .eq("id", targetBatchId)
         .maybeSingle()
 
@@ -309,6 +309,7 @@ export async function POST(req: NextRequest) {
         } catch {}
       }
 
+      const finalMonthlyFee = Number(batch?.monthly_fee) || 0
       const enrPayload: Record<string, any> = {
         student_id,
         batch_id: targetBatchId,
@@ -316,6 +317,8 @@ export async function POST(req: NextRequest) {
         roll_no: finalRoll,
         status: "active",
         qr_code: studentQr,
+        enrollment_date: new Date().toISOString().split("T")[0],
+        final_monthly_fee: finalMonthlyFee,
       }
 
       let { data: newEnr, error: insErr } = await admin
@@ -324,7 +327,18 @@ export async function POST(req: NextRequest) {
         .select("*, batch:batches(name, subject, monthly_fee, admission_fee, class_level)")
         .single()
 
-      if (insErr && (insErr.message?.includes("qr_code") || (insErr as any).code === "PGRST204")) {
+      if (insErr && (
+        insErr.message?.includes("final_monthly_fee") ||
+        insErr.message?.includes("enrollment_date") ||
+        insErr.message?.includes("qr_code") ||
+        (insErr as any).code === "PGRST204"
+      )) {
+        if (insErr.message?.includes("final_monthly_fee") && insErr.message?.includes("does not exist")) {
+          delete enrPayload.final_monthly_fee
+        }
+        if (insErr.message?.includes("enrollment_date") && insErr.message?.includes("does not exist")) {
+          delete enrPayload.enrollment_date
+        }
         delete enrPayload.qr_code
         const retry = await admin
           .from("enrollments")

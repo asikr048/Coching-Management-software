@@ -33,6 +33,12 @@ export async function POST(req: NextRequest) {
     if (sub.status === "approved") {
       // Ensure enrollment or course purchase is confirmed in database
       if (sub.batch_id) {
+        let batchFee = 0
+        try {
+          const { data: bInfo } = await admin.from("batches").select("monthly_fee").eq("id", sub.batch_id).maybeSingle()
+          if (bInfo) batchFee = Number(bInfo.monthly_fee) || 0
+        } catch {}
+
         const { data: existingEnr } = await admin
           .from("enrollments")
           .select("id, status")
@@ -45,6 +51,8 @@ export async function POST(req: NextRequest) {
             student_id: sub.student_id,
             batch_id: sub.batch_id,
             status: "active",
+            enrollment_date: new Date().toISOString().split("T")[0],
+            final_monthly_fee: batchFee,
           }, { onConflict: "student_id,batch_id" })
         } else if (existingEnr.status !== "active") {
           await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
@@ -197,11 +205,31 @@ export async function POST(req: NextRequest) {
         nextRoll = 1
       }
 
+      let batchMonthlyFee = 0
+      let batchAdmissionFee = 0
+      let batchTotalFee = 0
+      let bData: any = null
+      try {
+        const { data: fetchedB } = await admin
+          .from("batches")
+          .select("id, name, monthly_fee, admission_fee, current_seats, max_seats, origin_batch_id")
+          .eq("id", sub.batch_id)
+          .maybeSingle()
+        if (fetchedB) {
+          bData = fetchedB
+          batchMonthlyFee = Number(bData.monthly_fee) || 0
+          batchAdmissionFee = Number(bData.admission_fee) || 0
+          batchTotalFee = batchMonthlyFee + batchAdmissionFee
+        }
+      } catch {}
+
       const enrPayload: Record<string, any> = {
         student_id: sub.student_id,
         batch_id: sub.batch_id,
         status: "active",
         roll_no: nextRoll,
+        enrollment_date: new Date().toISOString().split("T")[0],
+        final_monthly_fee: batchMonthlyFee,
       }
       if (sub.branch_id) {
         enrPayload.branch_id = sub.branch_id
@@ -223,13 +251,17 @@ export async function POST(req: NextRequest) {
         })
         .eq("id", sub.student_id)
 
-      // If schema cache lacks roll_no or branch_id column on enrollments, retry gracefully
+      // If schema cache lacks roll_no, branch_id, or final_monthly_fee column on enrollments, retry gracefully
       if (enrErr && (
+        enrErr.message?.includes("final_monthly_fee") ||
+        enrErr.message?.includes("enrollment_date") ||
         enrErr.message?.includes("roll_no") ||
         enrErr.message?.includes("branch_id") || 
         enrErr.message?.includes("schema cache") || 
         (enrErr as any).code === "PGRST204"
       )) {
+        if (enrErr.message?.includes("final_monthly_fee") && enrErr.message?.includes("does not exist")) delete enrPayload.final_monthly_fee
+        if (enrErr.message?.includes("enrollment_date") && enrErr.message?.includes("does not exist")) delete enrPayload.enrollment_date
         if (enrErr.message?.includes("roll_no")) delete enrPayload.roll_no
         if (enrErr.message?.includes("branch_id")) delete enrPayload.branch_id
         const retryRes = await admin.from("enrollments").upsert(
@@ -253,26 +285,15 @@ export async function POST(req: NextRequest) {
           await admin.from("enrollments").insert({
             student_id: sub.student_id,
             batch_id: sub.batch_id,
-            status: "active"
+            status: "active",
+            final_monthly_fee: batchMonthlyFee
           })
         }
       }
 
-      // 2. Fetch batch fee details & update seat counter if new enrollment
-      let batchMonthlyFee = 0
-      let batchAdmissionFee = 0
-      let batchTotalFee = 0
+      // 2. Update seat counter if new enrollment
       try {
-        const { data: bData } = await admin
-          .from("batches")
-          .select("id, name, monthly_fee, admission_fee, current_seats, max_seats, origin_batch_id")
-          .eq("id", sub.batch_id)
-          .maybeSingle()
-
         if (bData) {
-          batchMonthlyFee = Number(bData.monthly_fee) || 0
-          batchAdmissionFee = Number(bData.admission_fee) || 0
-          batchTotalFee = batchMonthlyFee + batchAdmissionFee
           if (isEnrollment) {
             const safeSeats = bData.max_seats ? Math.min(bData.max_seats, (bData.current_seats || 0) + 1) : (bData.current_seats || 0) + 1
             await admin.from("batches").update({ current_seats: safeSeats }).eq("id", sub.batch_id)

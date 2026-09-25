@@ -881,7 +881,7 @@ export default function NewStudentForm({
       // 1. Strict Seat Capacity & Admission Status Verification
       const { data: targetBatch, error: targetBatchErr } = await supabase
         .from("batches")
-        .select("id, name, max_seats, current_seats, status")
+        .select("id, name, max_seats, current_seats, status, monthly_fee, admission_fee, branch_id")
         .eq("id", form.batch_id)
         .maybeSingle()
 
@@ -1088,14 +1088,17 @@ export default function NewStudentForm({
         rollNo: finalRoll || 1,
         studentUuid: sid,
       })
+      const finalMonthlyFee = Number(batch?.monthly_fee ?? targetBatch?.monthly_fee ?? 0) || 0
       const enrollPayload: Record<string, any> = {
         student_id: sid,
         batch_id: form.batch_id,
         status: "active",
         qr_code: enrQrCode,
+        enrollment_date: new Date().toISOString().split("T")[0],
+        final_monthly_fee: finalMonthlyFee,
       }
-      if (selectedBranchId || batch?.branch_id) {
-        enrollPayload.branch_id = selectedBranchId || batch?.branch_id || null
+      if (selectedBranchId || batch?.branch_id || targetBatch?.branch_id) {
+        enrollPayload.branch_id = selectedBranchId || batch?.branch_id || targetBatch?.branch_id || null
       }
       if (finalRoll != null) {
         enrollPayload.roll_no = finalRoll
@@ -1103,14 +1106,22 @@ export default function NewStudentForm({
 
       let { error: eErr } = await supabase.from("enrollments").insert(enrollPayload)
 
-      // Fallback if roll_no, qr_code or branch_id column doesn't exist in live Supabase enrollments schema cache
+      // Fallback if final_monthly_fee, enrollment_date, roll_no, qr_code or branch_id column doesn't exist in live Supabase enrollments schema cache
       if (eErr && (
+        eErr.message?.includes("final_monthly_fee") ||
+        eErr.message?.includes("enrollment_date") ||
         eErr.message?.includes("roll_no") ||
         eErr.message?.includes("branch_id") || 
         eErr.message?.includes("qr_code") || 
         eErr.message?.includes("schema cache") || 
         (eErr as any).code === "PGRST204"
       )) {
+        if (eErr.message?.includes("final_monthly_fee") && eErr.message?.includes("does not exist")) {
+          delete enrollPayload.final_monthly_fee
+        }
+        if (eErr.message?.includes("enrollment_date") && eErr.message?.includes("does not exist")) {
+          delete enrollPayload.enrollment_date
+        }
         if (eErr.message?.includes("qr_code")) {
           delete enrollPayload.qr_code
         }
@@ -1123,12 +1134,13 @@ export default function NewStudentForm({
         const retryRes = await supabase.from("enrollments").insert(enrollPayload)
         eErr = retryRes.error
 
-        // If schema cache still complains, insert minimal payload
+        // If schema cache still complains, insert minimal payload with final_monthly_fee
         if (eErr && (eErr.message?.includes("schema cache") || (eErr as any).code === "PGRST204")) {
           const minimalRes = await supabase.from("enrollments").insert({
             student_id: sid,
             batch_id: form.batch_id,
-            status: "active"
+            status: "active",
+            final_monthly_fee: finalMonthlyFee
           })
           eErr = minimalRes.error
         }
