@@ -71,11 +71,24 @@ export function getGradeRemarks(obtained: number, total: number): string {
  * Safely extracts the weekly schedule array from exam.result_note tag:
  * [WEEKLY_SCHEDULE:[{...}]]
  */
+/**
+ * Safely extracts the weekly or routine schedule array from exam.result_note tag:
+ * [WEEKLY_SCHEDULE:[{...}]] or [ROUTINE_SCHEDULE:[{...}]]
+ */
 export function extractWeeklyScheduleFromNote(note?: string | null): any[] | null {
-  if (!note || typeof note !== "string" || !note.includes("[WEEKLY_SCHEDULE:")) return null
+  if (!note || typeof note !== "string") return null
+  const tag = note.includes("[WEEKLY_SCHEDULE:")
+    ? "[WEEKLY_SCHEDULE:"
+    : note.includes("[ROUTINE_SCHEDULE:")
+    ? "[ROUTINE_SCHEDULE:"
+    : null
+  if (!tag) return null
 
-  // 1. Try matching [WEEKLY_SCHEDULE:([...])]
-  const match = note.match(/\[WEEKLY_SCHEDULE:(\[[\s\S]*?\])\]/)
+  // 1. Try regex match
+  const regex = tag === "[WEEKLY_SCHEDULE:"
+    ? /\[WEEKLY_SCHEDULE:(\[[\s\S]*?\])\]/
+    : /\[ROUTINE_SCHEDULE:(\[[\s\S]*?\])\]/
+  const match = note.match(regex)
   if (match && match[1]) {
     try {
       const parsed = JSON.parse(match[1])
@@ -84,9 +97,9 @@ export function extractWeeklyScheduleFromNote(note?: string | null): any[] | nul
   }
 
   // 2. Bracket-balancing parser for malformed or nested tags
-  const startIdx = note.indexOf("[WEEKLY_SCHEDULE:")
+  const startIdx = note.indexOf(tag)
   if (startIdx !== -1) {
-    const after = note.slice(startIdx + "[WEEKLY_SCHEDULE:".length)
+    const after = note.slice(startIdx + tag.length)
     const jsonStart = after.indexOf("[")
     if (jsonStart !== -1) {
       let depth = 0
@@ -110,14 +123,48 @@ export function extractWeeklyScheduleFromNote(note?: string | null): any[] | nul
 }
 
 /**
- * Safely removes [WEEKLY_SCHEDULE:...] and related metadata tags from result_note
+ * Safely removes [WEEKLY_SCHEDULE:...], [ROUTINE_SCHEDULE:...], and related metadata tags from result_note
  */
 export function cleanWeeklyScheduleFromNote(note?: string | null): string {
   if (!note || typeof note !== "string") return ""
   return note
     .replace(/\[WEEKLY_SCHEDULE:(\[[\s\S]*?\])\]/g, "")
     .replace(/\[WEEKLY_SCHEDULE:[^\]]*\]\]?/g, "")
+    .replace(/\[ROUTINE_SCHEDULE:(\[[\s\S]*?\])\]/g, "")
+    .replace(/\[ROUTINE_SCHEDULE:[^\]]*\]\]?/g, "")
     .replace(/\[WEEKLY_DAYS:[^\]]*\]/g, "")
+}
+
+/**
+ * Extract exam schedule type ('one_time' | 'weekly' | 'routine')
+ */
+export function extractExamScheduleType(note?: string | null, fallbackType?: string | null): "one_time" | "weekly" | "routine" {
+  if (note && typeof note === "string") {
+    const m = note.match(/\[EXAM_SCHEDULE_TYPE:([^\]\s]+)\]/)
+    if (m && m[1]) return m[1].trim() as any
+    if (note.includes("[ROUTINE_SCHEDULE:")) return "routine"
+  }
+  if (fallbackType === "routine" || fallbackType === "weekly") return fallbackType
+  return "one_time"
+}
+
+/**
+ * Helper to get Bengali day and standard English info from a date string (YYYY-MM-DD)
+ */
+export function getBengaliDayFromDate(dateStr: string): { bn: string; en: string; id: string } {
+  if (!dateStr) return { bn: "", en: "", id: "" }
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return { bn: "", en: "", id: "" }
+  const days = [
+    { id: "sunday", bn: "রবিবার", en: "Sunday" },
+    { id: "monday", bn: "সোমবার", en: "Monday" },
+    { id: "tuesday", bn: "মঙ্গলবার", en: "Tuesday" },
+    { id: "wednesday", bn: "বুধবার", en: "Wednesday" },
+    { id: "thursday", bn: "বৃহস্পতিবার", en: "Thursday" },
+    { id: "friday", bn: "শুক্রবার", en: "Friday" },
+    { id: "saturday", bn: "শনিবার", en: "Saturday" },
+  ]
+  return days[d.getDay()]
 }
 
 /**

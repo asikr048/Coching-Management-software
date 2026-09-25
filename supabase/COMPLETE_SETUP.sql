@@ -1,39 +1,81 @@
--- ==================== 001_schema.sql ====================
--- COACHING MANAGEMENT SOFTWARE - COMPLETE DATABASE SCHEMA
+-- ==============================================================================
+-- PROTTASHA COACHING MANAGEMENT SOFTWARE - COMPLETE DATABASE SETUP
+-- Safe, 100% Idempotent Script for Supabase SQL Editor
+-- Handles existing tables, existing owner account, and partial migrations.
+-- ==============================================================================
+
+-- 1. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-CREATE TABLE branches (
+-- 2. SEQUENCES
+CREATE SEQUENCE IF NOT EXISTS user_id_seq START 10001;
+
+-- ==============================================================================
+-- 3. TABLES (CREATE IF NOT EXISTS)
+-- ==============================================================================
+
+-- 3.1 BRANCHES
+CREATE TABLE IF NOT EXISTS public.branches (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
   address TEXT,
+  location TEXT,
+  description TEXT,
   phone TEXT,
   email TEXT,
   is_active BOOLEAN DEFAULT TRUE,
+  branch_director TEXT,
+  director_phone TEXT,
+  manager TEXT,
+  manager_phone TEXT,
+  whatsapp TEXT,
+  established_year TEXT DEFAULT '2018',
+  contact_info JSONB DEFAULT '{}'::jsonb,
+  sms_gateway_config JSONB DEFAULT '{}'::jsonb,
+  is_pending_deletion BOOLEAN DEFAULT false,
+  deletion_scheduled_at TIMESTAMPTZ,
+  deletion_requested_at TIMESTAMPTZ,
+  deletion_requested_by TEXT,
+  deletion_reason TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE staff (
+-- 3.2 STAFF
+CREATE TABLE IF NOT EXISTS public.staff (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   auth_user_id UUID UNIQUE,
-  branch_id UUID REFERENCES branches(id),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  branch_ids UUID[] DEFAULT '{}'::uuid[],
   name TEXT NOT NULL,
   email TEXT UNIQUE NOT NULL,
   phone TEXT,
-  role TEXT NOT NULL CHECK (role IN ('owner','receptionist','teacher','accountant','course_teacher')),
+  role TEXT NOT NULL DEFAULT 'owner',
   salary NUMERIC(10,2) DEFAULT 0,
   commission_rate NUMERIC(5,2) DEFAULT 0,
   subject TEXT,
+  has_financial_access BOOLEAN DEFAULT FALSE,
+  has_super_financial_access BOOLEAN DEFAULT FALSE,
   is_active BOOLEAN DEFAULT TRUE,
   joined_at DATE DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE students (
+-- 3.3 STAFF BRANCHES JUNCTION
+CREATE TABLE IF NOT EXISTS public.staff_branches (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  staff_id UUID REFERENCES public.staff(id) ON DELETE CASCADE,
+  branch_id UUID REFERENCES public.branches(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(staff_id, branch_id)
+);
+
+-- 3.4 STUDENTS
+CREATE TABLE IF NOT EXISTS public.students (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  branch_id UUID REFERENCES branches(id),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   student_id TEXT UNIQUE NOT NULL DEFAULT '',
   name TEXT NOT NULL,
   email TEXT,
@@ -42,7 +84,7 @@ CREATE TABLE students (
   guardian_phone TEXT NOT NULL,
   guardian_relation TEXT DEFAULT 'Parent',
   date_of_birth DATE,
-  gender TEXT CHECK (gender IN ('male','female','other')),
+  gender TEXT,
   address TEXT,
   school_college TEXT,
   class_level TEXT,
@@ -51,58 +93,78 @@ CREATE TABLE students (
   biometric_enrolled BOOLEAN DEFAULT FALSE,
   referral_code TEXT UNIQUE,
   referred_by_code TEXT,
-  referred_by_student_id UUID REFERENCES students(id),
+  referred_by_student_id UUID REFERENCES public.students(id),
+  roll_no INTEGER,
+  batch_roll INTEGER,
+  qr_code TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   enrollment_date DATE DEFAULT CURRENT_DATE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE rooms (
+-- 3.5 ROOMS
+CREATE TABLE IF NOT EXISTS public.rooms (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  branch_id UUID REFERENCES branches(id),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   capacity INTEGER DEFAULT 30,
   is_active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE batches (
+-- 3.6 BATCHES
+CREATE TABLE IF NOT EXISTS public.batches (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  branch_id UUID REFERENCES branches(id),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   subject TEXT,
   class_level TEXT,
-  teacher_id UUID REFERENCES staff(id),
-  room_id UUID REFERENCES rooms(id),
+  teacher_id UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  room_id UUID REFERENCES public.rooms(id) ON DELETE SET NULL,
   schedule TEXT,
+  schedule_days TEXT DEFAULT '',
+  schedule_time TEXT DEFAULT '',
   start_date DATE,
   end_date DATE,
   max_seats INTEGER DEFAULT 30,
   current_seats INTEGER DEFAULT 0,
   monthly_fee NUMERIC(10,2) DEFAULT 0,
   admission_fee NUMERIC(10,2) DEFAULT 0,
-  fee_type TEXT DEFAULT 'monthly' CHECK (fee_type IN ('monthly','quarterly','one_time')),
+  fee_type TEXT DEFAULT 'monthly',
   is_active BOOLEAN DEFAULT TRUE,
+  description TEXT DEFAULT '',
+  image_url TEXT DEFAULT '',
+  status TEXT DEFAULT 'ongoing',
+  classroom TEXT DEFAULT '',
+  branch_seats JSONB DEFAULT '{}'::jsonb,
+  approval_status TEXT DEFAULT 'approved',
+  origin_branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  origin_batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE enrollments (
+-- 3.7 ENROLLMENTS
+CREATE TABLE IF NOT EXISTS public.enrollments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id UUID NOT NULL REFERENCES students(id),
-  batch_id UUID NOT NULL REFERENCES batches(id),
-  enrolled_by UUID REFERENCES staff(id),
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  batch_id UUID NOT NULL REFERENCES public.batches(id) ON DELETE CASCADE,
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  enrolled_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  roll_no INTEGER,
+  qr_code TEXT,
   enrollment_date DATE DEFAULT CURRENT_DATE,
-  status TEXT DEFAULT 'active' CHECK (status IN ('active','inactive','transferred','completed')),
+  status TEXT DEFAULT 'active',
   notes TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(student_id, batch_id)
 );
 
-CREATE TABLE fee_structures (
+-- 3.8 FEE STRUCTURES
+CREATE TABLE IF NOT EXISTS public.fee_structures (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  batch_id UUID REFERENCES batches(id),
+  batch_id UUID REFERENCES public.batches(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   amount NUMERIC(10,2) NOT NULL,
   fee_type TEXT DEFAULT 'monthly',
@@ -112,23 +174,27 @@ CREATE TABLE fee_structures (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE payments (
+-- 3.9 PAYMENTS
+CREATE TABLE IF NOT EXISTS public.payments (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id UUID NOT NULL REFERENCES students(id),
-  batch_id UUID REFERENCES batches(id),
-  enrollment_id UUID REFERENCES enrollments(id),
-  amount NUMERIC(10,2) NOT NULL,
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  enrollment_id UUID REFERENCES public.enrollments(id) ON DELETE SET NULL,
+  amount NUMERIC(10,2) NOT NULL DEFAULT 0,
   discount NUMERIC(10,2) DEFAULT 0,
   late_fee NUMERIC(10,2) DEFAULT 0,
-  total_paid NUMERIC(10,2) NOT NULL,
-  payment_method TEXT DEFAULT 'cash' CHECK (payment_method IN ('cash','bkash','nagad','card','bank','online')),
+  total_paid NUMERIC(10,2) NOT NULL DEFAULT 0,
+  payment_method TEXT DEFAULT 'cash',
   transaction_id TEXT,
   payment_for TEXT,
   payment_month TEXT,
   due_date DATE,
   paid_at TIMESTAMPTZ DEFAULT NOW(),
-  received_by UUID REFERENCES staff(id),
-  receipt_number TEXT UNIQUE DEFAULT '',
+  received_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  receipt_number TEXT DEFAULT '',
+  referral_name TEXT,
+  referral_reason TEXT,
   notes TEXT,
   is_refunded BOOLEAN DEFAULT FALSE,
   refund_amount NUMERIC(10,2),
@@ -136,29 +202,86 @@ CREATE TABLE payments (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE fee_dues (
+-- 3.10 PAYMENT ACCOUNTS
+CREATE TABLE IF NOT EXISTS public.payment_accounts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  method TEXT NOT NULL,
+  account_number TEXT NOT NULL,
+  account_name TEXT,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3.11 PAYMENT APPROVERS
+CREATE TABLE IF NOT EXISTS public.payment_approvers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  staff_id UUID NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
+  added_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(staff_id)
+);
+
+-- 3.12 PAYMENT SUBMISSIONS
+CREATE TABLE IF NOT EXISTS public.payment_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  course_id UUID,
+  account_id UUID REFERENCES public.payment_accounts(id) ON DELETE SET NULL,
+  payment_method TEXT NOT NULL DEFAULT 'offline',
+  account_number TEXT DEFAULT '',
+  trx_id TEXT DEFAULT '',
+  transaction_id TEXT,
+  sender_number TEXT DEFAULT '',
+  amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total_fee NUMERIC(10,2) DEFAULT 0,
+  due_amount NUMERIC(10,2) DEFAULT 0,
+  due_date DATE,
+  fee_type TEXT DEFAULT 'monthly',
+  item_type TEXT DEFAULT 'batch',
+  payment_month TEXT,
+  referral_name TEXT,
+  referral_reason TEXT,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  approved_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  approved_at TIMESTAMPTZ,
+  reviewed_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  rejection_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3.13 FEE DUES
+CREATE TABLE IF NOT EXISTS public.fee_dues (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id UUID NOT NULL REFERENCES students(id),
-  batch_id UUID NOT NULL REFERENCES batches(id),
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  batch_id UUID NOT NULL REFERENCES public.batches(id) ON DELETE CASCADE,
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   due_month TEXT NOT NULL,
   due_amount NUMERIC(10,2) NOT NULL,
   due_date DATE NOT NULL,
   paid_amount NUMERIC(10,2) DEFAULT 0,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending','partial','paid','waived')),
+  status TEXT DEFAULT 'pending',
   reminder_sent_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(student_id, batch_id, due_month)
 );
 
-CREATE TABLE referrals (
+-- 3.14 REFERRALS
+CREATE TABLE IF NOT EXISTS public.referrals (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  referrer_id UUID NOT NULL REFERENCES students(id),
-  referee_id UUID NOT NULL REFERENCES students(id),
+  referrer_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  referee_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
   commission_amount NUMERIC(10,2) DEFAULT 0,
   commission_rate NUMERIC(5,2) DEFAULT 10,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','paid')),
-  approved_by UUID REFERENCES staff(id),
+  status TEXT DEFAULT 'pending',
+  approved_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
   paid_at TIMESTAMPTZ,
   payment_method TEXT,
   notes TEXT,
@@ -166,25 +289,28 @@ CREATE TABLE referrals (
   UNIQUE(referrer_id, referee_id)
 );
 
-CREATE TABLE attendance (
+-- 3.15 ATTENDANCE
+CREATE TABLE IF NOT EXISTS public.attendance (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id UUID NOT NULL REFERENCES students(id),
-  batch_id UUID NOT NULL REFERENCES batches(id),
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  batch_id UUID NOT NULL REFERENCES public.batches(id) ON DELETE CASCADE,
   date DATE NOT NULL DEFAULT CURRENT_DATE,
-  status TEXT DEFAULT 'present' CHECK (status IN ('present','absent','late','excused')),
-  entry_method TEXT DEFAULT 'manual' CHECK (entry_method IN ('fingerprint','manual','qr')),
+  status TEXT DEFAULT 'present',
+  entry_method TEXT DEFAULT 'manual',
   checked_in_at TIMESTAMPTZ DEFAULT NOW(),
   fee_alert_triggered BOOLEAN DEFAULT FALSE,
   note TEXT,
-  marked_by UUID REFERENCES staff(id),
+  marked_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  entered_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(student_id, batch_id, date)
 );
 
-CREATE TABLE biometric_logs (
+-- 3.16 BIOMETRIC LOGS
+CREATE TABLE IF NOT EXISTS public.biometric_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id UUID REFERENCES students(id),
-  branch_id UUID REFERENCES branches(id),
+  student_id UUID REFERENCES public.students(id) ON DELETE CASCADE,
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   scan_at TIMESTAMPTZ DEFAULT NOW(),
   recognized BOOLEAN DEFAULT FALSE,
   fee_alert BOOLEAN DEFAULT FALSE,
@@ -193,12 +319,14 @@ CREATE TABLE biometric_logs (
   raw_data JSONB
 );
 
-CREATE TABLE exams (
+-- 3.17 EXAMS
+CREATE TABLE IF NOT EXISTS public.exams (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  branch_id UUID REFERENCES branches(id),
-  batch_id UUID REFERENCES batches(id),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
+  batch_ids JSONB DEFAULT '[]'::jsonb,
   title TEXT NOT NULL,
-  exam_type TEXT DEFAULT 'written' CHECK (exam_type IN ('mcq','written','mixed')),
+  exam_type TEXT DEFAULT 'written',
   subject TEXT,
   total_marks INTEGER DEFAULT 100,
   pass_marks INTEGER DEFAULT 33,
@@ -206,53 +334,115 @@ CREATE TABLE exams (
   duration_minutes INTEGER DEFAULT 60,
   instructions TEXT,
   answer_key_url TEXT,
-  created_by UUID REFERENCES staff(id),
+  created_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
   is_published BOOLEAN DEFAULT FALSE,
+  is_online BOOLEAN DEFAULT FALSE,
+  time_limit_minutes INTEGER,
+  show_results_immediately BOOLEAN DEFAULT TRUE,
+  result_note TEXT,
+  exam_schedule_type TEXT DEFAULT 'one_time',
+  recurring_days JSONB DEFAULT '[]'::jsonb,
+  is_paused BOOLEAN DEFAULT FALSE,
+  is_public_result BOOLEAN DEFAULT FALSE,
+  schedule_notice_id UUID,
+  published_days JSONB DEFAULT '[]'::jsonb,
+  is_weekly_published BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE exam_results (
+-- 3.18 EXAM RESULTS
+CREATE TABLE IF NOT EXISTS public.exam_results (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  exam_id UUID NOT NULL REFERENCES exams(id),
-  student_id UUID NOT NULL REFERENCES students(id),
+  exam_id UUID NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
   obtained_marks NUMERIC(6,2),
   grade TEXT,
   rank INTEGER,
-  entered_by UUID REFERENCES staff(id),
+  entered_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  day_marks JSONB DEFAULT '{}'::jsonb,
+  result_note TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(exam_id, student_id)
 );
 
-CREATE TABLE materials (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  branch_id UUID REFERENCES branches(id),
+-- 3.19 EXAM QUESTIONS
+CREATE TABLE IF NOT EXISTS public.exam_questions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  exam_id UUID NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+  question_type TEXT NOT NULL DEFAULT 'mcq',
+  question_text TEXT NOT NULL,
+  options JSONB,
+  correct_answer TEXT,
+  marks INTEGER NOT NULL DEFAULT 1,
+  hint_note TEXT,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3.20 EXAM SUBMISSIONS
+CREATE TABLE IF NOT EXISTS public.exam_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  exam_id UUID NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  started_at TIMESTAMPTZ DEFAULT NOW(),
+  submitted_at TIMESTAMPTZ,
+  is_submitted BOOLEAN DEFAULT FALSE,
+  total_obtained NUMERIC(6,2) DEFAULT 0,
+  auto_graded BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(exam_id, student_id)
+);
+
+-- 3.21 EXAM ANSWERS
+CREATE TABLE IF NOT EXISTS public.exam_answers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  submission_id UUID NOT NULL REFERENCES public.exam_submissions(id) ON DELETE CASCADE,
+  question_id UUID NOT NULL REFERENCES public.exam_questions(id) ON DELETE CASCADE,
+  student_answer TEXT,
+  is_correct BOOLEAN,
+  obtained_marks NUMERIC(6,2) DEFAULT 0,
+  feedback TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(submission_id, question_id)
+);
+
+-- 3.22 MATERIALS
+CREATE TABLE IF NOT EXISTS public.materials (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
-  type TEXT DEFAULT 'book' CHECK (type IN ('book','notes','worksheet','other')),
-  batch_id UUID REFERENCES batches(id),
+  type TEXT DEFAULT 'sheet',
+  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
+  batch_ids JSONB DEFAULT '[]'::jsonb,
   subject TEXT,
   total_stock INTEGER DEFAULT 0,
   available_stock INTEGER DEFAULT 0,
   price NUMERIC(8,2) DEFAULT 0,
+  description TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE material_issues (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  material_id UUID NOT NULL REFERENCES materials(id),
-  student_id UUID NOT NULL REFERENCES students(id),
-  issued_by UUID REFERENCES staff(id),
+-- 3.23 MATERIAL ISSUES
+CREATE TABLE IF NOT EXISTS public.material_issues (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  material_id UUID NOT NULL REFERENCES public.materials(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
+  issued_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
   issued_at TIMESTAMPTZ DEFAULT NOW(),
   return_due_date DATE,
   returned_at TIMESTAMPTZ,
   condition_on_return TEXT,
-  notes TEXT
+  notes TEXT,
+  status TEXT DEFAULT 'issued'
 );
 
-CREATE TABLE courses (
+-- 3.24 COURSES
+CREATE TABLE IF NOT EXISTS public.courses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  teacher_id UUID NOT NULL REFERENCES staff(id),
-  branch_id UUID REFERENCES branches(id),
+  teacher_id UUID NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   title TEXT NOT NULL,
   description TEXT,
   thumbnail_url TEXT,
@@ -266,9 +456,9 @@ CREATE TABLE courses (
   level TEXT DEFAULT 'beginner',
   language TEXT DEFAULT 'Bengali',
   is_published BOOLEAN DEFAULT FALSE,
-  approved_by UUID REFERENCES staff(id),
+  approved_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
   approved_at TIMESTAMPTZ,
-  status TEXT DEFAULT 'draft' CHECK (status IN ('draft','pending_review','published','rejected')),
+  status TEXT DEFAULT 'draft',
   total_sales INTEGER DEFAULT 0,
   rating NUMERIC(3,2) DEFAULT 0,
   rating_count INTEGER DEFAULT 0,
@@ -276,11 +466,12 @@ CREATE TABLE courses (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE course_content (
+-- 3.25 COURSE CONTENT
+CREATE TABLE IF NOT EXISTS public.course_content (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
   title TEXT NOT NULL,
-  content_type TEXT DEFAULT 'video' CHECK (content_type IN ('video','pdf','quiz','text')),
+  content_type TEXT DEFAULT 'video',
   content_url TEXT,
   duration_minutes INTEGER,
   sort_order INTEGER DEFAULT 0,
@@ -288,10 +479,11 @@ CREATE TABLE course_content (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE course_purchases (
+-- 3.26 COURSE PURCHASES
+CREATE TABLE IF NOT EXISTS public.course_purchases (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  course_id UUID NOT NULL REFERENCES courses(id),
-  student_id UUID REFERENCES students(id),
+  course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  student_id UUID REFERENCES public.students(id) ON DELETE SET NULL,
   buyer_name TEXT,
   buyer_phone TEXT,
   buyer_email TEXT,
@@ -304,31 +496,34 @@ CREATE TABLE course_purchases (
   purchased_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE course_reviews (
+-- 3.27 COURSE REVIEWS
+CREATE TABLE IF NOT EXISTS public.course_reviews (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  course_id UUID NOT NULL REFERENCES courses(id),
-  purchase_id UUID REFERENCES course_purchases(id),
+  course_id UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+  purchase_id UUID REFERENCES course_purchases(id) ON DELETE SET NULL,
   reviewer_name TEXT,
-  rating INTEGER CHECK (rating BETWEEN 1 AND 5),
+  rating INTEGER,
   review TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE sms_queue (
+-- 3.28 SMS QUEUE
+CREATE TABLE IF NOT EXISTS public.sms_queue (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   to_phone TEXT NOT NULL,
   message TEXT NOT NULL,
   type TEXT DEFAULT 'general',
-  student_id UUID REFERENCES students(id),
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending','sent','failed')),
+  student_id UUID REFERENCES public.students(id) ON DELETE SET NULL,
+  status TEXT DEFAULT 'pending',
   sent_at TIMESTAMPTZ,
   error_message TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE audit_logs (
+-- 3.29 AUDIT LOGS
+CREATE TABLE IF NOT EXISTS public.audit_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES staff(id),
+  user_id UUID REFERENCES public.staff(id) ON DELETE SET NULL,
   action TEXT NOT NULL,
   table_name TEXT,
   record_id UUID,
@@ -338,596 +533,96 @@ CREATE TABLE audit_logs (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE expenses (
+-- 3.30 EXPENSES
+CREATE TABLE IF NOT EXISTS public.expenses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  branch_id UUID REFERENCES branches(id),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   category TEXT NOT NULL,
   amount NUMERIC(10,2) NOT NULL,
   description TEXT,
   expense_date DATE DEFAULT CURRENT_DATE,
-  paid_by UUID REFERENCES staff(id),
+  paid_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
   receipt_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE TABLE notifications (
+-- 3.31 NOTIFICATIONS
+CREATE TABLE IF NOT EXISTS public.notifications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID,
   title TEXT NOT NULL,
   message TEXT,
   type TEXT DEFAULT 'info',
   is_read BOOLEAN DEFAULT FALSE,
+  target_branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  target_audience TEXT DEFAULT 'all',
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- INDEXES
-CREATE INDEX idx_students_branch ON students(branch_id);
-CREATE INDEX idx_students_referral_code ON students(referral_code);
-CREATE INDEX idx_enrollments_student ON enrollments(student_id);
-CREATE INDEX idx_enrollments_batch ON enrollments(batch_id);
-CREATE INDEX idx_payments_student ON payments(student_id);
-CREATE INDEX idx_payments_paid_at ON payments(paid_at);
-CREATE INDEX idx_attendance_student_date ON attendance(student_id, date);
-CREATE INDEX idx_attendance_batch_date ON attendance(batch_id, date);
-CREATE INDEX idx_fee_dues_student ON fee_dues(student_id);
-CREATE INDEX idx_fee_dues_status ON fee_dues(status);
-CREATE INDEX idx_sms_queue_status ON sms_queue(status);
-CREATE INDEX idx_courses_teacher ON courses(teacher_id);
-CREATE INDEX idx_courses_status ON courses(status);
-
--- TRIGGERS
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$ BEGIN NEW.updated_at = NOW(); RETURN NEW; END; $$ language 'plpgsql';
-
-CREATE TRIGGER update_students_updated_at BEFORE UPDATE ON students FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_batches_updated_at BEFORE UPDATE ON batches FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_staff_updated_at BEFORE UPDATE ON staff FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_courses_updated_at BEFORE UPDATE ON courses FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
-CREATE OR REPLACE FUNCTION generate_student_id()
-RETURNS TRIGGER AS $$
-DECLARE year TEXT := TO_CHAR(NOW(), 'YYYY'); seq INTEGER;
-BEGIN
-  SELECT COALESCE(MAX(CAST(SUBSTRING(student_id FROM 9) AS INTEGER)), 0) + 1 INTO seq FROM students WHERE student_id LIKE 'EDU-' || year || '-%';
-  NEW.student_id := 'EDU-' || year || '-' || LPAD(seq::TEXT, 4, '0');
-  RETURN NEW;
-END; $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER set_student_id BEFORE INSERT ON students FOR EACH ROW WHEN (NEW.student_id IS NULL OR NEW.student_id = '') EXECUTE FUNCTION generate_student_id();
-
-CREATE OR REPLACE FUNCTION generate_referral_code()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.referral_code IS NULL OR NEW.referral_code = '' THEN
-    NEW.referral_code := UPPER(SUBSTRING(MD5(NEW.id::TEXT || NOW()::TEXT) FROM 1 FOR 8));
-  END IF;
-  RETURN NEW;
-END; $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER set_referral_code BEFORE INSERT ON students FOR EACH ROW EXECUTE FUNCTION generate_referral_code();
-
-CREATE OR REPLACE FUNCTION generate_receipt_number()
-RETURNS TRIGGER AS $$
-DECLARE year TEXT := TO_CHAR(NOW(), 'YYYY'); seq INTEGER;
-BEGIN
-  SELECT COALESCE(MAX(CAST(SUBSTRING(receipt_number FROM 10) AS INTEGER)), 0) + 1 INTO seq FROM payments WHERE receipt_number LIKE 'RCP-' || year || '-%';
-  NEW.receipt_number := 'RCP-' || year || '-' || LPAD(seq::TEXT, 6, '0');
-  RETURN NEW;
-END; $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER set_receipt_number BEFORE INSERT ON payments FOR EACH ROW WHEN (NEW.receipt_number IS NULL OR NEW.receipt_number = '') EXECUTE FUNCTION generate_receipt_number();
-
-CREATE OR REPLACE FUNCTION update_batch_seats()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF TG_OP = 'INSERT' AND NEW.status = 'active' THEN
-    UPDATE batches SET current_seats = current_seats + 1 WHERE id = NEW.batch_id;
-  ELSIF TG_OP = 'UPDATE' THEN
-    IF OLD.status = 'active' AND NEW.status != 'active' THEN
-      UPDATE batches SET current_seats = current_seats - 1 WHERE id = NEW.batch_id;
-    ELSIF OLD.status != 'active' AND NEW.status = 'active' THEN
-      UPDATE batches SET current_seats = current_seats + 1 WHERE id = NEW.batch_id;
-    END IF;
-  END IF;
-  RETURN NEW;
-END; $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER update_seats_on_enrollment AFTER INSERT OR UPDATE ON enrollments FOR EACH ROW EXECUTE FUNCTION update_batch_seats();
-
-CREATE OR REPLACE FUNCTION update_course_sales()
-RETURNS TRIGGER AS $$ BEGIN UPDATE courses SET total_sales = total_sales + 1 WHERE id = NEW.course_id; RETURN NEW; END; $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER increment_course_sales AFTER INSERT ON course_purchases FOR EACH ROW EXECUTE FUNCTION update_course_sales();
-
--- ==================== 002_add_referral_columns.sql ====================
--- Migration: Add dedicated referral columns to payments and payment_submissions tables
--- Previously referral info was packed into the notes TEXT field as a formatted string,
--- which was fragile and not queryable.
-
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS referral_name TEXT;
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS referral_reason TEXT;
-
-ALTER TABLE payment_submissions ADD COLUMN IF NOT EXISTS referral_name TEXT;
-ALTER TABLE payment_submissions ADD COLUMN IF NOT EXISTS referral_reason TEXT;
-
--- Backfill existing referral data from notes field where possible
-UPDATE payments
-SET 
-  referral_name = TRIM(substring(notes FROM 'Referral:\s*([^|]+)')),
-  referral_reason = TRIM(substring(notes FROM 'Reason:\s*(.+)'))
-WHERE payment_method = 'referral'
-  AND notes IS NOT NULL
-  AND notes LIKE '%Referral:%'
-  AND referral_name IS NULL;
-
-UPDATE payment_submissions
-SET 
-  referral_name = TRIM(substring(notes FROM 'Referral:\s*([^|]+)')),
-  referral_reason = TRIM(substring(notes FROM 'Reason:\s*(.+)'))
-WHERE payment_method = 'referral'
-  AND notes IS NOT NULL
-  AND notes LIKE '%Referral:%'
-  AND referral_name IS NULL;
-
--- ==================== 002_batch_details.sql ====================
--- Add schedule and description fields to batches
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS schedule_days TEXT DEFAULT '';
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS schedule_time TEXT DEFAULT '';
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT '';
-
--- ==================== 003_slider_images.sql ====================
--- Slider images for homepage carousel
-CREATE TABLE IF NOT EXISTS slider_images (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+-- 3.32 SLIDER IMAGES
+CREATE TABLE IF NOT EXISTS public.slider_images (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title TEXT NOT NULL DEFAULT '',
   subtitle TEXT DEFAULT '',
   image_url TEXT NOT NULL,
   link_url TEXT DEFAULT '',
   sort_order INTEGER DEFAULT 0,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT now()
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ==================== 004_user_profiles.sql ====================
--- User profiles with auto-generated ID for login
-CREATE TABLE IF NOT EXISTS user_profiles (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id TEXT UNIQUE NOT NULL,
+-- 3.33 USER PROFILES
+CREATE TABLE IF NOT EXISTS public.user_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT UNIQUE,
   email TEXT NOT NULL,
   name TEXT NOT NULL DEFAULT '',
   phone TEXT DEFAULT '',
+  role TEXT DEFAULT 'student',
   auth_user_id UUID UNIQUE,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Create a sequence for auto-incrementing user IDs
-CREATE SEQUENCE IF NOT EXISTS user_id_seq START 10001;
-
--- ==================== 005_manager_roles.sql ====================
--- Migration: Add super_manager and manager roles
-ALTER TABLE staff DROP CONSTRAINT IF EXISTS staff_role_check;
-ALTER TABLE staff ADD CONSTRAINT staff_role_check 
-  CHECK (role IN ('owner','super_manager','manager','receptionist','teacher','accountant','course_teacher'));
-
--- ==================== 006_payment_system.sql ====================
--- Migration 006: Payment System
--- payment_accounts: bKash/Nagad/Rocket/Upay numbers (Owner-managed)
-CREATE TABLE IF NOT EXISTS payment_accounts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  method TEXT NOT NULL CHECK (method IN ('bkash','nagad','rocket','upay')),
-  account_number TEXT NOT NULL,
-  account_name TEXT,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- payment_approvers: Staff designated by Owner to approve payments
-CREATE TABLE IF NOT EXISTS payment_approvers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  staff_id UUID NOT NULL REFERENCES staff(id) ON DELETE CASCADE,
-  added_by UUID REFERENCES staff(id),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(staff_id)
-);
-
--- payment_submissions: Student payment submissions (pending approval)
-CREATE TABLE IF NOT EXISTS payment_submissions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id UUID NOT NULL REFERENCES students(id),
-  batch_id UUID NOT NULL REFERENCES batches(id),
-  amount NUMERIC(10,2) NOT NULL,
-  total_fee NUMERIC(10,2) NOT NULL,
-  due_amount NUMERIC(10,2) DEFAULT 0,
-  due_date DATE,
-  payment_method TEXT NOT NULL CHECK (payment_method IN ('bkash','nagad','rocket','upay','offline')),
-  sender_number TEXT,
-  transaction_id TEXT,
-  notes TEXT,
-  status TEXT DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
-  approved_by UUID REFERENCES staff(id),
-  approved_at TIMESTAMPTZ,
-  rejection_reason TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Add rocket and upay to payments table payment_method check
-ALTER TABLE payments DROP CONSTRAINT IF EXISTS payments_payment_method_check;
-ALTER TABLE payments ADD CONSTRAINT payments_payment_method_check
-  CHECK (payment_method IN ('cash','bkash','nagad','rocket','upay','card','bank','online','offline'));
-
--- ==================== 007_batch_status_and_online_exams.sql ====================
--- MIGRATION 007: Batch Status + Online Exam System
--- Run in Supabase SQL Editor
-
--- 1. Add status column to batches for lifecycle management
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ongoing' 
-  CHECK (status IN ('ongoing','upcoming','started','admission_closed','finished'));
-
--- Update existing active batches to 'ongoing'
-UPDATE batches SET status = 'ongoing' WHERE is_active = true AND status IS NULL;
-UPDATE batches SET status = 'finished' WHERE is_active = false AND status IS NULL;
-
--- 2. Online Exam Questions
-CREATE TABLE IF NOT EXISTS exam_questions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  exam_id UUID NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
-  question_type TEXT NOT NULL CHECK (question_type IN ('mcq','short','long')),
-  question_text TEXT NOT NULL,
-  options JSONB, -- for MCQ: ["option1","option2","option3","option4"]
-  correct_answer TEXT, -- for MCQ: the correct option text; for short: expected answer
-  marks INTEGER NOT NULL DEFAULT 1,
-  hint_note TEXT, -- shown to student in results review as learning note
-  sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Student Exam Submissions (overall submission)
-CREATE TABLE IF NOT EXISTS exam_submissions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  exam_id UUID NOT NULL REFERENCES exams(id),
-  student_id UUID NOT NULL REFERENCES students(id),
-  started_at TIMESTAMPTZ DEFAULT NOW(),
-  submitted_at TIMESTAMPTZ,
-  is_submitted BOOLEAN DEFAULT FALSE,
-  total_obtained NUMERIC(6,2) DEFAULT 0,
-  auto_graded BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(exam_id, student_id)
-);
-
--- 4. Individual Question Answers
-CREATE TABLE IF NOT EXISTS exam_answers (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  submission_id UUID NOT NULL REFERENCES exam_submissions(id) ON DELETE CASCADE,
-  question_id UUID NOT NULL REFERENCES exam_questions(id),
-  student_answer TEXT,
-  is_correct BOOLEAN,
-  obtained_marks NUMERIC(6,2) DEFAULT 0,
-  feedback TEXT, -- teacher's per-question feedback note
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(submission_id, question_id)
-);
-
--- 5. Add is_online flag to exams table  
-ALTER TABLE exams ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;
-ALTER TABLE exams ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;
-ALTER TABLE exams ADD COLUMN IF NOT EXISTS show_results_immediately BOOLEAN DEFAULT TRUE;
-ALTER TABLE exams ADD COLUMN IF NOT EXISTS result_note TEXT; -- Overall note shown with results
-
--- 6. Indexes for performance
-CREATE INDEX IF NOT EXISTS idx_exam_questions_exam ON exam_questions(exam_id);
-CREATE INDEX IF NOT EXISTS idx_exam_submissions_exam ON exam_submissions(exam_id);
-CREATE INDEX IF NOT EXISTS idx_exam_submissions_student ON exam_submissions(student_id);
-CREATE INDEX IF NOT EXISTS idx_exam_answers_submission ON exam_answers(submission_id);
-CREATE INDEX IF NOT EXISTS idx_fee_dues_student ON fee_dues(student_id);
-CREATE INDEX IF NOT EXISTS idx_fee_dues_batch ON fee_dues(batch_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance(date);
-CREATE INDEX IF NOT EXISTS idx_attendance_batch ON attendance(batch_id);
-
--- ==================== 007_notices_feedback_settings.sql ====================
--- Notices: posted by anyone with staff access (manager, owner, etc.)
-CREATE TABLE IF NOT EXISTS notices (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT NOT NULL,
-  content TEXT NOT NULL,
-  priority TEXT DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
-  is_active BOOLEAN DEFAULT true,
-  created_by UUID REFERENCES auth.users(id),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Feedback: submitted by anyone (public)
-CREATE TABLE IF NOT EXISTS feedback (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  name TEXT NOT NULL,
-  email TEXT,
-  phone TEXT,
-  message TEXT NOT NULL,
-  rating INTEGER CHECK (rating BETWEEN 1 AND 5),
-  is_read BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Site settings: key-value store for configurable values
-CREATE TABLE IF NOT EXISTS site_settings (
-  key TEXT PRIMARY KEY,
-  value TEXT,
-  updated_by UUID REFERENCES auth.users(id),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Insert default contact link
-INSERT INTO site_settings (key, value) VALUES
-  ('contact_link', 'https://wa.me/8801302201431'),
-  ('contact_label', 'WhatsApp Us')
-ON CONFLICT (key) DO NOTHING;
-
--- RLS
-ALTER TABLE notices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE feedback ENABLE ROW LEVEL SECURITY;
-ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Public read active notices" ON notices FOR SELECT USING (is_active = true);
-CREATE POLICY "Staff manage notices" ON notices FOR ALL USING (EXISTS (SELECT 1 FROM staff WHERE auth_user_id = auth.uid()));
-CREATE POLICY "Anyone submit feedback" ON feedback FOR INSERT WITH CHECK (true);
-CREATE POLICY "Staff read feedback" ON feedback FOR SELECT USING (EXISTS (SELECT 1 FROM staff WHERE auth_user_id = auth.uid()));
-CREATE POLICY "Staff update feedback" ON feedback FOR UPDATE USING (EXISTS (SELECT 1 FROM staff WHERE auth_user_id = auth.uid()));
-CREATE POLICY "Public read settings" ON site_settings FOR SELECT USING (true);
-CREATE POLICY "Staff manage settings" ON site_settings FOR ALL USING (EXISTS (SELECT 1 FROM staff WHERE auth_user_id = auth.uid() AND role IN ('owner','super_manager','manager')));
-
--- ==================== 008_financial_access.sql ====================
--- MIGRATION 008: Financial Access Permission
--- Only the Owner can grant this. Without it, no one can do financial operations.
--- Run in Supabase SQL Editor
-
-ALTER TABLE staff ADD COLUMN IF NOT EXISTS has_financial_access BOOLEAN DEFAULT FALSE;
-
--- Owner always has financial access
-UPDATE staff SET has_financial_access = true WHERE role = 'owner';
-
--- ==================== 009_fix_all_missing_tables.sql ====================
--- ====================================================================
--- COMPREHENSIVE SCHEMA FIX FOR MEDHASHIREE COACHING MANAGEMENT
--- Run this script in your Supabase Project -> SQL Editor -> Run
--- This script creates all missing tables and columns safely (idempotent).
--- ====================================================================
-
--- 1. Enable UUID Extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
--- 2. SITE_SETTINGS (Key-Value Store for SMS Gateway, Contact Info, etc.)
+-- 3.34 SITE SETTINGS
 CREATE TABLE IF NOT EXISTS public.site_settings (
   key TEXT PRIMARY KEY,
   value TEXT,
-  updated_by UUID REFERENCES auth.users(id),
+  updated_by UUID,
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- RLS for site_settings
-ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public read settings" ON public.site_settings;
-CREATE POLICY "Public read settings" ON public.site_settings FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Staff manage settings" ON public.site_settings;
-CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (true);
-
--- Default site settings
-INSERT INTO public.site_settings (key, value) VALUES
-  ('contact_link', 'https://wa.me/8801302201431'),
-  ('contact_label', 'WhatsApp Us')
-ON CONFLICT (key) DO NOTHING;
-
-
--- 3. NOTICES (Center Announcements)
+-- 3.35 NOTICES
 CREATE TABLE IF NOT EXISTS public.notices (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  branch_ids UUID[] DEFAULT '{}'::uuid[],
   title TEXT NOT NULL,
   content TEXT NOT NULL,
-  priority TEXT DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
-  is_active BOOLEAN DEFAULT true,
-  created_by UUID REFERENCES auth.users(id),
+  priority TEXT DEFAULT 'normal',
+  target_audience TEXT DEFAULT 'all',
+  target_branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  is_active BOOLEAN DEFAULT TRUE,
+  notice_date DATE DEFAULT CURRENT_DATE,
+  created_by UUID,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE public.notices ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public read active notices" ON public.notices;
-CREATE POLICY "Public read active notices" ON public.notices FOR SELECT USING (is_active = true);
-DROP POLICY IF EXISTS "Staff manage notices" ON public.notices;
-CREATE POLICY "Staff manage notices" ON public.notices FOR ALL USING (true);
-
-
--- 4. FEEDBACK (Public / Student Messages)
+-- 3.36 FEEDBACK
 CREATE TABLE IF NOT EXISTS public.feedback (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   email TEXT,
   phone TEXT,
   message TEXT NOT NULL,
-  rating INTEGER CHECK (rating BETWEEN 1 AND 5),
-  is_read BOOLEAN DEFAULT false,
+  rating INTEGER,
+  is_read BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Anyone submit feedback" ON public.feedback;
-CREATE POLICY "Anyone submit feedback" ON public.feedback FOR INSERT WITH CHECK (true);
-DROP POLICY IF EXISTS "Staff read feedback" ON public.feedback;
-CREATE POLICY "Staff read feedback" ON public.feedback FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Staff update feedback" ON public.feedback;
-CREATE POLICY "Staff update feedback" ON public.feedback FOR UPDATE USING (true);
-
-
--- 5. SLIDER IMAGES (Homepage Banner Carousel)
-CREATE TABLE IF NOT EXISTS public.slider_images (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  title TEXT,
-  subtitle TEXT,
-  image_url TEXT NOT NULL,
-  sort_order INTEGER DEFAULT 0,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.slider_images ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public read active slider" ON public.slider_images;
-CREATE POLICY "Public read active slider" ON public.slider_images FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Staff manage slider" ON public.slider_images;
-CREATE POLICY "Staff manage slider" ON public.slider_images FOR ALL USING (true);
-
-
--- 6. USER PROFILES (Auth user metadata)
-CREATE TABLE IF NOT EXISTS public.user_profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT DEFAULT 'student',
-  phone TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Users can read own profile" ON public.user_profiles;
-CREATE POLICY "Users can read own profile" ON public.user_profiles FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Users can insert own profile" ON public.user_profiles;
-CREATE POLICY "Users can insert own profile" ON public.user_profiles FOR INSERT WITH CHECK (true);
-DROP POLICY IF EXISTS "Users can update own profile" ON public.user_profiles;
-CREATE POLICY "Users can update own profile" ON public.user_profiles FOR UPDATE USING (true);
-
-
--- 7. PAYMENT ACCOUNTS & SUBMISSIONS (bKash / Nagad / Rocket numbers)
-CREATE TABLE IF NOT EXISTS public.payment_accounts (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  method TEXT NOT NULL,
-  account_number TEXT NOT NULL,
-  account_name TEXT,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.payment_accounts ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow read payment accounts" ON public.payment_accounts;
-CREATE POLICY "Allow read payment accounts" ON public.payment_accounts FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Staff manage payment accounts" ON public.payment_accounts;
-CREATE POLICY "Staff manage payment accounts" ON public.payment_accounts FOR ALL USING (true);
-
-CREATE TABLE IF NOT EXISTS public.payment_approvers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  staff_id UUID NOT NULL REFERENCES public.staff(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(staff_id)
-);
-
-ALTER TABLE public.payment_approvers ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Read payment approvers" ON public.payment_approvers;
-CREATE POLICY "Read payment approvers" ON public.payment_approvers FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Manage payment approvers" ON public.payment_approvers;
-CREATE POLICY "Manage payment approvers" ON public.payment_approvers FOR ALL USING (true);
-
-CREATE TABLE IF NOT EXISTS public.payment_submissions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_id UUID NOT NULL REFERENCES public.students(id),
-  batch_id UUID REFERENCES public.batches(id),
-  account_id UUID REFERENCES public.payment_accounts(id),
-  payment_method TEXT NOT NULL,
-  account_number TEXT NOT NULL,
-  trx_id TEXT NOT NULL,
-  sender_number TEXT NOT NULL,
-  amount NUMERIC(10, 2) NOT NULL,
-  fee_type TEXT NOT NULL,
-  payment_month TEXT,
-  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-  reviewed_by UUID REFERENCES public.staff(id),
-  reviewed_at TIMESTAMPTZ,
-  notes TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.payment_submissions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Allow read payment submissions" ON public.payment_submissions;
-CREATE POLICY "Allow read payment submissions" ON public.payment_submissions FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Allow insert payment submissions" ON public.payment_submissions;
-CREATE POLICY "Allow insert payment submissions" ON public.payment_submissions FOR INSERT WITH CHECK (true);
-DROP POLICY IF EXISTS "Allow update payment submissions" ON public.payment_submissions;
-CREATE POLICY "Allow update payment submissions" ON public.payment_submissions FOR UPDATE USING (true);
-
-
--- 8. ONLINE EXAMS & SUBMISSIONS
-CREATE TABLE IF NOT EXISTS public.exam_questions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  exam_id UUID NOT NULL REFERENCES public.exams(id) ON DELETE CASCADE,
-  question_type TEXT NOT NULL CHECK (question_type IN ('mcq','short','long')),
-  question_text TEXT NOT NULL,
-  options JSONB,
-  correct_answer TEXT,
-  marks INTEGER NOT NULL DEFAULT 1,
-  hint_note TEXT,
-  sort_order INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.exam_questions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Read exam questions" ON public.exam_questions;
-CREATE POLICY "Read exam questions" ON public.exam_questions FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Staff manage exam questions" ON public.exam_questions;
-CREATE POLICY "Staff manage exam questions" ON public.exam_questions FOR ALL USING (true);
-
-CREATE TABLE IF NOT EXISTS public.exam_submissions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  exam_id UUID NOT NULL REFERENCES public.exams(id),
-  student_id UUID NOT NULL REFERENCES public.students(id),
-  started_at TIMESTAMPTZ DEFAULT NOW(),
-  submitted_at TIMESTAMPTZ,
-  is_submitted BOOLEAN DEFAULT FALSE,
-  total_obtained NUMERIC(6,2) DEFAULT 0,
-  auto_graded BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(exam_id, student_id)
-);
-
-ALTER TABLE public.exam_submissions ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Read exam submissions" ON public.exam_submissions;
-CREATE POLICY "Read exam submissions" ON public.exam_submissions FOR SELECT USING (true);
-DROP POLICY IF EXISTS "Submit exam" ON public.exam_submissions;
-CREATE POLICY "Submit exam" ON public.exam_submissions FOR ALL USING (true);
-
-CREATE TABLE IF NOT EXISTS public.exam_answers (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  submission_id UUID NOT NULL REFERENCES public.exam_submissions(id) ON DELETE CASCADE,
-  question_id UUID NOT NULL REFERENCES public.exam_questions(id),
-  student_answer TEXT,
-  is_correct BOOLEAN,
-  obtained_marks NUMERIC(6,2) DEFAULT 0,
-  feedback TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(submission_id, question_id)
-);
-
-ALTER TABLE public.exam_answers ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Answers policy" ON public.exam_answers;
-CREATE POLICY "Answers policy" ON public.exam_answers FOR ALL USING (true);
-
-
--- 9. EXTEND BATCHES TABLE (Missing columns)
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS schedule_days TEXT DEFAULT '';
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS schedule_time TEXT DEFAULT '';
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT '';
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ongoing'
-  CHECK (status IN ('ongoing','upcoming','started','admission_closed','finished'));
-
--- 10. EXTEND EXAMS TABLE (Online exam columns)
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS show_results_immediately BOOLEAN DEFAULT TRUE;
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS result_note TEXT;
-
--- 11. EXTEND STAFF TABLE (Financial access column)
-ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS has_financial_access BOOLEAN DEFAULT FALSE;
-
--- 12. STUDENT DELETION REQUESTS (Two-Person Approval & 24h Delay Deletion)
+-- 3.37 STUDENT DELETION REQUESTS
 CREATE TABLE IF NOT EXISTS public.student_deletion_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   student_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -946,743 +641,10 @@ CREATE TABLE IF NOT EXISTS public.student_deletion_requests (
   executed_at TIMESTAMPTZ,
   cancelled_at TIMESTAMPTZ,
   cancelled_by TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE public.student_deletion_requests ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public full access deletion requests" ON public.student_deletion_requests;
-CREATE POLICY "Public full access deletion requests" ON public.student_deletion_requests FOR ALL USING (true);
-
--- 13. MATERIALS & MATERIAL ISSUES (Study Materials & Distribution Tracking)
-CREATE TABLE IF NOT EXISTS public.materials (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  branch_id UUID,
-  name TEXT NOT NULL,
-  type TEXT DEFAULT 'sheet',
-  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
-  subject TEXT,
-  total_stock INTEGER DEFAULT 0,
-  available_stock INTEGER DEFAULT 0,
-  price NUMERIC(8,2) DEFAULT 0,
-  description TEXT,
-  batch_ids JSONB DEFAULT '[]'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS batch_ids JSONB DEFAULT '[]'::jsonb;
-
-DO $$
-BEGIN
-  ALTER TABLE public.materials DROP CONSTRAINT IF EXISTS materials_type_check;
-EXCEPTION
-  WHEN OTHERS THEN NULL;
-END $$;
-
-CREATE TABLE IF NOT EXISTS public.material_issues (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  material_id UUID NOT NULL REFERENCES public.materials(id) ON DELETE CASCADE,
-  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
-  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
-  issued_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
-  issued_at TIMESTAMPTZ DEFAULT NOW(),
-  return_due_date DATE,
-  returned_at TIMESTAMPTZ,
-  condition_on_return TEXT,
-  notes TEXT,
-  status TEXT DEFAULT 'issued'
-);
-
-ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public full access materials" ON public.materials;
-CREATE POLICY "Public full access materials" ON public.materials FOR ALL USING (true);
-
-ALTER TABLE public.material_issues ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public full access material_issues" ON public.material_issues;
-CREATE POLICY "Public full access material_issues" ON public.material_issues FOR ALL USING (true);
-
--- Notify completion
-SELECT 'All missing tables, columns, and policies created successfully!' AS result;
-
--- ==================== 010_student_deletion_requests.sql ====================
--- Migration 010: Two-Person Approval and 24-Hour Timelock Student Deletion System
-CREATE TABLE IF NOT EXISTS public.student_deletion_requests (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  student_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
-  student_names JSONB NOT NULL DEFAULT '[]'::jsonb,
-  reason TEXT NOT NULL,
-  requested_by TEXT NOT NULL,
-  requested_by_name TEXT,
-  approver_1 TEXT,
-  approver_1_name TEXT,
-  approved_at_1 TIMESTAMPTZ,
-  approver_2 TEXT,
-  approver_2_name TEXT,
-  approved_at_2 TIMESTAMPTZ,
-  status TEXT NOT NULL DEFAULT 'pending',
-  scheduled_delete_at TIMESTAMPTZ,
-  executed_at TIMESTAMPTZ,
-  cancelled_at TIMESTAMPTZ,
-  cancelled_by TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-ALTER TABLE public.student_deletion_requests ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Public full access deletion requests" ON public.student_deletion_requests;
-CREATE POLICY "Public full access deletion requests"
-  ON public.student_deletion_requests
-  FOR ALL
-  TO authenticated, anon
-  USING (true)
-  WITH CHECK (true);
-
--- ==================== 011_materials_and_distribution.sql ====================
--- Migration 011: Materials & Distribution Schema
-CREATE TABLE IF NOT EXISTS public.materials (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  branch_id UUID,
-  name TEXT NOT NULL,
-  type TEXT DEFAULT 'sheet',
-  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
-  subject TEXT,
-  total_stock INTEGER DEFAULT 0,
-  available_stock INTEGER DEFAULT 0,
-  price NUMERIC(8,2) DEFAULT 0,
-  description TEXT,
-  batch_ids JSONB DEFAULT '[]'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS batch_ids JSONB DEFAULT '[]'::jsonb;
-
--- Drop old check constraint if it exists to allow sheet, notes, book, etc.
-DO $$$
-BEGIN
-  ALTER TABLE public.materials DROP CONSTRAINT IF EXISTS materials_type_check;
-EXCEPTION
-  WHEN OTHERS THEN NULL;
-END $$$;
-
-CREATE TABLE IF NOT EXISTS public.material_issues (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  material_id UUID NOT NULL REFERENCES public.materials(id) ON DELETE CASCADE,
-  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
-  batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL,
-  issued_by UUID REFERENCES public.staff(id) ON DELETE SET NULL,
-  issued_at TIMESTAMPTZ DEFAULT NOW(),
-  return_due_date DATE,
-  returned_at TIMESTAMPTZ,
-  condition_on_return TEXT,
-  notes TEXT,
-  status TEXT DEFAULT 'issued'
-);
-
-ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public full access materials" ON public.materials;
-CREATE POLICY "Public full access materials" ON public.materials FOR ALL USING (true);
-
-ALTER TABLE public.material_issues ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public full access material_issues" ON public.material_issues;
-CREATE POLICY "Public full access material_issues" ON public.material_issues FOR ALL USING (true);
-
--- ==================== 012_referrals_enhancement.sql ====================
--- Migration 012: Referrals System Enhancement
--- Support written referral names when not linked to an existing student ID
-
-DO $$
-BEGIN
-  IF EXISTS (
-    SELECT 1 FROM information_schema.columns 
-    WHERE table_name = 'referrals' AND column_name = 'referrer_id'
-  ) THEN
-    ALTER TABLE public.referrals ALTER COLUMN referrer_id DROP NOT NULL;
-  END IF;
-END $$;
-
-ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS referrer_name TEXT;
-ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS referral_code TEXT;
-
-CREATE INDEX IF NOT EXISTS idx_students_referred_by_code ON public.students(referred_by_code);
-CREATE INDEX IF NOT EXISTS idx_referrals_referee_id ON public.referrals(referee_id);
-
--- ==================== 013_fix_slider_spelling.sql ====================
--- Fix spelling of MedhaSiri / MedhaShiri to MedhaShiree in slider_images table
-UPDATE slider_images 
-SET 
-  title = REGEXP_REPLACE(title, 'Medha\s*sh?ir[ei]+', 'MedhaShiree', 'gi'),
-  subtitle = CASE 
-    WHEN subtitle IS NOT NULL THEN REGEXP_REPLACE(subtitle, 'Medha\s*sh?ir[ei]+', 'MedhaShiree', 'gi')
-    ELSE subtitle 
-  END
-WHERE 
-  title ILIKE '%medhasiri%' 
-  OR title ILIKE '%medhashiri%'
-  OR subtitle ILIKE '%medhasiri%' 
-  OR subtitle ILIKE '%medhashiri%';
-
--- ==================== 014_homepage_contact_settings.sql ====================
--- Insert default contact and homepage settings into site_settings
-INSERT INTO site_settings (key, value) VALUES
-  ('contact_phone', '01302201431'),
-  ('contact_email', 'info@medhashiree.com'),
-  ('contact_address', 'Rajshahi, Bangladesh'),
-  ('contact_link', 'https://wa.me/8801302201431'),
-  ('contact_label', 'WhatsApp Us'),
-  ('footer_about', 'Rajshahi''s premier coaching center. Quality education, expert teachers, and a proven track record of student success.')
-ON CONFLICT (key) DO NOTHING;
-
--- ==================== 015_payment_gateway_numbers_and_courses.sql ====================
--- 015_payment_gateway_numbers_and_courses.sql
--- Allow payment_submissions for courses as well as batches
-ALTER TABLE payment_submissions ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES courses(id);
-ALTER TABLE payment_submissions ALTER COLUMN batch_id DROP NOT NULL;
-ALTER TABLE payment_submissions ADD COLUMN IF NOT EXISTS item_type TEXT DEFAULT 'batch';
-
--- Ensure payment_accounts has unique constraint on method
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'payment_accounts_method_key'
-  ) THEN
-    ALTER TABLE payment_accounts ADD CONSTRAINT payment_accounts_method_key UNIQUE (method);
-  END IF;
-END $$;
-
--- Default payment accounts if not present
-INSERT INTO payment_accounts (method, account_number, account_name, is_active)
-VALUES
-  ('bkash', '01302201431', 'Send Money (Personal)', true),
-  ('nagad', '01302201431', 'Send Money (Personal)', true),
-  ('rocket', '01302201431', 'Send Money (Personal)', true),
-  ('upay', '01302201431', 'Send Money (Personal)', true)
-ON CONFLICT (method) DO NOTHING;
-
--- Default settings keys
-INSERT INTO site_settings (key, value)
-VALUES
-  ('payment_number_bkash', '01302201431'),
-  ('payment_number_nagad', '01302201431'),
-  ('payment_number_rocket', '01302201431'),
-  ('payment_number_upay', '01302201431'),
-  ('payment_type_bkash', 'Send Money'),
-  ('payment_type_nagad', 'Send Money'),
-  ('payment_type_rocket', 'Send Money'),
-  ('payment_type_upay', 'Send Money')
-ON CONFLICT (key) DO NOTHING;
-
--- ==================== 016_ensure_payment_approvals_schema.sql ====================
--- 016_ensure_payment_approvals_schema.sql
--- Ensure all columns and constraints for payment_submissions exist
-
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES public.courses(id) ON DELETE SET NULL;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS item_type TEXT DEFAULT 'batch';
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS fee_due_id UUID REFERENCES public.fee_dues(id) ON DELETE SET NULL;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS due_amount NUMERIC(10,2) DEFAULT 0;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS total_fee NUMERIC(10,2) DEFAULT 0;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS due_date DATE;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS transaction_id TEXT;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS sender_number TEXT;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
-ALTER TABLE IF EXISTS public.payment_submissions ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
-
--- Drop NOT NULL on batch_id if it exists to allow course purchases without a batch
-ALTER TABLE IF EXISTS public.payment_submissions ALTER COLUMN batch_id DROP NOT NULL;
-
--- Enable RLS and ensure policies permit proper reading & writing
-ALTER TABLE IF EXISTS public.payment_submissions ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "Allow read payment submissions" ON public.payment_submissions;
-CREATE POLICY "Allow read payment submissions" ON public.payment_submissions FOR SELECT USING (true);
-
-DROP POLICY IF EXISTS "Allow insert payment submissions" ON public.payment_submissions;
-CREATE POLICY "Allow insert payment submissions" ON public.payment_submissions FOR INSERT WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow update payment submissions" ON public.payment_submissions;
-CREATE POLICY "Allow update payment submissions" ON public.payment_submissions FOR UPDATE USING (true);
-
--- ==================== 017_exam_leaderboard_visibility.sql ====================
--- MIGRATION 017: Exam Marks Visibility Control
--- Default is TRUE: All enrolled students can view everyone's marks & batch merit list
--- When FALSE: Each student can only view their own marks privately
-
-ALTER TABLE exams ADD COLUMN IF NOT EXISTS show_all_results BOOLEAN DEFAULT TRUE;
-
--- Ensure any existing exams default to true
-UPDATE exams SET show_all_results = TRUE WHERE show_all_results IS NULL;
-
--- ==================== 018_multi_branch_and_homepage_system.sql ====================
--- MIGRATION 018: Multi-Branch Coaching Management System, Permissions, Branch SMS APIs & Homepage Content
--- Run in Supabase SQL Editor if needed. All frontend code is resilient with fallback guards.
-
--- 1. Enhance branches table with rich management & contact details
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS location TEXT;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS branch_director TEXT;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS director_phone TEXT;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS manager TEXT;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS manager_phone TEXT;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS whatsapp TEXT;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS established_year TEXT DEFAULT '2018';
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS contact_info JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE branches ADD COLUMN IF NOT EXISTS sms_gateway_config JSONB DEFAULT '{}'::jsonb;
-
--- 2. Enhance staff table for multi-branch access and super financial access
-ALTER TABLE staff ADD COLUMN IF NOT EXISTS branch_ids UUID[] DEFAULT '{}'::uuid[];
-ALTER TABLE staff ADD COLUMN IF NOT EXISTS has_super_financial_access BOOLEAN DEFAULT FALSE;
-
--- Ensure owner always has super financial access
-UPDATE staff SET has_super_financial_access = TRUE WHERE role = 'owner';
-
--- 3. Junction table for explicit multi-branch relationships
-CREATE TABLE IF NOT EXISTS staff_branches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  staff_id UUID REFERENCES staff(id) ON DELETE CASCADE,
-  branch_id UUID REFERENCES branches(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(staff_id, branch_id)
-);
-
--- 4. Blog Posts table for Homepage & Content Editor
-CREATE TABLE IF NOT EXISTS blogs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
-  title TEXT NOT NULL,
-  slug TEXT UNIQUE,
-  summary TEXT,
-  content TEXT NOT NULL,
-  cover_image_url TEXT,
-  author_name TEXT DEFAULT 'MedhaShiree Faculty',
-  category TEXT DEFAULT 'Academic News',
-  is_published BOOLEAN DEFAULT TRUE,
-  published_at TIMESTAMPTZ DEFAULT NOW(),
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 5. Achievements table for Student Accolades & Results
-CREATE TABLE IF NOT EXISTS achievements (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  branch_id UUID REFERENCES branches(id) ON DELETE SET NULL,
-  title TEXT NOT NULL,
-  subtitle TEXT,
-  year TEXT DEFAULT '2026',
-  category TEXT DEFAULT 'Board Exam',
-  student_name TEXT,
-  result_details TEXT,
-  image_url TEXT,
-  sort_order INT DEFAULT 0,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 6. Ensure notices table has branch_id and notice_date
-ALTER TABLE notices ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
-ALTER TABLE notices ADD COLUMN IF NOT EXISTS notice_date DATE DEFAULT CURRENT_DATE;
-
--- 7. Ensure batches, students, fee_dues, and exams have branch_id
-ALTER TABLE batches ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
-ALTER TABLE students ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
-ALTER TABLE fee_dues ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
-ALTER TABLE exams ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
-ALTER TABLE payments ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
-
--- 8. Enable Row Level Security & Policies
-ALTER TABLE branches ENABLE ROW LEVEL SECURITY;
-ALTER TABLE blogs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE achievements ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Public read active branches" ON branches FOR SELECT USING (is_active = true);
-CREATE POLICY "Staff manage branches" ON branches FOR ALL USING (
-  EXISTS (SELECT 1 FROM staff WHERE auth_user_id = auth.uid() AND role IN ('owner', 'super_manager', 'manager'))
-);
-
-CREATE POLICY "Public read published blogs" ON blogs FOR SELECT USING (is_published = true);
-CREATE POLICY "Staff manage blogs" ON blogs FOR ALL USING (
-  EXISTS (SELECT 1 FROM staff WHERE auth_user_id = auth.uid() AND role IN ('owner', 'super_manager', 'manager'))
-);
-
-CREATE POLICY "Public read active achievements" ON achievements FOR SELECT USING (is_active = true);
-CREATE POLICY "Staff manage achievements" ON achievements FOR ALL USING (
-  EXISTS (SELECT 1 FROM staff WHERE auth_user_id = auth.uid() AND role IN ('owner', 'super_manager', 'manager'))
-);
-
--- 9. Insert a default Main Branch if none exist
-INSERT INTO branches (name, address, location, phone, email, is_active, established_year, branch_director, manager)
-SELECT 'Rajshahi Main Branch', 'Rajshahi Sadar, Rajshahi', 'Rajshahi', '01302201431', 'info@medhashiree.com', true, '2018', 'Academic Director', 'Branch Manager'
-WHERE NOT EXISTS (SELECT 1 FROM branches LIMIT 1);
-
--- ==================== 019_performance_indexes_for_scale.sql ====================
--- ====================================================================
--- MIGRATION 019: High-Concurrency Performance Indexes for 100+ to 1,000+ Students
--- Ensures sub-10ms query execution across Exams, Results, Attendance, and Billing.
--- Run in Supabase SQL Editor -> Run
--- ====================================================================
-
--- 1. Students & Enrollments Scalability
-CREATE INDEX IF NOT EXISTS idx_students_branch_active ON public.students(branch_id, is_active);
-CREATE INDEX IF NOT EXISTS idx_students_search ON public.students(name, student_id, phone);
-CREATE INDEX IF NOT EXISTS idx_enrollments_batch_status ON public.enrollments(batch_id, status);
-CREATE INDEX IF NOT EXISTS idx_enrollments_student ON public.enrollments(student_id);
-
--- 2. Online Exams & High-Concurrency Submissions
-CREATE INDEX IF NOT EXISTS idx_exams_batch_active ON public.exams(batch_id, is_online);
-CREATE INDEX IF NOT EXISTS idx_exam_questions_exam_sort ON public.exam_questions(exam_id, sort_order);
-CREATE INDEX IF NOT EXISTS idx_exam_submissions_exam_score ON public.exam_submissions(exam_id, total_obtained DESC);
-CREATE INDEX IF NOT EXISTS idx_exam_submissions_student_exam ON public.exam_submissions(student_id, exam_id);
-CREATE INDEX IF NOT EXISTS idx_exam_answers_submission_q ON public.exam_answers(submission_id, question_id);
-
--- 3. Fee Dues & Payments Speed
-CREATE INDEX IF NOT EXISTS idx_fee_dues_student_status ON public.fee_dues(student_id, status);
-CREATE INDEX IF NOT EXISTS idx_payments_student_date ON public.payments(student_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_payments_branch ON public.payments(branch_id);
-
--- 4. Attendance Queries
-CREATE INDEX IF NOT EXISTS idx_attendance_student_date ON public.attendance(student_id, date);
-CREATE INDEX IF NOT EXISTS idx_attendance_batch_date ON public.attendance(batch_id, date);
-
--- 5. SMS Queue Throughput
-CREATE INDEX IF NOT EXISTS idx_sms_queue_status ON public.sms_queue(status, created_at DESC);
-
-SELECT 'All high-concurrency performance indexes created successfully!' AS result;
-
--- ==================== 019_seed_default_notices.sql ====================
--- 019_seed_default_notices.sql
--- Seed default institutional notices into notices table if none exist
-
-INSERT INTO public.notices (title, content, is_active, created_at, notice_date)
-SELECT
-  'ভর্তি বিজ্ঞপ্তি : ২০২৫-২৬ সেশনে ভর্তি কার্যক্রম চলমান রয়েছে।',
-  'সকল শাখার সকল ব্যাচে নতুন সেশনের ক্লাস আগামী ১০ তারিখ হতে শুরু হবে। আসন সংখ্যা সীমিত বিধায় দ্রুত যোগাযোগ করুন।',
-  true,
-  NOW(),
-  CURRENT_DATE
-WHERE NOT EXISTS (SELECT 1 FROM public.notices LIMIT 1);
-
-INSERT INTO public.notices (title, content, is_active, created_at, notice_date)
-SELECT
-  'এইচএসসি মডেল টেস্ট ২০২৬ এর সময়সূচি প্রকাশিত হয়েছে।',
-  'আগামী রবিবার হতে পদার্থবিজ্ঞান ও রসায়ন মডেল টেস্টের চূড়ান্ত সময়সূচি অনুযায়ী পরীক্ষা গ্রহণ করা হবে।',
-  true,
-  NOW() - INTERVAL '2 days',
-  CURRENT_DATE - INTERVAL '2 days'
-WHERE (SELECT COUNT(*) FROM public.notices) = 1;
-
-INSERT INTO public.notices (title, content, is_active, created_at, notice_date)
-SELECT
-  'অভিভাবক সমাবেশ ও ত্রৈমাসিক ফলাফল প্রকাশ সংক্রান্ত নোটিশ।',
-  'সকল অভিভাবকবৃন্দকে আগামী শুক্রবারে কোচিং অডিটোরিয়ামে উপস্থিত থাকার জন্য বিনীত অনুরোধ করা হচ্ছে।',
-  true,
-  NOW() - INTERVAL '5 days',
-  CURRENT_DATE - INTERVAL '5 days'
-WHERE (SELECT COUNT(*) FROM public.notices) = 2;
-
--- Mark seeded in site_settings so automatic re-seeding does not occur if an admin deletes all notices
-INSERT INTO public.site_settings (key, value)
-VALUES ('notices_seeded', 'true')
-ON CONFLICT (key) DO NOTHING;
-
--- ==================== 020_batch_branch_approval_and_multibatch_config.sql ====================
--- MIGRATION 020: Branch-Tied Batches, Cross-Branch Approval Workflow & Multi-Batch Exam Configuration
--- Safe & idempotent script for Supabase
-
--- 1. Enhance batches table with approval status and cross-branch tracking
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'approved'
-  CHECK (approval_status IN ('approved', 'pending_approval', 'rejected'));
-
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS origin_branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS origin_batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
-
--- Default any existing batches to 'approved'
-UPDATE public.batches SET approval_status = 'approved' WHERE approval_status IS NULL;
-
--- 2. Enhance exams table with multi-batch support (batch_ids)
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS batch_ids JSONB DEFAULT '[]'::jsonb;
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
-
--- If an existing exam has a batch_id, populate batch_ids array with it
-UPDATE public.exams 
-SET batch_ids = json_build_array(batch_id)::jsonb 
-WHERE batch_id IS NOT NULL AND (batch_ids IS NULL OR batch_ids = '[]'::jsonb);
-
--- 3. Ensure materials table has branch_id and batch_ids
-ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
-ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS batch_ids JSONB DEFAULT '[]'::jsonb;
-
--- 4. Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_batches_branch_approval ON public.batches(branch_id, approval_status);
-CREATE INDEX IF NOT EXISTS idx_batches_origin_batch ON public.batches(origin_batch_id);
-CREATE INDEX IF NOT EXISTS idx_exams_branch ON public.exams(branch_id);
-CREATE INDEX IF NOT EXISTS idx_materials_branch ON public.materials(branch_id);
-
--- ==================== 021_feedback_branch_id.sql ====================
--- MIGRATION 021: Harmonize columns across feedback, achievements, and blogs
-ALTER TABLE feedback ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
-
--- Ensure achievements columns are compatible with both naming conventions
-ALTER TABLE achievements ADD COLUMN IF NOT EXISTS photo_url TEXT;
-ALTER TABLE achievements ADD COLUMN IF NOT EXISTS image_url TEXT;
-ALTER TABLE achievements ADD COLUMN IF NOT EXISTS exam_year TEXT;
-ALTER TABLE achievements ADD COLUMN IF NOT EXISTS year TEXT;
-ALTER TABLE achievements ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE achievements ADD COLUMN IF NOT EXISTS result_details TEXT;
-
--- Ensure blogs columns are compatible with both naming conventions
-ALTER TABLE blogs ADD COLUMN IF NOT EXISTS cover_image TEXT;
-ALTER TABLE blogs ADD COLUMN IF NOT EXISTS cover_image_url TEXT;
-ALTER TABLE blogs ADD COLUMN IF NOT EXISTS excerpt TEXT;
-ALTER TABLE blogs ADD COLUMN IF NOT EXISTS summary TEXT;
-ALTER TABLE blogs ADD COLUMN IF NOT EXISTS tags TEXT[];
-
--- ==================== 022_batch_classroom_and_branch_seats.sql ====================
--- MIGRATION 022: Batch Classroom Text Field & Branch Seats Tracking
--- Safe & idempotent script for Supabase
-
--- 1. Add free-text classroom column to batches
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS classroom TEXT DEFAULT '';
-
--- 2. Add branch_seats JSONB column to batches for multi-branch seat tracking
-ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS branch_seats JSONB DEFAULT '{}'::jsonb;
-
--- 3. Ensure payment_submissions has branch_id column
-ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
-
--- 4. Ensure enrollments has branch_id column
-ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
-
--- 5. Performance Indexes
-CREATE INDEX IF NOT EXISTS idx_batches_classroom ON public.batches(classroom);
-CREATE INDEX IF NOT EXISTS idx_payment_submissions_branch ON public.payment_submissions(branch_id);
-CREATE INDEX IF NOT EXISTS idx_enrollments_branch ON public.enrollments(branch_id);
-
--- ==================== 023_ensure_staff_branch_ids.sql ====================
--- MIGRATION 023: Ensure staff branch_ids array and permissions
--- Idempotent script for Supabase SQL Editor
-
-ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS branch_ids UUID[] DEFAULT '{}'::uuid[];
-ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS has_super_financial_access BOOLEAN DEFAULT FALSE;
-
--- Ensure owner has full access
-UPDATE public.staff SET has_super_financial_access = TRUE WHERE role = 'owner';
-
--- Populate branch_ids from branch_id if branch_ids is empty
-UPDATE public.staff 
-SET branch_ids = ARRAY[branch_id] 
-WHERE branch_id IS NOT NULL AND (branch_ids IS NULL OR branch_ids = '{}'::uuid[]);
-
--- Create junction table if missing
-CREATE TABLE IF NOT EXISTS public.staff_branches (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  staff_id UUID REFERENCES public.staff(id) ON DELETE CASCADE,
-  branch_id UUID REFERENCES public.branches(id) ON DELETE CASCADE,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(staff_id, branch_id)
-);
-
--- ==================== 024_add_branch_director_role.sql ====================
--- Migration 024: Add branch_director role to staff table check constraint
--- A Branch Director acts like a branch owner within their assigned/permitted branches.
-
-ALTER TABLE staff DROP CONSTRAINT IF EXISTS staff_role_check;
-ALTER TABLE staff ADD CONSTRAINT staff_role_check 
-  CHECK (role IN ('owner', 'branch_director', 'super_manager', 'manager', 'receptionist', 'teacher', 'accountant', 'course_teacher'));
-
--- ==================== 024_batch_roll_numbers.sql ====================
--- Migration 024: Batch Roll Numbers (1, 2, 3...)
-
--- 1. Add roll_no column to enrollments if it doesn't exist
-ALTER TABLE public.enrollments 
-ADD COLUMN IF NOT EXISTS roll_no INTEGER;
-
--- 2. Add roll_no and batch_roll columns to students if they don't exist
-ALTER TABLE public.students 
-ADD COLUMN IF NOT EXISTS roll_no INTEGER,
-ADD COLUMN IF NOT EXISTS batch_roll INTEGER;
-
--- 3. Backfill roll_no for all existing enrollments partitioned by batch_id
-DO $$
-BEGIN
-  WITH ranked AS (
-    SELECT id, ROW_NUMBER() OVER (
-      PARTITION BY batch_id 
-      ORDER BY enrollment_date ASC NULLS LAST, created_at ASC NULLS LAST, id ASC
-    ) AS r_num
-    FROM public.enrollments
-  )
-  UPDATE public.enrollments e
-  SET roll_no = ranked.r_num
-  FROM ranked
-  WHERE e.id = ranked.id AND (e.roll_no IS NULL OR e.roll_no <= 0);
-END $$;
-
--- 4. Sync primary student roll_no from their primary enrollment or batch
-DO $$
-BEGIN
-  UPDATE public.students s
-  SET roll_no = e.roll_no,
-      batch_roll = e.roll_no
-  FROM public.enrollments e
-  WHERE e.student_id = s.id AND e.status = 'active'
-    AND (s.roll_no IS NULL OR s.roll_no <= 0);
-END $$;
-
--- 5. Trigger function to auto-assign sequential roll_no (MAX + 1 starting from 1) on new enrollment
-CREATE OR REPLACE FUNCTION public.auto_assign_batch_roll_no()
-RETURNS TRIGGER AS $$
-DECLARE
-  next_roll INTEGER;
-BEGIN
-  IF NEW.roll_no IS NULL OR NEW.roll_no <= 0 THEN
-    SELECT COALESCE(MAX(roll_no), 0) + 1 INTO next_roll
-    FROM public.enrollments
-    WHERE batch_id = NEW.batch_id;
-    
-    NEW.roll_no := next_roll;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_auto_assign_batch_roll_no ON public.enrollments;
-CREATE TRIGGER trg_auto_assign_batch_roll_no
-BEFORE INSERT ON public.enrollments
-FOR EACH ROW
-EXECUTE FUNCTION public.auto_assign_batch_roll_no();
-
--- 6. Indexes for ultra-fast lookup by roll_no and batch_id
-CREATE INDEX IF NOT EXISTS idx_enrollments_batch_roll ON public.enrollments(batch_id, roll_no);
-CREATE INDEX IF NOT EXISTS idx_students_roll_no ON public.students(roll_no);
-
--- ==================== 025_add_notices_branch_columns.sql ====================
--- MIGRATION 025: Ensure notices table has branch_id, branch_ids array, and foreign key
--- Run in Supabase SQL Editor if needed. Application code handles in-memory joins and resilient fallbacks.
-
--- 1. Ensure branch_id column exists with foreign key to branches(id)
-ALTER TABLE notices ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES branches(id) ON DELETE SET NULL;
-
--- 2. Add branch_ids UUID[] array column for multi-branch mark-selection
-ALTER TABLE notices ADD COLUMN IF NOT EXISTS branch_ids UUID[] DEFAULT '{}'::uuid[];
-
--- 3. Ensure notice_date column exists
-ALTER TABLE notices ADD COLUMN IF NOT EXISTS notice_date DATE DEFAULT CURRENT_DATE;
-
--- 4. Create indexes for efficient querying by branch and date
-CREATE INDEX IF NOT EXISTS idx_notices_branch_id ON notices(branch_id);
-CREATE INDEX IF NOT EXISTS idx_notices_is_active ON notices(is_active);
-CREATE INDEX IF NOT EXISTS idx_notices_notice_date ON notices(notice_date DESC);
-
--- 5. Force PostgREST to reload schema cache so foreign keys and columns are immediately recognized
-NOTIFY pgrst, 'reload schema';
-
--- ==================== 026_weekly_exams_and_public_results.sql ====================
--- MIGRATION 026: One-Time vs Weekly Exams, Recurring Days, Exam Pausing, and Public Online Results
--- Safe & idempotent script for Supabase
-
--- 1. Add exam_schedule_type column (default: 'one_time')
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS exam_schedule_type TEXT DEFAULT 'one_time'
-  CHECK (exam_schedule_type IN ('one_time', 'weekly'));
-
--- 2. Add recurring_days for weekly exams (e.g., ["Saturday", "Monday"])
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS recurring_days JSONB DEFAULT '[]'::jsonb;
-
--- 3. Add is_paused for pausing weekly exams
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_paused BOOLEAN DEFAULT FALSE;
-
--- 4. Add is_public_result to publish merit list to the public Online Result portal
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_public_result BOOLEAN DEFAULT FALSE;
-
--- 5. Add schedule_notice_id to link with notice board if routine is published to notices
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS schedule_notice_id UUID REFERENCES public.notices(id) ON DELETE SET NULL;
-
--- 6. Indexes for efficient lookup
-CREATE INDEX IF NOT EXISTS idx_exams_schedule_type ON public.exams(exam_schedule_type);
-CREATE INDEX IF NOT EXISTS idx_exams_is_public_result ON public.exams(is_public_result);
-CREATE INDEX IF NOT EXISTS idx_exams_is_paused ON public.exams(is_paused);
-
--- 7. Force PostgREST schema cache reload
-NOTIFY pgrst, 'reload schema';
-
--- ==================== 027_weekly_day_marks_and_published_days.sql ====================
--- MIGRATION 027: Weekly Day Marks, Published Days & Weekly Consolidated Results
--- Safe & idempotent script for Supabase
-
--- 1. Add day_marks JSONB column to exam_results to store day-by-day marks
--- e.g. { "Saturday": { "marks": 45, "total": 50, "grade": "A+", "exam_name": "Math" } }
-ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS day_marks JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS result_note TEXT;
-
--- 2. Add published_days JSONB to exams to track which individual days are published to students
--- e.g. ["Saturday", "Monday"]
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS published_days JSONB DEFAULT '[]'::jsonb;
-
--- 3. Add is_weekly_published boolean to exams to track if consolidated weekly results are published
-ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_weekly_published BOOLEAN DEFAULT FALSE;
-
--- 4. Create index for published status
-CREATE INDEX IF NOT EXISTS idx_exams_is_weekly_published ON public.exams(is_weekly_published);
-
--- 5. Force PostgREST schema cache reload
-NOTIFY pgrst, 'reload schema';
-
--- ==================== 028_add_referral_to_payment_method_check.sql ====================
--- MIGRATION 028: Add 'referral' to payments table payment_method check constraint
--- Safe & idempotent script for Supabase
-
-ALTER TABLE public.payments DROP CONSTRAINT IF EXISTS payments_payment_method_check;
-
-ALTER TABLE public.payments ADD CONSTRAINT payments_payment_method_check
-  CHECK (payment_method IN ('cash','bkash','nagad','rocket','upay','card','bank','online','offline','referral'));
-
--- Force PostgREST schema cache reload
-NOTIFY pgrst, 'reload schema';
-
--- ==================== 029_add_batch_ids_to_materials.sql ====================
--- ==============================================================================
--- Migration 029: Ensure batch_ids, description, and branch_id exist on materials table
--- Run this in your Supabase Dashboard -> SQL Editor
--- ==============================================================================
-
--- 1. Add batch_ids column (stores JSON array of batch UUIDs for multi-batch assignment)
-ALTER TABLE public.materials 
-  ADD COLUMN IF NOT EXISTS batch_ids JSONB DEFAULT '[]'::jsonb;
-
--- 2. Add description column if missing
-ALTER TABLE public.materials 
-  ADD COLUMN IF NOT EXISTS description TEXT;
-
--- 3. Add branch_id column if missing
-ALTER TABLE public.materials 
-  ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
-
--- 4. Add course_id column if missing (for linking study materials directly to online courses)
-ALTER TABLE public.materials 
-  ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES public.courses(id) ON DELETE SET NULL;
-
--- 5. Indexes for fast querying
-CREATE INDEX IF NOT EXISTS idx_materials_batch_ids ON public.materials USING gin (batch_ids);
-CREATE INDEX IF NOT EXISTS idx_materials_course_id ON public.materials (course_id);
-
--- 6. Drop restrictive type check constraint so 'sheet', 'exam_paper', etc. are allowed
-ALTER TABLE public.materials DROP CONSTRAINT IF EXISTS materials_type_check;
-
--- 7. Refresh PostgREST schema cache so the API recognizes the columns immediately
-NOTIFY pgrst, 'reload schema';
-
--- ==================== 030_branch_deletion_schedule.sql ====================
--- Migration 030: 48-Hour Branch Deletion Timelock and Red Warning System
--- Adds columns to branches table for scheduling deletion with a 48-hour cooling period
-
-ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS is_pending_deletion BOOLEAN DEFAULT false;
-ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS deletion_scheduled_at TIMESTAMPTZ;
-ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ;
-ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS deletion_requested_by TEXT;
-ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
-
--- Table for logging branch deletion audit history
+-- 3.38 BRANCH DELETION REQUESTS
 CREATE TABLE IF NOT EXISTS public.branch_deletion_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   branch_id UUID REFERENCES public.branches(id) ON DELETE CASCADE,
@@ -1691,29 +653,847 @@ CREATE TABLE IF NOT EXISTS public.branch_deletion_requests (
   requested_by TEXT NOT NULL,
   requested_by_name TEXT,
   scheduled_delete_at TIMESTAMPTZ NOT NULL,
-  status TEXT NOT NULL DEFAULT 'timelock', -- 'timelock', 'cancelled', 'executed'
+  status TEXT NOT NULL DEFAULT 'timelock',
   cancelled_at TIMESTAMPTZ,
   cancelled_by TEXT,
   executed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 3.39 BLOGS
+CREATE TABLE IF NOT EXISTS public.blogs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  slug TEXT UNIQUE,
+  summary TEXT,
+  content TEXT NOT NULL,
+  cover_image_url TEXT,
+  author_name TEXT DEFAULT 'Faculty',
+  category TEXT DEFAULT 'Academic News',
+  is_published BOOLEAN DEFAULT TRUE,
+  published_at TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3.40 ACHIEVEMENTS
+CREATE TABLE IF NOT EXISTS public.achievements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  subtitle TEXT,
+  year TEXT DEFAULT '2026',
+  category TEXT DEFAULT 'Board Exam',
+  student_name TEXT,
+  result_details TEXT,
+  image_url TEXT,
+  sort_order INTEGER DEFAULT 0,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+
+-- ==============================================================================
+-- 4. EXHAUSTIVE COLUMN RETROFITTING
+-- Guarantees every table has all required columns regardless of prior state
+-- ==============================================================================
+
+-- 4.1 branches columns
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS location TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS branch_director TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS director_phone TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS manager TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS manager_phone TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS whatsapp TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS established_year TEXT DEFAULT '2018';
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS contact_info JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS sms_gateway_config JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS is_pending_deletion BOOLEAN DEFAULT false;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS deletion_scheduled_at TIMESTAMPTZ;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMPTZ;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS deletion_requested_by TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS deletion_reason TEXT;
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.2 staff columns
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS auth_user_id UUID;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS branch_ids UUID[] DEFAULT '{}'::uuid[];
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'owner';
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS salary NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(5,2) DEFAULT 0;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS has_financial_access BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS has_super_financial_access BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS joined_at DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.3 students columns
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS student_id TEXT DEFAULT '';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS guardian_name TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS guardian_phone TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS guardian_relation TEXT DEFAULT 'Parent';
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS date_of_birth DATE;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS gender TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS school_college TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS class_level TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS photo_url TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS biometric_template TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS biometric_enrolled BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS referred_by_code TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS referred_by_student_id UUID REFERENCES public.students(id);
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS roll_no INTEGER;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS batch_roll INTEGER;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS qr_code TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS enrollment_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.4 batches columns
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS class_level TEXT;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS teacher_id UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS room_id UUID;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS schedule TEXT;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS schedule_days TEXT DEFAULT '';
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS schedule_time TEXT DEFAULT '';
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS start_date DATE;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS end_date DATE;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS max_seats INTEGER DEFAULT 30;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS current_seats INTEGER DEFAULT 0;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS monthly_fee NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS admission_fee NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS fee_type TEXT DEFAULT 'monthly';
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS description TEXT DEFAULT '';
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS image_url TEXT DEFAULT '';
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ongoing';
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS classroom TEXT DEFAULT '';
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS branch_seats JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT 'approved';
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS origin_branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS origin_batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.batches ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.5 enrollments columns
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS student_id UUID;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS batch_id UUID;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS enrolled_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS roll_no INTEGER;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS qr_code TEXT;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS enrollment_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.6 payments columns (CRITICAL: ensure paid_at exists on all existing tables)
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS student_id UUID;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS enrollment_id UUID REFERENCES public.enrollments(id) ON DELETE SET NULL;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS discount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS late_fee NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS total_paid NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'cash';
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS transaction_id TEXT;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS payment_for TEXT;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS payment_month TEXT;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS due_date DATE;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS received_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS receipt_number TEXT DEFAULT '';
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS referral_name TEXT;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS referral_reason TEXT;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS is_refunded BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS refund_amount NUMERIC(10,2);
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS refund_reason TEXT;
+ALTER TABLE public.payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Backfill paid_at and total_paid where null
+UPDATE public.payments SET paid_at = COALESCE(paid_at, created_at, NOW()) WHERE paid_at IS NULL;
+UPDATE public.payments SET total_paid = COALESCE(total_paid, amount, 0) WHERE total_paid IS NULL;
+
+-- 4.7 payment_accounts columns
+ALTER TABLE public.payment_accounts ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.payment_accounts ADD COLUMN IF NOT EXISTS method TEXT DEFAULT 'bkash';
+ALTER TABLE public.payment_accounts ADD COLUMN IF NOT EXISTS account_number TEXT DEFAULT '';
+ALTER TABLE public.payment_accounts ADD COLUMN IF NOT EXISTS account_name TEXT;
+ALTER TABLE public.payment_accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.payment_accounts ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.payment_accounts ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.8 payment_submissions columns
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS student_id UUID;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS course_id UUID;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS account_id UUID REFERENCES public.payment_accounts(id) ON DELETE SET NULL;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'offline';
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS account_number TEXT DEFAULT '';
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS trx_id TEXT DEFAULT '';
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS transaction_id TEXT;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS sender_number TEXT DEFAULT '';
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS total_fee NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS due_amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS due_date DATE;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS fee_type TEXT DEFAULT 'monthly';
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS item_type TEXT DEFAULT 'batch';
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS payment_month TEXT;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS referral_name TEXT;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS referral_reason TEXT;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.payment_submissions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.payment_submissions ALTER COLUMN batch_id DROP NOT NULL;
+
+-- 4.9 fee_dues columns
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS student_id UUID;
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS batch_id UUID;
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS due_month TEXT;
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS due_amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS due_date DATE;
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ;
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.fee_dues ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.10 referrals columns
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS referrer_id UUID;
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS referee_id UUID;
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS commission_amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(5,2) DEFAULT 10;
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS payment_method TEXT;
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.referrals ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.11 attendance columns
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS student_id UUID;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS batch_id UUID;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'present';
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS entry_method TEXT DEFAULT 'manual';
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS checked_in_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS fee_alert_triggered BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS marked_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS entered_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.attendance ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.12 exams columns
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS batch_ids JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS exam_type TEXT DEFAULT 'written';
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS total_marks INTEGER DEFAULT 100;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS pass_marks INTEGER DEFAULT 33;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS exam_date DATE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS duration_minutes INTEGER DEFAULT 60;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS instructions TEXT;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS answer_key_url TEXT;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS show_results_immediately BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS result_note TEXT;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS exam_schedule_type TEXT DEFAULT 'one_time';
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS recurring_days JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_paused BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_public_result BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS schedule_notice_id UUID REFERENCES public.notices(id) ON DELETE SET NULL;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS published_days JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_weekly_published BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.13 exam_results columns
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS exam_id UUID;
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS student_id UUID;
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS obtained_marks NUMERIC(6,2);
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS grade TEXT;
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS rank INTEGER;
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS entered_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS day_marks JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS result_note TEXT;
+ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.14 materials columns
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'sheet';
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS batch_ids JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS total_stock INTEGER DEFAULT 0;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS available_stock INTEGER DEFAULT 0;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS price NUMERIC(8,2) DEFAULT 0;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.materials ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.15 material_issues columns
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS material_id UUID;
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS student_id UUID;
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS issued_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS issued_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS return_due_date DATE;
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS returned_at TIMESTAMPTZ;
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS condition_on_return TEXT;
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE public.material_issues ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'issued';
+
+-- 4.16 notices columns
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS branch_ids UUID[] DEFAULT '{}'::uuid[];
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS content TEXT;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS priority TEXT DEFAULT 'normal';
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS target_audience TEXT DEFAULT 'all';
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS target_branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS notice_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS created_by UUID;
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.notices ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.17 feedback columns
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS message TEXT;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS rating INTEGER;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.feedback ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.18 courses columns
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS teacher_id UUID;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS thumbnail_url TEXT;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS price NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS discount_price NUMERIC(10,2);
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS discount_code TEXT;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS discount_expires_at TIMESTAMPTZ;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS access_days INTEGER DEFAULT 365;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS commission_rate NUMERIC(5,2) DEFAULT 30;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS category TEXT;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS level TEXT DEFAULT 'beginner';
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS language TEXT DEFAULT 'Bengali';
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'draft';
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS total_sales INTEGER DEFAULT 0;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS rating NUMERIC(3,2) DEFAULT 0;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS rating_count INTEGER DEFAULT 0;
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE public.courses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.19 notifications columns
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS user_id UUID;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS message TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'info';
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS target_branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS target_audience TEXT DEFAULT 'all';
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.20 user_profiles columns
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS name TEXT DEFAULT '';
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT '';
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'student';
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS auth_user_id UUID;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.21 sms_queue columns
+ALTER TABLE public.sms_queue ADD COLUMN IF NOT EXISTS to_phone TEXT;
+ALTER TABLE public.sms_queue ADD COLUMN IF NOT EXISTS message TEXT;
+ALTER TABLE public.sms_queue ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'general';
+ALTER TABLE public.sms_queue ADD COLUMN IF NOT EXISTS student_id UUID;
+ALTER TABLE public.sms_queue ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
+ALTER TABLE public.sms_queue ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+ALTER TABLE public.sms_queue ADD COLUMN IF NOT EXISTS error_message TEXT;
+ALTER TABLE public.sms_queue ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- 4.22 expenses columns
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS category TEXT;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS amount NUMERIC(10,2) DEFAULT 0;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS expense_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS paid_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES public.staff(id) ON DELETE SET NULL;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS receipt_url TEXT;
+ALTER TABLE public.expenses ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+
+-- ==============================================================================
+-- 5. SAFELY UPDATE CHECK CONSTRAINTS
+-- ==============================================================================
+
+-- 5.1 staff_role_check
+ALTER TABLE public.staff DROP CONSTRAINT IF EXISTS staff_role_check;
+ALTER TABLE public.staff ADD CONSTRAINT staff_role_check 
+  CHECK (role IN ('owner', 'branch_director', 'super_manager', 'manager', 'receptionist', 'teacher', 'accountant', 'course_teacher'));
+
+-- 5.2 payments_payment_method_check
+ALTER TABLE public.payments DROP CONSTRAINT IF EXISTS payments_payment_method_check;
+ALTER TABLE public.payments ADD CONSTRAINT payments_payment_method_check
+  CHECK (payment_method IN ('cash','bkash','nagad','rocket','upay','card','bank','online','offline','referral'));
+
+-- 5.3 payment_submissions status check
+ALTER TABLE public.payment_submissions DROP CONSTRAINT IF EXISTS payment_submissions_status_check;
+ALTER TABLE public.payment_submissions ADD CONSTRAINT payment_submissions_status_check
+  CHECK (status IN ('pending', 'approved', 'rejected'));
+
+-- 5.4 batches status check
+ALTER TABLE public.batches DROP CONSTRAINT IF EXISTS batches_status_check;
+ALTER TABLE public.batches ADD CONSTRAINT batches_status_check
+  CHECK (status IN ('ongoing','upcoming','started','admission_closed','finished'));
+
+-- 5.5 materials type check relax
+DO $$
+BEGIN
+  ALTER TABLE public.materials DROP CONSTRAINT IF EXISTS materials_type_check;
+EXCEPTION
+  WHEN OTHERS THEN NULL;
+END $$;
+
+
+-- ==============================================================================
+-- 6. PERFORMANCE INDEXES
+-- ==============================================================================
+CREATE INDEX IF NOT EXISTS idx_students_branch ON public.students(branch_id);
+CREATE INDEX IF NOT EXISTS idx_students_referral_code ON public.students(referral_code);
+CREATE INDEX IF NOT EXISTS idx_students_qr_code ON public.students(qr_code);
+CREATE INDEX IF NOT EXISTS idx_enrollments_student ON public.enrollments(student_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_batch ON public.enrollments(batch_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_branch ON public.enrollments(branch_id);
+CREATE INDEX IF NOT EXISTS idx_enrollments_qr_code ON public.enrollments(qr_code);
+CREATE INDEX IF NOT EXISTS idx_payments_student ON public.payments(student_id);
+CREATE INDEX IF NOT EXISTS idx_payments_paid_at ON public.payments(paid_at);
+CREATE INDEX IF NOT EXISTS idx_payments_branch ON public.payments(branch_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_student_date ON public.attendance(student_id, date);
+CREATE INDEX IF NOT EXISTS idx_attendance_batch_date ON public.attendance(batch_id, date);
+CREATE INDEX IF NOT EXISTS idx_fee_dues_student ON public.fee_dues(student_id);
+CREATE INDEX IF NOT EXISTS idx_fee_dues_status ON public.fee_dues(status);
+CREATE INDEX IF NOT EXISTS idx_fee_dues_branch ON public.fee_dues(branch_id);
+CREATE INDEX IF NOT EXISTS idx_sms_queue_status ON public.sms_queue(status);
+CREATE INDEX IF NOT EXISTS idx_courses_teacher ON public.courses(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_courses_status ON public.courses(status);
+CREATE INDEX IF NOT EXISTS idx_exams_branch ON public.exams(branch_id);
+CREATE INDEX IF NOT EXISTS idx_exams_schedule_type ON public.exams(exam_schedule_type);
+CREATE INDEX IF NOT EXISTS idx_exams_is_public_result ON public.exams(is_public_result);
+CREATE INDEX IF NOT EXISTS idx_exams_is_paused ON public.exams(is_paused);
+CREATE INDEX IF NOT EXISTS idx_exams_is_weekly_published ON public.exams(is_weekly_published);
+CREATE INDEX IF NOT EXISTS idx_materials_branch ON public.materials(branch_id);
+CREATE INDEX IF NOT EXISTS idx_material_issues_status ON public.material_issues(status);
+CREATE INDEX IF NOT EXISTS idx_material_issues_batch_id ON public.material_issues(batch_id);
+CREATE INDEX IF NOT EXISTS idx_notices_branch_id ON public.notices(branch_id);
+CREATE INDEX IF NOT EXISTS idx_notices_is_active ON public.notices(is_active);
+CREATE INDEX IF NOT EXISTS idx_notices_notice_date ON public.notices(notice_date DESC);
+CREATE INDEX IF NOT EXISTS idx_payment_submissions_branch ON public.payment_submissions(branch_id);
+
+
+-- ==============================================================================
+-- 7. TRIGGERS & FUNCTIONS
+-- ==============================================================================
+
+-- 7.1 update_updated_at_column
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_students_updated_at ON public.students;
+CREATE TRIGGER update_students_updated_at BEFORE UPDATE ON public.students FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_batches_updated_at ON public.batches;
+CREATE TRIGGER update_batches_updated_at BEFORE UPDATE ON public.batches FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_staff_updated_at ON public.staff;
+CREATE TRIGGER update_staff_updated_at BEFORE UPDATE ON public.staff FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_courses_updated_at ON public.courses;
+CREATE TRIGGER update_courses_updated_at BEFORE UPDATE ON public.courses FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+-- 7.2 generate_student_id
+CREATE OR REPLACE FUNCTION public.generate_student_id()
+RETURNS TRIGGER AS $$
+DECLARE
+  year TEXT := TO_CHAR(NOW(), 'YYYY');
+  seq INTEGER;
+BEGIN
+  SELECT COALESCE(MAX(CAST(SUBSTRING(student_id FROM 9) AS INTEGER)), 0) + 1 
+  INTO seq 
+  FROM public.students 
+  WHERE student_id LIKE 'EDU-' || year || '-%';
+
+  NEW.student_id := 'EDU-' || year || '-' || LPAD(seq::TEXT, 4, '0');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_student_id ON public.students;
+CREATE TRIGGER set_student_id 
+  BEFORE INSERT ON public.students 
+  FOR EACH ROW 
+  WHEN (NEW.student_id IS NULL OR NEW.student_id = '') 
+  EXECUTE FUNCTION public.generate_student_id();
+
+-- 7.3 generate_referral_code
+CREATE OR REPLACE FUNCTION public.generate_referral_code()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.referral_code IS NULL OR NEW.referral_code = '' THEN
+    NEW.referral_code := UPPER(SUBSTRING(MD5(NEW.id::TEXT || NOW()::TEXT) FROM 1 FOR 8));
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_referral_code ON public.students;
+CREATE TRIGGER set_referral_code 
+  BEFORE INSERT ON public.students 
+  FOR EACH ROW 
+  EXECUTE FUNCTION public.generate_referral_code();
+
+-- 7.4 generate_receipt_number
+CREATE OR REPLACE FUNCTION public.generate_receipt_number()
+RETURNS TRIGGER AS $$
+DECLARE
+  year TEXT := TO_CHAR(NOW(), 'YYYY');
+  seq INTEGER;
+BEGIN
+  SELECT COALESCE(MAX(CAST(SUBSTRING(receipt_number FROM 10) AS INTEGER)), 0) + 1 
+  INTO seq 
+  FROM public.payments 
+  WHERE receipt_number LIKE 'RCP-' || year || '-%';
+
+  NEW.receipt_number := 'RCP-' || year || '-' || LPAD(seq::TEXT, 6, '0');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS set_receipt_number ON public.payments;
+CREATE TRIGGER set_receipt_number 
+  BEFORE INSERT ON public.payments 
+  FOR EACH ROW 
+  WHEN (NEW.receipt_number IS NULL OR NEW.receipt_number = '') 
+  EXECUTE FUNCTION public.generate_receipt_number();
+
+-- 7.5 update_batch_seats
+CREATE OR REPLACE FUNCTION public.update_batch_seats()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF TG_OP = 'INSERT' AND NEW.status = 'active' THEN
+    UPDATE public.batches SET current_seats = current_seats + 1 WHERE id = NEW.batch_id;
+  ELSIF TG_OP = 'UPDATE' THEN
+    IF OLD.status = 'active' AND NEW.status != 'active' THEN
+      UPDATE public.batches SET current_seats = GREATEST(current_seats - 1, 0) WHERE id = NEW.batch_id;
+    ELSIF OLD.status != 'active' AND NEW.status = 'active' THEN
+      UPDATE public.batches SET current_seats = current_seats + 1 WHERE id = NEW.batch_id;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_seats_on_enrollment ON public.enrollments;
+CREATE TRIGGER update_seats_on_enrollment 
+  AFTER INSERT OR UPDATE ON public.enrollments 
+  FOR EACH ROW 
+  EXECUTE FUNCTION public.update_batch_seats();
+
+-- 7.6 update_course_sales
+CREATE OR REPLACE FUNCTION public.update_course_sales()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE public.courses SET total_sales = total_sales + 1 WHERE id = NEW.course_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS increment_course_sales ON public.course_purchases;
+CREATE TRIGGER increment_course_sales 
+  AFTER INSERT ON public.course_purchases 
+  FOR EACH ROW 
+  EXECUTE FUNCTION public.update_course_sales();
+
+-- 7.7 auto_assign_batch_roll_no
+CREATE OR REPLACE FUNCTION public.auto_assign_batch_roll_no()
+RETURNS TRIGGER AS $$
+DECLARE
+  next_roll INTEGER;
+  existing_count INTEGER;
+BEGIN
+  IF NEW.roll_no IS NOT NULL AND NEW.roll_no > 0 THEN
+    SELECT COUNT(*) INTO existing_count
+    FROM public.enrollments
+    WHERE batch_id = NEW.batch_id AND roll_no = NEW.roll_no AND id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid);
+    
+    IF existing_count > 0 THEN
+      SELECT COALESCE(MAX(roll_no), 0) + 1 INTO next_roll
+      FROM public.enrollments
+      WHERE batch_id = NEW.batch_id;
+      NEW.roll_no := next_roll;
+    END IF;
+  ELSE
+    SELECT COALESCE(MAX(roll_no), 0) + 1 INTO next_roll
+    FROM public.enrollments
+    WHERE batch_id = NEW.batch_id;
+    NEW.roll_no := next_roll;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS auto_assign_roll_trigger ON public.enrollments;
+CREATE TRIGGER auto_assign_roll_trigger
+  BEFORE INSERT OR UPDATE OF roll_no ON public.enrollments
+  FOR EACH ROW
+  EXECUTE FUNCTION public.auto_assign_batch_roll_no();
+
+
+-- ==============================================================================
+-- 8. ROW LEVEL SECURITY (RLS) POLICIES
+-- ==============================================================================
+
+-- Enable RLS across all tables
+ALTER TABLE public.branches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.staff ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.staff_branches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.enrollments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fee_structures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_approvers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.payment_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fee_dues ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.referrals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.biometric_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exam_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exam_questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exam_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.exam_answers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.materials ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.material_issues ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.course_content ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.course_purchases ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.course_reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sms_queue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.slider_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.notices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.feedback ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_deletion_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.branch_deletion_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.blogs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.achievements ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "Public full access branch deletion requests" ON public.branch_deletion_requests;
-CREATE POLICY "Public full access branch deletion requests"
-  ON public.branch_deletion_requests
-  FOR ALL
-  TO authenticated, anon
-  USING (true)
-  WITH CHECK (true);
+-- Idempotent Permissive Policies for Web Application Operations
+DROP POLICY IF EXISTS "Public full access branches" ON public.branches;
+CREATE POLICY "Public full access branches" ON public.branches FOR ALL USING (true);
 
--- ==================== 031_resequence_duplicate_batch_rolls.sql ====================
--- Migration 031: Resequence duplicate batch roll numbers (1, 2, 3...)
--- Ensures strict sequential rolls (1, 2, 3...) starting from 1 for every batch,
--- resolving any duplicate rolls (e.g. multiple Roll 1s) caused by client defaults.
+DROP POLICY IF EXISTS "Public full access staff" ON public.staff;
+CREATE POLICY "Public full access staff" ON public.staff FOR ALL USING (true);
 
--- 1. Re-sequence all enrollments partitioned by batch_id
+DROP POLICY IF EXISTS "Public full access staff_branches" ON public.staff_branches;
+CREATE POLICY "Public full access staff_branches" ON public.staff_branches FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access students" ON public.students;
+CREATE POLICY "Public full access students" ON public.students FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access rooms" ON public.rooms;
+CREATE POLICY "Public full access rooms" ON public.rooms FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access batches" ON public.batches;
+CREATE POLICY "Public full access batches" ON public.batches FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access enrollments" ON public.enrollments;
+CREATE POLICY "Public full access enrollments" ON public.enrollments FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access fee_structures" ON public.fee_structures;
+CREATE POLICY "Public full access fee_structures" ON public.fee_structures FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access payments" ON public.payments;
+CREATE POLICY "Public full access payments" ON public.payments FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access payment_accounts" ON public.payment_accounts;
+CREATE POLICY "Public full access payment_accounts" ON public.payment_accounts FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access payment_approvers" ON public.payment_approvers;
+CREATE POLICY "Public full access payment_approvers" ON public.payment_approvers FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access payment_submissions" ON public.payment_submissions;
+CREATE POLICY "Public full access payment_submissions" ON public.payment_submissions FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access fee_dues" ON public.fee_dues;
+CREATE POLICY "Public full access fee_dues" ON public.fee_dues FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access referrals" ON public.referrals;
+CREATE POLICY "Public full access referrals" ON public.referrals FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access attendance" ON public.attendance;
+CREATE POLICY "Public full access attendance" ON public.attendance FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access biometric_logs" ON public.biometric_logs;
+CREATE POLICY "Public full access biometric_logs" ON public.biometric_logs FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access exams" ON public.exams;
+CREATE POLICY "Public full access exams" ON public.exams FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access exam_results" ON public.exam_results;
+CREATE POLICY "Public full access exam_results" ON public.exam_results FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access exam_questions" ON public.exam_questions;
+CREATE POLICY "Public full access exam_questions" ON public.exam_questions FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access exam_submissions" ON public.exam_submissions;
+CREATE POLICY "Public full access exam_submissions" ON public.exam_submissions FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access exam_answers" ON public.exam_answers;
+CREATE POLICY "Public full access exam_answers" ON public.exam_answers FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access materials" ON public.materials;
+CREATE POLICY "Public full access materials" ON public.materials FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access material_issues" ON public.material_issues;
+CREATE POLICY "Public full access material_issues" ON public.material_issues FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access courses" ON public.courses;
+CREATE POLICY "Public full access courses" ON public.courses FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access course_content" ON public.course_content;
+CREATE POLICY "Public full access course_content" ON public.course_content FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access course_purchases" ON public.course_purchases;
+CREATE POLICY "Public full access course_purchases" ON public.course_purchases FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access course_reviews" ON public.course_reviews;
+CREATE POLICY "Public full access course_reviews" ON public.course_reviews FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access sms_queue" ON public.sms_queue;
+CREATE POLICY "Public full access sms_queue" ON public.sms_queue FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access audit_logs" ON public.audit_logs;
+CREATE POLICY "Public full access audit_logs" ON public.audit_logs FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access expenses" ON public.expenses;
+CREATE POLICY "Public full access expenses" ON public.expenses FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access notifications" ON public.notifications;
+CREATE POLICY "Public full access notifications" ON public.notifications FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access slider_images" ON public.slider_images;
+CREATE POLICY "Public full access slider_images" ON public.slider_images FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access user_profiles" ON public.user_profiles;
+CREATE POLICY "Public full access user_profiles" ON public.user_profiles FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access site_settings" ON public.site_settings;
+CREATE POLICY "Public full access site_settings" ON public.site_settings FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access notices" ON public.notices;
+CREATE POLICY "Public full access notices" ON public.notices FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access feedback" ON public.feedback;
+CREATE POLICY "Public full access feedback" ON public.feedback FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access student_deletion_requests" ON public.student_deletion_requests;
+CREATE POLICY "Public full access student_deletion_requests" ON public.student_deletion_requests FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access branch_deletion_requests" ON public.branch_deletion_requests;
+CREATE POLICY "Public full access branch_deletion_requests" ON public.branch_deletion_requests FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access blogs" ON public.blogs;
+CREATE POLICY "Public full access blogs" ON public.blogs FOR ALL USING (true);
+
+DROP POLICY IF EXISTS "Public full access achievements" ON public.achievements;
+CREATE POLICY "Public full access achievements" ON public.achievements FOR ALL USING (true);
+
+
+-- ==============================================================================
+-- 9. DATA BACKFILLS & CLEANUP
+-- ==============================================================================
+
+-- 9.1 Backfill students qr_code
+UPDATE public.students s
+SET qr_code = 'MSQR-' || 
+  TO_CHAR(COALESCE(s.created_at, s.enrollment_date::timestamptz, NOW()), 'YYYYMMDD') || '-' || 
+  LPAD(COALESCE(NULLIF(regexp_replace(s.student_id, '\D', '', 'g'), ''), '1'), 4, '0') || '-' || 
+  UPPER(SUBSTRING(MD5(s.id::text || COALESCE(s.created_at::text, 'admission')) FROM 1 FOR 4))
+WHERE s.qr_code IS NULL OR s.qr_code = '';
+
+-- 9.2 Backfill enrollments qr_code
+UPDATE public.enrollments e
+SET qr_code = 'MSQR-' || 
+  TO_CHAR(COALESCE(e.created_at, NOW()), 'YYYYMMDD') || '-' || 
+  LPAD(COALESCE(e.roll_no::text, '1'), 3, '0') || '-' || 
+  UPPER(SUBSTRING(MD5(e.id::text || COALESCE(e.created_at::text, 'enrollment')) FROM 1 FOR 4))
+FROM public.students s
+WHERE e.student_id = s.id AND (e.qr_code IS NULL OR e.qr_code = '');
+
+-- 9.3 Ensure sequential roll numbers for enrollments
 DO $$
 BEGIN
   WITH ranked AS (
@@ -1732,204 +1512,95 @@ BEGIN
     AND (e.roll_no IS NULL OR e.roll_no <> ranked.r_num);
 END $$;
 
--- 2. Sync updated roll_no and batch_roll to students table
-DO $$
-BEGIN
-  UPDATE public.students s
-  SET roll_no = e.roll_no,
-      batch_roll = e.roll_no
-  FROM public.enrollments e
-  WHERE e.student_id = s.id 
-    AND e.status = 'active'
-    AND (s.roll_no IS NULL OR s.roll_no <> e.roll_no OR s.batch_roll IS NULL OR s.batch_roll <> e.roll_no);
-END $$;
+-- 9.4 Sync roll numbers to students
+UPDATE public.students s
+SET roll_no = e.roll_no,
+    batch_roll = e.roll_no
+FROM public.enrollments e
+WHERE e.student_id = s.id 
+  AND e.status = 'active'
+  AND (s.roll_no IS NULL OR s.roll_no <> e.roll_no OR s.batch_roll IS NULL OR s.batch_roll <> e.roll_no);
 
--- 3. Trigger enhancement: Ensure roll_no is always MAX + 1 if duplicate or null
-CREATE OR REPLACE FUNCTION public.auto_assign_batch_roll_no()
-RETURNS TRIGGER AS $$
+-- 9.5 Populate default site settings if not present
+INSERT INTO public.site_settings (key, value) VALUES
+  ('contact_link', 'https://wa.me/8801302201431'),
+  ('contact_label', 'WhatsApp Us'),
+  ('institute_name', 'Prottasha Coaching Academy'),
+  ('institute_name_bn', 'প্রত্যাশা কোচিং একাডেমি'),
+  ('theme_color', 'emerald')
+ON CONFLICT (key) DO NOTHING;
+
+
+-- ==============================================================================
+-- 10. DEFAULT BRANCH & SAFE OWNER ACCOUNT LINKING
+-- ==============================================================================
+DO $$
 DECLARE
-  next_roll INTEGER;
-  existing_count INTEGER;
+  v_branch_id UUID;
+  v_owner_auth_id UUID;
+  v_owner_email TEXT;
 BEGIN
-  -- Check if roll_no is missing or already taken in this batch
-  IF NEW.roll_no IS NOT NULL AND NEW.roll_no > 0 THEN
-    SELECT COUNT(*) INTO existing_count
-    FROM public.enrollments
-    WHERE batch_id = NEW.batch_id AND roll_no = NEW.roll_no AND id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid);
-    
-    IF existing_count > 0 THEN
-      -- Duplicate detected! Auto-assign MAX + 1
-      SELECT COALESCE(MAX(roll_no), 0) + 1 INTO next_roll
-      FROM public.enrollments
-      WHERE batch_id = NEW.batch_id;
-      
-      NEW.roll_no := next_roll;
+  -- 10.1 Ensure at least one Branch exists
+  INSERT INTO public.branches (name, address, location, phone, email, is_active, established_year)
+  SELECT 'Main Campus', 'Main Road, Campus Area', 'Main Campus', '+880 1700-000000', 'info@prottashacoaching.com', true, '2024'
+  WHERE NOT EXISTS (SELECT 1 FROM public.branches LIMIT 1);
+
+  SELECT id INTO v_branch_id FROM public.branches LIMIT 1;
+
+  -- 10.2 Ensure any existing staff with role 'owner' has full permissions
+  UPDATE public.staff 
+  SET has_super_financial_access = TRUE,
+      has_financial_access = TRUE,
+      is_active = TRUE
+  WHERE role = 'owner';
+
+  -- 10.3 If no staff record has role 'owner', find the existing auth user and link them as owner
+  IF NOT EXISTS (SELECT 1 FROM public.staff WHERE role = 'owner') THEN
+    SELECT id, email INTO v_owner_auth_id, v_owner_email
+    FROM auth.users
+    ORDER BY created_at ASC
+    LIMIT 1;
+
+    IF v_owner_auth_id IS NOT NULL THEN
+      INSERT INTO public.staff (
+        auth_user_id,
+        name,
+        email,
+        role,
+        branch_id,
+        has_financial_access,
+        has_super_financial_access,
+        is_active
+      )
+      VALUES (
+        v_owner_auth_id,
+        COALESCE(v_owner_email, 'Super Admin'),
+        COALESCE(v_owner_email, 'owner@prottashacoaching.com'),
+        'owner',
+        v_branch_id,
+        TRUE,
+        TRUE,
+        TRUE
+      )
+      ON CONFLICT (email) DO UPDATE SET
+        auth_user_id = EXCLUDED.auth_user_id,
+        role = 'owner',
+        has_financial_access = TRUE,
+        has_super_financial_access = TRUE,
+        is_active = TRUE;
+
+      RAISE NOTICE 'SUCCESS: Existing Supabase Auth user % has been linked as the Owner staff member.', v_owner_email;
+    ELSE
+      RAISE NOTICE 'INFO: No user found in auth.users yet. Create an account in Supabase Auth and it will be linked or update staff manually.';
     END IF;
   ELSE
-    SELECT COALESCE(MAX(roll_no), 0) + 1 INTO next_roll
-    FROM public.enrollments
-    WHERE batch_id = NEW.batch_id;
-    
-    NEW.roll_no := next_roll;
+    RAISE NOTICE 'SUCCESS: Owner staff member verified with super admin permissions.';
   END IF;
-
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS trg_auto_assign_batch_roll_no ON public.enrollments;
-CREATE TRIGGER trg_auto_assign_batch_roll_no
-BEFORE INSERT ON public.enrollments
-FOR EACH ROW
-EXECUTE FUNCTION public.auto_assign_batch_roll_no();
-
--- ==================== 032_ensure_enrollments_branch_id.sql ====================
--- Migration 032: Ensure enrollments and slider_images have branch_id column
--- Safe and idempotent script for Supabase
-
--- 1. Enrollments branch_id
-ALTER TABLE public.enrollments ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_enrollments_branch ON public.enrollments(branch_id);
-
--- 2. Slider Images branch_id
-ALTER TABLE public.slider_images ADD COLUMN IF NOT EXISTS branch_id UUID REFERENCES public.branches(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_slider_images_branch ON public.slider_images(branch_id);
-
-
--- ==================== 033_material_issues_status_and_batch_id.sql ====================
--- ==============================================================================
--- Migration 033: Ensure status and batch_id exist on material_issues table
--- Run this in your Supabase Dashboard -> SQL Editor (or apply via migration tool)
--- ==============================================================================
-
--- 1. Add status column with default 'issued'
-ALTER TABLE public.material_issues 
-  ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'issued';
-
--- 2. Add batch_id column referencing public.batches
-ALTER TABLE public.material_issues 
-  ADD COLUMN IF NOT EXISTS batch_id UUID REFERENCES public.batches(id) ON DELETE SET NULL;
-
--- 3. Backfill any existing records where status is null:
-UPDATE public.material_issues 
-SET status = CASE 
-  WHEN returned_at IS NOT NULL THEN 'returned' 
-  ELSE 'issued' 
-END 
-WHERE status IS NULL;
-
--- 4. Indexes for fast status and batch queries
-CREATE INDEX IF NOT EXISTS idx_material_issues_status ON public.material_issues (status);
-CREATE INDEX IF NOT EXISTS idx_material_issues_batch_id ON public.material_issues (batch_id);
-
--- 5. Refresh PostgREST schema cache immediately
-NOTIFY pgrst, 'reload schema';
-
--- ==================== 034_student_and_enrollment_qr_code.sql ====================
--- ==============================================================================
--- Migration 034: Add unique admission-time QR code to students and enrollments
--- Run this in your Supabase Dashboard -> SQL Editor (or apply via migration tool)
--- ==============================================================================
-
--- 1. Add qr_code column to students
-ALTER TABLE public.students 
-  ADD COLUMN IF NOT EXISTS qr_code TEXT;
-
--- 2. Add qr_code column to enrollments
-ALTER TABLE public.enrollments 
-  ADD COLUMN IF NOT EXISTS qr_code TEXT;
-
--- 3. Backfill existing students where qr_code is NULL
-UPDATE public.students s
-SET qr_code = 'MSQR-' || 
-  TO_CHAR(COALESCE(s.created_at, s.enrollment_date::timestamptz, NOW()), 'YYYYMMDD') || '-' || 
-  LPAD(COALESCE(NULLIF(regexp_replace(s.student_id, '\D', '', 'g'), ''), '1'), 4, '0') || '-' || 
-  UPPER(SUBSTRING(MD5(s.id::text || COALESCE(s.created_at::text, 'admission')) FROM 1 FOR 4))
-WHERE s.qr_code IS NULL OR s.qr_code = '';
-
--- 4. Backfill existing enrollments where qr_code is NULL
-UPDATE public.enrollments e
-SET qr_code = 'MSQR-' || 
-  TO_CHAR(COALESCE(e.created_at, NOW()), 'YYYYMMDD') || '-' || 
-  LPAD(COALESCE(e.roll_no::text, '1'), 3, '0') || '-' || 
-  UPPER(SUBSTRING(MD5(e.id::text || COALESCE(e.created_at::text, 'enrollment')) FROM 1 FOR 4))
-FROM public.students s
-WHERE e.student_id = s.id AND (e.qr_code IS NULL OR e.qr_code = '');
-
--- 5. Indexes for fast QR scanning lookup
-CREATE INDEX IF NOT EXISTS idx_students_qr_code ON public.students (qr_code);
-CREATE INDEX IF NOT EXISTS idx_enrollments_qr_code ON public.enrollments (qr_code);
-
--- 6. Refresh PostgREST schema cache
-NOTIFY pgrst, 'reload schema';
-
-
--- ====================================================================
--- FINAL STEP: CREATE DEFAULT BRANCH & SUPER ADMIN (OWNER) ACCOUNT
--- ====================================================================
-DO $$
-DECLARE
-  user_email TEXT := 'asikrcommon@gmail.com';
-  user_password TEXT := 'Admin@123456';
-  user_id UUID;
-  branch_record_id UUID;
-BEGIN
-  -- 1. Ensure at least one Branch exists
-  INSERT INTO branches (name, address, phone, is_active)
-  SELECT 'Main Campus', 'Main Road', '+880 1700-000000', true
-  WHERE NOT EXISTS (SELECT 1 FROM branches LIMIT 1);
-
-  SELECT id INTO branch_record_id FROM branches LIMIT 1;
-
-  -- 2. Create the user in auth.users with password if not exists, or update password
-  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE email = user_email) THEN
-    user_id := gen_random_uuid();
-    INSERT INTO auth.users (
-      instance_id,
-      id,
-      aud,
-      role,
-      email,
-      encrypted_password,
-      email_confirmed_at,
-      raw_app_meta_data,
-      raw_user_meta_data,
-      created_at,
-      updated_at
-    ) VALUES (
-      '00000000-0000-0000-0000-000000000000',
-      user_id,
-      'authenticated',
-      'authenticated',
-      user_email,
-      crypt(user_password, gen_salt('bf')),
-      NOW(),
-      '{"provider":"email","providers":["email"]}',
-      '{"full_name":"Super Admin"}',
-      NOW(),
-      NOW()
-    );
-  ELSE
-    UPDATE auth.users 
-    SET encrypted_password = crypt(user_password, gen_salt('bf')),
-        email_confirmed_at = NOW()
-    WHERE email = user_email
-    RETURNING id INTO user_id;
-  END IF;
-
-  -- 3. Link or update the staff record with 'owner' role
-  INSERT INTO staff (auth_user_id, name, email, role, branch_id)
-  VALUES (
-    (SELECT id FROM auth.users WHERE email = user_email),
-    'Super Admin',
-    user_email,
-    'owner',
-    branch_record_id
-  )
-  ON CONFLICT (email) DO UPDATE SET 
-    role = 'owner',
-    auth_user_id = (SELECT id FROM auth.users WHERE email = user_email),
-    branch_id = branch_record_id;
-
-  RAISE NOTICE 'SUCCESS: Database tables and Super Admin created! Email: %, Password: %', user_email, user_password;
 END $$;
+
+-- ==============================================================================
+-- 11. RELOAD POSTGREST SCHEMA CACHE
+-- ==============================================================================
+NOTIFY pgrst, 'reload schema';
+
+SELECT 'Database setup completed successfully! All tables, columns, indexes, policies, and permissions are up to date.' AS result;

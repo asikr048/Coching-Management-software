@@ -167,13 +167,32 @@ export default function ExamPrintModal({
   //    Defaults to displayTitle (series name). User can change it just for the printout.
   const [pdfTitle, setPdfTitle] = useState<string>(displayTitle)
 
-  // Keep academic year and pdfTitle synced if exam changes (e.g. navigating between weeks)
+  // 8. Custom Editable Result Sheet Headings (local only before printing)
+  const [customInstituteName, setCustomInstituteName] = useState<string>(branding.nameBn || branding.name || "মেধাসিঁড়ি")
+  const [customInstituteBranch, setCustomInstituteBranch] = useState<string>(exam.branch?.name || branding.address || "Academic Care")
+  const [customBatchName, setCustomBatchName] = useState<string>("")
+  const [customDocumentTitle, setCustomDocumentTitle] = useState<string>("")
+  const [customDocumentSubtitle, setCustomDocumentSubtitle] = useState<string>("")
+  const [customToppersHeader1, setCustomToppersHeader1] = useState<string>("🏆 সামগ্রিক শীর্ষ মেধা (GRAND TOTAL TOPPERS)")
+  const [customToppersHeader2, setCustomToppersHeader2] = useState<string>("📚 বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী তালিকা (SUBJECT-WISE TOPPERS)")
+  const [isEditingHeadings, setIsEditingHeadings] = useState<boolean>(false)
+
+  // Keep academic year, pdfTitle, and branding synced if exam/branding changes
   useEffect(() => {
     if (exam.exam_date) {
       setCustomAcademicYear(new Date(exam.exam_date).getFullYear().toString())
     }
     setPdfTitle((isWeeklyExam && seriesTitle) ? seriesTitle : (exam.title || ""))
   }, [exam.id, exam.exam_date, exam.title, isWeeklyExam, seriesTitle])
+
+  useEffect(() => {
+    if (branding.nameBn || branding.name) {
+      setCustomInstituteName(branding.nameBn || branding.name)
+    }
+    if (exam.branch?.name || branding.address) {
+      setCustomInstituteBranch(exam.branch?.name || branding.address || "Academic Care")
+    }
+  }, [branding.nameBn, branding.name, branding.address, exam.branch?.name])
 
   // Sync mode and orientation when defaultMode changes
   useEffect(() => {
@@ -417,6 +436,193 @@ export default function ExamPrintModal({
       gpa: e.gpa,
     }))
   }, [studentEvaluations])
+
+  // Effective editable names
+  const effectiveBatchName = customBatchName.trim() ? customBatchName : activeBatchName
+  const effectiveInstituteName = customInstituteName.trim() ? customInstituteName : (branding.nameBn || branding.name || "মেধাসিঁড়ি")
+  const effectiveInstituteBranch = customInstituteBranch.trim() ? customInstituteBranch : (exam.branch?.name || branding.address || "Academic Care")
+
+  const defaultDocTitle = useMemo(() => {
+    if (template === "merit_list") return "Section Wise Merit List"
+    if (template === "progress_report") return "PROGRESS REPORT"
+    if (template === "tabulation") return isCombinedWeeks ? "সকল সপ্তাহের সমন্বিত মেধা ও ফলাফল বিবরণী" : "পূর্ণাঙ্গ টেবুলেশন শিট"
+    return "TOPPERS & MERIT SUMMARY"
+  }, [template, isCombinedWeeks])
+
+  const defaultDocSubtitle = useMemo(() => {
+    if (template === "merit_list") return "শাখাভিত্তিক মেধা তালিকা"
+    if (template === "progress_report") return "শিক্ষার্থী অগ্রগতি প্রতিবেদন"
+    if (template === "tabulation") return "ফলাফল টেবুলেশন বিবরণী"
+    return "শীর্ষ মেধাবী শিক্ষার্থী তালিকা"
+  }, [template])
+
+  const effectiveDocTitle = customDocumentTitle.trim() ? customDocumentTitle : defaultDocTitle
+  const effectiveDocSubtitle = customDocumentSubtitle.trim() ? customDocumentSubtitle : defaultDocSubtitle
+
+  // 1. Dynamic Total Toppers (Grand Total Toppers) for Weekly & Combined View
+  const activeTotalToppers = useMemo<GrandTopperItem[]>(() => {
+    const scoredList = studentEvaluations
+      .filter((e) => e.hasEvaluated && e.totalMarks > 0)
+      .sort((a, b) => b.totalMarks - a.totalMarks || Number(a.rollNumber) - Number(b.rollNumber))
+
+    if (scoredList.length === 0) {
+      if (totalToppers && totalToppers.length > 0 && !isCombinedWeeks) {
+        return totalToppers
+      }
+      return []
+    }
+
+    const uniqueScores = Array.from(new Set(scoredList.map((x) => x.totalMarks))).sort((a, b) => b - a)
+    const top3Scores = uniqueScores.slice(0, 3)
+
+    return top3Scores.map((score, idx) => {
+      const position = (idx + 1) as 1 | 2 | 3
+      const studentsInTier = scoredList.filter((x) => x.totalMarks === score)
+      const pct = activeTotalMarks > 0 ? Math.round((score / activeTotalMarks) * 100) : 0
+      const gradeInfo = calculateCoachingGrade(score, activeTotalMarks)
+      const positionLabel = position === 1 ? "১ম স্থান" : position === 2 ? "২য় স্থান" : "৩য় স্থান"
+
+      return {
+        position,
+        positionLabel,
+        obtained_marks: score,
+        pct,
+        grade: gradeInfo.grade,
+        gpa: gradeInfo.gp,
+        students: studentsInTier.map((x) => ({
+          id: x.student.id,
+          name: x.student.name,
+          roll_no: x.student.roll_no,
+          batch_roll: x.student.batch_roll,
+          student_id: x.student.student_id,
+        })),
+      }
+    })
+  }, [studentEvaluations, activeTotalMarks, totalToppers, isCombinedWeeks])
+
+  // 2. Dynamic Subject Toppers across active scope (including combined weeks)
+  const activeSubjectToppers = useMemo<SubjectTopperItem[]>(() => {
+    if (isCombinedWeeks && activeCombinedExams.length > 0) {
+      const allSubjectItems: SubjectTopperItem[] = []
+
+      activeCombinedExams.forEach((we, wIdx) => {
+        const weekNum = (we.result_note ? extractSeriesWeek(we.result_note, we.title) : 0) || (wIdx + 1)
+        const weekLabel = `Week ${weekNum}`
+
+        let examDays: Array<{ key: string; day_bn: string; subject?: string; exam_name?: string; total_marks: number }> = []
+        if (Array.isArray(we.recurring_days) && we.recurring_days.length > 0) {
+          examDays = we.recurring_days.map((d: any) => ({
+            key: typeof d === "object" ? d.day || d.key : d,
+            day_bn: typeof d === "object" ? d.day_bn || d.day : d,
+            subject: typeof d === "object" ? d.subject : "",
+            exam_name: typeof d === "object" ? d.exam_name : "",
+            total_marks: typeof d === "object" ? Number(d.total_marks) || 50 : 50,
+          }))
+        } else if (we.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+          try {
+            const m = we.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+            if (m && m[1]) {
+              const parsed = JSON.parse(m[1])
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                examDays = parsed.map((d: any) => ({
+                  key: d.day || d.key,
+                  day_bn: d.day_bn || d.day,
+                  subject: d.subject || "",
+                  exam_name: d.exam_name || "",
+                  total_marks: Number(d.total_marks) || 50,
+                }))
+              }
+            }
+          } catch {}
+        }
+        if (examDays.length === 0 && weeklyDays.length > 0) {
+          examDays = weeklyDays
+        }
+
+        examDays.forEach((d) => {
+          let topScore = -1
+          const candidateMap: Record<string, number> = {}
+
+          for (const s of filteredStudents) {
+            const sid = s.id
+            const scode = s.student_id
+            const sDays =
+              combinedWeeksDayMarks?.[sid]?.[we.id] ||
+              (scode ? combinedWeeksDayMarks?.[scode]?.[we.id] : undefined) ||
+              (we.id === exam.id ? (dayMarksMap[sid] || (scode ? dayMarksMap[scode] : undefined)) : undefined) ||
+              {}
+            const item = getDayMarkItemHelper(sDays, d.key, d.day_bn, (d as any).day_en)
+            const val = item !== undefined && item !== null ? Number(item?.marks ?? item) : -1
+            if (!isNaN(val) && val >= 0) {
+              candidateMap[s.id] = val
+              if (val > topScore) topScore = val
+            }
+          }
+
+          const winners = topScore >= 0
+            ? filteredStudents
+                .filter((s) => candidateMap[s.id] === topScore)
+                .map((s) => ({
+                  id: s.id,
+                  name: s.name,
+                  roll_no: s.roll_no,
+                  batch_roll: s.batch_roll,
+                  student_id: s.student_id,
+                }))
+            : []
+
+          allSubjectItems.push({
+            dayName: `${weekLabel}: ${d.day_bn || d.key}`,
+            subjectName: d.subject || d.exam_name || "সাপ্তাহিক মূল্যায়ন",
+            totalMarks: d.total_marks || 50,
+            highestMarks: topScore >= 0 ? topScore : 0,
+            winners,
+          })
+        })
+      })
+
+      if (allSubjectItems.length > 0) return allSubjectItems
+    }
+
+    if (weeklyDays.length > 0) {
+      return weeklyDays.map((d) => {
+        let topScore = -1
+        const candidateMap: Record<string, number> = {}
+
+        for (const s of filteredStudents) {
+          const sDays = dayMarksMap[s.id] || {}
+          const item = getDayMarkItemHelper(sDays, d.key, d.day_bn, (d as any).day_en)
+          const val = item !== undefined && item !== null ? Number(item?.marks ?? item) : -1
+          if (!isNaN(val) && val >= 0) {
+            candidateMap[s.id] = val
+            if (val > topScore) topScore = val
+          }
+        }
+
+        const winners = topScore >= 0
+          ? filteredStudents
+              .filter((s) => candidateMap[s.id] === topScore)
+              .map((s) => ({
+                id: s.id,
+                name: s.name,
+                roll_no: s.roll_no,
+                batch_roll: s.batch_roll,
+                student_id: s.student_id,
+              }))
+          : []
+
+        return {
+          dayName: d.day_bn || d.key,
+          subjectName: d.subject || d.exam_name || "বিষয়ভিত্তিক মূল্যায়ন",
+          totalMarks: d.total_marks || 50,
+          highestMarks: topScore >= 0 ? topScore : 0,
+          winners,
+        }
+      })
+    }
+
+    return subjectToppers || []
+  }, [isCombinedWeeks, activeCombinedExams, weeklyDays, filteredStudents, combinedWeeksDayMarks, dayMarksMap, exam.id, subjectToppers])
 
   // Students to render in Progress Report mode
   const targetProgressReportStudents = useMemo(() => {
@@ -814,6 +1020,20 @@ export default function ExamPrintModal({
                 placeholder="2026"
                 title="রেজাল্ট শিটে শিক্ষাবর্ষ পরিবর্তন করুন"
               />
+
+              <button
+                type="button"
+                onClick={() => setIsEditingHeadings(!isEditingHeadings)}
+                className={cn(
+                  "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 border ml-1",
+                  isEditingHeadings
+                    ? "bg-amber-500 text-white border-amber-600 shadow-xs"
+                    : "bg-white text-slate-700 hover:bg-slate-100 border-slate-300"
+                )}
+                title="প্রিন্টের পূর্বে সকল রেজাল্ট শিটের শিরোনাম ও হেডিং পরিবর্তন করুন"
+              >
+                <span>✏️ সকল হেডিং সম্পাদনা</span>
+              </button>
             </div>
 
             {/* 2. Multi-Batch Selector (When multi-batch exists) */}
@@ -952,6 +1172,105 @@ export default function ExamPrintModal({
               </div>
             )}
           </div>
+
+          {/* Editable Headings Drawer */}
+          {isEditingHeadings && (
+            <div className="bg-amber-50/70 border border-amber-200 rounded-xl p-3 mt-1 animate-in fade-in duration-200 text-xs shadow-xs">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <span>✏️ রেজাল্ট শিটের সকল শিরোনাম ও হেডিং সম্পাদনা</span>
+                  <span className="text-[10px] text-slate-500 font-normal">(শুধুমাত্র প্রিন্ট কপি ও PDF এর জন্য প্রযোজ্য)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomInstituteName(branding.nameBn || branding.name || "মেধাসিঁড়ি")
+                    setCustomInstituteBranch(exam.branch?.name || branding.address || "Academic Care")
+                    setCustomBatchName("")
+                    setCustomDocumentTitle("")
+                    setCustomDocumentSubtitle("")
+                    setCustomToppersHeader1("🏆 সামগ্রিক শীর্ষ মেধা (GRAND TOTAL TOPPERS)")
+                    setCustomToppersHeader2("📚 বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী তালিকা (SUBJECT-WISE TOPPERS)")
+                  }}
+                  className="text-[11px] text-amber-700 hover:text-amber-900 underline font-medium cursor-pointer"
+                >
+                  ডিফল্টে রিসেট করুন
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="text-slate-600 block mb-0.5 font-medium">প্রতিষ্ঠান নাম:</label>
+                  <input
+                    type="text"
+                    value={customInstituteName}
+                    onChange={(e) => setCustomInstituteName(e.target.value)}
+                    placeholder={branding.nameBn || branding.name || "মেধাসিঁড়ি"}
+                    className="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-600 block mb-0.5 font-medium">ব্রাঞ্চ / শাখা / সাব-টাইটেল:</label>
+                  <input
+                    type="text"
+                    value={customInstituteBranch}
+                    onChange={(e) => setCustomInstituteBranch(e.target.value)}
+                    placeholder={exam.branch?.name || branding.address || "Academic Care"}
+                    className="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-600 block mb-0.5 font-medium">ব্যাচ / সেকশন নাম:</label>
+                  <input
+                    type="text"
+                    value={customBatchName}
+                    onChange={(e) => setCustomBatchName(e.target.value)}
+                    placeholder={activeBatchName}
+                    className="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-600 block mb-0.5 font-medium">মূল শিটের শিরোনাম (Document Title):</label>
+                  <input
+                    type="text"
+                    value={customDocumentTitle}
+                    onChange={(e) => setCustomDocumentTitle(e.target.value)}
+                    placeholder="SECTION WISE MERIT LIST / PROGRESS REPORT"
+                    className="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-600 block mb-0.5 font-medium">শিট সাব-টাইটেল (Subtitle):</label>
+                  <input
+                    type="text"
+                    value={customDocumentSubtitle}
+                    onChange={(e) => setCustomDocumentSubtitle(e.target.value)}
+                    placeholder="Class Wise Merit Position & Academic Report"
+                    className="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-slate-600 block mb-0.5 font-medium">টপার শিট সেকশন ১ হেডিং:</label>
+                  <input
+                    type="text"
+                    value={customToppersHeader1}
+                    onChange={(e) => setCustomToppersHeader1(e.target.value)}
+                    placeholder="🏆 সামগ্রিক শীর্ষ মেধা (GRAND TOTAL TOPPERS)"
+                    className="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <label className="text-slate-600 block mb-0.5 font-medium">টপার শিট সেকশন ২ হেডিং (বিষয়ভিত্তিক টপার):</label>
+                  <input
+                    type="text"
+                    value={customToppersHeader2}
+                    onChange={(e) => setCustomToppersHeader2(e.target.value)}
+                    placeholder="📚 বিষয়ভিত্তিক শীর্ষ শিক্ষার্থী তালিকা (SUBJECT-WISE TOPPERS)"
+                    className="w-full px-2.5 py-1 bg-white border border-slate-300 rounded-lg font-bold text-slate-800 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Document Preview Viewport */}
@@ -966,10 +1285,10 @@ export default function ExamPrintModal({
             {/* TEMPLATE 1: SECTION WISE MERIT LIST (Picture 2) */}
             {template === "merit_list" && (
               <SectionWiseMeritList
-                instituteName={branding.nameBn || branding.name}
-                instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
+                instituteName={effectiveInstituteName}
+                instituteBranch={effectiveInstituteBranch}
                 instituteLogoUrl={branding.logoUrl}
-                sectionName={activeBatchName}
+                sectionName={effectiveBatchName}
                 examTitle={
                   isCombinedWeeks && activeCombinedExams.length > 0
                     ? `${pdfTitle || displayTitle} (${activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})`
@@ -977,6 +1296,8 @@ export default function ExamPrintModal({
                 }
                 academicYear={customAcademicYear}
                 rows={meritListRows}
+                documentTitle={effectiveDocTitle}
+                documentSubtitle={effectiveDocSubtitle}
               />
             )}
 
@@ -990,12 +1311,12 @@ export default function ExamPrintModal({
                   return (
                     <StudentProgressReport
                       key={st.id}
-                      instituteName={branding.nameBn || branding.name}
-                      instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
+                      instituteName={effectiveInstituteName}
+                      instituteBranch={effectiveInstituteBranch}
                       instituteLogoUrl={branding.logoUrl}
                       examTitle={pdfTitle || displayTitle}
                       academicYear={customAcademicYear}
-                      batchName={activeBatchName}
+                      batchName={effectiveBatchName}
                       groupName={st.group || "HUMANITIES"}
                       student={{
                         id: st.id,
@@ -1011,6 +1332,7 @@ export default function ExamPrintModal({
                       }}
                       subjects={subjects}
                       classPosition={ev?.meritRank || "—"}
+                      documentTitle={effectiveDocTitle}
                     />
                   )
                 })}
@@ -1020,12 +1342,14 @@ export default function ExamPrintModal({
             {/* TEMPLATE 3: COMPREHENSIVE TABULATION SHEET */}
             {template === "tabulation" && (
               <PrintableExamSheet
-                instituteName={branding.nameBn || branding.name}
-                instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
+                instituteName={effectiveInstituteName}
+                instituteBranch={effectiveInstituteBranch}
                 instituteLogoUrl={branding.logoUrl}
                 tagline={branding.tagline}
+                documentTitle={effectiveDocTitle}
                 exam={{
                   ...exam,
+                  batch: { name: effectiveBatchName },
                   title:
                     isCombinedWeeks && activeCombinedExams.length > 0
                       ? `${pdfTitle || displayTitle} (${activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})`
@@ -1051,19 +1375,23 @@ export default function ExamPrintModal({
             {/* TEMPLATE 4: TOPPERS & SUBJECT MERIT SUMMARY SHEET (Pic 2 Toppers & Subject-Wise) */}
             {template === "toppers_sheet" && (
               <WeeklyToppersSheet
-                instituteName={branding.nameBn || branding.name}
-                instituteBranch={exam.branch?.name || branding.address || "Academic Care"}
+                instituteName={effectiveInstituteName}
+                instituteBranch={effectiveInstituteBranch}
                 instituteLogoUrl={branding.logoUrl}
                 examTitle={
                   isCombinedWeeks && activeCombinedExams.length > 0
                     ? `${pdfTitle || displayTitle} (${activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})`
                     : (pdfTitle || displayTitle)
                 }
-                batchName={activeBatchName}
+                batchName={effectiveBatchName}
                 academicYear={customAcademicYear}
                 totalWeeklyMaxMarks={activeTotalMarks}
-                totalToppers={totalToppers}
-                subjectToppers={subjectToppers}
+                totalToppers={activeTotalToppers}
+                subjectToppers={activeSubjectToppers}
+                documentTitle={effectiveDocTitle}
+                documentSubtitle={effectiveDocSubtitle}
+                toppersHeader1={customToppersHeader1}
+                toppersHeader2={customToppersHeader2}
               />
             )}
           </div>

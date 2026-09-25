@@ -85,6 +85,7 @@ interface ParsedWeeklyDay {
   subject: string
   total_marks: number
   pass_marks: number
+  date?: string
 }
 
 const ALL_WEEK_DAYS = [
@@ -291,21 +292,40 @@ export default function ExamResultsPage() {
   const isTeacher = pathname?.includes("/dashboard/teacher")
   const backUrl = isTeacher ? "/dashboard/teacher/exams" : "/dashboard/owner/exams"
 
-  // 1. Detect if this is a Weekly Exam (ultra resilient)
+  // 1. Detect if this is a Weekly or Routine Multi-Day Exam (ultra resilient)
   const isWeeklyExam = useMemo(() => {
     if (!exam) return false
-    if (exam.exam_schedule_type === "weekly") return true
+    if (exam.exam_schedule_type === "weekly" || exam.exam_schedule_type === "routine") return true
     if (exam.is_weekly === true || exam.is_weekly_published === true) return true
     if (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) return true
     if (typeof exam.recurring_days === "string" && exam.recurring_days.trim().startsWith("[") && exam.recurring_days.trim().length > 2) return true
-    if (exam.result_note?.includes("[WEEKLY_SCHEDULE:") || exam.result_note?.includes("[WEEKLY_DAYS:") || exam.result_note?.includes("[STUDENT_DAY_MARKS:")) return true
+    if (
+      exam.result_note?.includes("[WEEKLY_SCHEDULE:") ||
+      exam.result_note?.includes("[ROUTINE_SCHEDULE:") ||
+      exam.result_note?.includes("[EXAM_SCHEDULE_TYPE:routine]") ||
+      exam.result_note?.includes("[WEEKLY_DAYS:") ||
+      exam.result_note?.includes("[STUDENT_DAY_MARKS:")
+    ) return true
     const title = String(exam.title || "").toLowerCase()
     const subject = String(exam.subject || "").toLowerCase()
-    if (title.includes("সাপ্তাহিক") || title.includes("weekly") || subject.includes("সাপ্তাহিক") || subject.includes("weekly")) return true
+    if (
+      title.includes("সাপ্তাহিক") || title.includes("weekly") ||
+      title.includes("রুটিন") || title.includes("routine") ||
+      subject.includes("সাপ্তাহিক") || subject.includes("weekly") ||
+      subject.includes("রুটিন") || subject.includes("routine")
+    ) return true
     if (Number(exam.total_marks) === 350 && !exam.exam_date) return true
     return ALL_WEEK_DAYS.some(
       (d) => title.includes(d.bn) || title.includes(d.id) || subject.includes(d.bn) || subject.includes(d.id)
     )
+  }, [exam])
+
+  const isRoutineExam = useMemo(() => {
+    if (!exam) return false
+    if (exam.exam_schedule_type === "routine") return true
+    if (exam.result_note?.includes("[EXAM_SCHEDULE_TYPE:routine]") || exam.result_note?.includes("[ROUTINE_SCHEDULE:")) return true
+    const title = String(exam.title || "").toLowerCase()
+    return title.includes("রুটিন") || title.includes("routine")
   }, [exam])
 
   // 2. Parse Weekly Schedule Days (GUARANTEE ALL 7 DAYS: Saturday through Friday)
@@ -344,20 +364,22 @@ export default function ExamResultsPage() {
       }
     }
 
-    // B. Check result_note tag [WEEKLY_SCHEDULE:...] using robust extractor
+    // B. Check result_note tag [WEEKLY_SCHEDULE:...] or [ROUTINE_SCHEDULE:...] using robust extractor
     const noteSchedule = extractWeeklyScheduleFromNote(exam.result_note)
     if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
-      for (const item of noteSchedule) {
-        const rawKey = item.day || item.day_bn || item.day_en || ""
+      for (let idx = 0; idx < noteSchedule.length; idx++) {
+        const item = noteSchedule[idx]
+        const rawKey = item.key || (item.date ? `routine_${item.date}_${idx}` : (item.day || item.day_bn || item.day_en || `day_${idx}`))
         const dayKey = String(rawKey).toLowerCase()
         const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
-        const canonicalKey = matched?.id || dayKey
+        const canonicalKey = matched?.id || rawKey
         const existing = dayConfigMap[canonicalKey]
         dayConfigMap[canonicalKey] = {
           key: canonicalKey,
-          day_bn: matched?.bn || item.day_bn || item.day || existing?.day_bn || "",
-          day_en: matched?.en || item.day_en || item.day || existing?.day_en || "",
-          exam_name: item.exam_name || existing?.exam_name || `${matched?.bn || item.day}ের পরীক্ষা`,
+          day_bn: item.day_bn || matched?.bn || item.day || (item.date ? `${item.date}` : existing?.day_bn || ""),
+          day_en: item.day_en || matched?.en || item.day || existing?.day_en || "",
+          date: item.date || existing?.date,
+          exam_name: item.exam_name || existing?.exam_name || (matched?.bn ? `${matched.bn}ের পরীক্ষা` : (item.subject ? `${item.subject} পরীক্ষা` : "পরীক্ষা")),
           subject: item.subject || existing?.subject || exam.subject || "",
           total_marks: item.total_marks != null ? Number(item.total_marks) : (existing?.total_marks || 50),
           pass_marks: item.pass_marks != null ? Number(item.pass_marks) : (existing?.pass_marks || 20),
@@ -397,6 +419,20 @@ export default function ExamResultsPage() {
     // D. Return ONLY configured days if any were found!
     const configuredKeys = Object.keys(dayConfigMap)
     if (configuredKeys.length > 0) {
+      if (Array.isArray(noteSchedule) && noteSchedule.length > 0) {
+        const noteItems: ParsedWeeklyDay[] = []
+        noteSchedule.forEach((item, idx) => {
+          const rawKey = item.key || (item.date ? `routine_${item.date}_${idx}` : (item.day || item.day_bn || item.day_en || `day_${idx}`))
+          const dayKey = String(rawKey).toLowerCase()
+          const matched = ALL_WEEK_DAYS.find((d) => d.id === dayKey || d.bn === rawKey || d.en.toLowerCase() === dayKey)
+          const canonicalKey = matched?.id || rawKey
+          if (dayConfigMap[canonicalKey] && !noteItems.some((n) => n.key === canonicalKey)) {
+            noteItems.push(dayConfigMap[canonicalKey])
+          }
+        })
+        if (noteItems.length > 0) return noteItems
+      }
+
       const ordered = ALL_WEEK_DAYS.filter((w) => !!dayConfigMap[w.id]).map((w) => dayConfigMap[w.id])
       const remaining = Object.values(dayConfigMap).filter((d) => !ordered.some((o) => o.key === d.key))
       return [...ordered, ...remaining]
@@ -1238,6 +1274,42 @@ export default function ExamResultsPage() {
         }
       }
 
+      // 3. Merge active in-memory marks for current exam so fresh marks are always preserved
+      for (const [stId, sDays] of Object.entries(dayMarksMap)) {
+        let daySum = 0
+        let hasAnyDay = false
+        if (sDays && typeof sDays === "object") {
+          for (const val of Object.values(sDays)) {
+            const m = typeof val === "object" && val !== null ? Number((val as any).marks) : Number(val)
+            if (!isNaN(m) && m > 0) {
+              daySum += m
+              hasAnyDay = true
+            }
+          }
+        }
+        if (hasAnyDay) {
+          recordScore(stId, exam.id, daySum, sDays)
+          const match = students.find((s) => s.id === stId || s.student_id === stId)
+          if (match) {
+            recordScore(match.id, exam.id, daySum, sDays)
+            if (match.student_id) recordScore(match.student_id, exam.id, daySum, sDays)
+          }
+        }
+      }
+      for (const [stId, res] of Object.entries(savedResults)) {
+        if (res?.obtained_marks !== undefined && res?.obtained_marks !== "") {
+          const num = parseFloat(res.obtained_marks)
+          if (!isNaN(num) && num > 0) {
+            recordScore(stId, exam.id, num)
+            const match = students.find((s) => s.id === stId || s.student_id === stId)
+            if (match) {
+              recordScore(match.id, exam.id, num)
+              if (match.student_id) recordScore(match.student_id, exam.id, num)
+            }
+          }
+        }
+      }
+
       setRawStudentWeekMarks(studentMarksMap)
       setRawStudentWeekDayMarks(studentDayMarksMap)
 
@@ -1307,8 +1379,33 @@ export default function ExamResultsPage() {
       let studentTotal = 0
       let count = 0
       activeCombinedExams.forEach((we) => {
-        const m = studentWeekMarks[we.id]
+        let m = studentWeekMarks[we.id]
+
+        // CRITICAL IN-MEMORY FALLBACK: For active exam, check live dayMarksMap and savedResults
+        if (we.id === exam?.id) {
+          const sDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : {}) || {}
+          let daySum = 0
+          let hasAnyDay = false
+          Object.values(sDays).forEach((dItem: any) => {
+            const num = typeof dItem === "object" && dItem !== null ? Number(dItem.marks) : Number(dItem)
+            if (!isNaN(num) && num > 0) {
+              daySum += num
+              hasAnyDay = true
+            }
+          })
+          if (hasAnyDay) {
+            m = daySum
+          } else {
+            const saved = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : null)
+            if (saved?.obtained_marks !== undefined && saved?.obtained_marks !== "") {
+              const num = parseFloat(saved.obtained_marks)
+              if (!isNaN(num)) m = num
+            }
+          }
+        }
+
         if (m !== undefined && m !== null) {
+          studentWeekMarks[we.id] = m
           studentTotal += Number(m) || 0
           if (Number(m) > 0) count++
         }
@@ -1342,7 +1439,7 @@ export default function ExamResultsPage() {
     })
 
     setCombinedWeekData(combinedList)
-  }, [activeCombinedExams, rawStudentWeekMarks, students])
+  }, [activeCombinedExams, rawStudentWeekMarks, students, exam?.id, dayMarksMap, savedResults])
 
   function toggleCombinedWeekSelection(weekId: string) {
     setSelectedCombinedWeekIds((prev) => {
@@ -1783,6 +1880,40 @@ export default function ExamResultsPage() {
     }
   }
 
+  // Sync in-memory saved marks to combined weeks state
+  function syncSavedMarksToCombinedState(studentId: string, totalMarks: number, dayMarks?: any) {
+    if (!exam) return
+    const student = students.find((s) => s.id === studentId || s.student_id === studentId)
+    const sid = student?.student_id || studentId
+    const uid = student?.id || studentId
+
+    setRawStudentWeekMarks((prev) => ({
+      ...prev,
+      [uid]: {
+        ...(prev[uid] || {}),
+        [exam.id]: totalMarks,
+      },
+      [sid]: {
+        ...(prev[sid] || {}),
+        [exam.id]: totalMarks,
+      },
+    }))
+
+    if (dayMarks) {
+      setRawStudentWeekDayMarks((prev) => ({
+        ...prev,
+        [uid]: {
+          ...(prev[uid] || {}),
+          [exam.id]: dayMarks,
+        },
+        [sid]: {
+          ...(prev[sid] || {}),
+          [exam.id]: dayMarks,
+        },
+      }))
+    }
+  }
+
   // Save specific day mark for a student (works from breakdown table or day view)
   async function saveStudentDayMark(student: Student, day: ParsedWeeklyDay, rawMark: string, silent?: boolean) {
     if (inflightSavesRef.current[student.id]) return
@@ -1870,6 +2001,7 @@ export default function ExamResultsPage() {
         [`${student.id}_${activeKey}`]: String(numMarks),
       }))
       setJustSavedIds((prev) => new Set(prev).add(student.id))
+      syncSavedMarksToCombinedState(student.id, grandTotal, currentStudentDays)
 
       if (!silent) {
         toast.success(`✓ ${student.name} (${day.day_bn}): ${numMarks}/${dayMax} সংরক্ষিত!`)
@@ -2043,6 +2175,31 @@ export default function ExamResultsPage() {
         return next
       })
 
+      // Sync rawStudentWeekMarks and rawStudentWeekDayMarks for combined calculation
+      setRawStudentWeekMarks((prev) => {
+        const next = { ...prev }
+        for (const u of batchUpdates) {
+          const st = students.find((s) => s.id === u.student_id || s.student_id === u.student_id)
+          const sid = st?.student_id || u.student_id
+          const uid = st?.id || u.student_id
+          const num = Number(u.obtained_marks) || 0
+          next[uid] = { ...(next[uid] || {}), [exam.id]: num }
+          next[sid] = { ...(next[sid] || {}), [exam.id]: num }
+        }
+        return next
+      })
+      setRawStudentWeekDayMarks((prev) => {
+        const next = { ...prev }
+        for (const [stId, dMap] of Object.entries(nextDayMarksMap)) {
+          const st = students.find((s) => s.id === stId || s.student_id === stId)
+          const sid = st?.student_id || stId
+          const uid = st?.id || stId
+          next[uid] = { ...(next[uid] || {}), [exam.id]: dMap }
+          next[sid] = { ...(next[sid] || {}), [exam.id]: dMap }
+        }
+        return next
+      })
+
       toast.success(`✓ সকল ৭ দিনের নম্বর সফলভাবে সংরক্ষিত হয়েছে! (${batchUpdates.length} জন শিক্ষার্থী)`)
     } catch (err: any) {
       toast.error(err.message || "Failed to save all days")
@@ -2147,6 +2304,7 @@ export default function ExamResultsPage() {
           [`${student.id}_${activeKey}`]: String(numMarks),
         }))
         setJustSavedIds((prev) => new Set(prev).add(student.id))
+        syncSavedMarksToCombinedState(student.id, grandTotal, currentStudentDays)
 
         if (!silent) {
           toast.success(`✓ ${student.name} (${activeDayConfig.day_bn}): ${numMarks}/${activeMax} (${dayGrade}) সংরক্ষিত!`)
@@ -2198,6 +2356,7 @@ export default function ExamResultsPage() {
           },
         }))
         setJustSavedIds((prev) => new Set(prev).add(student.id))
+        syncSavedMarksToCombinedState(student.id, numMarks)
         syncAllRanks({ ...draftMarks, [student.id]: String(numMarks) })
 
         if (!silent) {
@@ -3588,7 +3747,7 @@ export default function ExamResultsPage() {
       </div>
 
       {/* 4. PREVIOUS WEEKS & CONTINUOUS SERIES NAVIGATION BAR */}
-      {isWeeklyExam && (
+      {isWeeklyExam && !isRoutineExam && (
         <div className="bg-white p-4 rounded-2xl border-2 border-purple-200/90 shadow-sm space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div className="flex items-center gap-3">
@@ -3812,10 +3971,12 @@ export default function ExamResultsPage() {
               </div>
               <div>
                 <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
-                  সাপ্তাহিক পরীক্ষা ও রেজাল্ট হাব (Weekly Exam Hub)
+                  {isRoutineExam ? "রুটিন পরীক্ষা ও রেজাল্ট হাব (Routine Exam Hub)" : "সাপ্তাহিক পরীক্ষা ও রেজাল্ট হাব (Weekly Exam Hub)"}
                 </h2>
                 <p className="text-xs text-slate-500">
-                  দৈনিক বিষয়ভিত্তিক নম্বর এন্ট্রি, এই সপ্তাহের ফলাফল বা সকল সপ্তাহের সমন্বিত মেধা নির্বাচন করুন।
+                  {isRoutineExam
+                    ? "তারিখ ও বিষয়ভিত্তিক নম্বর এন্ট্রি এবং সম্পূর্ণ রুটিনের মেধা তালিকা ও রেজাল্ট দেখুন।"
+                    : "দৈনিক বিষয়ভিত্তিক নম্বর এন্ট্রি, এই সপ্তাহের ফলাফল বা সকল সপ্তাহের সমন্বিত মেধা নির্বাচন করুন।"}
                 </p>
               </div>
             </div>
@@ -3831,8 +3992,8 @@ export default function ExamResultsPage() {
             </div>
           </div>
 
-          {/* 3-MODE PRIMARY VIEW SWITCHER */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/80">
+          {/* 3-MODE PRIMARY VIEW SWITCHER (or 2-mode for Routine Exams) */}
+          <div className={cn("grid gap-2.5 p-1 bg-slate-100/80 rounded-2xl border border-slate-200/80", isRoutineExam ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-3")}>
             {/* Mode 1: Daily Marks Entry */}
             <button
               type="button"
@@ -3853,10 +4014,10 @@ export default function ExamResultsPage() {
               )}
             >
               <CalendarDays className="w-4 h-4 shrink-0" />
-              <span>১. দৈনিক বিষয়ভিত্তিক এন্ট্রি (Daily Marks)</span>
+              <span>{isRoutineExam ? "১. তারিখ ও বিষয়ভিত্তিক এন্ট্রি (Routine Marks)" : "১. দৈনিক বিষয়ভিত্তিক এন্ট্রি (Daily Marks)"}</span>
             </button>
 
-            {/* Mode 2: Weekly Aggregate & Toppers */}
+            {/* Mode 2: Weekly / Routine Aggregate & Toppers */}
             <button
               type="button"
               onClick={() => {
@@ -3876,7 +4037,7 @@ export default function ExamResultsPage() {
               )}
             >
               <Trophy className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>২. এই সপ্তাহের রেজাল্ট ও টপার (Week {currentWeekNum})</span>
+              <span>{isRoutineExam ? "২. সম্পূর্ণ রুটিনের মেধা তালিকা ও রেজাল্ট" : `২. এই সপ্তাহের রেজাল্ট ও টপার (Week ${currentWeekNum})`}</span>
               <span
                 className={cn(
                   "text-[10px] px-1.5 py-0.2 rounded-full border font-mono font-bold",
@@ -3889,32 +4050,34 @@ export default function ExamResultsPage() {
               </span>
             </button>
 
-            {/* Mode 3: All Weeks Combined Series */}
-            <button
-              type="button"
-              onClick={() => {
-                Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
-                autoSaveTimersRef.current = {}
-                setSelectedTab("all_weeks_combined")
-                setJustSavedIds(new Set())
-                setSelectedStudent(null)
-                setQuickMarkInput("")
-                setStudentSearchQuery("")
-                loadCombinedWeeklyResults()
-              }}
-              className={cn(
-                "flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer",
-                selectedTab === "all_weeks_combined"
-                  ? "bg-gradient-to-r from-blue-700 to-indigo-800 text-white shadow-sm ring-2 ring-blue-400/40"
-                  : "bg-white hover:bg-blue-50 text-blue-950 border border-blue-200"
-              )}
-            >
-              <Award className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>৩. সকল সপ্তাহের সমন্বিত মেধা</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold border border-blue-200 font-mono">
-                {fullSeriesSlots.length > 0 ? `${fullSeriesSlots.length}টি সপ্তাহ` : "হিসাব করুন"}
-              </span>
-            </button>
+            {/* Mode 3: All Weeks Combined Series (Only for weekly series) */}
+            {!isRoutineExam && (
+              <button
+                type="button"
+                onClick={() => {
+                  Object.values(autoSaveTimersRef.current).forEach((t) => clearTimeout(t))
+                  autoSaveTimersRef.current = {}
+                  setSelectedTab("all_weeks_combined")
+                  setJustSavedIds(new Set())
+                  setSelectedStudent(null)
+                  setQuickMarkInput("")
+                  setStudentSearchQuery("")
+                  loadCombinedWeeklyResults()
+                }}
+                className={cn(
+                  "flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl font-bold text-xs transition-all cursor-pointer",
+                  selectedTab === "all_weeks_combined"
+                    ? "bg-gradient-to-r from-blue-700 to-indigo-800 text-white shadow-sm ring-2 ring-blue-400/40"
+                    : "bg-white hover:bg-blue-50 text-blue-950 border border-blue-200"
+                )}
+              >
+                <Award className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>৩. সকল সপ্তাহের সমন্বিত মেধা</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 font-bold border border-blue-200 font-mono">
+                  {fullSeriesSlots.length > 0 ? `${fullSeriesSlots.length}টি সপ্তাহ` : "হিসাব করুন"}
+                </span>
+              </button>
+            )}
           </div>
 
           {/* WHEN IN COMBINED MODE: SHOW COMBINED WEEK SELECTOR */}
@@ -4123,9 +4286,16 @@ export default function ExamResultsPage() {
                       )}
                     >
                       <div className="flex items-center justify-between w-full gap-2">
-                        <span className={cn("text-xs font-black", isSelected ? "text-white" : "text-slate-900")}>
-                          {d.day_bn}
-                        </span>
+                        <div className="flex flex-col">
+                          <span className={cn("text-xs font-black", isSelected ? "text-white" : "text-slate-900")}>
+                            {d.day_bn}
+                          </span>
+                          {d.date && (
+                            <span className={cn("text-[10px] font-mono", isSelected ? "text-amber-100" : "text-slate-500")}>
+                              {d.date}
+                            </span>
+                          )}
+                        </div>
                         <span
                           className={cn(
                             "text-[10px] font-bold px-1.5 py-0.2 rounded-full border",

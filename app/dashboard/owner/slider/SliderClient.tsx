@@ -1153,87 +1153,111 @@ export default function SliderClient({
   return (
     <div className="space-y-6">
       {/* Tab Navigation */}
-      <div className="flex border border-slate-200 bg-white p-2 rounded-2xl shadow-sm gap-2 flex-wrap">
+      <div className="flex border border-slate-200/80 bg-white/95 backdrop-blur-md p-2 rounded-2xl shadow-sm gap-2 flex-wrap items-center">
         <button
           onClick={() => setActiveTab('slider')}
           className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'slider'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 scale-[1.02]'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
           }`}
         >
-          <Image className="w-4 h-4" /> Hero Slider ({slides.length})
+          <Image className="w-4 h-4" />
+          <span>Hero Slider</span>
+          <span className={`px-2 py-0.5 text-[11px] rounded-full font-bold ${activeTab === 'slider' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            {slides.length}
+          </span>
         </button>
 
         <button
           onClick={() => setActiveTab('notices')}
           className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'notices'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 scale-[1.02]'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
           }`}
         >
-          <Bell className="w-4 h-4" /> Notice Book ({notices.length})
+          <Bell className="w-4 h-4" />
+          <span>Notice Book</span>
+          <span className={`px-2 py-0.5 text-[11px] rounded-full font-bold ${activeTab === 'notices' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            {notices.length}
+          </span>
         </button>
 
         <button
           onClick={() => setActiveTab('exams')}
           className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'exams'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 scale-[1.02]'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
           }`}
         >
-          <Award className="w-4 h-4" /> পরীক্ষা রেজাল্ট নোটিফিকেশন ({publishedCardsCount})
+          <Award className="w-4 h-4" />
+          <span>পরীক্ষা রেজাল্ট নোটিফিকেশন</span>
+          <span className={`px-2 py-0.5 text-[11px] rounded-full font-bold ${activeTab === 'exams' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            {publishedCardsCount}
+          </span>
         </button>
 
         <button
           onClick={() => setActiveTab('achievements')}
           className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'achievements'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 scale-[1.02]'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
           }`}
         >
-          <Trophy className="w-4 h-4" /> Achievements ({achievements.length})
+          <Trophy className="w-4 h-4" />
+          <span>Achievements</span>
+          <span className={`px-2 py-0.5 text-[11px] rounded-full font-bold ${activeTab === 'achievements' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            {achievements.length}
+          </span>
         </button>
 
         <button
           onClick={() => setActiveTab('blogs')}
           className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'blogs'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 scale-[1.02]'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
           }`}
         >
-          <BookOpen className="w-4 h-4" /> Educational Blogs ({blogs.length})
+          <BookOpen className="w-4 h-4" />
+          <span>Educational Blogs</span>
+          <span className={`px-2 py-0.5 text-[11px] rounded-full font-bold ${activeTab === 'blogs' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            {blogs.length}
+          </span>
         </button>
 
         <button
           onClick={() => setActiveTab('feedback')}
           className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
             activeTab === 'feedback'
-              ? 'bg-amber-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 scale-[1.02]'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
           }`}
         >
-          <MessageSquare className="w-4 h-4" /> Feedback ({feedback.length})
+          <MessageSquare className="w-4 h-4" />
+          <span>Feedback</span>
+          <span className={`px-2 py-0.5 text-[11px] rounded-full font-bold ${activeTab === 'feedback' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'}`}>
+            {feedback.length}
+          </span>
           {feedback.filter(f => !f.is_read).length > 0 && (
-            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+            <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse ml-0.5" />
           )}
         </button>
 
         <button
           onClick={() => setActiveTab('contact')}
-          className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2 cursor-pointer ${
+          className={`px-4 py-2.5 text-xs sm:text-sm font-bold rounded-xl transition-all flex items-center gap-2.5 cursor-pointer ml-auto border ${
             activeTab === 'contact'
-              ? 'bg-emerald-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+              ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/25 border-emerald-500 scale-[1.02]'
+              : 'bg-emerald-50/80 text-emerald-800 border-emerald-200 hover:bg-emerald-100 hover:border-emerald-300'
           }`}
         >
-          <Palette className="w-4 h-4 text-amber-300" />
+          <Palette className={`w-4 h-4 ${activeTab === 'contact' ? 'text-amber-300 animate-pulse' : 'text-emerald-600'}`} />
           <span>Branding & Contacts</span>
-          <span className="px-1.5 py-0.5 text-[10px] bg-amber-400 text-slate-950 rounded-md font-extrabold uppercase tracking-wider">
+          <span className="px-2 py-0.5 text-[10px] bg-amber-400 text-slate-950 rounded-md font-extrabold uppercase tracking-wider shadow-sm">
             White-Label
           </span>
         </button>
@@ -1244,10 +1268,10 @@ export default function SliderClient({
       {/* ---------------------------------------------------- */}
       {activeTab === 'slider' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white backdrop-blur-md p-4 rounded-2xl border border-slate-200 shadow-xl">
+          <div className="flex justify-between items-center bg-white backdrop-blur-md p-5 rounded-2xl border border-slate-200/80 shadow-sm">
             <div>
               <h3 className="font-extrabold text-slate-900 text-base">Hero Image Slider</h3>
-              <p className="text-xs text-amber-400/90 font-medium">
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
                 Shown on the left 65% of the homepage hero section
               </p>
             </div>

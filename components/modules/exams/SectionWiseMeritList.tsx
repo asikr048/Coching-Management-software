@@ -22,6 +22,8 @@ export interface SectionWiseMeritListProps {
   academicYear?: string // e.g. "2025"
   rows: SectionWiseMeritRow[]
   breakBefore?: boolean
+  documentTitle?: string
+  documentSubtitle?: string
 }
 
 export default function SectionWiseMeritList({
@@ -33,6 +35,8 @@ export default function SectionWiseMeritList({
   academicYear = new Date().getFullYear().toString(),
   rows = [],
   breakBefore = false,
+  documentTitle = "Section Wise Merit List",
+  documentSubtitle,
 }: SectionWiseMeritListProps) {
   // Sort rows strictly by Section Merit if numeric, or fallback to roll
   const sortedRows = useMemo(() => {
@@ -87,8 +91,11 @@ export default function SectionWiseMeritList({
 
         <div className="text-right">
           <h2 className="text-base sm:text-lg font-black tracking-wider uppercase underline underline-offset-4 text-black">
-            Section Wise Merit List
+            {documentTitle}
           </h2>
+          {documentSubtitle && (
+            <p className="text-[11px] font-bold text-slate-700 mt-0.5">{documentSubtitle}</p>
+          )}
         </div>
       </div>
 

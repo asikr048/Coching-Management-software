@@ -8,7 +8,17 @@ import {
   Pause, Play, CalendarDays, Bell, Sparkles, AlertCircle, Search, ExternalLink, Filter,
   Check, RefreshCw, Layers, Award
 } from "lucide-react"
-import { formatDate, cn, extractWeeklyScheduleFromNote, cleanWeeklyScheduleFromNote, extractSeriesId, extractSeriesWeek, getExamSeriesKey } from "@/lib/utils"
+import { 
+  formatDate, 
+  cn, 
+  extractWeeklyScheduleFromNote, 
+  cleanWeeklyScheduleFromNote, 
+  extractSeriesId, 
+  extractSeriesWeek, 
+  getExamSeriesKey, 
+  getBengaliDayFromDate, 
+  extractExamScheduleType 
+} from "@/lib/utils"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useBranch } from "@/components/providers/BranchContext"
@@ -56,7 +66,7 @@ interface ExamRow {
   branch_id?: string | null
   branch?: { id?: string; name: string } | null
   exam_questions?: { count: number }[]
-  exam_schedule_type?: "one_time" | "weekly"
+  exam_schedule_type?: "one_time" | "weekly" | "routine"
   recurring_days?: any[] | null
   is_paused?: boolean
   is_public_result?: boolean
@@ -72,6 +82,34 @@ export interface WeeklyDayConfig {
   subject: string
   total_marks: string
   pass_marks: string
+}
+
+export interface RoutineItemConfig {
+  id: string
+  date: string
+  day_bn: string
+  day_en: string
+  exam_name: string
+  subject: string
+  total_marks: string
+  pass_marks: string
+}
+
+export const defaultRoutineItems = (): RoutineItemConfig[] => {
+  const today = new Date().toISOString().split("T")[0]
+  const dayInfo = getBengaliDayFromDate(today)
+  return [
+    {
+      id: "r-1",
+      date: today,
+      day_bn: dayInfo.bn || "শনিবার",
+      day_en: dayInfo.en || "Saturday",
+      exam_name: "১ম দিন পরীক্ষা",
+      subject: "",
+      total_marks: "50",
+      pass_marks: "20",
+    },
+  ]
 }
 
 const defaultWeeklySchedule = () => ({
@@ -143,13 +181,69 @@ export default function ExamsClient({
   // Modal State
   const [examMode, setExamMode] = useState<"offline" | "online">("offline")
   
+  // Routine Exam State & Helpers
+  const [routineItems, setRoutineItems] = useState<RoutineItemConfig[]>(defaultRoutineItems())
+
+  function handleAddRoutineItem() {
+    setRoutineItems((prev) => {
+      let nextDate = new Date().toISOString().split("T")[0]
+      if (prev.length > 0 && prev[prev.length - 1].date) {
+        const lastD = new Date(prev[prev.length - 1].date)
+        if (!isNaN(lastD.getTime())) {
+          lastD.setDate(lastD.getDate() + 1)
+          nextDate = lastD.toISOString().split("T")[0]
+        }
+      }
+      const dayInfo = getBengaliDayFromDate(nextDate)
+      return [
+        ...prev,
+        {
+          id: `r-${Date.now()}-${prev.length + 1}`,
+          date: nextDate,
+          day_bn: dayInfo.bn || "রবিবার",
+          day_en: dayInfo.en || "Sunday",
+          exam_name: `${prev.length + 1}ম দিন পরীক্ষা`,
+          subject: "",
+          total_marks: "50",
+          pass_marks: "20",
+        },
+      ]
+    })
+  }
+
+  function handleRemoveRoutineItem(id: string) {
+    if (routineItems.length <= 1) {
+      toast.error("রুটিনে কমপক্ষে একটি দিন থাকতে হবে")
+      return
+    }
+    setRoutineItems((prev) => prev.filter((item) => item.id !== id))
+  }
+
+  function handleUpdateRoutineItem(id: string, field: keyof RoutineItemConfig, val: string) {
+    setRoutineItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item
+        if (field === "date") {
+          const dayInfo = getBengaliDayFromDate(val)
+          return {
+            ...item,
+            date: val,
+            day_bn: dayInfo.bn || item.day_bn,
+            day_en: dayInfo.en || item.day_en,
+          }
+        }
+        return { ...item, [field]: val }
+      })
+    )
+  }
+
   // Form State
   const [form, setForm] = useState({ 
     title: "", 
     branch_id: selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || ""),
     batch_id: "", 
     batch_ids: [] as string[],
-    exam_schedule_type: "one_time" as "one_time" | "weekly",
+    exam_schedule_type: "one_time" as "one_time" | "weekly" | "routine",
     recurring_days: [] as string[],
     publish_to_notice: false,
     notice_title: "",
@@ -184,9 +278,19 @@ export default function ExamsClient({
         dateText = "প্রতি সপ্তাহে নির্ধারিত দিনসমূহে"
         scheduleBreakdown = `\n\n📅 সাপ্তাহিক পরীক্ষার সূচি ও মানবণ্টন:\n` + lines.join("\n")
       }
+    } else if (currentForm.exam_schedule_type === "routine") {
+      const lines: string[] = []
+      routineItems.forEach((r, idx) => {
+        const subj = r.subject ? ` [${r.subject}]` : ""
+        lines.push(`  • ${r.date} (${r.day_bn}): ${r.exam_name || `পরীক্ষা ${idx + 1}`}${subj} (পূর্ণমান: ${r.total_marks || 50}, পাস নম্বর: ${r.pass_marks || 20})`)
+      })
+      if (lines.length > 0) {
+        dateText = `${routineItems[0]?.date || ""} হতে শুরু`
+        scheduleBreakdown = `\n\n📅 পরীক্ষার রুটিন সূচি ও মানবণ্টন:\n` + lines.join("\n")
+      }
     }
 
-    const title = currentForm.title.trim() || (currentForm.exam_schedule_type === "weekly" ? "সাপ্তাহিক মূল্যায়ন পরীক্ষা" : "মাসিক মূল্যায়ন পরীক্ষা")
+    const title = currentForm.title.trim() || (currentForm.exam_schedule_type === "weekly" ? "সাপ্তাহিক মূল্যায়ন পরীক্ষা" : currentForm.exam_schedule_type === "routine" ? "রুটিন মূল্যায়ন পরীক্ষা" : "মাসিক মূল্যায়ন পরীক্ষা")
     const subject = currentForm.subject.trim() || "সাধারণ / নির্ধারিত বিষয়"
 
     // Batch names summary
@@ -231,6 +335,7 @@ export default function ExamsClient({
     setExamMode("offline")
     setQuestions([])
     setWeeklySchedule(defaultWeeklySchedule())
+    setRoutineItems(defaultRoutineItems())
     setForm({ 
       title: "", 
       branch_id: selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || ""),
@@ -256,6 +361,35 @@ export default function ExamsClient({
 
   function handleOpenCreate() {
     resetForm()
+    setShowModal(true)
+  }
+
+  // Quick Routine Exam Creator
+  function handleOpenNewRoutineExam() {
+    resetForm()
+    const today = new Date().toISOString().split("T")[0]
+    const initialBatchId = batchFilter !== "all" ? batchFilter : (batches[0]?.id || "")
+    const initialItems = defaultRoutineItems()
+    setRoutineItems(initialItems)
+
+    setForm((prev) => ({
+      ...prev,
+      title: "মডেল টেস্ট রুটিন পরীক্ষা",
+      subject: "রুটিন ভিত্তিক বিষয়সমূহ",
+      batch_id: initialBatchId,
+      batch_ids: initialBatchId ? [initialBatchId] : [],
+      exam_schedule_type: "routine",
+      recurring_days: [],
+      total_marks: "50",
+      pass_marks: "20",
+      exam_date: today,
+      duration_minutes: "60",
+      show_results_immediately: true,
+      show_all_results: true,
+      result_note: `[EXAM_SCHEDULE_TYPE:routine]`,
+    }))
+
+    setExamMode("offline")
     setShowModal(true)
   }
 
@@ -549,7 +683,12 @@ export default function ExamsClient({
       if (statusFilter === "published" && !isExamPublished(ex)) return false
       if (statusFilter === "draft" && isExamPublished(ex)) return false
       if (statusFilter === "online" && !ex.is_online) return false
-      const isWeeklyEx =
+      const isRoutineEx =
+        ex.exam_schedule_type === "routine" ||
+        extractExamScheduleType(ex.result_note) === "routine" ||
+        Boolean(ex.result_note?.includes("[ROUTINE_SCHEDULE:"))
+
+      const isWeeklyEx = !isRoutineEx && (
         ex.exam_schedule_type === "weekly" ||
         (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
         Boolean(ex.title?.includes("সাপ্তাহিক")) ||
@@ -558,7 +697,8 @@ export default function ExamsClient({
         Boolean(ex.result_note?.includes("[SERIES_WEEK:")) ||
         Boolean(ex.title?.toUpperCase().includes("WEEKLY-")) ||
         (Number(ex.total_marks) === 350 && !ex.exam_date)
-      if (statusFilter === "one_time" && isWeeklyEx) return false
+      )
+      if (statusFilter === "one_time" && (isWeeklyEx || isRoutineEx)) return false
       if (statusFilter === "weekly" && !isWeeklyEx) return false
       return true
     })
@@ -574,7 +714,12 @@ export default function ExamsClient({
     const standalone: ExamRow[] = []
 
     filteredExams.forEach((ex) => {
-      const isW =
+      const isRoutineEx =
+        ex.exam_schedule_type === "routine" ||
+        extractExamScheduleType(ex.result_note) === "routine" ||
+        Boolean(ex.result_note?.includes("[ROUTINE_SCHEDULE:"))
+
+      const isW = !isRoutineEx && (
         ex.exam_schedule_type === "weekly" ||
         (Array.isArray(ex.recurring_days) && ex.recurring_days.length > 0) ||
         Boolean(ex.title?.includes("সাপ্তাহিক")) ||
@@ -583,6 +728,7 @@ export default function ExamsClient({
         Boolean(ex.result_note?.includes("[SERIES_WEEK:")) ||
         Boolean(ex.title?.toUpperCase().includes("WEEKLY-")) ||
         (Number(ex.total_marks) === 350 && !ex.exam_date)
+      )
 
       if (isW) {
         weeklyList.push(ex)
@@ -894,13 +1040,19 @@ export default function ExamsClient({
     const isOnline = Boolean(exam.is_online)
     setExamMode(isOnline ? "online" : "offline")
 
-    const isWeekly =
+    const isRoutine =
+      exam.exam_schedule_type === "routine" ||
+      extractExamScheduleType(exam.result_note) === "routine" ||
+      Boolean(exam.result_note?.includes("[ROUTINE_SCHEDULE:"))
+
+    const isWeekly = !isRoutine && (
       exam.exam_schedule_type === "weekly" ||
       (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
       Boolean(exam.title?.includes("সাপ্তাহিক")) ||
       Boolean(exam.subject?.includes("সাপ্তাহিক")) ||
       Boolean(exam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
       (Number(exam.total_marks) === 350 && !exam.exam_date)
+    )
 
     let targetBatchIds: string[] = []
     if (Array.isArray(exam.batch_ids) && exam.batch_ids.length > 0) {
@@ -915,6 +1067,53 @@ export default function ExamsClient({
       try {
         recDays = JSON.parse(recDays)
       } catch {}
+    }
+
+    if (isRoutine) {
+      let parsedRoutine: RoutineItemConfig[] = []
+      const routineMatch = exam.result_note?.match(/\[ROUTINE_SCHEDULE:([\s\S]*?)\]/)
+      if (routineMatch && routineMatch[1]) {
+        try {
+          const raw = JSON.parse(routineMatch[1])
+          if (Array.isArray(raw) && raw.length > 0) {
+            parsedRoutine = raw.map((item: any, idx: number) => {
+              const dayInfo = getBengaliDayFromDate(item.date || "")
+              return {
+                id: item.id || `r-${Date.now()}-${idx}`,
+                date: item.date || "",
+                day_bn: item.day_bn || item.day || dayInfo.bn || "শনিবার",
+                day_en: item.day_en || dayInfo.en || "Saturday",
+                exam_name: item.exam_name || `পরীক্ষা ${idx + 1}`,
+                subject: item.subject || "",
+                total_marks: item.total_marks != null ? String(item.total_marks) : "50",
+                pass_marks: item.pass_marks != null ? String(item.pass_marks) : "20",
+              }
+            })
+          }
+        } catch {}
+      }
+      if (parsedRoutine.length === 0 && Array.isArray(recDays) && recDays.length > 0) {
+        parsedRoutine = recDays.map((item: any, idx: number) => {
+          const dayInfo = getBengaliDayFromDate(item.date || "")
+          return {
+            id: item.id || `r-${Date.now()}-${idx}`,
+            date: item.date || "",
+            day_bn: item.day_bn || item.day || dayInfo.bn || "শনিবার",
+            day_en: item.day_en || dayInfo.en || "Saturday",
+            exam_name: item.exam_name || `পরীক্ষা ${idx + 1}`,
+            subject: item.subject || "",
+            total_marks: item.total_marks != null ? String(item.total_marks) : "50",
+            pass_marks: item.pass_marks != null ? String(item.pass_marks) : "20",
+          }
+        })
+      }
+      if (parsedRoutine.length > 0) {
+        setRoutineItems(parsedRoutine)
+      } else {
+        setRoutineItems(defaultRoutineItems())
+      }
+    } else {
+      setRoutineItems(defaultRoutineItems())
     }
 
     const newSched = defaultWeeklySchedule()
@@ -1069,7 +1268,7 @@ export default function ExamsClient({
       branch_id: exam.branch_id || (selectedBranchId !== "all" ? selectedBranchId : (currentBranch?.id || branches[0]?.id || "")),
       batch_id: exam.batch_id || targetBatchIds[0] || "",
       batch_ids: targetBatchIds,
-      exam_schedule_type: isWeekly ? "weekly" : "one_time",
+      exam_schedule_type: isRoutine ? "routine" : isWeekly ? "weekly" : "one_time",
       recurring_days: Array.isArray(recDays) ? recDays : [],
       publish_to_notice: false,
       notice_title: "",
@@ -1142,6 +1341,7 @@ export default function ExamsClient({
     }
 
     let activeWeeklyDays: any[] = []
+    let activeRoutineDays: any[] = []
     if (form.exam_schedule_type === "weekly") {
       activeWeeklyDays = WEEK_DAYS.filter(
         (w) => weeklySchedule[w.id as keyof typeof weeklySchedule]?.selected
@@ -1162,6 +1362,30 @@ export default function ExamsClient({
         toast.error("সাপ্তাহিক পরীক্ষার জন্য অন্তত একটি দিন সিলেক্ট করুন এবং বিবরণ লিখুন (Please select at least one day and configure exam details)")
         return
       }
+    } else if (form.exam_schedule_type === "routine") {
+      if (!form.title.trim()) {
+        toast.error("রুটিন পরীক্ষার নাম লিখুন (Please enter routine exam title)")
+        return
+      }
+      activeRoutineDays = routineItems.map((r, idx) => {
+        const dayInfo = getBengaliDayFromDate(r.date)
+        return {
+          id: r.id || `r-${idx}`,
+          date: r.date,
+          day: r.day_en ? r.day_en.toLowerCase() : (dayInfo.id || `day_${idx}`),
+          day_bn: r.day_bn.trim() || dayInfo.bn || `দিন ${idx + 1}`,
+          day_en: r.day_en.trim() || dayInfo.en || `Day ${idx + 1}`,
+          exam_name: r.exam_name.trim() || `${r.day_bn || dayInfo.bn || `দিন ${idx + 1}`}ের পরীক্ষা`,
+          subject: r.subject.trim() || form.subject || "",
+          total_marks: parseInt(r.total_marks) || 50,
+          pass_marks: parseInt(r.pass_marks) || 20,
+        }
+      })
+
+      if (activeRoutineDays.length === 0) {
+        toast.error("রুটিন পরীক্ষার জন্য অন্তত একটি দিন নির্ধারণ করুন")
+        return
+      }
     } else {
       if (!form.title.trim()) {
         toast.error("Please enter exam title (পরীক্ষার নাম লিখুন)")
@@ -1180,19 +1404,31 @@ export default function ExamsClient({
 
       const finalTitle = form.exam_schedule_type === "weekly"
         ? (form.title.trim() || "WEEKLY-01")
-        : form.title
+        : form.title.trim()
 
       const finalTotalMarks = form.exam_schedule_type === "weekly"
         ? activeWeeklyDays.reduce((acc, d) => acc + (d.total_marks || 50), 0)
+        : form.exam_schedule_type === "routine"
+        ? activeRoutineDays.reduce((acc, d) => acc + (d.total_marks || 50), 0)
         : (examMode === "online" ? computedTotal : parseInt(form.total_marks))
 
       const finalPassMarks = form.exam_schedule_type === "weekly"
         ? activeWeeklyDays.reduce((acc, d) => acc + (d.pass_marks || 20), 0)
+        : form.exam_schedule_type === "routine"
+        ? activeRoutineDays.reduce((acc, d) => acc + (d.pass_marks || 20), 0)
         : parseInt(form.pass_marks)
 
       const finalSubject = form.exam_schedule_type === "weekly"
         ? (form.subject.trim() || activeWeeklyDays.map(d => d.subject).filter(Boolean).join(", ") || "সাপ্তাহিক বিষয়সমূহ")
+        : form.exam_schedule_type === "routine"
+        ? (form.subject.trim() || activeRoutineDays.map(d => d.subject).filter(Boolean).join(", ") || "রুটিন বিষয়সমূহ")
         : (form.subject || null)
+
+      const finalExamDate = form.exam_schedule_type === "one_time"
+        ? (form.exam_date || null)
+        : form.exam_schedule_type === "routine"
+        ? (activeRoutineDays[0]?.date || new Date().toISOString().split("T")[0])
+        : null
 
       // 1. UPDATE EXISTING EXAM
       if (editingExam) {
@@ -1202,23 +1438,25 @@ export default function ExamsClient({
           batch_id: selectedBatchIdToUse,
           batch_ids: selectedBatchIdsToUse,
           exam_schedule_type: form.exam_schedule_type,
-          recurring_days: form.exam_schedule_type === "weekly" ? activeWeeklyDays : [],
+          recurring_days: form.exam_schedule_type === "weekly" ? activeWeeklyDays : form.exam_schedule_type === "routine" ? activeRoutineDays : [],
           exam_type: form.exam_type,
           subject: finalSubject,
           total_marks: finalTotalMarks,
           pass_marks: finalPassMarks,
-          exam_date: form.exam_schedule_type === "one_time" ? (form.exam_date || null) : null,
+          exam_date: finalExamDate,
           is_online: examMode === "online",
           time_limit_minutes: examMode === "online" ? parseInt(form.duration_minutes) : null,
           duration_minutes: examMode === "offline" ? parseInt(form.duration_minutes) : null,
           show_results_immediately: form.show_results_immediately,
           show_all_results: form.show_all_results,
           result_note: (form.result_note 
-            ? cleanWeeklyScheduleFromNote(form.result_note).replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "").trim() + " " 
+            ? cleanWeeklyScheduleFromNote(form.result_note).replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "").replace(/\[EXAM_SCHEDULE_TYPE:[^\]]*\]/g, "").trim() + " " 
             : "") + 
             `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
             (form.exam_schedule_type === "weekly" 
               ? ` [WEEKLY_SCHEDULE:${JSON.stringify(activeWeeklyDays)}] [WEEKLY_DAYS:${activeWeeklyDays.map(d => d.day).join(",")}]` 
+              : form.exam_schedule_type === "routine"
+              ? ` [EXAM_SCHEDULE_TYPE:routine] [ROUTINE_SCHEDULE:${JSON.stringify(activeRoutineDays)}] [WEEKLY_SCHEDULE:${JSON.stringify(activeRoutineDays)}]`
               : ""),
         }
 
@@ -1366,14 +1604,14 @@ export default function ExamsClient({
         batch_id: selectedBatchIdToUse, 
         batch_ids: selectedBatchIdsToUse,
         exam_schedule_type: form.exam_schedule_type,
-        recurring_days: form.exam_schedule_type === "weekly" ? activeWeeklyDays : [],
+        recurring_days: form.exam_schedule_type === "weekly" ? activeWeeklyDays : form.exam_schedule_type === "routine" ? activeRoutineDays : [],
         is_paused: false,
         is_public_result: false,
         exam_type: form.exam_type,
         subject: finalSubject, 
         total_marks: finalTotalMarks, 
         pass_marks: finalPassMarks,
-        exam_date: form.exam_schedule_type === "one_time" ? (form.exam_date || null) : null, 
+        exam_date: finalExamDate, 
         is_online: examMode === "online",
         time_limit_minutes: examMode === "online" ? parseInt(form.duration_minutes) : null,
         duration_minutes: examMode === "offline" ? parseInt(form.duration_minutes) : null,
@@ -1385,10 +1623,15 @@ export default function ExamsClient({
             const newSeriesId = `series_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
             baseNote = `[SERIES_ID:${newSeriesId}] [SERIES_WEEK:1] ` + baseNote
           }
+          if (form.exam_schedule_type === "routine" && !baseNote.includes("[EXAM_SCHEDULE_TYPE:routine]")) {
+            baseNote = `[EXAM_SCHEDULE_TYPE:routine] ` + baseNote
+          }
           return (baseNote + 
             `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
             (form.exam_schedule_type === "weekly" 
               ? ` [WEEKLY_SCHEDULE:${JSON.stringify(activeWeeklyDays)}] [WEEKLY_DAYS:${activeWeeklyDays.map(d => d.day).join(",")}]` 
+              : form.exam_schedule_type === "routine"
+              ? ` [ROUTINE_SCHEDULE:${JSON.stringify(activeRoutineDays)}] [WEEKLY_SCHEDULE:${JSON.stringify(activeRoutineDays)}]`
               : "")).trim()
         })(),
         is_published: false
@@ -1556,13 +1799,19 @@ export default function ExamsClient({
   }
 
   function renderSingleExam(exam: ExamRow) {
-    const isWeekly =
+    const isRoutine =
+      exam.exam_schedule_type === "routine" ||
+      extractExamScheduleType(exam.result_note) === "routine" ||
+      Boolean(exam.result_note?.includes("[ROUTINE_SCHEDULE:"))
+
+    const isWeekly = !isRoutine && (
       exam.exam_schedule_type === "weekly" ||
       (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
       Boolean(exam.title?.includes("সাপ্তাহিক")) ||
       Boolean(exam.subject?.includes("সাপ্তাহিক")) ||
       Boolean(exam.result_note?.includes("[WEEKLY_SCHEDULE:")) ||
       (Number(exam.total_marks) === 350 && !exam.exam_date)
+    )
 
     let recurringDaysList: any[] = []
     if (Array.isArray(exam.recurring_days)) {
@@ -1572,11 +1821,16 @@ export default function ExamsClient({
         recurringDaysList = JSON.parse(exam.recurring_days)
       } catch {}
     }
-    if (recurringDaysList.length === 0 && exam.result_note?.includes("[WEEKLY_SCHEDULE:")) {
+    if (recurringDaysList.length === 0 && (exam.result_note?.includes("[ROUTINE_SCHEDULE:") || exam.result_note?.includes("[WEEKLY_SCHEDULE:"))) {
       try {
-        const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
-        if (match && match[1]) {
-          recurringDaysList = JSON.parse(match[1])
+        const rMatch = exam.result_note.match(/\[ROUTINE_SCHEDULE:(.*?)\]/)
+        if (rMatch && rMatch[1]) {
+          recurringDaysList = JSON.parse(rMatch[1])
+        } else {
+          const match = exam.result_note.match(/\[WEEKLY_SCHEDULE:(.*?)\]/)
+          if (match && match[1]) {
+            recurringDaysList = JSON.parse(match[1])
+          }
         }
       } catch {}
     }
@@ -1601,11 +1855,13 @@ export default function ExamsClient({
               "p-2.5 rounded-xl border mt-0.5", 
               exam.is_online 
                 ? "bg-blue-50 text-blue-600 border-blue-200" 
-                : isWeekly
+                : isRoutine
+                  ? "bg-teal-50 text-teal-700 border-teal-200"
+                  : isWeekly
                   ? "bg-purple-50 text-purple-600 border-purple-200"
                   : "bg-amber-50 text-amber-600 border-amber-200"
             )}>
-              {exam.is_online ? <Globe className="w-5 h-5" /> : isWeekly ? <CalendarDays className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+              {exam.is_online ? <Globe className="w-5 h-5" /> : isRoutine ? <Clock className="w-5 h-5" /> : isWeekly ? <CalendarDays className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
             </div>
             <div>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -1675,7 +1931,11 @@ export default function ExamsClient({
               </button>
             </div>
             <div className="flex items-center gap-1 flex-wrap justify-end">
-              {isWeekly ? (
+              {isRoutine ? (
+                <span className="text-[10px] bg-teal-50 text-teal-800 border border-teal-200 px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-teal-600" /> ROUTINE
+                </span>
+              ) : isWeekly ? (
                 <span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-200 px-2 py-0.5 rounded-md font-extrabold flex items-center gap-1">
                   <CalendarDays className="w-3 h-3" /> WEEKLY
                 </span>
@@ -1698,17 +1958,19 @@ export default function ExamsClient({
           <div className="flex flex-col">
             <span className="text-[11px] text-slate-500 font-medium">Total Marks</span>
             <span className="font-extrabold text-amber-700 text-sm">
-              {isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-                ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+              {(isWeekly || isRoutine) && Array.isArray(recurringDaysList) && recurringDaysList.length > 0
+                ? recurringDaysList.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
                 : exam.total_marks}
             </span>
           </div>
           <div className="flex flex-col">
             <span className="text-[11px] text-slate-500 font-medium">
-              {isWeekly ? "Weekly Day(s)" : "Exam Date"}
+              {isRoutine ? "Routine Schedule" : isWeekly ? "Weekly Day(s)" : "Exam Date"}
             </span>
             <span className="font-semibold text-slate-800 text-sm truncate">
-              {isWeekly 
+              {isRoutine
+                ? (recurringDaysList.length > 0 ? `${recurringDaysList.length}টি পরীক্ষা রুটিন` : "রুটিন ভিত্তিক")
+                : isWeekly 
                 ? (daysBengali ? `প্রতি ${daysBengali}` : "সাপ্তাহিক নির্ধারিত দিন")
                 : (exam.exam_date ? formatDate(exam.exam_date) : "TBD")}
             </span>
@@ -1922,6 +2184,16 @@ export default function ExamsClient({
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0 min-w-fit">
+          <button 
+            type="button"
+            onClick={handleOpenNewRoutineExam} 
+            className="flex items-center gap-2 px-3.5 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-teal-500/20 hover:scale-[1.02] transition-all cursor-pointer shrink-0 whitespace-nowrap"
+            title="তারিখ ও বিষয়ভিত্তিক নতুন রুটিন পরীক্ষা তৈরি করুন"
+          >
+            <Clock className="w-4 h-4 text-teal-200" />
+            <span>+ Routine Exam (রুটিন পরীক্ষা)</span>
+          </button>
+
           <button 
             type="button"
             onClick={handleOpenNewWeeklyExam} 
@@ -2744,16 +3016,19 @@ export default function ExamsClient({
                     </label>
                     <select 
                       value={form.exam_schedule_type} 
-                      onChange={e => update("exam_schedule_type", e.target.value as "one_time" | "weekly")} 
+                      onChange={e => update("exam_schedule_type", e.target.value as "one_time" | "weekly" | "routine")} 
                       className={inputClass + " font-bold text-indigo-950 bg-white border-amber-300"}
                     >
                       <option value="one_time">One time exam (এককালীন পরীক্ষা - নির্দিষ্ট তারিখে)</option>
                       <option value="weekly">Weekly exam (সাপ্তাহিক পরীক্ষা - প্রতি সপ্তাহে নির্ধারিত দিনে)</option>
+                      <option value="routine">Routine exam (রুটিন পরীক্ষা - তারিখ ও বিষয়ভিত্তিক রুটিন অনুযায়ী)</option>
                     </select>
                     <p className="text-[11px] text-slate-500 mt-1">
                       {form.exam_schedule_type === "one_time" 
                         ? "এককালীন পরীক্ষার একটি নির্দিষ্ট তারিখ থাকবে এবং এটি শিক্ষার্থীদের ব্যাচ প্রোফাইল ও রুটিনে প্রদর্শিত হবে।" 
-                        : "সাপ্তাহিক পরীক্ষা প্রতি সপ্তাহে নির্ধারিত দিনগুলোতে অনুষ্ঠিত হবে। প্রতিটি দিনের জন্য আলাদা পরীক্ষার নাম ও নম্বর নির্ধারণ করা যাবে।"}
+                        : form.exam_schedule_type === "weekly"
+                        ? "সাপ্তাহিক পরীক্ষা প্রতি সপ্তাহে নির্ধারিত দিনগুলোতে অনুষ্ঠিত হবে। প্রতিটি দিনের জন্য আলাদা পরীক্ষার নাম ও নম্বর নির্ধারণ করা যাবে।"
+                        : "রুটিন পরীক্ষায় যেকোনো তারিখ ও দিন নির্বাচন করে একাধিক বিষয় ও পরীক্ষার নামসহ পূর্ণাঙ্গ মার্কশিট তৈরি করা যায়।"}
                     </p>
                   </div>
                 </div>
@@ -2961,6 +3236,193 @@ export default function ExamsClient({
                         </div>
                         <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
                           টিক দেওয়া থাকলে পরীক্ষা তৈরির সাথে সাথেই কোচিংয়ের নোটিশ বোর্ডে এই সাপ্তাহিক পরীক্ষার সম্পূর্ণ সূচি ও মানবণ্টন নোটিশ আকারে স্বয়ংক্রিয়ভাবে প্রকাশিত হবে।
+                        </p>
+                      </label>
+                    </div>
+                  </div>
+                ) : form.exam_schedule_type === "routine" ? (
+                  /* ROUTINE EXAM CONFIGURATION */
+                  <div className="space-y-4">
+                    {/* Routine Title */}
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                        Routine Exam Title (রুটিন পরীক্ষার নাম / শিরোনাম) *
+                      </label>
+                      <input 
+                        required
+                        value={form.title} 
+                        onChange={e => update("title", e.target.value)} 
+                        className={inputClass} 
+                        placeholder="যেমন: মডেল টেস্ট রুটিন - ২০২৬ অথবা Routine Exam 01" 
+                      />
+                    </div>
+
+                    {/* Routine Schedule Builder */}
+                    <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200 space-y-3.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div>
+                          <label className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5 uppercase tracking-wider">
+                            <CalendarDays className="w-3.5 h-3.5 text-blue-600" />
+                            রুটিন পরীক্ষার তারিখ, বিষয় ও মানবণ্টন নির্ধারণ (Routine Schedule & Marks) *
+                          </label>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            প্রতিটি পরীক্ষার তারিখ নির্বাচন করুন, বাংলা বার স্বয়ংক্রিয়ভাবে নির্ধারণ হবে। এরপর পরীক্ষার নাম, বিষয় ও পূর্ণমান লিখুন।
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-blue-700 font-extrabold bg-blue-100/90 px-2.5 py-1 rounded-full border border-blue-200">
+                            মোট {routineItems.length} টি পরীক্ষা
+                          </span>
+                          <span className="text-xs text-emerald-700 font-extrabold bg-emerald-100/90 px-2.5 py-1 rounded-full border border-emerald-200">
+                            মোট পূর্ণমান: {routineItems.reduce((acc, r) => acc + (parseInt(r.total_marks) || 0), 0)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Routine Item Rows */}
+                      <div className="space-y-3">
+                        {routineItems.map((item, index) => (
+                          <div
+                            key={item.id}
+                            className="p-3.5 bg-white rounded-xl border border-slate-200 hover:border-blue-300 shadow-2xs transition-all space-y-2.5"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-blue-900 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                                পরীক্ষা #{index + 1} ({item.day_bn})
+                              </span>
+                              {routineItems.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveRoutineItem(item.id)}
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded-lg transition-colors text-xs flex items-center gap-1 font-bold cursor-pointer"
+                                  title="দিনটি মুছে ফেলুন"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  মুছুন
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                              {/* Date Picker */}
+                              <div className="sm:col-span-3">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                  তারিখ (Date) *
+                                </label>
+                                <input
+                                  type="date"
+                                  required
+                                  value={item.date}
+                                  onClick={(e) => e.currentTarget.showPicker?.()}
+                                  onChange={(e) => handleUpdateRoutineItem(item.id, "date", e.target.value)}
+                                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+
+                              {/* Day Name (Auto badge / editable) */}
+                              <div className="sm:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                  বার (Day)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={item.day_bn}
+                                  onChange={(e) => handleUpdateRoutineItem(item.id, "day_bn", e.target.value)}
+                                  placeholder="যেমন: রবিবার"
+                                  className="w-full px-2 py-1.5 text-xs bg-blue-50/50 border border-blue-200 rounded-lg text-blue-900 font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                                />
+                              </div>
+
+                              {/* Exam Name */}
+                              <div className="sm:col-span-3">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                  পরীক্ষার নাম *
+                                </label>
+                                <input
+                                  type="text"
+                                  required
+                                  value={item.exam_name}
+                                  onChange={(e) => handleUpdateRoutineItem(item.id, "exam_name", e.target.value)}
+                                  placeholder={`যেমন: পরীক্ষা ${index + 1} বা MCQ টেস্ট`}
+                                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+
+                              {/* Subject */}
+                              <div className="sm:col-span-2">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                  বিষয় (Subject)
+                                </label>
+                                <input
+                                  type="text"
+                                  value={item.subject}
+                                  onChange={(e) => handleUpdateRoutineItem(item.id, "subject", e.target.value)}
+                                  placeholder="যেমন: পদার্থবিজ্ঞান"
+                                  className="w-full px-2 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                              </div>
+
+                              {/* Total Marks */}
+                              <div className="sm:col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                  মোট *
+                                </label>
+                                <input
+                                  type="number"
+                                  required
+                                  value={item.total_marks}
+                                  onChange={(e) => handleUpdateRoutineItem(item.id, "total_marks", e.target.value)}
+                                  placeholder="50"
+                                  className="w-full px-1.5 py-1.5 text-xs bg-white border border-blue-300 rounded-lg font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                                />
+                              </div>
+
+                              {/* Pass Marks */}
+                              <div className="sm:col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-700 uppercase tracking-wider mb-1">
+                                  পাস
+                                </label>
+                                <input
+                                  type="number"
+                                  value={item.pass_marks}
+                                  onChange={(e) => handleUpdateRoutineItem(item.id, "pass_marks", e.target.value)}
+                                  placeholder="20"
+                                  className="w-full px-1.5 py-1.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add Day Button */}
+                      <button
+                        type="button"
+                        onClick={handleAddRoutineItem}
+                        className="w-full py-2.5 px-4 bg-white border-2 border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50/50 text-blue-700 font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+                      >
+                        <Plus className="w-4 h-4 text-blue-600" />
+                        + নতুন দিন / বিষয় যোগ করুন (Add Routine Day)
+                      </button>
+                    </div>
+
+                    {/* Publish to Notice Board Checkbox for Routine */}
+                    <div className="bg-amber-50/70 p-3.5 rounded-xl border border-amber-200/90 flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        id="publish_to_notice_routine"
+                        checked={form.publish_to_notice}
+                        onChange={e => togglePublishToNotice(e.target.checked)}
+                        className="w-4 h-4 mt-0.5 text-amber-600 rounded border-slate-300 focus:ring-amber-500 cursor-pointer"
+                      />
+                      <label htmlFor="publish_to_notice_routine" className="cursor-pointer select-none">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                          <Bell className="w-3.5 h-3.5 text-amber-600" />
+                          নোটিশ বোর্ডে রুটিন প্রকাশ করুন (Publish exam routine to Notice Board)
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                          টিক দেওয়া থাকলে পরীক্ষা তৈরির সাথে সাথেই কোচিংয়ের নোটিশ বোর্ডে এই রুটিন পরীক্ষার সম্পূর্ণ সূচি ও মানবণ্টন নোটিশ আকারে স্বয়ংক্রিয়ভাবে প্রকাশিত হবে।
                         </p>
                       </label>
                     </div>
