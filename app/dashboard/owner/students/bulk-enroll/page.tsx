@@ -9,35 +9,43 @@ export const revalidate = 0
 
 export default async function BulkEnrollPage() {
   const supabase = await createClient()
-  const admin = createAdminClient()
+  const hasServiceKey = Boolean(
+    process.env.SUPABASE_SERVICE_ROLE_KEY &&
+    !process.env.SUPABASE_SERVICE_ROLE_KEY.includes("placeholder")
+  )
+  const db = hasServiceKey ? createAdminClient() : supabase
 
   let batches: any[] = []
   try {
-    const { data: bData } = await admin
+    const { data: bData, error: bErr } = await db
       .from("batches")
-      .select("*, branch:branches(id, name)")
+      .select("id, name, branch_id, origin_batch_id, origin_branch_id, branch_seats, classroom, subject, class_level, max_seats, current_seats, monthly_fee, admission_fee, status, is_active")
       .order("name")
 
-    if (bData && bData.length > 0) {
+    if (!bErr && bData && bData.length > 0) {
       batches = bData.filter((b: any) => b.is_active !== false && b.status !== "finished")
+      if (batches.length === 0) batches = bData
     } else {
       const { data: fbB } = await supabase
         .from("batches")
-        .select("*, branch:branches(id, name)")
+        .select("*")
         .order("name")
-      if (fbB) batches = fbB.filter((b: any) => b.is_active !== false && b.status !== "finished")
+      if (fbB && fbB.length > 0) {
+        batches = fbB.filter((b: any) => b.is_active !== false && b.status !== "finished")
+        if (batches.length === 0) batches = fbB
+      }
     }
   } catch {
     try {
       const { data: fbB } = await supabase.from("batches").select("*").order("name")
-      if (fbB) batches = fbB.filter((b: any) => b.is_active !== false && b.status !== "finished")
+      if (fbB) batches = fbB
     } catch {}
   }
 
   // 1. Fetch Students to map enrollment history reliably
   let studentsList: any[] = []
   try {
-    const { data: stData, error: stErr } = await admin
+    const { data: stData, error: stErr } = await db
       .from("students")
       .select("id, name, student_id, branch_id, phone, email, guardian_name, guardian_phone, address, class_level, school_college, roll_no, batch_roll, qr_code, is_active")
       .order("name")
@@ -60,9 +68,9 @@ export default async function BulkEnrollPage() {
 
   // 2. Fetch Branches, Payments, Dues in parallel
   const [branchesRes, paymentsRes, duesRes] = await Promise.all([
-    admin.from("branches").select("id, name, address").order("name"),
-    admin.from("payments").select("id, student_id, batch_id, amount, total_paid, payment_method, payment_for, payment_month, receipt_number, created_at, paid_at").order("created_at", { ascending: false }).limit(300),
-    admin.from("fee_dues").select("id, student_id, batch_id, due_amount, paid_amount, due_date, status").limit(300),
+    db.from("branches").select("id, name, address").order("name"),
+    db.from("payments").select("id, student_id, batch_id, amount, total_paid, payment_method, payment_for, payment_month, receipt_number, created_at, paid_at").order("created_at", { ascending: false }).limit(300),
+    db.from("fee_dues").select("id, student_id, batch_id, due_amount, paid_amount, due_date, status").limit(300),
   ])
 
   let branches: any[] = branchesRes.data || []
@@ -76,7 +84,7 @@ export default async function BulkEnrollPage() {
   // 3. Fetch Enrollments safely
   let rawEnrollments: any[] = []
   try {
-    const { data: enr1, error: err1 } = await admin
+    const { data: enr1, error: err1 } = await db
       .from("enrollments")
       .select("id, created_at, status, batch_id, student_id, branch_id, roll_no")
       .order("created_at", { ascending: false })
@@ -93,7 +101,7 @@ export default async function BulkEnrollPage() {
       if (fbEnr && fbEnr.length > 0) {
         rawEnrollments = fbEnr
       } else {
-        const { data: rawAll } = await admin.from("enrollments").select("*").order("created_at", { ascending: false }).limit(300)
+        const { data: rawAll } = await db.from("enrollments").select("*").order("created_at", { ascending: false }).limit(300)
         if (rawAll) rawEnrollments = rawAll
       }
     }

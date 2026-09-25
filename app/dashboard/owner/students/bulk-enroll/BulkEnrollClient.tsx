@@ -206,10 +206,17 @@ export default function BulkEnrollClient({
   const [allBatches, setAllBatches] = useState<Batch[]>(initialBatches)
   const [loadingBatches, setLoadingBatches] = useState(false)
   const [financialAccess, setFinancialAccess] = useState<boolean | null>(null)
+  const [clientBranches, setClientBranches] = useState<Branch[]>([])
 
   useEffect(() => {
     checkFinancialAccess().then(({ hasAccess }) => setFinancialAccess(hasAccess))
   }, [])
+
+  useEffect(() => {
+    if (initialBatches && initialBatches.length > 0) {
+      setAllBatches(initialBatches)
+    }
+  }, [initialBatches])
 
   // Client-side fallback fetch to ensure batches are always populated even if server cache/SSR was empty
   useEffect(() => {
@@ -218,7 +225,7 @@ export default function BulkEnrollClient({
       try {
         const { data, error } = await supabase
           .from("batches")
-          .select("*, branch:branches(id, name)")
+          .select("*")
           .order("name")
 
         if (!error && data && data.length > 0) {
@@ -232,16 +239,23 @@ export default function BulkEnrollClient({
       }
     }
 
-    if (initialBatches.length === 0) {
-      loadBatchesClient()
+    loadBatchesClient()
+  }, [supabase])
+
+  useEffect(() => {
+    if ((!branches || branches.length === 0) && (!contextBranches || contextBranches.length === 0)) {
+      supabase.from("branches").select("id, name, address").order("name").then(({ data }) => {
+        if (data && data.length > 0) setClientBranches(data as Branch[])
+      })
     }
-  }, [supabase, initialBatches.length])
+  }, [branches, contextBranches, supabase])
 
   const effectiveBranches = useMemo(() => {
     if (branches && branches.length > 0) return branches
     if (contextBranches && contextBranches.length > 0) return contextBranches
+    if (clientBranches && clientBranches.length > 0) return clientBranches
     return []
-  }, [branches, contextBranches])
+  }, [branches, contextBranches, clientBranches])
 
   // Default to "all" branches so no batches are hidden by default!
   const [selectedBranchId, setSelectedBranchId] = useState<string>("all")
@@ -1358,7 +1372,8 @@ export default function BulkEnrollClient({
                 const cur = b.current_seats || 0
                 const avail = Math.max(0, max - cur)
                 const isFull = avail <= 0
-                const branchLabel = b.branch?.name ? ` [${b.branch.name}]` : ""
+                const bBranch = b.branch?.name || effectiveBranches.find(br => br.id === b.branch_id)?.name
+                const branchLabel = bBranch ? ` [${bBranch}]` : ""
                 return (
                   <option key={b.id} value={b.id} disabled={isFull}>
                     {b.name} ({b.class_level || "General"}{b.subject ? ` - ${b.subject}` : ""}){branchLabel} • {cur}/{max} Seats {isFull ? "[পূর্ণ (Full)]" : `[${avail} Available]`}
