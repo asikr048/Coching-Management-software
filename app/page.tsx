@@ -12,6 +12,8 @@ import Link from "next/link"
 import type { Branch } from "@/lib/supabase/types"
 import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState } from "@/lib/user-enrollments"
 import { useBranding } from "@/components/providers/BrandingContext"
+import { useLanguage } from "@/components/providers/LanguageContext"
+import LanguageSelector from "@/components/ui/LanguageSelector"
 
 const ALL_WEEK_DAYS = [
   { id: "saturday", bn: "শনিবার", en: "Saturday" },
@@ -121,6 +123,7 @@ export default function HomePage() {
 
   // Institutional Branding & Site Settings
   const { branding, theme: activeBrandingTheme } = useBranding()
+  const { t, language } = useLanguage()
 
   const [contactLink, setContactLink] = useState(branding.whatsappLink || "https://wa.me/8801700000000")
   const [contactLabel, setContactLabel] = useState("WhatsApp Us")
@@ -688,11 +691,11 @@ export default function HomePage() {
             <a
               href="#contact"
               className="hover:text-amber-300 transition-colors p-1 flex items-center gap-1.5 text-gray-300"
-              title="Contact Us"
+              title={t("contact_us", { bn: "যোগাযোগ করুন", en: "Contact Us", mix: "Contact Us" })}
             >
               <Phone className="w-3.5 h-3.5 text-emerald-400" />
               <span className="text-[11px] font-semibold text-gray-200 hidden sm:inline hover:text-amber-300">
-                Contact Us
+                {t("contact_us", { bn: "যোগাযোগ করুন", en: "Contact Us", mix: "Contact Us" })}
               </span>
             </a>
             <a
@@ -706,7 +709,7 @@ export default function HomePage() {
             </a>
             <span className="h-3 w-px bg-gray-600 hidden sm:block"></span>
             <span className="text-[11px] text-amber-300 font-semibold hidden sm:inline">
-              স্থাপিত: {displayEstablishedYear}ইং
+              {t("established", { bn: "স্থাপিত", en: "Est.", mix: "স্থাপিত" })}: {displayEstablishedYear}ইং
             </span>
           </div>
         </div>
@@ -746,7 +749,10 @@ export default function HomePage() {
           </Link>
 
           {/* Interactive Branch Dropdown & Quick Login */}
-          <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 flex-shrink-0">
+            {/* Language Selection Mini Logo */}
+            <LanguageSelector variant="header" />
+
             {branches.length > 0 && (
               <div className="relative">
                 <button
@@ -756,7 +762,9 @@ export default function HomePage() {
                 >
                   <Landmark className="w-4 h-4 text-brand-primary flex-shrink-0" />
                   <span className="truncate max-w-[75px] xs:max-w-[110px] sm:max-w-[170px]">
-                    {selectedBranchId === "all" ? "সকল শাখা" : (currentBranch?.name || "শাখা")}
+                    {selectedBranchId === "all"
+                      ? t("all_branches", { bn: "সকল শাখা", en: "All Branches", mix: "সকল শাখা" })
+                      : (currentBranch?.name || t("select_branch", { bn: "শাখা", en: "Branch", mix: "শাখা" }))}
                   </span>
                   <ChevronDown className="w-3.5 h-3.5 text-brand-primary flex-shrink-0" />
                 </button>
@@ -767,9 +775,9 @@ export default function HomePage() {
                     onMouseLeave={() => setBranchDropdownOpen(false)}
                   >
                     <div className="px-3 py-2 border-b border-gray-100 bg-gray-50 text-[11px] font-semibold text-gray-500 uppercase tracking-wider flex items-center justify-between">
-                      <span>শাখা নির্বাচন করুন (Select Branch)</span>
+                      <span>{t("select_branch", { bn: "শাখা নির্বাচন করুন", en: "Select Branch", mix: "শাখা নির্বাচন করুন (Select Branch)" })}</span>
                       <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.2 rounded font-normal">
-                        {branches.length} টি শাখা
+                        {branches.length} {language === "bn" ? "টি শাখা" : "branches"}
                       </span>
                     </div>
 
@@ -785,8 +793,12 @@ export default function HomePage() {
                       <div className="flex items-center gap-2">
                         <Landmark className="w-4 h-4 text-indigo-600" />
                         <div>
-                          <p className="font-semibold">সকল শাখা (All Branches)</p>
-                          <p className="text-[10px] text-gray-500">কেন্দ্রীয় সার্বিক তথ্য</p>
+                          <p className="font-semibold">
+                            {t("all_branches", { bn: "সকল শাখা", en: "All Branches", mix: "সকল শাখা (All Branches)" })}
+                          </p>
+                          <p className="text-[10px] text-gray-500">
+                            {t("global_overview", { bn: "সার্বিক পর্যবেক্ষণ", en: "Global overview", mix: "কেন্দ্রীয় সার্বিক তথ্য" })}
+                          </p>
                         </div>
                       </div>
                       {selectedBranchId === "all" && <Check className="w-4 h-4 text-indigo-600" />}
@@ -827,8 +839,12 @@ export default function HomePage() {
               className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 brand-badge hover:brightness-95 rounded-xl text-xs sm:text-sm font-extrabold shadow-xs transition-all flex-shrink-0 cursor-pointer"
             >
               <Trophy className="w-4 h-4 text-brand-primary" />
-              <span className="hidden sm:inline">অনলাইন রেজাল্ট</span>
-              <span className="sm:hidden">রেজাল্ট</span>
+              <span className="hidden sm:inline">
+                {t("online_result", { bn: "অনলাইন রেজাল্ট", en: "Online Result", mix: "অনলাইন রেজাল্ট" })}
+              </span>
+              <span className="sm:hidden">
+                {t("online_result_short", { bn: "রেজাল্ট", en: "Results", mix: "রেজাল্ট" })}
+              </span>
             </Link>
 
             {/* Student/Staff Login Portal Link */}
@@ -837,7 +853,13 @@ export default function HomePage() {
               className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1.5 sm:py-2 brand-btn-primary rounded-xl text-xs sm:text-sm font-bold shadow-xs transition-all flex-shrink-0 cursor-pointer"
             >
               <User className="w-4 h-4" />
-              <span>{currentUser ? (userRole === "student" ? "প্রোফাইল" : "ড্যাশবোর্ড") : "লগইন"}</span>
+              <span>
+                {currentUser
+                  ? (userRole === "student"
+                      ? t("my_profile", { bn: "প্রোফাইল", en: "Profile", mix: "প্রোফাইল" })
+                      : t("dashboard", { bn: "ড্যাশবোর্ড", en: "Dashboard", mix: "ড্যাশবোর্ড" }))
+                  : t("sign_in", { bn: "লগইন", en: "Sign In", mix: "লগইন" })}
+              </span>
             </Link>
           </div>
         </div>
@@ -856,7 +878,7 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-3 sm:px-8 flex items-center justify-between">
           <div className="flex items-center space-x-1 sm:space-x-2 py-1 text-xs sm:text-sm font-semibold whitespace-nowrap">
             <Link href="/" className="px-3 py-2.5 rounded-lg bg-black/20 text-white font-bold">
-              মূল পাতা (Home)
+              {t("nav_home", { bn: "মূল পাতা", en: "Home", mix: "মূল পাতা (Home)" })}
             </Link>
             <Link 
               href="/online-result" 
@@ -864,32 +886,32 @@ export default function HomePage() {
               style={{ backgroundColor: activeBrandingTheme.secondaryHex }}
             >
               <Trophy className="w-3.5 h-3.5 text-slate-950" />
-              <span>অনলাইন রেজাল্ট (Online Result)</span>
+              <span>{t("online_result_banner", { bn: "অনলাইন রেজাল্ট", en: "Online Results", mix: "অনলাইন রেজাল্ট (Online Result)" })}</span>
             </Link>
             <a href="#batches" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
-              ব্যাচসমূহ (Batches)
+              {t("batches", { bn: "ব্যাচসমূহ", en: "Batches", mix: "ব্যাচসমূহ (Batches)" })}
             </a>
             <Link 
               href="/online-result" 
               className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white font-bold transition-colors flex items-center gap-1"
             >
               <Trophy className="w-3.5 h-3.5 text-white/90" />
-              <span>পরীক্ষার রেজাল্ট (Results)</span>
+              <span>{t("results", { bn: "পরীক্ষার রেজাল্ট", en: "Exam Results", mix: "পরীক্ষার রেজাল্ট (Results)" })}</span>
             </Link>
             <a href="#courses" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
-              কোর্সসমূহ (Courses)
+              {t("courses", { bn: "কোর্সসমূহ", en: "Courses", mix: "কোর্সসমূহ (Courses)" })}
             </a>
             <a href="#notices" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
-              নোটিশ বোর্ড (Notices)
+              {t("notices", { bn: "নোটিশ বোর্ড", en: "Notice Board", mix: "নোটিশ বোর্ড (Notices)" })}
             </a>
             <a href="#achievements" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
-              সাফল্য (Achievements)
+              {t("achievements", { bn: "সাফল্য", en: "Achievements", mix: "সাফল্য (Achievements)" })}
             </a>
             <a href="#blogs" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
-              শিক্ষামূলক ব্লগ (Blog)
+              {t("blogs", { bn: "শিক্ষামূলক ব্লগ", en: "Educational Blog", mix: "শিক্ষামূলক ব্লগ (Blog)" })}
             </a>
             <a href="#contact" className="px-3 py-2.5 rounded-lg hover:bg-white/10 text-white/90 hover:text-white transition-colors">
-              যোগাযোগ (Contact)
+              {t("contact", { bn: "যোগাযোগ", en: "Contact", mix: "যোগাযোগ (Contact)" })}
             </a>
           </div>
 

@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/client"
 import { Eye, EyeOff, Loader2, Lock, Users, TrendingUp, Star, ArrowRight, UserPlus, BookOpen, IdCard, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useBranding } from "@/components/providers/BrandingContext"
+import { useLanguage } from "@/components/providers/LanguageContext"
+import LanguageSelector from "@/components/ui/LanguageSelector"
 
 function LoginFormContent() {
   const searchParams = useSearchParams()
@@ -210,6 +212,7 @@ function LoginFormContent() {
   }
 
     const { branding } = useBranding()
+    const { t } = useLanguage()
 
     return (
       <div className="w-full max-w-[420px] space-y-7">
@@ -221,21 +224,32 @@ function LoginFormContent() {
           </div>
           <h1 className="text-2xl font-bold text-gray-900">{branding.name}</h1>
         </div>
-        {/* Header */}
+        {/* Header with Language Selector & Sign Up */}
         <div className="flex items-center justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">Welcome back</h2>
-            <p className="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">Sign in to your {branding.name} portal</p>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
+              {t("welcome_back", { bn: "স্বাগতম", en: "Welcome back", mix: "Welcome back" })}
+            </h2>
+            <p className="text-gray-500 text-xs sm:text-sm mt-0.5 sm:mt-1 truncate">
+              {t("sign_in_subtitle", {
+                bn: `${branding.name} পোর্টালে প্রবেশ করুন`,
+                en: `Sign in to your ${branding.name} portal`,
+                mix: `Sign in to your ${branding.name} portal`,
+              })}
+            </p>
           </div>
-        <Link
-          href="/signup"
-          className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs sm:text-sm font-semibold hover:bg-indigo-100 transition-colors shrink-0"
-        >
-          <UserPlus className="w-4 h-4 shrink-0" />
-          <span className="hidden xs:inline">Sign Up</span>
-          <span className="xs:hidden">Join</span>
-        </Link>
-      </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <LanguageSelector variant="compact" />
+            <Link
+              href="/signup"
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl text-xs sm:text-sm font-semibold hover:bg-indigo-100 transition-colors shrink-0"
+            >
+              <UserPlus className="w-4 h-4 shrink-0" />
+              <span className="hidden xs:inline">{t("sign_up", { bn: "সাইন আপ", en: "Sign Up", mix: "Sign Up" })}</span>
+              <span className="xs:hidden">{t("join_now", { bn: "যুক্ত হোন", en: "Join", mix: "Join" })}</span>
+            </Link>
+          </div>
+        </div>
 
       {error && (
         <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm flex items-start gap-2.5">
@@ -247,7 +261,7 @@ function LoginFormContent() {
       <form onSubmit={handleLogin} className="space-y-5">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">
-            User ID or Email
+            {t("user_id_or_email", { bn: "ইউজার আইডি বা ইমেইল", en: "User ID or Email", mix: "User ID or Email" })}
           </label>
           <div className="relative">
             <IdCard className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
@@ -262,7 +276,9 @@ function LoginFormContent() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">
+            {t("password", { bn: "পাসওয়ার্ড", en: "Password", mix: "Password" })}
+          </label>
           <div className="relative">
             <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -291,10 +307,12 @@ function LoginFormContent() {
               onChange={e => setRemember(e.target.checked)}
               className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
             />
-            <span className="text-sm text-gray-600">Remember me</span>
+            <span className="text-sm text-gray-600">
+              {t("remember_me", { bn: "মনে রাখুন", en: "Remember me", mix: "Remember me" })}
+            </span>
           </label>
           <button type="button" className="text-sm text-brand-primary font-medium hover:underline">
-            Forgot password?
+            {t("forgot_password", { bn: "পাসওয়ার্ড ভুলে গেছেন?", en: "Forgot password?", mix: "Forgot password?" })}
           </button>
         </div>
 
@@ -305,11 +323,11 @@ function LoginFormContent() {
         >
           {loading ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" /> Signing in...
+              <Loader2 className="w-4 h-4 animate-spin" /> {t("logging_in", { bn: "প্রবেশ করা হচ্ছে...", en: "Signing in...", mix: "Signing in..." })}
             </>
           ) : (
             <>
-              Sign In <ArrowRight className="w-4 h-4" />
+              {t("sign_in", { bn: "সাইন ইন", en: "Sign In", mix: "Sign In" })} <ArrowRight className="w-4 h-4" />
             </>
           )}
         </button>

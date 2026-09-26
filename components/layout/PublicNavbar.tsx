@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 import { User } from "lucide-react"
 import { useBranding } from "@/components/providers/BrandingContext"
+import { useLanguage } from "@/components/providers/LanguageContext"
+import LanguageSelector from "@/components/ui/LanguageSelector"
 
 export default function PublicNavbar() {
   const [currentUser, setCurrentUser] = useState<any>(null)
@@ -11,6 +13,7 @@ export default function PublicNavbar() {
   const [loaded, setLoaded] = useState(false)
   const supabase = createClient()
   const { branding, theme } = useBranding()
+  const { t } = useLanguage()
 
   useEffect(() => {
     async function checkAuth() {
@@ -33,10 +36,10 @@ export default function PublicNavbar() {
     : "/student/profile"
 
   const buttonLabel = ["owner", "branch_director", "super_manager", "manager"].includes(userRole || "")
-    ? "Admin Panel"
+    ? t("admin_panel", { bn: "অ্যাডমিন প্যানেল", en: "Admin Panel", mix: "Admin Panel" })
     : ["teacher", "course_teacher", "receptionist", "reception", "accountant"].includes(userRole || "")
-    ? "Dashboard"
-    : "My Profile"
+    ? t("dashboard", { bn: "ড্যাশবোর্ড", en: "Dashboard", mix: "Dashboard" })
+    : t("my_profile", { bn: "আমার প্রোফাইল", en: "My Profile", mix: "My Profile" })
 
   return (
     <nav className="bg-white border-b border-gray-100 px-3 sm:px-4 py-3 sm:py-4">
@@ -49,7 +52,10 @@ export default function PublicNavbar() {
           </div>
           <span className="text-base sm:text-lg font-bold text-slate-900 truncate">{branding.name}</span>
         </Link>
-        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+          {/* Language Selection Mini Logo */}
+          <LanguageSelector variant="header" />
+
           {loaded && currentUser ? (
             <Link
               href={dashboardHref}
@@ -62,14 +68,14 @@ export default function PublicNavbar() {
               href="/login"
               className="px-2.5 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-brand-primary hover:bg-brand-light rounded-xl transition-colors"
             >
-              Sign In
+              {t("sign_in", { bn: "সাইন ইন", en: "Sign In", mix: "Sign In" })}
             </Link>
           ) : null}
           <Link
             href="/#batches"
             className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold brand-btn-primary rounded-xl transition-all"
           >
-            View Batches
+            {t("view_batches", { bn: "ব্যাচসমূহ দেখুন", en: "View Batches", mix: "View Batches" })}
           </Link>
         </div>
       </div>

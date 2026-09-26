@@ -6,6 +6,8 @@ import { Bell, LogOut, User, ChevronDown, Menu, Landmark, Building2, Check, Spar
 import type { Staff } from "@/lib/supabase/types"
 import { useBranch } from "@/components/providers/BranchContext"
 import { useBranding } from "@/components/providers/BrandingContext"
+import { useLanguage } from "@/components/providers/LanguageContext"
+import LanguageSelector from "@/components/ui/LanguageSelector"
 import { cn } from "@/lib/utils"
 import NotificationDropdown from "./NotificationDropdown"
 
@@ -21,6 +23,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
   const supabase = createClient()
   const { selectedBranchId, setSelectedBranchId, branches, currentBranch, isAllBranchesPermitted, permittedBranchIds } = useBranch()
   const { branding, theme } = useBranding()
+  const { t, language } = useLanguage()
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -28,14 +31,14 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
   }
 
   const roleLabel: Record<string, string> = {
-    owner: "Owner",
-    branch_director: "Branch Director",
-    super_manager: "Super Manager",
-    manager: "Manager",
-    receptionist: "Receptionist",
-    teacher: "Teacher",
-    accountant: "Accountant",
-    course_teacher: "Course Teacher",
+    owner: t("role_owner", { bn: "মালিক", en: "Owner", mix: "Owner" }),
+    branch_director: t("role_branch_director", { bn: "শাখা পরিচালক", en: "Branch Director", mix: "Branch Director" }),
+    super_manager: t("role_super_manager", { bn: "সুপার ম্যানেজার", en: "Super Manager", mix: "Super Manager" }),
+    manager: t("role_manager", { bn: "ম্যানেজার", en: "Manager", mix: "Manager" }),
+    receptionist: t("role_receptionist", { bn: "রিসেপশনিস্ট", en: "Receptionist", mix: "Receptionist" }),
+    teacher: t("role_teacher", { bn: "শিক্ষক", en: "Teacher", mix: "Teacher" }),
+    accountant: t("role_accountant", { bn: "হিসাবরক্ষক", en: "Accountant", mix: "Accountant" }),
+    course_teacher: t("role_course_teacher", { bn: "কোর্স শিক্ষক", en: "Course Teacher", mix: "Course Teacher" }),
   }
 
   const visibleBranches = branches.filter(b => isAllBranchesPermitted || permittedBranchIds.includes(b.id))
@@ -60,7 +63,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <h1 className="text-sm sm:text-lg font-black text-[#1e1b4b] tracking-tight truncate max-w-[120px] xs:max-w-[160px] sm:max-w-none">
-              {roleLabel[user.role] || user.role} Panel
+              {roleLabel[user.role] || user.role} {t("panel", { bn: "প্যানেল", en: "Panel", mix: "Panel" })}
             </h1>
             <span className={cn("hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border shadow-2xs truncate max-w-[180px]", theme.badgeClass)}>
               <Sparkles className="w-3 h-3 mr-1 flex-shrink-0" />
@@ -68,7 +71,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
             </span>
           </div>
           <p className="text-[11px] sm:text-xs text-slate-500 font-medium hidden xs:block">
-            {new Date().toLocaleDateString("en-GB", {
+            {new Date().toLocaleDateString(language === "bn" ? "bn-BD" : "en-GB", {
               weekday: "short",
               year: "numeric",
               month: "short",
@@ -78,7 +81,10 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        {/* Language Selection Mini Logo Button */}
+        <LanguageSelector variant="header" />
+
         {/* Branch Selector Dropdown */}
         {branches.length > 0 && (
           <div className="relative">
@@ -102,8 +108,8 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
               )}
               <span className="truncate max-w-[80px] xs:max-w-[120px] sm:max-w-[190px]">
                 {selectedBranchId === "all"
-                  ? "All Branches (সকল শাখা)"
-                  : (currentBranch?.name || "Select Branch")}
+                  ? t("all_branches", { bn: "সকল শাখা", en: "All Branches", mix: "All Branches (সকল শাখা)" })
+                  : (currentBranch?.name || t("select_branch", { bn: "শাখা নির্বাচন", en: "Select Branch", mix: "Select Branch" }))}
               </span>
               {isCurrentPendingDeletion && (
                 <span className="text-[10px] bg-red-600 text-white font-black px-1.5 py-0.2 rounded uppercase">
@@ -119,7 +125,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
                 onMouseLeave={() => setBranchMenuOpen(false)}
               >
                 <div className="px-3.5 py-2.5 border-b border-slate-100 bg-slate-50 text-[11px] font-bold text-slate-600 uppercase tracking-wider flex items-center justify-between">
-                  <span>Branch Filter (শাখা ফিল্টার)</span>
+                  <span>{t("branch_filter", { bn: "শাখা ফিল্টার", en: "Branch Filter", mix: "Branch Filter (শাখা ফিল্টার)" })}</span>
                   <span className="text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded border border-indigo-200">
                     {visibleBranches.length} {visibleBranches.length === 1 ? "branch" : "branches"}
                   </span>
@@ -139,8 +145,12 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
                     <div className="flex items-center gap-2">
                       <Landmark className="w-4 h-4 text-indigo-600 flex-shrink-0" />
                       <div>
-                        <p className="font-bold text-xs sm:text-sm text-slate-900">All Branches (সকল শাখা)</p>
-                        <p className="text-[10px] text-slate-500">Global multi-branch overview</p>
+                        <p className="font-bold text-xs sm:text-sm text-slate-900">
+                          {t("all_branches", { bn: "সকল শাখা", en: "All Branches", mix: "All Branches (সকল শাখা)" })}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {t("global_overview", { bn: "সার্বিক পর্যবেক্ষণ", en: "Global multi-branch overview", mix: "Global multi-branch overview" })}
+                        </p>
                       </div>
                     </div>
                     {selectedBranchId === "all" && <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />}
@@ -219,7 +229,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
                   onClick={handleLogout}
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-xl font-medium transition-colors"
                 >
-                  <LogOut className="w-4 h-4" /> Sign Out
+                  <LogOut className="w-4 h-4" /> {t("sign_out", { bn: "লগআউট", en: "Sign Out", mix: "Sign Out" })}
                 </button>
               </div>
             </div>

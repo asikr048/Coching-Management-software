@@ -4,6 +4,8 @@ import "./globals.css"
 import { Toaster } from "sonner"
 import ConnectivityBanner from "@/components/desktop/ConnectivityBanner"
 import { BrandingProvider } from "@/components/providers/BrandingContext"
+import { LanguageProvider } from "@/components/providers/LanguageContext"
+import LanguageSelector from "@/components/ui/LanguageSelector"
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
@@ -28,9 +30,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <BrandingProvider>
-          <ConnectivityBanner />
-          {children}
-          <Toaster richColors position="top-right" />
+          <LanguageProvider>
+            <ConnectivityBanner />
+            {children}
+            <LanguageSelector variant="floating" />
+            <Toaster richColors position="top-right" />
+          </LanguageProvider>
         </BrandingProvider>
       </body>
     </html>
