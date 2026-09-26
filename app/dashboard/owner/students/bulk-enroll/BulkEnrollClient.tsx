@@ -70,6 +70,7 @@ interface ParsedStudent {
   guardian_relation?: string
   isValid: boolean
   errors: string[]
+  warnings?: string[]
 }
 
 export function normalizeBDPhone(raw: string): string {
@@ -876,10 +877,15 @@ export default function BulkEnrollClient({
       else if (rawGender.includes("o") || rawGender.includes("অন্যান্য")) gender = "other"
 
       const errors: string[] = []
+      const warnings: string[] = []
       if (!name) errors.push("নাম প্রয়োজন (Missing Name)")
-      if (!guardianPhone && !studentPhone) errors.push("মোবাইল নম্বর প্রয়োজন (Missing Phone)")
-      else if ((guardianPhone || studentPhone).replace(/[^0-9]/g, "").length < 10) errors.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
-      else if (/00000$/.test((guardianPhone || studentPhone).replace(/[^0-9]/g, ""))) errors.push("এক্সেলে নম্বর বিকৃত হয়ে শূন্য হয়েছে (Excel rounded to zeros)")
+      if (!guardianPhone && !studentPhone) {
+        warnings.push("মোবাইল নম্বর দেওয়া হয়নি (তথ্য স্কিপ করা হয়েছে)")
+      } else if ((guardianPhone || studentPhone).replace(/[^0-9]/g, "").length < 10) {
+        warnings.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
+      } else if (/00000$/.test((guardianPhone || studentPhone).replace(/[^0-9]/g, ""))) {
+        warnings.push("এক্সেলে নম্বর বিকৃত হয়ে শূন্য হয়েছিল (Excel rounded to zeros)")
+      }
 
       const studentId = colIndex.student_id >= 0 && cells[colIndex.student_id] ? cells[colIndex.student_id].replace(/^["']|["']$/g, "").trim() : undefined
       const rollNo = colIndex.roll_no >= 0 && cells[colIndex.roll_no] ? cells[colIndex.roll_no].replace(/^["'#]|["']$/g, "").trim() : undefined
@@ -909,7 +915,8 @@ export default function BulkEnrollClient({
         date_of_birth: dob,
         guardian_relation: relation,
         isValid: errors.length === 0,
-        errors
+        errors,
+        warnings
       })
     }
 
@@ -981,14 +988,20 @@ export default function BulkEnrollClient({
       }
       const updated = { ...s, [field]: finalVal }
       const errors: string[] = []
+      const warnings: string[] = []
       if (!updated.name?.trim()) errors.push("Missing Name")
-      if (!updated.guardian_phone?.trim() && !updated.phone?.trim()) errors.push("Missing Phone")
-      else if (((updated.guardian_phone || updated.phone || "").replace(/[^0-9]/g, "")).length < 10) errors.push("Invalid Phone")
-      else if (/00000$/.test(((updated.guardian_phone || updated.phone || "").replace(/[^0-9]/g, "")))) errors.push("Excel rounded to zeros")
+      if (!updated.guardian_phone?.trim() && !updated.phone?.trim()) {
+        warnings.push("মোবাইল নম্বর দেওয়া হয়নি (তথ্য স্কিপ করা হয়েছে)")
+      } else if (((updated.guardian_phone || updated.phone || "").replace(/[^0-9]/g, "")).length < 10) {
+        warnings.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
+      } else if (/00000$/.test(((updated.guardian_phone || updated.phone || "").replace(/[^0-9]/g, "")))) {
+        warnings.push("এক্সেলে নম্বর বিকৃত হয়েছিল")
+      }
       return {
         ...updated,
         isValid: errors.length === 0,
-        errors
+        errors,
+        warnings
       }
     }))
   }
@@ -1011,12 +1024,9 @@ export default function BulkEnrollClient({
       return
     }
 
-    if (!password || password.length < 6) {
-      toast.error("পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে (Password must be at least 6 characters)")
-      return
-    }
+    const effectivePassword = (password && password.length >= 6) ? password.trim() : "student123"
 
-    if (password !== confirmPassword) {
+    if (password && confirmPassword && password !== confirmPassword) {
       toast.error("পাসওয়ার্ড দুটি মিলছে না (Passwords do not match)")
       return
     }
@@ -1031,7 +1041,7 @@ export default function BulkEnrollClient({
       const payload = {
         batch_id: selectedBatchId,
         branch_id: selectedBranchId !== "all" ? selectedBranchId : selectedBatch?.branch_id,
-        password: password.trim(),
+        password: effectivePassword,
         students: parsedStudents.map(s => ({
           name: s.name.trim(),
           guardian_phone: normalizeBDPhone(s.guardian_phone),
@@ -1433,7 +1443,7 @@ export default function BulkEnrollClient({
             <div>
               <h2 className="text-base font-bold text-slate-900">সিএসভি ফরম্যাট ও নমুনা ফাইল (CSV Format & Template)</h2>
               <p className="text-xs text-slate-500">
-                ফাইলে <b>Due (বকেয়া)</b> কলামে চলতি মাসে শিক্ষার্থীর বকেয়া টাকার পরিমাণ উল্লেখ করুন
+                শুধুমাত্র <b>নাম (Name)</b> দিয়ে ভর্তি করা যাবে! অন্যান্য তথ্য প্রয়োজন তবে স্কিপ করা যাবে এবং পরবর্তীতে সরাসরি এডিট করা যাবে।
               </p>
             </div>
           </div>
@@ -1458,6 +1468,14 @@ export default function BulkEnrollClient({
           </div>
         </div>
 
+        {/* Skippable Guidance Banner */}
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+          <span>
+            <b>টিপস (Name-Only Enrollment):</b> আপনি চাইলে শুধুমাত্র শিক্ষার্থীদের নামের তালিকা আপলোড করে সরাসরি ব্যাচে ভর্তি করাতে পারেন। ফোন বা অন্যান্য তথ্য এখন না থাকলে স্কিপ করুন, পরবর্তীতে অ্যাডমিন প্যানেল থেকে সহজে এডিট করা যাবে।
+          </span>
+        </div>
+
         {/* Format Explanation Table */}
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
@@ -1473,14 +1491,14 @@ export default function BulkEnrollClient({
               <tr>
                 <td className="py-2 px-3 font-mono font-bold text-slate-900">Name</td>
                 <td className="py-2 px-3 font-medium text-slate-800">নাম</td>
-                <td className="py-2 px-3"><span className="text-rose-600 font-bold">Required</span></td>
+                <td className="py-2 px-3"><span className="text-emerald-700 font-bold">একমাত্র বাধ্যতামূলক (Required)</span></td>
                 <td className="py-2 px-3">শিক্ষার্থীর পুরো নাম (যেমন: আবাব হোসেন)</td>
               </tr>
               <tr>
                 <td className="py-2 px-3 font-mono font-bold text-slate-900">Guardian Phone</td>
                 <td className="py-2 px-3 font-medium text-slate-800">অভিভাবকের মোবাইল</td>
-                <td className="py-2 px-3"><span className="text-rose-600 font-bold">Required</span></td>
-                <td className="py-2 px-3">মোবাইল নম্বর (যেমন: +8801302201431 বা 01302201431)</td>
+                <td className="py-2 px-3"><span className="text-amber-700 font-bold">প্রয়োজনীয় (স্কিপ করা যাবে)</span></td>
+                <td className="py-2 px-3">মোবাইল নম্বর (না দিলে পরে অ্যাডমিন প্যানেল থেকে এডিট করা যাবে)</td>
               </tr>
               <tr className="bg-amber-50/50 font-semibold">
                 <td className="py-2 px-3 font-mono text-indigo-700 font-bold">Due</td>
@@ -1700,12 +1718,21 @@ export default function BulkEnrollClient({
                       </td>
                       <td className="py-1 px-3 align-middle whitespace-nowrap">
                         {st.isValid ? (
-                          <span className="inline-flex items-center text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap">
-                            ✓ Ready
-                          </span>
+                          st.warnings && st.warnings.length > 0 ? (
+                            <span 
+                              className="inline-flex items-center text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-300 whitespace-nowrap cursor-help"
+                              title={st.warnings.join(" | ")}
+                            >
+                              ⚠️ স্কিপড (Ready)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 whitespace-nowrap">
+                              ✓ Ready
+                            </span>
+                          )
                         ) : (
                           <span 
-                            className="inline-flex items-center text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 whitespace-nowrap max-w-[130px] truncate block" 
+                            className="inline-flex items-center text-[10px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-200 whitespace-nowrap max-w-[130px] truncate block cursor-help" 
                             title={st.errors.join(", ")}
                           >
                             ! {st.errors[0]}

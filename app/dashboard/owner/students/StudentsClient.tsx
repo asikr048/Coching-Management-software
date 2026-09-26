@@ -90,6 +90,112 @@ export default function StudentsClient({
   const [loadingFresh, setLoadingFresh] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
 
+  // Compact Inline Student Edit Form state
+  const [editingStudentId, setEditingStudentId] = useState<string | null>(null)
+  const [savingStudentId, setSavingStudentId] = useState<string | null>(null)
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    roll_no: "",
+    phone: "",
+    email: "",
+    gender: "male",
+    date_of_birth: "",
+    class_level: "",
+    school_college: "",
+    guardian_name: "",
+    guardian_phone: "",
+    guardian_relation: "Parent",
+    address: "",
+    is_active: true,
+  })
+
+  const toggleInlineEdit = (student: any) => {
+    if (editingStudentId === student.id) {
+      setEditingStudentId(null)
+      return
+    }
+    const r = student.roll_no != null ? String(student.roll_no) : (student.batch_roll != null ? String(student.batch_roll) : (student.enrollments?.[0]?.roll_no != null ? String(student.enrollments[0].roll_no) : ""))
+    setEditFormData({
+      name: student.name || "",
+      roll_no: r,
+      phone: student.phone || "",
+      email: student.email || "",
+      gender: student.gender || "male",
+      date_of_birth: student.date_of_birth || "",
+      class_level: student.class_level || "",
+      school_college: student.school_college || "",
+      guardian_name: student.guardian_name || "",
+      guardian_phone: student.guardian_phone || "",
+      guardian_relation: student.guardian_relation || "Parent",
+      address: student.address || "",
+      is_active: student.is_active ?? true,
+    })
+    setEditingStudentId(student.id)
+  }
+
+  const handleSaveInlineEdit = async (studentId: string) => {
+    if (!editFormData.name?.trim()) {
+      toast.error("শিক্ষার্থীর নাম আবশ্যক (Student name is required)")
+      return
+    }
+
+    setSavingStudentId(studentId)
+    try {
+      const parsedRoll = editFormData.roll_no?.trim() ? parseInt(editFormData.roll_no.trim(), 10) : null
+      const updates: Record<string, any> = {
+        name: editFormData.name.trim(),
+        phone: editFormData.phone?.trim() || null,
+        email: editFormData.email?.trim() || null,
+        gender: editFormData.gender || "male",
+        date_of_birth: editFormData.date_of_birth || null,
+        guardian_name: editFormData.guardian_name?.trim() || null,
+        guardian_phone: editFormData.guardian_phone?.trim() || null,
+        guardian_relation: editFormData.guardian_relation || "Parent",
+        address: editFormData.address?.trim() || null,
+        school_college: editFormData.school_college?.trim() || null,
+        class_level: editFormData.class_level?.trim() || null,
+        is_active: editFormData.is_active,
+        roll_no: parsedRoll,
+        batch_roll: parsedRoll,
+      }
+
+      const { error } = await supabase.from("students").update(updates).eq("id", studentId)
+      if (error) throw error
+
+      if (parsedRoll != null) {
+        try {
+          await supabase.from("enrollments").update({ roll_no: parsedRoll }).eq("student_id", studentId)
+        } catch {}
+      }
+
+      // Update local state reactively
+      setLocalStudents((prev) =>
+        prev.map((s) => {
+          if (s.id !== studentId) return s
+          const updatedEnrollments = s.enrollments?.map((enr, i) => {
+            if (i === 0 && parsedRoll != null) return { ...enr, roll_no: parsedRoll }
+            return enr
+          })
+          return {
+            ...s,
+            ...updates,
+            roll_no: parsedRoll,
+            batch_roll: parsedRoll,
+            enrollments: updatedEnrollments || s.enrollments,
+          }
+        })
+      )
+
+      toast.success("শিক্ষার্থীর তথ্য সফলভাবে সংরক্ষিত হয়েছে! (Student information updated successfully)")
+      setEditingStudentId(null)
+    } catch (err: any) {
+      console.error("Inline edit save error:", err)
+      toast.error(`আপডেট করতে সমস্যা হয়েছে: ${err.message || "Failed to update"}`)
+    } finally {
+      setSavingStudentId(null)
+    }
+  }
+
   const fetchStudentsClient = async () => {
     setLoadingFresh(true)
     try {
@@ -1209,7 +1315,8 @@ export default function StudentsClient({
                   const isSelected = selectedIds.has(student.id)
                   
                   return (
-                    <tr key={student.id} className={`hover:bg-amber-50/30 transition-colors ${isSelected ? 'bg-amber-500/10' : ''}`}>
+                    <Fragment key={student.id}>
+                    <tr className={`hover:bg-amber-50/30 transition-colors ${isSelected ? 'bg-amber-500/10' : ''}`}>
                       <td className="px-4 py-4">
                         <input 
                           type="checkbox" 
@@ -1341,23 +1448,49 @@ export default function StudentsClient({
                         </span>
                       </td>
                       <td className="px-4 py-4 text-right relative">
-                        <button 
-                          onClick={() => setOpenDropdown(openDropdown === student.id ? null : student.id)}
-                          className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-                        >
-                          <MoreVertical className="w-5 h-5" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => toggleInlineEdit(student)}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all inline-flex items-center gap-1 cursor-pointer ${
+                              editingStudentId === student.id
+                                ? "bg-amber-500 text-white shadow-sm ring-2 ring-amber-500/20"
+                                : "text-amber-800 bg-amber-100/90 hover:bg-amber-200 border border-amber-300 shadow-2xs"
+                            }`}
+                            title={editingStudentId === student.id ? "এডিট ফর্ম বন্ধ করুন (Close Edit)" : "নিচে সরাসরি তথ্য এডিট করুন (Quick Inline Edit)"}
+                          >
+                            <Edit className="w-3.5 h-3.5" />
+                            <span>{editingStudentId === student.id ? "বন্ধ" : "এডিট"}</span>
+                          </button>
+
+                          <button 
+                            onClick={() => setOpenDropdown(openDropdown === student.id ? null : student.id)}
+                            className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                          >
+                            <MoreVertical className="w-5 h-5" />
+                          </button>
+                        </div>
 
                         {/* Action Dropdown */}
                         {openDropdown === student.id && (
                           <>
                             <div className="fixed inset-0 z-10" onClick={() => setOpenDropdown(null)}></div>
                             <div className="absolute right-8 top-10 w-56 bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 z-20 py-1.5 overflow-hidden animate-in fade-in slide-in-from-top-2 text-left">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenDropdown(null)
+                                  toggleInlineEdit(student)
+                                }}
+                                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-amber-300 hover:bg-slate-800 transition-colors text-left font-semibold cursor-pointer"
+                              >
+                                <Edit className="w-4 h-4 text-amber-400" /> Quick Inline Edit (নিচে ফর্ম)
+                              </button>
                               <Link href={`/dashboard/owner/students/${student.id}`} className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-800 hover:text-amber-400 transition-colors">
                                 <Eye className="w-4 h-4" /> View Profile
                               </Link>
                               <Link href={`/dashboard/owner/students/${student.id}/edit`} className="flex items-center gap-2 px-4 py-2.5 text-sm text-slate-200 hover:bg-slate-800 hover:text-amber-400 transition-colors">
-                                <Edit className="w-4 h-4" /> Edit Details
+                                <Edit className="w-4 h-4" /> Full Page Edit
                               </Link>
 
                               {/* Student ID Card & Admission Slip */}
@@ -1425,6 +1558,268 @@ export default function StudentsClient({
                         )}
                       </td>
                     </tr>
+
+                    {/* Inline Compact Edit Form directly below student row */}
+                    {editingStudentId === student.id && (
+                      <tr key={`edit-${student.id}`} className="bg-amber-50/60 border-y-2 border-amber-400">
+                        <td colSpan={11} className="p-3 sm:p-5">
+                          <div className="bg-white rounded-2xl border border-amber-300 shadow-xl p-4 sm:p-6 space-y-4 text-left">
+                            {/* Header */}
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 flex items-center justify-center font-bold">
+                                  <Edit className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                                    <span>শিক্ষার্থীর তথ্য পরিবর্তন ও সংযোজন (Quick Edit Student Info)</span>
+                                    <span className="text-xs font-mono font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                                      {student.student_id}
+                                    </span>
+                                  </h4>
+                                  <p className="text-xs text-slate-500 mt-0.5">
+                                    নিচের কমপ্যাক্ট ফর্মে যেকোনো তথ্য যোগ বা আপডেট করে সরাসরি সংরক্ষণ করুন (Changes save immediately)
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setEditingStudentId(null)}
+                                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                                title="Close Form"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+
+                            {/* Compact Form */}
+                            <form onSubmit={(e) => { e.preventDefault(); handleSaveInlineEdit(student.id); }}>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+                                {/* Name */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    শিক্ষার্থীর নাম (Student Name) <span className="text-rose-500">*</span>
+                                  </label>
+                                  <input
+                                    required
+                                    type="text"
+                                    value={editFormData.name}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, name: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* Batch Roll */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    ব্যাচ রোল নম্বর (Roll No)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="1, 2, 3..."
+                                    value={editFormData.roll_no}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, roll_no: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* Student Phone */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    শিক্ষার্থীর মোবাইল (Phone)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="01..."
+                                    value={editFormData.phone}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, phone: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* Email */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    ইমেইল (Email)
+                                  </label>
+                                  <input
+                                    type="email"
+                                    placeholder="student@example.com"
+                                    value={editFormData.email}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, email: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* Guardian Name */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    অভিভাবকের নাম (Guardian Name)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="পিতা / মাতার নাম"
+                                    value={editFormData.guardian_name}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, guardian_name: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* Guardian Phone */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    অভিভাবকের মোবাইল (Guardian Phone)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="01..."
+                                    value={editFormData.guardian_phone}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, guardian_phone: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* Guardian Relation */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    সম্পর্ক (Relation)
+                                  </label>
+                                  <select
+                                    value={editFormData.guardian_relation}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, guardian_relation: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                                  >
+                                    <option value="Parent">Parent (পিতা/মাতা)</option>
+                                    <option value="Father">Father (পিতা)</option>
+                                    <option value="Mother">Mother (মাতা)</option>
+                                    <option value="Brother">Brother (ভাই)</option>
+                                    <option value="Sister">Sister (বোন)</option>
+                                    <option value="Uncle">Uncle (চাচা/মামা)</option>
+                                    <option value="Other">Other (অন্যান্য)</option>
+                                  </select>
+                                </div>
+
+                                {/* Gender */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    লিঙ্গ (Gender)
+                                  </label>
+                                  <select
+                                    value={editFormData.gender}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, gender: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                                  >
+                                    <option value="male">Male (ছাত্র)</option>
+                                    <option value="female">Female (ছাত্রী)</option>
+                                    <option value="other">Other (অন্যান্য)</option>
+                                  </select>
+                                </div>
+
+                                {/* Class Level */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    শ্রেণী / বর্ষ (Class Level)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="যেমন: Class 10, HSC 2025"
+                                    value={editFormData.class_level}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, class_level: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* School / College */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    প্রতিষ্ঠান (School / College)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="স্কুল বা কলেজের নাম"
+                                    value={editFormData.school_college}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, school_college: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* Date of Birth */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    জন্মতারিখ (Date of Birth)
+                                  </label>
+                                  <input
+                                    type="date"
+                                    value={editFormData.date_of_birth}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, date_of_birth: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+
+                                {/* Status */}
+                                <div>
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    স্ট্যাটাস (Status)
+                                  </label>
+                                  <select
+                                    value={editFormData.is_active ? "active" : "inactive"}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, is_active: e.target.value === "active" }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                                  >
+                                    <option value="active">Active (সক্রিয়)</option>
+                                    <option value="inactive">Inactive (নিষ্ক্রিয়)</option>
+                                  </select>
+                                </div>
+
+                                {/* Address */}
+                                <div className="sm:col-span-2 md:col-span-3 lg:col-span-4">
+                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                    ঠিকানা (Address)
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="বর্তমান বা স্থায়ী ঠিকানা"
+                                    value={editFormData.address}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, address: e.target.value }))}
+                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                  />
+                                </div>
+                              </div>
+
+                              {/* Action buttons */}
+                              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-100">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingStudentId(null)}
+                                  className="px-4 py-2 border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                                >
+                                  বাতিল (Cancel)
+                                </button>
+                                <button
+                                  type="submit"
+                                  disabled={savingStudentId === student.id}
+                                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                                >
+                                  {savingStudentId === student.id ? (
+                                    <>
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      সংরক্ষণ হচ্ছে...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="w-3.5 h-3.5" />
+                                      তথ্য সংরক্ষণ করুন (Save Changes)
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                   )
                 })
               )}
