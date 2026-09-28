@@ -1568,17 +1568,28 @@ export default function ExamsClient({
           try {
             await supabase
               .from("exams")
-              .update({ title: finalTitle })
+              .update({
+                title: finalTitle,
+                batch_id: selectedBatchIdToUse,
+                batch_ids: selectedBatchIdsToUse,
+                branch_id: form.branch_id || (selectedBranchId !== "all" ? selectedBranchId : null),
+              })
               .ilike("result_note", `%[SERIES_ID:${curSeriesId}]%`)
           } catch (syncErr) {
-            console.warn("Failed to sync series title to other weeks in series:", syncErr)
+            console.warn("Failed to sync series title and batches to other weeks in series:", syncErr)
           }
         }
 
         setExams(prev => prev.map(ex => {
           if (ex.id === editingExam.id) return finalUpdatedExam
           if (curSeriesId && ex.result_note?.includes(`[SERIES_ID:${curSeriesId}]`)) {
-            return { ...ex, title: finalTitle }
+            return {
+              ...ex,
+              title: finalTitle,
+              batch_id: selectedBatchIdToUse || undefined,
+              batch_ids: selectedBatchIdsToUse,
+              batch: matchedBatch ? { name: matchedBatch.name } : ex.batch,
+            }
           }
           return ex
         }))

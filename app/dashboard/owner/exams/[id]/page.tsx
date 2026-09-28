@@ -666,10 +666,21 @@ export default function ExamResultsPage() {
           existing = existingData || []
         }
 
+        const validStudentIds = new Set(resolvedStudents.map((s) => s.id))
+        // If the exam has students loaded, purge and filter any stale results from previous batches
+        if (resolvedStudents.length > 0) {
+          const orphanIds = (existing || []).map((r: any) => r.student_id).filter((id: string) => !validStudentIds.has(id))
+          if (orphanIds.length > 0) {
+            supabase.from("exam_results").delete().eq("exam_id", params.id).in("student_id", orphanIds).then(() => {})
+          }
+          existing = (existing || []).filter((r: any) => validStudentIds.has(r.student_id))
+        }
+
         const map: Record<string, Result> = {}
         const dayMarks: Record<string, Record<string, DayMarkItem>> = {}
 
         for (const r of existing || []) {
+          if (resolvedStudents.length > 0 && !validStudentIds.has(r.student_id)) continue
           const markStr = String(r.obtained_marks ?? "")
           map[r.student_id] = {
             student_id: r.student_id,
@@ -696,6 +707,7 @@ export default function ExamResultsPage() {
             if (m && m[1]) {
               const parsedAll = JSON.parse(m[1])
               for (const [stId, sMap] of Object.entries(parsedAll)) {
+                if (resolvedStudents.length > 0 && !validStudentIds.has(stId)) continue
                 if (!dayMarks[stId] || Object.keys(dayMarks[stId]).length === 0) {
                   dayMarks[stId] = sMap as Record<string, DayMarkItem>
                 } else {
@@ -730,6 +742,7 @@ export default function ExamResultsPage() {
             firstExamName = typeof d0 === "object" && d0.exam_name ? d0.exam_name : "পরীক্ষা"
           }
           for (const [sId, res] of Object.entries(map)) {
+            if (resolvedStudents.length > 0 && !validStudentIds.has(sId)) continue
             const currentDays = dayMarks[sId] || {}
             if (Object.keys(currentDays).length === 0 && res.obtained_marks !== "" && !isNaN(parseFloat(res.obtained_marks))) {
               const numVal = parseFloat(res.obtained_marks)
