@@ -112,7 +112,6 @@ export async function POST(req: NextRequest) {
     const {
       batch_id,
       branch_id,
-      password,
       students = []
     } = body
 
@@ -120,9 +119,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Batch selection is required." }, { status: 400 })
     }
 
-    if (!password || password.length < 6) {
-      return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 })
-    }
+    const password = (body.password && String(body.password).trim().length >= 6) ? String(body.password).trim() : "student123"
 
     if (!Array.isArray(students) || students.length === 0) {
       return NextResponse.json({ error: "No students provided for bulk enrollment." }, { status: 400 })

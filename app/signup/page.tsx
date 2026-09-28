@@ -3,9 +3,12 @@ import { useState } from "react"
 import { GraduationCap, Eye, EyeOff, Loader2, Mail, Lock, User, Phone, ArrowRight, Copy, CheckCircle, AlertCircle, LogIn } from "lucide-react"
 import Link from "next/link"
 import { useBranding } from "@/components/providers/BrandingContext"
+import { useLanguage } from "@/components/providers/LanguageContext"
+import LanguageSelector from "@/components/ui/LanguageSelector"
 
 export default function SignupPage() {
   const { branding, theme } = useBranding()
+  const { t } = useLanguage()
   const [form, setForm] = useState({ name: "", email: "", confirmEmail: "", phone: "", password: "", confirmPassword: "" })
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -218,14 +221,21 @@ export default function SignupPage() {
             <h1 className="text-2xl font-bold text-gray-900">{branding.name}</h1>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900">Create Account</h2>
-              <p className="text-gray-500 text-sm mt-1">Fill in your details to get your student ID</p>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {t("create_account", { bn: "অ্যাকাউন্ট তৈরি করুন", en: "Create Account", mix: "Create Account" })}
+              </h2>
+              <p className="text-gray-500 text-sm mt-1">
+                {t("signup_subtitle", { bn: "আপনার তথ্য দিন", en: "Fill in your details to get your student ID", mix: "Fill in your details to get your student ID" })}
+              </p>
             </div>
-            <Link href="/login" className="text-sm font-bold text-brand-primary hover:underline flex items-center gap-1">
-              Sign In &rarr;
-            </Link>
+            <div className="flex items-center gap-2 shrink-0">
+              <LanguageSelector variant="compact" />
+              <Link href="/login" className="text-sm font-bold text-brand-primary hover:underline flex items-center gap-1">
+                {t("sign_in", { bn: "সাইন ইন", en: "Sign In", mix: "Sign In" })} &rarr;
+              </Link>
+            </div>
           </div>
 
           {error && (

@@ -942,12 +942,14 @@ export default function NewStudentForm({
         if (missingFields.includes("school_college") && existingFix.school_college.trim()) updates.school_college = existingFix.school_college.trim()
         if (Object.keys(updates).length > 0) await supabase.from("students").update(updates).eq("id", sid)
       } else {
-        if (!form.name.trim()) { toast.error("Name required"); setLoading(false); return }
-        if (!form.guardian_phone.trim()) { toast.error("Guardian phone required"); setLoading(false); return }
-        if (!form.password || form.password.length < 6) { toast.error("Password min 6 chars"); setLoading(false); return }
-        if (form.password !== form.confirmPassword) { toast.error("Passwords don't match"); setLoading(false); return }
+        if (!form.name.trim()) { toast.error("শিক্ষার্থীর নাম আবশ্যক (Student name required)"); setLoading(false); return }
 
-        recordedPassword = form.password
+        const effectivePassword = (form.password && form.password.trim().length >= 6) ? form.password.trim() : "student123"
+        if (form.password && form.confirmPassword && form.password !== form.confirmPassword) {
+          toast.error("পাসওয়ার্ড দুটি মিলছে না (Passwords do not match)"); setLoading(false); return
+        }
+
+        recordedPassword = effectivePassword
 
         // Generate unique student ID (MS-XXXXX) robustly
         const { data: lastStudents } = await supabase
@@ -981,7 +983,7 @@ export default function NewStudentForm({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email,
-            password: form.password,
+            password: recordedPassword,
             fullName: form.name.trim(),
             studentId: studentIdStr,
             phone: form.phone.trim() || null
@@ -1006,7 +1008,7 @@ export default function NewStudentForm({
           gender: form.gender,
           date_of_birth: form.date_of_birth || null,
           guardian_name: form.guardian_name.trim() || null,
-          guardian_phone: form.guardian_phone.trim(),
+          guardian_phone: form.guardian_phone.trim() || null,
           guardian_relation: form.guardian_relation,
           address: form.address.trim() || null,
           school_college: form.school_college.trim() || null,
@@ -1818,7 +1820,7 @@ export default function NewStudentForm({
                 <div><label className={labelCls}>Guardian Name</label><input value={existingFix.guardian_name} onChange={e => setExistingFix(f => ({...f, guardian_name: e.target.value}))} className={ic} placeholder="Guardian name" /></div>
               )}
               {missingFields.includes("guardian_phone") && (
-                <div><label className={`${labelCls} text-rose-600`}>Guardian Phone *</label><input required value={existingFix.guardian_phone} onChange={e => setExistingFix(f => ({...f, guardian_phone: e.target.value}))} className={`${ic} border-rose-300 focus:border-rose-500 focus:ring-rose-500/20`} placeholder="01..." /></div>
+                <div><label className={labelCls}>Guardian Phone (ঐচ্ছিক)</label><input value={existingFix.guardian_phone} onChange={e => setExistingFix(f => ({...f, guardian_phone: e.target.value}))} className={ic} placeholder="01..." /></div>
               )}
               {missingFields.includes("address") && (
                 <div><label className={labelCls}>Address</label><input value={existingFix.address} onChange={e => setExistingFix(f => ({...f, address: e.target.value}))} className={ic} /></div>
@@ -1836,14 +1838,25 @@ export default function NewStudentForm({
         {/* New student form */}
         {mode === "new" && (
           <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm px-5 py-5 space-y-5">
+            {/* Quick Name-only Enrollment Banner */}
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-950">দ্রুত ভর্তি টিপস (Name-Only Quick Enrollment):</p>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  শুধুমাত্র শিক্ষার্থীর <b>নাম (Name)</b> দিয়ে সরাসরি ব্যাচ নির্বাচন করে ভর্তি করা যাবে! অন্যান্য তথ্য এখন না থাকলে স্কিপ করুন, পরবর্তীতে অ্যাডমিন প্যানেলের স্টুডেন্ট লিস্ট থেকে সরাসরি এডিট করে সব তথ্য যোগ করতে পারবেন।
+                </p>
+              </div>
+            </div>
+
             {/* Personal */}
             <div>
               <p className="text-xs font-black text-indigo-950 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-amber-500"></span> Personal Info (ব্যক্তিগত তথ্য)
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2"><label className={labelCls}>Full Name *</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
-                <div><label className={labelCls}>Phone</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
+                <div className="sm:col-span-2"><label className={labelCls}>Full Name * (বাধ্যতামূলক)</label><input required value={form.name} onChange={e => update("name", e.target.value)} className={ic} placeholder="Student full name" /></div>
+                <div><label className={labelCls}>Phone (ঐচ্ছিক - স্কিপ করা যাবে)</label><input value={form.phone} onChange={e => update("phone", e.target.value)} className={ic} placeholder="01..." /></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mt-3">
                 {effectiveBranches.length > 0 && (
@@ -1875,7 +1888,7 @@ export default function NewStudentForm({
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div><label className={labelCls}>Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={ic} /></div>
-                <div><label className={labelCls}>Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={ic} placeholder="01..." /></div>
+                <div><label className={labelCls}>Phone (ঐচ্ছিক - স্কিপ করা যাবে)</label><input value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={ic} placeholder="01..." /></div>
                 <div><label className={labelCls}>Relation</label><select value={form.guardian_relation} onChange={e => update("guardian_relation", e.target.value)} className={ic}><option>Parent</option><option>Father</option><option>Mother</option><option>Uncle</option><option>Other</option></select></div>
                 <div><label className={labelCls}>Address</label><input value={form.address} onChange={e => update("address", e.target.value)} className={ic} /></div>
               </div>
@@ -1889,8 +1902,8 @@ export default function NewStudentForm({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div><label className={labelCls}>School / College</label><input value={form.school_college} onChange={e => update("school_college", e.target.value)} className={ic} /></div>
                 <div><label className={labelCls}>Referral Name / Code</label><input value={form.referred_by_code} onChange={e => update("referred_by_code", e.target.value)} className={ic} placeholder="Referrer name or code (optional)" /></div>
-                <div><label className={labelCls}>Password *</label><input type="password" required value={form.password} onChange={e => update("password", e.target.value)} className={ic} placeholder="Min 6 chars" minLength={6} /></div>
-                <div><label className={labelCls}>Confirm Password *</label><input type="password" required value={form.confirmPassword} onChange={e => update("confirmPassword", e.target.value)} className={`${ic} ${form.confirmPassword && form.password !== form.confirmPassword ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`} placeholder="Re-enter" />
+                <div><label className={labelCls}>Password (ডিফল্ট: student123)</label><input type="password" value={form.password} onChange={e => update("password", e.target.value)} className={ic} placeholder="খালি রাখলে student123" minLength={6} /></div>
+                <div><label className={labelCls}>Confirm Password (ঐচ্ছিক)</label><input type="password" value={form.confirmPassword} onChange={e => update("confirmPassword", e.target.value)} className={`${ic} ${form.confirmPassword && form.password !== form.confirmPassword ? "border-rose-400 focus:border-rose-500 focus:ring-rose-500/20" : ""}`} placeholder="Re-enter (optional)" />
                   {form.confirmPassword && form.password !== form.confirmPassword && <p className="text-[10px] text-rose-600 font-semibold mt-1">Passwords don&apos;t match</p>}
                   {form.confirmPassword && form.password === form.confirmPassword && form.password.length >= 6 && <p className="text-[10px] text-emerald-600 font-semibold mt-1">✓ Match</p>}
                 </div>
@@ -2657,7 +2670,7 @@ export default function NewStudentForm({
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3 pt-2">
           <button type="button" onClick={() => router.back()} className="py-2.5 px-6 border border-slate-300 text-slate-700 rounded-xl font-bold hover:bg-slate-100 text-sm transition-colors cursor-pointer">Cancel</button>
-          <button type="submit" disabled={loading || !form.batch_id || (mode === "existing" && !selectedStudent) || (mode === "new" && form.password !== form.confirmPassword)}
+          <button type="submit" disabled={loading || !form.batch_id || (mode === "existing" && !selectedStudent) || (mode === "new" && Boolean(form.password && form.confirmPassword && form.password !== form.confirmPassword))}
             className="flex-1 py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl font-black disabled:opacity-40 flex items-center justify-center gap-2 text-sm shadow-md shadow-amber-500/25 transition-all cursor-pointer">
             {loading ? <><Loader2 className="w-4 h-4 animate-spin text-white" /> Processing...</> : <><UserPlus className="w-4 h-4" /> {mode === "new" ? "Create & Enroll (ভর্তি সম্পন্ন করুন)" : "Enroll Student"}</>}
           </button>

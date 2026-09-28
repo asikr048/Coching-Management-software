@@ -3,15 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin"
 import { requireStaffRole, isAuthError } from "@/lib/api-auth";
 
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
   if (isAuthError(auth)) return auth;
 
   try {
     const { email, password, fullName, studentId, phone } = await req.json()
 
-    if (!password || password.length < 6) {
-      return NextResponse.json({ error: "Password must be at least 6 characters" }, { status: 400 })
-    }
+    const effectivePassword = (password && String(password).trim().length >= 6) ? String(password).trim() : "student123"
     if (!studentId) {
       return NextResponse.json({ error: "Student ID is required" }, { status: 400 })
     }
@@ -39,13 +37,13 @@ export async function POST(req: NextRequest) {
     // Create user using Supabase Admin Auth without affecting current admin session
     const { data: userData, error: createError } = await admin.auth.admin.createUser({
       email: targetEmail,
-      password: password,
+      password: effectivePassword,
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
         user_id: studentId,
         phone: phone || null,
-        initial_password: password,
+        initial_password: effectivePassword,
       },
     })
 
@@ -57,12 +55,12 @@ export async function POST(req: NextRequest) {
         const existing = userList?.users?.find(u => u.email?.toLowerCase() === targetEmail.toLowerCase())
         if (existing) {
           await admin.auth.admin.updateUserById(existing.id, { 
-            password: password,
+            password: effectivePassword,
             user_metadata: {
               full_name: fullName,
               user_id: studentId,
               phone: phone || null,
-              initial_password: password,
+              initial_password: effectivePassword,
             }
           })
           return NextResponse.json({ success: true, userId: existing.id, email: targetEmail })

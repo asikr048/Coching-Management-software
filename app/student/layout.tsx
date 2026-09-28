@@ -6,11 +6,14 @@ import { useRouter } from "next/navigation"
 import { GraduationCap, BookOpen, LogOut } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useBranding } from "@/components/providers/BrandingContext"
+import { useLanguage } from "@/components/providers/LanguageContext"
+import LanguageSelector from "@/components/ui/LanguageSelector"
 
 export default function StudentLayout({ children }: { children: ReactNode }) {
   const supabase = createClient()
   const router = useRouter()
   const { branding, theme } = useBranding()
+  const { t } = useLanguage()
 
   const handleSignOut = async () => {
     await supabase.auth.signOut()
@@ -37,23 +40,30 @@ export default function StudentLayout({ children }: { children: ReactNode }) {
                 {branding.name}
               </span>
               <span className="hidden xs:inline-block text-xs px-2 py-0.5 brand-badge font-semibold rounded-full">
-                Student Portal
+                {t("student_portal", { bn: "শিক্ষার্থী পোর্টাল", en: "Student Portal", mix: "Student Portal" })}
               </span>
             </div>
           </Link>
-          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* Language Selection Mini Logo */}
+            <LanguageSelector variant="header" />
+
             <Link
               href="/marketplace"
               className="px-2.5 sm:px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 sm:gap-2 transition-colors shadow-2xs"
             >
               <BookOpen className="w-4 h-4 text-brand-primary" />
-              <span className="hidden sm:inline">Browse Courses</span>
-              <span className="sm:hidden">Courses</span>
+              <span className="hidden sm:inline">
+                {t("browse_courses", { bn: "কোর্সসমূহ দেখুন", en: "Browse Courses", mix: "Browse Courses" })}
+              </span>
+              <span className="sm:hidden">
+                {t("courses", { bn: "কোর্স", en: "Courses", mix: "Courses" })}
+              </span>
             </Link>
             <button
               onClick={handleSignOut}
-              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              title="Sign out"
+              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+              title={t("sign_out", { bn: "লগআউট", en: "Sign out", mix: "Sign out" })}
             >
               <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>

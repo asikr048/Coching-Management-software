@@ -46,7 +46,7 @@ export default function EditStudentPage() {
       const { error } = await supabase.from("students").update({
         name: form.name, phone: form.phone || null, email: form.email || null,
         gender: form.gender, date_of_birth: form.date_of_birth || null,
-        guardian_name: form.guardian_name || null, guardian_phone: form.guardian_phone,
+        guardian_name: form.guardian_name || null, guardian_phone: form.guardian_phone || null,
         guardian_relation: form.guardian_relation, address: form.address || null,
         school_college: form.school_college || null, class_level: form.class_level || null,
         is_active: form.is_active,
@@ -96,7 +96,7 @@ export default function EditStudentPage() {
           <h3 className="font-black text-slate-900 text-base mb-4">Guardian Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Guardian Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={inputClass} /></div>
-            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Guardian Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={inputClass} /></div>
+            <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Guardian Phone (ঐচ্ছিক)</label><input value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={inputClass} /></div>
             <div><label className="block text-xs font-bold text-slate-700 mb-1.5">Relation</label><select value={form.guardian_relation} onChange={e => update("guardian_relation", e.target.value)} className={inputClass}><option>Parent</option><option>Father</option><option>Mother</option><option>Guardian</option></select></div>
             <div className="flex items-center gap-2.5 pt-6"><input type="checkbox" checked={form.is_active} onChange={e => update("is_active", e.target.checked)} className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-amber-500 focus:ring-amber-400" /><label className="text-sm font-bold text-slate-900">Active Student</label></div>
           </div>
