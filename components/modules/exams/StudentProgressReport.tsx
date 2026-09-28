@@ -43,6 +43,8 @@ export interface StudentProgressReportProps {
   subjects: ProgressReportSubject[]
   classPosition: number | string // Rank in batch
   documentTitle?: string
+  markDisplayMode?: "total" | "mcq" | "written" | "both"
+  isCombined?: boolean
   attendance?: {
     workingDays?: number
     totalPresent?: number
@@ -98,6 +100,8 @@ export default function StudentProgressReport({
   subjects = [],
   classPosition,
   documentTitle = "PROGRESS REPORT",
+  markDisplayMode,
+  isCombined = false,
   attendance = { workingDays: 0, totalPresent: 0, totalAbsent: 0 },
   conductEvaluation = { excellent: false, good: true, average: false, poor: false, comments: "" },
   coCurricular = { sports: false, culturalFunction: false, scoutBncc: false, mathOlympiad: false },
@@ -134,6 +138,30 @@ export default function StudentProgressReport({
       failedCount,
     }
   }, [subjects])
+
+  // Dynamic mark display mode:
+  // If isCombined (weekly combined or total week combined): show only Total Marks ("total")
+  // If explicitly provided via markDisplayMode, use it.
+  // Otherwise, auto-detect from subject mark breakdowns.
+  const effectiveMode = useMemo<"total" | "mcq" | "written" | "both">(() => {
+    if (isCombined) return "total"
+    if (markDisplayMode) return markDisplayMode
+
+    let hasWr = false
+    let hasMcq = false
+    for (const sub of subjects) {
+      if (sub.isWeekHeader || sub.isWeekSubtotal) continue
+      if (sub.wrMarks !== undefined && sub.wrMarks > 0) hasWr = true
+      if (sub.mcqMarks !== undefined && sub.mcqMarks > 0) hasMcq = true
+    }
+
+    if (hasWr && hasMcq) return "both"
+    if (hasWr) return "written"
+    if (hasMcq) return "mcq"
+    return "total"
+  }, [isCombined, markDisplayMode, subjects])
+
+  const totalCols = effectiveMode === "both" ? 8 : 6
 
   const qrUrl = useMemo(() => {
     const rawData = student.qr_code || `MEDHASHIREE:${student.student_id}:${student.roll_no || student.batch_roll || ""}:${examTitle}`
@@ -328,40 +356,65 @@ export default function StudentProgressReport({
           <div className="mt-3">
             <table className="w-full border-collapse border border-black text-xs font-sans">
               <thead>
-                <tr className="bg-slate-100 font-bold border-b border-black text-center text-[11px]">
-                  <th rowSpan={2} className="border border-black py-1.5 px-2 text-left min-w-[150px]">
-                    Name of Subjects
-                  </th>
-                  <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-16">
-                    Full Marks
-                  </th>
-                  <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-16">
-                    Highest Marks
-                  </th>
-                  <th colSpan={2} className="border border-black py-0.5 px-1 text-center">
-                    Obtaining Marks
-                  </th>
-                  <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-16">
-                    Total Marks
-                  </th>
-                  <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-14">
-                    Letter Grade
-                  </th>
-                  <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-14">
-                    Grade Point
-                  </th>
-                </tr>
-                <tr className="bg-slate-100 font-bold border-b border-black text-center text-[10px]">
-                  <th className="border border-black py-0.5 px-1.5 w-12 font-mono">WR</th>
-                  <th className="border border-black py-0.5 px-1.5 w-12 font-mono">MCQ</th>
-                </tr>
+                {effectiveMode === "both" ? (
+                  <>
+                    <tr className="bg-slate-100 font-bold border-b border-black text-center text-[11px]">
+                      <th rowSpan={2} className="border border-black py-1.5 px-2 text-left min-w-[150px]">
+                        Name of Subjects
+                      </th>
+                      <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-16">
+                        Full Marks
+                      </th>
+                      <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-16">
+                        Highest Marks
+                      </th>
+                      <th colSpan={2} className="border border-black py-0.5 px-1 text-center">
+                        Obtaining Marks
+                      </th>
+                      <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-16">
+                        Total Marks
+                      </th>
+                      <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-14">
+                        Letter Grade
+                      </th>
+                      <th rowSpan={2} className="border border-black py-1.5 px-1.5 w-14">
+                        Grade Point
+                      </th>
+                    </tr>
+                    <tr className="bg-slate-100 font-bold border-b border-black text-center text-[10px]">
+                      <th className="border border-black py-0.5 px-1.5 w-12 font-mono">WR</th>
+                      <th className="border border-black py-0.5 px-1.5 w-12 font-mono">MCQ</th>
+                    </tr>
+                  </>
+                ) : (
+                  <tr className="bg-slate-100 font-bold border-b border-black text-center text-[11px]">
+                    <th className="border border-black py-1.5 px-2 text-left min-w-[150px]">
+                      Name of Subjects
+                    </th>
+                    <th className="border border-black py-1.5 px-1.5 w-16">
+                      Full Marks
+                    </th>
+                    <th className="border border-black py-1.5 px-1.5 w-16">
+                      Highest Marks
+                    </th>
+                    <th className="border border-black py-1.5 px-1.5 w-20 font-mono">
+                      {effectiveMode === "mcq" ? "MCQ Mark" : effectiveMode === "written" ? "WR Mark" : "Obtained Marks"}
+                    </th>
+                    <th className="border border-black py-1.5 px-1.5 w-14">
+                      Letter Grade
+                    </th>
+                    <th className="border border-black py-1.5 px-1.5 w-14">
+                      Grade Point
+                    </th>
+                  </tr>
+                )}
               </thead>
               <tbody>
                 {subjects.map((sub, idx) => {
                   if (sub.isWeekHeader) {
                     return (
                       <tr key={`header-${idx}`} className="border-b-2 border-black bg-slate-200/90 print:bg-slate-200 text-left font-bold">
-                        <td colSpan={8} className="py-1 px-2.5 text-xs font-black uppercase tracking-wider text-black">
+                        <td colSpan={totalCols} className="py-1 px-2.5 text-xs font-black uppercase tracking-wider text-black">
                           {sub.name}
                         </td>
                       </tr>
@@ -375,7 +428,9 @@ export default function StudentProgressReport({
                         </td>
                         <td className="border border-black py-1 px-1 font-bold">{sub.fullMarks}</td>
                         <td className="border border-black py-1 px-1 text-slate-400">—</td>
-                        <td colSpan={2} className="border border-black py-1 px-1 font-sans text-[10px] text-slate-600 font-bold">সপ্তাহের মোট</td>
+                        {effectiveMode === "both" ? (
+                          <td colSpan={2} className="border border-black py-1 px-1 font-sans text-[10px] text-slate-600 font-bold">সপ্তাহের মোট</td>
+                        ) : null}
                         <td className="border border-black py-1 px-1 font-black text-black">{sub.totalMarks}</td>
                         <td className="border border-black py-1 px-1 font-sans font-black">{sub.grade}</td>
                         <td className="border border-black py-1 px-1 font-bold">{sub.gp ? sub.gp.toFixed(1) : "0.0"}</td>
@@ -389,11 +444,27 @@ export default function StudentProgressReport({
                       </td>
                       <td className="border border-black py-1 px-1">{sub.fullMarks}</td>
                       <td className="border border-black py-1 px-1 font-bold">{sub.highestMarks}</td>
-                      <td className="border border-black py-1 px-1">{sub.wrMarks || 0}</td>
-                      <td className="border border-black py-1 px-1">{sub.mcqMarks || sub.totalMarks}</td>
-                      <td className="border border-black py-1 px-1 font-bold text-black">
-                        {sub.totalMarks}
-                      </td>
+                      {effectiveMode === "both" ? (
+                        <>
+                          <td className="border border-black py-1 px-1">{sub.wrMarks !== undefined && sub.wrMarks !== null ? sub.wrMarks : 0}</td>
+                          <td className="border border-black py-1 px-1">{sub.mcqMarks !== undefined && sub.mcqMarks !== null ? sub.mcqMarks : 0}</td>
+                          <td className="border border-black py-1 px-1 font-bold text-black">
+                            {sub.totalMarks}
+                          </td>
+                        </>
+                      ) : effectiveMode === "mcq" ? (
+                        <td className="border border-black py-1 px-1 font-bold font-mono text-black">
+                          {sub.mcqMarks !== undefined && sub.mcqMarks !== null ? sub.mcqMarks : sub.totalMarks}
+                        </td>
+                      ) : effectiveMode === "written" ? (
+                        <td className="border border-black py-1 px-1 font-bold font-mono text-black">
+                          {sub.wrMarks !== undefined && sub.wrMarks !== null ? sub.wrMarks : sub.totalMarks}
+                        </td>
+                      ) : (
+                        <td className="border border-black py-1 px-1 font-bold font-mono text-black">
+                          {sub.totalMarks}
+                        </td>
+                      )}
                       <td className="border border-black py-1 px-1 font-sans font-bold">
                         {sub.grade}
                       </td>
@@ -408,14 +479,9 @@ export default function StudentProgressReport({
                 {subjects.length < 5 &&
                   Array.from({ length: 5 - subjects.length }).map((_, i) => (
                     <tr key={`empty-${i}`} className="border-b border-black text-center h-6">
-                      <td className="border border-black py-1 px-2">&nbsp;</td>
-                      <td className="border border-black py-1 px-1">&nbsp;</td>
-                      <td className="border border-black py-1 px-1">&nbsp;</td>
-                      <td className="border border-black py-1 px-1">&nbsp;</td>
-                      <td className="border border-black py-1 px-1">&nbsp;</td>
-                      <td className="border border-black py-1 px-1">&nbsp;</td>
-                      <td className="border border-black py-1 px-1">&nbsp;</td>
-                      <td className="border border-black py-1 px-1">&nbsp;</td>
+                      {Array.from({ length: totalCols }).map((__, cIdx) => (
+                        <td key={cIdx} className="border border-black py-1 px-1">&nbsp;</td>
+                      ))}
                     </tr>
                   ))}
 
@@ -428,7 +494,7 @@ export default function StudentProgressReport({
                     {totals.totalFull}
                   </td>
                   <td
-                    colSpan={3}
+                    colSpan={effectiveMode === "both" ? 3 : 1}
                     className="border border-black py-1.5 px-2 text-right uppercase font-sans"
                   >
                     Obtained Marks &amp; GPA

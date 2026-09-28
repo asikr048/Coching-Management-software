@@ -46,7 +46,7 @@ export interface PrintableExamSheetProps {
     phone?: string | null
   }>
   savedResults?: Record<string, { obtained_marks: string; grade: string }>
-  dayMarksMap?: Record<string, Record<string, { marks: number; total: number; grade: string; subject?: string; exam_name?: string }>>
+  dayMarksMap?: Record<string, Record<string, { marks: number; total: number; grade: string; subject?: string; exam_name?: string; mcq?: number; written?: number; mode?: string }>>
   activeCombinedExams?: any[]
   combinedWeekData?: any[]
   sortBy?: "rank" | "roll"
@@ -58,6 +58,7 @@ export interface PrintableExamSheetProps {
   instituteLogoUrl?: string
   tagline?: string
   documentTitle?: string
+  markDisplayMode?: "total" | "mcq" | "written" | "both"
 }
 
 function getDayMarkItemHelper(
@@ -101,6 +102,7 @@ export default function PrintableExamSheet({
   instituteLogoUrl,
   tagline,
   documentTitle,
+  markDisplayMode,
 }: PrintableExamSheetProps) {
   const isWeeklyAggregate = mode === "weekly_aggregate"
   const isWeeklyDay = mode === "weekly_day"
@@ -229,6 +231,8 @@ export default function PrintableExamSheet({
         const pct = mark !== null ? Math.round((mark / activeTotalMarks) * 100) : null
         const grade = mark !== null ? getGrade(mark, activeTotalMarks) : "—"
         const isPass = mark !== null && mark >= activePassMarks
+        const wr = item && typeof item === "object" && item.written !== undefined ? Number(item.written) : null
+        const mcq = item && typeof item === "object" && item.mcq !== undefined ? Number(item.mcq) : null
 
         return {
           student: s,
@@ -237,8 +241,10 @@ export default function PrintableExamSheet({
           pct,
           grade,
           isPass,
-          dayBreakdown: {},
+          dayBreakdown: {} as Record<string, { marks: number | null; total: number }>,
           hasEvaluated: hasMark,
+          written: wr,
+          mcq: mcq,
         }
       } else {
         // One-Time Exam
@@ -248,6 +254,11 @@ export default function PrintableExamSheet({
         const pct = mark !== null ? Math.round((mark / activeTotalMarks) * 100) : null
         const grade = mark !== null ? getGrade(mark, activeTotalMarks) : "—"
         const isPass = mark !== null && mark >= activePassMarks
+        const sDays = dayMarksMap[s.id] || {}
+        const mainItem = sDays["main"] || sDays["default"] || sDays[exam.id]
+        const resItem = savedResults[s.id] as any
+        const wr = mainItem?.written !== undefined ? Number(mainItem.written) : (resItem?.written !== undefined ? Number(resItem.written) : null)
+        const mcq = mainItem?.mcq !== undefined ? Number(mainItem.mcq) : (resItem?.mcq !== undefined ? Number(resItem.mcq) : null)
 
         return {
           student: s,
@@ -256,8 +267,10 @@ export default function PrintableExamSheet({
           pct,
           grade,
           isPass,
-          dayBreakdown: {},
+          dayBreakdown: {} as Record<string, { marks: number | null; total: number }>,
           hasEvaluated: hasMark,
+          written: wr,
+          mcq: mcq,
         }
       }
     })
@@ -300,6 +313,30 @@ export default function PrintableExamSheet({
 
     return withRank
   }, [students, isAllWeeksCombined, activeCombinedExams, combinedWeekData, isWeeklyAggregate, isWeeklyDay, activeDayConfig, totalWeeklyMaxMarks, activeTotalMarks, activePassMarks, dayMarksMap, weeklyDays, savedResults, exam.total_marks, exam.pass_marks, sortBy])
+
+  // In combined results (weekly aggregate or all weeks combined), ONLY total marks are shown.
+  // In individual/daily exams, show WR, MCQ, or both based on mode or data.
+  const effectiveMarkMode = useMemo<"total" | "mcq" | "written" | "both">(() => {
+    if (isWeeklyAggregate || isAllWeeksCombined) return "total"
+    if (markDisplayMode) return markDisplayMode
+    let hasWr = false
+    let hasMcq = false
+    for (const st of students) {
+      const sDays = dayMarksMap[st.id] || {}
+      const item = isWeeklyDay
+        ? getDayMarkItemHelper(sDays, activeDayConfig?.key, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+        : (sDays["main"] || sDays["default"] || sDays[exam.id])
+      if (item && item.written !== undefined && item.written > 0) hasWr = true
+      if (item && item.mcq !== undefined && item.mcq > 0) hasMcq = true
+      const res = savedResults[st.id] as any
+      if (res && res.written !== undefined && res.written > 0) hasWr = true
+      if (res && res.mcq !== undefined && res.mcq > 0) hasMcq = true
+    }
+    if (hasWr && hasMcq) return "both"
+    if (hasWr) return "written"
+    if (hasMcq) return "mcq"
+    return "total"
+  }, [isWeeklyAggregate, isAllWeeksCombined, markDisplayMode, students, dayMarksMap, isWeeklyDay, activeDayConfig, exam.id, savedResults])
 
   // Summary KPIs
   const summary = useMemo(() => {
@@ -756,14 +793,39 @@ export default function PrintableExamSheet({
                   )
                 })}
 
-              <th className="border border-slate-400 py-1.5 px-2 bg-amber-50/70 print:bg-transparent text-center whitespace-nowrap w-20 min-w-[70px]">
-                <span className="block font-black text-[11px] leading-tight">
-                  {isWeeklyAggregate ? "মোট প্রাপ্ত" : "প্রাপ্ত নম্বর"}
-                </span>
-                <span className="text-[9px] text-amber-900 font-bold block leading-tight">
-                  ({isWeeklyAggregate ? totalWeeklyMaxMarks : activeTotalMarks})
-                </span>
-              </th>
+              {effectiveMarkMode === "both" ? (
+                <>
+                  <th className="border border-slate-400 py-1.5 px-1.5 text-center whitespace-nowrap w-12 min-w-[44px] font-mono">
+                    <span className="block font-black text-[11px] leading-tight">WR</span>
+                  </th>
+                  <th className="border border-slate-400 py-1.5 px-1.5 text-center whitespace-nowrap w-12 min-w-[44px] font-mono">
+                    <span className="block font-black text-[11px] leading-tight">MCQ</span>
+                  </th>
+                  <th className="border border-slate-400 py-1.5 px-2 bg-amber-50/70 print:bg-transparent text-center whitespace-nowrap w-20 min-w-[70px]">
+                    <span className="block font-black text-[11px] leading-tight">মোট প্রাপ্ত</span>
+                    <span className="text-[9px] text-amber-900 font-bold block leading-tight">({activeTotalMarks})</span>
+                  </th>
+                </>
+              ) : effectiveMarkMode === "mcq" ? (
+                <th className="border border-slate-400 py-1.5 px-2 bg-amber-50/70 print:bg-transparent text-center whitespace-nowrap w-20 min-w-[70px]">
+                  <span className="block font-black text-[11px] leading-tight">MCQ</span>
+                  <span className="text-[9px] text-amber-900 font-bold block leading-tight">({activeTotalMarks})</span>
+                </th>
+              ) : effectiveMarkMode === "written" ? (
+                <th className="border border-slate-400 py-1.5 px-2 bg-amber-50/70 print:bg-transparent text-center whitespace-nowrap w-20 min-w-[70px]">
+                  <span className="block font-black text-[11px] leading-tight">WR</span>
+                  <span className="text-[9px] text-amber-900 font-bold block leading-tight">({activeTotalMarks})</span>
+                </th>
+              ) : (
+                <th className="border border-slate-400 py-1.5 px-2 bg-amber-50/70 print:bg-transparent text-center whitespace-nowrap w-20 min-w-[70px]">
+                  <span className="block font-black text-[11px] leading-tight">
+                    {isWeeklyAggregate ? "মোট প্রাপ্ত" : "প্রাপ্ত নম্বর"}
+                  </span>
+                  <span className="text-[9px] text-amber-900 font-bold block leading-tight">
+                    ({isWeeklyAggregate ? totalWeeklyMaxMarks : activeTotalMarks})
+                  </span>
+                </th>
+              )}
               <th className="border border-slate-400 py-1.5 px-1.5 w-12 min-w-[44px] text-center whitespace-nowrap">শতকরা</th>
               <th className="border border-slate-400 py-1.5 px-1.5 w-12 min-w-[40px] text-center whitespace-nowrap">গ্রেড</th>
               <th className="border border-slate-400 py-1.5 px-2 w-14 min-w-[55px] text-center whitespace-nowrap">ফলাফল</th>
@@ -871,6 +933,16 @@ export default function PrintableExamSheet({
                       )
                     })}
 
+                  {effectiveMarkMode === "both" && (
+                    <>
+                      <td className="border border-slate-300 py-1.5 px-1.5 text-center font-mono font-bold text-slate-800 whitespace-nowrap">
+                        {row.written !== null && row.written !== undefined ? row.written : 0}
+                      </td>
+                      <td className="border border-slate-300 py-1.5 px-1.5 text-center font-mono font-bold text-slate-800 whitespace-nowrap">
+                        {row.mcq !== null && row.mcq !== undefined ? row.mcq : 0}
+                      </td>
+                    </>
+                  )}
                   <td className="border border-slate-300 py-1.5 px-2 text-center font-mono font-black text-amber-950 bg-amber-50/40 print:bg-transparent whitespace-nowrap">
                     {row.mark !== null ? row.mark : <span className="text-slate-400 font-normal">—</span>}
                   </td>
@@ -912,7 +984,7 @@ export default function PrintableExamSheet({
             {processedRows.length === 0 && (
               <tr>
                 <td
-                  colSpan={isWeeklyAggregate ? weeklyDays.length + 9 : 9}
+                  colSpan={isWeeklyAggregate ? weeklyDays.length + 9 : isAllWeeksCombined ? activeCombinedExams.length + 9 : (effectiveMarkMode === "both" ? 11 : 9)}
                   className="border border-slate-300 py-8 text-center text-slate-400 italic"
                 >
                   কোনো শিক্ষার্থীর তথ্য পাওয়া যায়নি।

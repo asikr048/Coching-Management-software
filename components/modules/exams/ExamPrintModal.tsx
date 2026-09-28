@@ -83,6 +83,7 @@ export interface ExamPrintModalProps {
    *  For weekly exams this is what should appear as the exam name everywhere.
    *  Undefined for one-time exams. */
   seriesTitle?: string
+  markDisplayMode?: "total" | "mcq" | "written" | "both"
 }
 
 function getDayMarkItemHelper(
@@ -128,6 +129,7 @@ export default function ExamPrintModal({
   totalToppers = [],
   subjectToppers = [],
   seriesTitle,
+  markDisplayMode,
 }: ExamPrintModalProps) {
   const { branding, theme } = useBranding()
 
@@ -738,12 +740,19 @@ export default function ExamPrintModal({
             weekGpSum += gradeInfo.gp
             weekDaysCount++
 
+            const itemWr = item && typeof item === "object" && item.written !== undefined
+              ? Number(item.written)
+              : (item?.mode === "written" ? score : 0)
+            const itemMcq = item && typeof item === "object" && item.mcq !== undefined
+              ? Number(item.mcq)
+              : (item?.mode === "mcq" ? score : (item && typeof item === "object" && item.written !== undefined ? 0 : score))
+
             allSubjects.push({
               name: `${d.day_bn || d.key}: ${d.subject || d.exam_name || "সাপ্তাহিক মূল্যায়ন"}`,
               fullMarks: dayMax,
               highestMarks: dayHighest,
-              wrMarks: 0,
-              mcqMarks: score,
+              wrMarks: itemWr,
+              mcqMarks: itemMcq,
               totalMarks: score,
               grade: gradeInfo.grade,
               gp: gradeInfo.gp,
@@ -801,12 +810,18 @@ export default function ExamPrintModal({
         const item = sDays[d.key] || (d.day_bn && sDays[d.day_bn])
         const score = item && !isNaN(Number(item.marks)) ? Number(item.marks) : 0
         const gradeInfo = calculateCoachingGrade(score, d.total_marks || 50)
+        const itemWr = item && typeof item === "object" && item.written !== undefined
+          ? Number(item.written)
+          : (item?.mode === "written" ? score : 0)
+        const itemMcq = item && typeof item === "object" && item.mcq !== undefined
+          ? Number(item.mcq)
+          : (item?.mode === "mcq" ? score : (item && typeof item === "object" && item.written !== undefined ? 0 : score))
         return {
           name: d.subject || d.exam_name || d.day_bn,
           fullMarks: d.total_marks || 50,
           highestMarks: subjectHighestMap.get(d.key) || score,
-          wrMarks: 0,
-          mcqMarks: score,
+          wrMarks: itemWr,
+          mcqMarks: itemMcq,
           totalMarks: score,
           grade: gradeInfo.grade,
           gp: gradeInfo.gp,
@@ -817,14 +832,30 @@ export default function ExamPrintModal({
     // Default single subject exam
     const raw = savedResults[studentId]?.obtained_marks
     const score = raw !== undefined && raw !== "" && !isNaN(parseFloat(raw)) ? parseFloat(raw) : 0
+    const sDays = dayMarksMap[studentId] || {}
+    const mainItem = sDays["main"] || sDays["default"] || sDays[exam.id]
+    const resItem = savedResults[studentId] as any
+
+    const itemWr = mainItem?.written !== undefined
+      ? Number(mainItem.written)
+      : resItem?.written !== undefined
+      ? Number(resItem.written)
+      : (mainItem?.mode === "written" ? score : 0)
+
+    const itemMcq = mainItem?.mcq !== undefined
+      ? Number(mainItem.mcq)
+      : resItem?.mcq !== undefined
+      ? Number(resItem.mcq)
+      : (mainItem?.mode === "mcq" ? score : (mainItem?.written !== undefined || resItem?.written !== undefined ? 0 : score))
+
     const gradeInfo = calculateCoachingGrade(score, exam.total_marks || 100)
     return [
       {
         name: exam.subject || exam.title || "সাধারণ বিষয়",
         fullMarks: exam.total_marks || 100,
         highestMarks: exam.total_marks || 100,
-        wrMarks: 0,
-        mcqMarks: score,
+        wrMarks: itemWr,
+        mcqMarks: itemMcq,
         totalMarks: score,
         grade: gradeInfo.grade,
         gp: gradeInfo.gp,
@@ -1333,6 +1364,8 @@ export default function ExamPrintModal({
                       subjects={subjects}
                       classPosition={ev?.meritRank || "—"}
                       documentTitle={effectiveDocTitle}
+                      markDisplayMode={isCombinedWeeks || isWeeklyAggregate ? "total" : markDisplayMode}
+                      isCombined={isCombinedWeeks || isWeeklyAggregate}
                     />
                   )
                 })}
@@ -1369,6 +1402,7 @@ export default function ExamPrintModal({
                 showPodium={showPodium}
                 showSubjectToppers={showSubjectToppers}
                 showSignatures={showSignatures}
+                markDisplayMode={isCombinedWeeks || isWeeklyAggregate ? "total" : markDisplayMode}
               />
             )}
 

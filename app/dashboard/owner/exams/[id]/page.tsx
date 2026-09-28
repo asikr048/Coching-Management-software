@@ -63,10 +63,14 @@ interface Student {
   qr_code?: string | null
 }
 
+type MarkInputMode = "total" | "mcq" | "written" | "both"
+
 interface Result {
   student_id: string
   obtained_marks: string
   grade: string
+  mcq?: number
+  written?: number
 }
 
 interface DayMarkItem {
@@ -75,6 +79,9 @@ interface DayMarkItem {
   grade: string
   subject?: string
   exam_name?: string
+  mcq?: number
+  written?: number
+  mode?: MarkInputMode
 }
 
 interface ParsedWeeklyDay {
@@ -207,6 +214,9 @@ export default function ExamResultsPage() {
   const [students, setStudents] = useState<Student[]>([])
   const [savedResults, setSavedResults] = useState<Record<string, Result>>({})
   const [draftMarks, setDraftMarks] = useState<Record<string, string>>({})
+  const [draftMcqMarks, setDraftMcqMarks] = useState<Record<string, string>>({})
+  const [draftWrMarks, setDraftWrMarks] = useState<Record<string, string>>({})
+  const [markInputModes, setMarkInputModes] = useState<Record<string, MarkInputMode>>({})
   
   // Day-wise marks state: studentId -> dayKey -> DayMarkItem
   const [dayMarksMap, setDayMarksMap] = useState<Record<string, Record<string, DayMarkItem>>>({})
@@ -698,6 +708,15 @@ export default function ExamResultsPage() {
             } catch {}
           }
           dayMarks[r.student_id] = sDayMarks
+
+          const mainItem = sDayMarks["main"] || sDayMarks["default"]
+          map[r.student_id] = {
+            student_id: r.student_id,
+            obtained_marks: markStr,
+            grade: r.grade || "",
+            mcq: mainItem?.mcq !== undefined ? Number(mainItem.mcq) : (r.mcq !== undefined ? Number(r.mcq) : undefined),
+            written: mainItem?.written !== undefined ? Number(mainItem.written) : (r.written !== undefined ? Number(r.written) : undefined),
+          }
         }
 
         // Also load day marks from exam.result_note fallback [STUDENT_DAY_MARKS:...]
@@ -758,6 +777,29 @@ export default function ExamResultsPage() {
             }
           }
         }
+
+        // Load or auto-detect mark input modes
+        let loadedModes: Record<string, MarkInputMode> = {}
+        if (ex?.result_note?.includes("[MARK_INPUT_MODES:")) {
+          try {
+            const m = ex.result_note.match(/\[MARK_INPUT_MODES:(.*?)\]/)
+            if (m && m[1]) {
+              loadedModes = JSON.parse(m[1])
+            }
+          } catch {}
+        }
+        for (const [sId, sDays] of Object.entries(dayMarks)) {
+          for (const [dayK, dItem] of Object.entries(sDays)) {
+            if (!loadedModes[dayK]) {
+              if (dItem.mode) {
+                loadedModes[dayK] = dItem.mode
+              } else if (dItem.mcq !== undefined && dItem.written !== undefined && (dItem.mcq > 0 || dItem.written > 0)) {
+                loadedModes[dayK] = "both"
+              }
+            }
+          }
+        }
+        setMarkInputModes(loadedModes)
 
         setSavedResults(map)
         setDayMarksMap(dayMarks)
@@ -2221,8 +2263,14 @@ export default function ExamResultsPage() {
     }
   }
 
-  // Save single student mark (with optional silent mode for auto-save)
-  async function saveStudentMark(student: Student, rawMark: string, rowIndex?: number, silent?: boolean) {
+  // Save single student mark (with optional silent mode for auto-save and extra mcq/written/mode)
+  async function saveStudentMark(
+    student: Student,
+    rawMark: string,
+    rowIndex?: number,
+    silent?: boolean,
+    extra?: { mcq?: number; written?: number; mode?: MarkInputMode }
+  ) {
     if (inflightSavesRef.current[student.id]) return
     inflightSavesRef.current[student.id] = true
 
@@ -2245,6 +2293,15 @@ export default function ExamResultsPage() {
       return
     }
 
+    const activeDayKey = (activeDayConfig?.key || selectedTab || "main").toLowerCase()
+    const currentMode: MarkInputMode = extra?.mode || markInputModes[activeDayKey] || "total"
+    const mcqVal = extra?.mcq !== undefined
+      ? extra.mcq
+      : (currentMode === "mcq" ? numMarks : (currentMode === "written" ? 0 : undefined))
+    const wrVal = extra?.written !== undefined
+      ? extra.written
+      : (currentMode === "written" ? numMarks : (currentMode === "mcq" ? 0 : undefined))
+
     const dayGrade = getGrade(numMarks, activeMax)
 
     if (isWeeklyExam && activeDayConfig && selectedTab !== "weekly_aggregate") {
@@ -2256,6 +2313,9 @@ export default function ExamResultsPage() {
         grade: dayGrade,
         subject: activeDayConfig.subject,
         exam_name: activeDayConfig.exam_name,
+        mcq: mcqVal,
+        written: wrVal,
+        mode: currentMode,
       }
 
       const grandTotal = Object.values(currentStudentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
@@ -2310,6 +2370,8 @@ export default function ExamResultsPage() {
             student_id: student.id,
             obtained_marks: String(grandTotal),
             grade: overallGrade,
+            mcq: mcqVal,
+            written: wrVal,
           },
         }))
         setDraftCellMarks((prev) => ({
@@ -2324,7 +2386,8 @@ export default function ExamResultsPage() {
         }
 
         if (rowIndex !== undefined) {
-          const nextInput = document.getElementById(`mark-input-${rowIndex + 1}`) as HTMLInputElement | null
+          const nextSelector = currentMode === "both" ? `mark-input-mcq-${rowIndex + 1}` : `mark-input-${rowIndex + 1}`
+          const nextInput = document.getElementById(nextSelector) as HTMLInputElement | null
           if (nextInput) {
             nextInput.focus()
             nextInput.select()
@@ -2336,6 +2399,14 @@ export default function ExamResultsPage() {
       }
     } else {
       const grade = getGrade(numMarks, activeMax)
+      const mainDayItem: DayMarkItem = {
+        marks: numMarks,
+        total: activeMax,
+        grade,
+        mcq: mcqVal,
+        written: wrVal,
+        mode: currentMode,
+      }
       try {
         const res = await fetch(`/api/exams/${exam.id}/results`, {
           method: "POST",
@@ -2344,20 +2415,23 @@ export default function ExamResultsPage() {
             student_id: student.id,
             obtained_marks: numMarks,
             grade: grade,
+            day_marks: { main: mainDayItem },
           }),
         })
 
         if (!res.ok) {
-          const { error } = await supabase.from("exam_results").upsert(
-            {
-              exam_id: exam.id,
-              student_id: student.id,
-              obtained_marks: numMarks,
-              grade: grade,
-            },
-            { onConflict: "exam_id,student_id" }
-          )
-          if (error) throw error
+          const payload: any = {
+            exam_id: exam.id,
+            student_id: student.id,
+            obtained_marks: numMarks,
+            grade: grade,
+            day_marks: { main: mainDayItem },
+          }
+          let { error } = await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          if (error) {
+            delete payload.day_marks
+            await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          }
         }
 
         setSavedResults((prev) => ({
@@ -2366,6 +2440,15 @@ export default function ExamResultsPage() {
             student_id: student.id,
             obtained_marks: String(numMarks),
             grade,
+            mcq: mcqVal,
+            written: wrVal,
+          },
+        }))
+        setDayMarksMap((prev) => ({
+          ...prev,
+          [student.id]: {
+            ...(prev[student.id] || {}),
+            main: mainDayItem,
           },
         }))
         setJustSavedIds((prev) => new Set(prev).add(student.id))
@@ -2377,7 +2460,8 @@ export default function ExamResultsPage() {
         }
 
         if (rowIndex !== undefined) {
-          const nextInput = document.getElementById(`mark-input-${rowIndex + 1}`) as HTMLInputElement | null
+          const nextSelector = currentMode === "both" ? `mark-input-mcq-${rowIndex + 1}` : `mark-input-${rowIndex + 1}`
+          const nextInput = document.getElementById(nextSelector) as HTMLInputElement | null
           if (nextInput) {
             nextInput.focus()
             nextInput.select()
@@ -2401,9 +2485,15 @@ export default function ExamResultsPage() {
       : (exam?.total_marks || 100)
     if (isNaN(num) || num < 0 || num > activeMax) return
 
+    const activeKey = (activeDayConfig?.key || selectedTab || "main").toLowerCase()
+    const currentMode = markInputModes[activeKey] || "total"
+    const extra: any = { mode: currentMode }
+    if (currentMode === "mcq") extra.mcq = num
+    if (currentMode === "written") extra.written = num
+
     setAutoSavingIds((prev) => new Set(prev).add(student.id))
     try {
-      await saveStudentMark(student, trimmed, undefined, true)
+      await saveStudentMark(student, trimmed, undefined, true, extra)
     } finally {
       setAutoSavingIds((prev) => {
         const next = new Set(prev)
@@ -2473,6 +2563,145 @@ export default function ExamResultsPage() {
     }
   }
 
+  // Change mark input mode for the current day / tab
+  async function handleMarkModeChange(newMode: MarkInputMode) {
+    const activeKey = (activeDayConfig?.key || selectedTab || "main").toLowerCase()
+    const updatedModes = { ...markInputModes, [activeKey]: newMode }
+    setMarkInputModes(updatedModes)
+
+    if (exam?.id) {
+      try {
+        const curNote = exam.result_note || ""
+        const cleanNote = curNote.replace(/\[MARK_INPUT_MODES:[^\]]*\]/g, "").trim()
+        const newNote = `${cleanNote} [MARK_INPUT_MODES:${JSON.stringify(updatedModes)}]`.trim()
+        await supabase.from("exams").update({ result_note: newNote }).eq("id", exam.id)
+        setExam((prev: any) => prev ? { ...prev, result_note: newNote } : prev)
+      } catch (e) {
+        console.warn("Could not persist mark input mode:", e)
+      }
+    }
+  }
+
+  // Handle live mark input typing for Both mode (MCQ + WR)
+  function handleBothMarkChange(student: Student, field: "mcq" | "written", val: string) {
+    const activeKey = (activeDayConfig?.key || selectedTab || "main").toLowerCase()
+    const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
+      ? getDayMarkItem(dayMarksMap[student.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+      : (dayMarksMap[student.id]?.["main"] || dayMarksMap[student.id]?.["default"])
+
+    if (field === "mcq") {
+      setDraftMcqMarks((prev) => ({ ...prev, [student.id]: val }))
+    } else {
+      setDraftWrMarks((prev) => ({ ...prev, [student.id]: val }))
+    }
+
+    if (autoSaveTimersRef.current[student.id]) {
+      clearTimeout(autoSaveTimersRef.current[student.id])
+      delete autoSaveTimersRef.current[student.id]
+    }
+
+    const mcqStr = field === "mcq" ? val : (draftMcqMarks[student.id] ?? (dayObj?.mcq !== undefined ? String(dayObj.mcq) : ""))
+    const wrStr = field === "written" ? val : (draftWrMarks[student.id] ?? (dayObj?.written !== undefined ? String(dayObj.written) : ""))
+
+    if (mcqStr.trim() === "" && wrStr.trim() === "") return
+
+    const mcqNum = mcqStr.trim() !== "" ? parseFloat(mcqStr.trim()) : 0
+    const wrNum = wrStr.trim() !== "" ? parseFloat(wrStr.trim()) : 0
+    if (isNaN(mcqNum) || isNaN(wrNum) || mcqNum < 0 || wrNum < 0) return
+
+    const total = mcqNum + wrNum
+    const activeMax = isWeeklyExam
+      ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+      : (exam?.total_marks || 100)
+    if (total > activeMax) return
+
+    const delay = inflightSavesRef.current[student.id] ? 1200 : 700
+    autoSaveTimersRef.current[student.id] = setTimeout(() => {
+      triggerBothAutoSave(student, mcqNum, wrNum, total)
+    }, delay)
+  }
+
+  // Handle blur in Both mode
+  function handleBothMarkBlur(student: Student) {
+    if (autoSaveTimersRef.current[student.id]) {
+      clearTimeout(autoSaveTimersRef.current[student.id])
+      delete autoSaveTimersRef.current[student.id]
+    }
+
+    const activeKey = (activeDayConfig?.key || selectedTab || "main").toLowerCase()
+    const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
+      ? getDayMarkItem(dayMarksMap[student.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+      : (dayMarksMap[student.id]?.["main"] || dayMarksMap[student.id]?.["default"])
+
+    const mcqStr = draftMcqMarks[student.id] ?? (dayObj?.mcq !== undefined ? String(dayObj.mcq) : "")
+    const wrStr = draftWrMarks[student.id] ?? (dayObj?.written !== undefined ? String(dayObj.written) : "")
+
+    if (mcqStr.trim() === "" && wrStr.trim() === "") return
+
+    const mcqNum = mcqStr.trim() !== "" ? parseFloat(mcqStr.trim()) : 0
+    const wrNum = wrStr.trim() !== "" ? parseFloat(wrStr.trim()) : 0
+    if (isNaN(mcqNum) || isNaN(wrNum) || mcqNum < 0 || wrNum < 0) return
+
+    const total = mcqNum + wrNum
+    const activeMax = isWeeklyExam
+      ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+      : (exam?.total_marks || 100)
+    if (total > activeMax) {
+      toast.error(`মোট নম্বর (${total}) সর্বোচ্চ (${activeMax})-এর বেশি হতে পারবে না`)
+      return
+    }
+
+    triggerBothAutoSave(student, mcqNum, wrNum, total)
+  }
+
+  // Auto-save both MCQ and WR
+  async function triggerBothAutoSave(student: Student, mcq: number, written: number, total: number) {
+    setAutoSavingIds((prev) => new Set(prev).add(student.id))
+    try {
+      await saveStudentMark(student, String(total), undefined, true, { mcq, written, mode: "both" })
+    } finally {
+      setAutoSavingIds((prev) => {
+        const next = new Set(prev)
+        next.delete(student.id)
+        return next
+      })
+    }
+  }
+
+  // Save Both Row
+  async function saveBothRowMark(student: Student, rowIndex?: number) {
+    const activeKey = (activeDayConfig?.key || selectedTab || "main").toLowerCase()
+    const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
+      ? getDayMarkItem(dayMarksMap[student.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+      : (dayMarksMap[student.id]?.["main"] || dayMarksMap[student.id]?.["default"])
+
+    const mcqStr = draftMcqMarks[student.id] ?? (dayObj?.mcq !== undefined ? String(dayObj.mcq) : "")
+    const wrStr = draftWrMarks[student.id] ?? (dayObj?.written !== undefined ? String(dayObj.written) : "")
+
+    const mcqNum = mcqStr.trim() !== "" ? parseFloat(mcqStr.trim()) : 0
+    const wrNum = wrStr.trim() !== "" ? parseFloat(wrStr.trim()) : 0
+    if (isNaN(mcqNum) || isNaN(wrNum) || mcqNum < 0 || wrNum < 0) {
+      toast.error("সঠিক নম্বর প্রবেশ করান")
+      return
+    }
+
+    const total = mcqNum + wrNum
+    const activeMax = isWeeklyExam
+      ? (selectedTab === "weekly_aggregate" ? totalWeeklyMaxMarks : (activeDayConfig?.total_marks || 50))
+      : (exam?.total_marks || 100)
+    if (total > activeMax) {
+      toast.error(`মোট নম্বর (${total}) সর্বোচ্চ (${activeMax})-এর বেশি হতে পারবে না`)
+      return
+    }
+
+    setSavingRowStudentId(student.id)
+    try {
+      await saveStudentMark(student, String(total), rowIndex, false, { mcq: mcqNum, written: wrNum, mode: "both" })
+    } finally {
+      setSavingRowStudentId(null)
+    }
+  }
+
   // Quick mark save handler
   async function handleSaveQuickMark() {
     if (!selectedStudent) return
@@ -2481,9 +2710,15 @@ export default function ExamResultsPage() {
       toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeTotalMarks}-এর মধ্যে হতে হবে`)
       return
     }
+    const activeKey = (activeDayConfig?.key || selectedTab || "main").toLowerCase()
+    const currentMode = markInputModes[activeKey] || "total"
+    const extra: any = { mode: currentMode }
+    if (currentMode === "mcq") extra.mcq = num
+    if (currentMode === "written") extra.written = num
+
     setSavingQuickMark(true)
     try {
-      await saveStudentMark(selectedStudent, quickMarkInput)
+      await saveStudentMark(selectedStudent, quickMarkInput, undefined, false, extra)
       setSelectedStudent(null)
       setQuickMarkInput("")
       setStudentSearchQuery("")
@@ -2501,9 +2736,15 @@ export default function ExamResultsPage() {
       toast.error(`নম্বরটি অবশ্যই 0 থেকে ${activeTotalMarks}-এর মধ্যে হতে হবে`)
       return
     }
+    const activeKey = (activeDayConfig?.key || selectedTab || "main").toLowerCase()
+    const currentMode = markInputModes[activeKey] || "total"
+    const extra: any = { mode: currentMode }
+    if (currentMode === "mcq") extra.mcq = num
+    if (currentMode === "written") extra.written = num
+
     setSavingRowStudentId(student.id)
     try {
-      await saveStudentMark(student, raw, rowIndex)
+      await saveStudentMark(student, raw, rowIndex, false, extra)
     } finally {
       setSavingRowStudentId(null)
     }
@@ -2570,6 +2811,16 @@ export default function ExamResultsPage() {
           ...prev,
           [studentId]: "",
         }))
+        setDraftMcqMarks((prev) => {
+          const next = { ...prev }
+          delete next[studentId]
+          return next
+        })
+        setDraftWrMarks((prev) => {
+          const next = { ...prev }
+          delete next[studentId]
+          return next
+        })
         setJustSavedIds((prev) => {
           const next = new Set(prev)
           next.delete(studentId)
@@ -2602,6 +2853,16 @@ export default function ExamResultsPage() {
         delete next[studentId]
         return next
       })
+      setDraftMcqMarks((prev) => {
+        const next = { ...prev }
+        delete next[studentId]
+        return next
+      })
+      setDraftWrMarks((prev) => {
+        const next = { ...prev }
+        delete next[studentId]
+        return next
+      })
       setJustSavedIds((prev) => {
         const next = new Set(prev)
         next.delete(studentId)
@@ -2621,33 +2882,76 @@ export default function ExamResultsPage() {
       if (isWeeklyExam && activeDayConfig && selectedTab !== "weekly_aggregate") {
         const activeKey = (activeDayConfig.key || selectedTab).toLowerCase()
         const activeMax = activeDayConfig.total_marks
+        const currentMode = markInputModes[activeKey] || "total"
         const batchUpdates: any[] = []
         const nextDayMarksMap: Record<string, Record<string, DayMarkItem>> = { ...dayMarksMap }
 
         for (const s of students) {
-          const raw = draftMarks[s.id]?.trim()
-          if (raw && raw !== "") {
-            const numMarks = parseFloat(raw)
-            if (!isNaN(numMarks) && numMarks >= 0 && numMarks <= activeMax) {
-              const dayGrade = getGrade(numMarks, activeMax)
-              const sDays = normalizeDayMarks(nextDayMarksMap[s.id])
-              sDays[activeKey] = {
-                marks: numMarks,
-                total: activeMax,
-                grade: dayGrade,
-                subject: activeDayConfig.subject,
-                exam_name: activeDayConfig.exam_name,
-              }
-              nextDayMarksMap[s.id] = sDays
-              const grandTotal = Object.values(sDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
-              const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
+          if (currentMode === "both") {
+            const mcqVal = draftMcqMarks[s.id]?.trim()
+            const wrVal = draftWrMarks[s.id]?.trim()
+            const dayObj = getDayMarkItem(dayMarksMap[s.id], activeKey, activeDayConfig.day_bn, activeDayConfig.day_en)
+            const mcqStr = mcqVal !== undefined ? mcqVal : (dayObj?.mcq !== undefined ? String(dayObj.mcq) : "")
+            const wrStr = wrVal !== undefined ? wrVal : (dayObj?.written !== undefined ? String(dayObj.written) : "")
+            if (mcqStr.trim() !== "" || wrStr.trim() !== "") {
+              const mcqNum = mcqStr.trim() !== "" ? parseFloat(mcqStr.trim()) : 0
+              const wrNum = wrStr.trim() !== "" ? parseFloat(wrStr.trim()) : 0
+              if (!isNaN(mcqNum) && !isNaN(wrNum) && mcqNum >= 0 && wrNum >= 0) {
+                const totalNum = mcqNum + wrNum
+                if (totalNum <= activeMax) {
+                  const dayGrade = getGrade(totalNum, activeMax)
+                  const sDays = normalizeDayMarks(nextDayMarksMap[s.id])
+                  sDays[activeKey] = {
+                    marks: totalNum,
+                    total: activeMax,
+                    grade: dayGrade,
+                    subject: activeDayConfig.subject,
+                    exam_name: activeDayConfig.exam_name,
+                    mcq: mcqNum,
+                    written: wrNum,
+                    mode: "both",
+                  }
+                  nextDayMarksMap[s.id] = sDays
+                  const grandTotal = Object.values(sDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+                  const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
 
-              batchUpdates.push({
-                student_id: s.id,
-                obtained_marks: grandTotal,
-                grade: overallGrade,
-                day_marks: sDays,
-              })
+                  batchUpdates.push({
+                    student_id: s.id,
+                    obtained_marks: grandTotal,
+                    grade: overallGrade,
+                    day_marks: sDays,
+                  })
+                }
+              }
+            }
+          } else {
+            const raw = draftMarks[s.id]?.trim()
+            if (raw && raw !== "") {
+              const numMarks = parseFloat(raw)
+              if (!isNaN(numMarks) && numMarks >= 0 && numMarks <= activeMax) {
+                const dayGrade = getGrade(numMarks, activeMax)
+                const sDays = normalizeDayMarks(nextDayMarksMap[s.id])
+                sDays[activeKey] = {
+                  marks: numMarks,
+                  total: activeMax,
+                  grade: dayGrade,
+                  subject: activeDayConfig.subject,
+                  exam_name: activeDayConfig.exam_name,
+                  mode: currentMode,
+                  mcq: currentMode === "mcq" ? numMarks : undefined,
+                  written: currentMode === "written" ? numMarks : undefined,
+                }
+                nextDayMarksMap[s.id] = sDays
+                const grandTotal = Object.values(sDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+                const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
+
+                batchUpdates.push({
+                  student_id: s.id,
+                  obtained_marks: grandTotal,
+                  grade: overallGrade,
+                  day_marks: sDays,
+                })
+              }
             }
           }
         }
@@ -2723,13 +3027,35 @@ export default function ExamResultsPage() {
         })
         toast.success(`✓ ${batchUpdates.length} জন শিক্ষার্থীর নম্বর সফলভাবে সংরক্ষিত হয়েছে!`)
       } else {
+        const currentMode = markInputModes["main"] || "total"
         let savedCount = 0
         for (let i = 0; i < students.length; i++) {
           const s = students[i]
-          const raw = draftMarks[s.id]?.trim()
-          if (raw && raw !== "") {
-            await saveStudentMark(s, raw)
-            savedCount++
+          if (currentMode === "both") {
+            const mcqVal = draftMcqMarks[s.id]?.trim()
+            const wrVal = draftWrMarks[s.id]?.trim()
+            const dayObj = dayMarksMap[s.id]?.["main"] || dayMarksMap[s.id]?.["default"]
+            const mcqStr = mcqVal !== undefined ? mcqVal : (dayObj?.mcq !== undefined ? String(dayObj.mcq) : "")
+            const wrStr = wrVal !== undefined ? wrVal : (dayObj?.written !== undefined ? String(dayObj.written) : "")
+            if (mcqStr.trim() !== "" || wrStr.trim() !== "") {
+              const mcqNum = mcqStr.trim() !== "" ? parseFloat(mcqStr.trim()) : 0
+              const wrNum = wrStr.trim() !== "" ? parseFloat(wrStr.trim()) : 0
+              if (!isNaN(mcqNum) && !isNaN(wrNum) && mcqNum >= 0 && wrNum >= 0) {
+                const totalNum = mcqNum + wrNum
+                await saveStudentMark(s, String(totalNum), undefined, false, { mcq: mcqNum, written: wrNum, mode: "both" })
+                savedCount++
+              }
+            }
+          } else {
+            const raw = draftMarks[s.id]?.trim()
+            if (raw && raw !== "") {
+              const numVal = parseFloat(raw)
+              const extra: any = { mode: currentMode }
+              if (currentMode === "mcq") extra.mcq = numVal
+              if (currentMode === "written") extra.written = numVal
+              await saveStudentMark(s, raw, undefined, false, extra)
+              savedCount++
+            }
           }
         }
         toast.success(`Results saved for ${savedCount} students!`)
@@ -3455,6 +3781,7 @@ export default function ExamResultsPage() {
           savedResults={savedResults}
           dayMarksMap={dayMarksMap}
           sortBy="rank"
+          markDisplayMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
         />
       </div>
 
@@ -5701,8 +6028,30 @@ export default function ExamResultsPage() {
                     <th className="px-4 py-3 w-16 text-center">Roll</th>
                     <th className="px-4 py-3">Student Name</th>
                     <th className="px-4 py-3">Student ID</th>
-                    <th className="px-4 py-3 text-center">
-                      প্রাপ্ত নম্বর (/{activeTotalMarks})
+                    <th className="px-4 py-3 text-center min-w-[200px]">
+                      <div className="flex flex-col items-center justify-center gap-1.5">
+                        <div className="inline-flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2 py-1 shadow-2xs">
+                          <select
+                            value={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
+                            onChange={(e) => handleMarkModeChange(e.target.value as MarkInputMode)}
+                            className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                          >
+                            <option value="total">প্রাপ্ত নম্বর (/{activeTotalMarks})</option>
+                            <option value="mcq">MCQ</option>
+                            <option value="written">WR</option>
+                            <option value="both">Both</option>
+                          </select>
+                        </div>
+                        {(markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total") === "both" && (
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+                            <span className="w-14 text-center">MCQ</span>
+                            <span>+</span>
+                            <span className="w-14 text-center">WR</span>
+                            <span>=</span>
+                            <span className="min-w-10 text-center">মোট</span>
+                          </div>
+                        )}
+                      </div>
                     </th>
                     <th className="px-4 py-3 text-center">গ্রেড</th>
                     <th className="px-4 py-3 text-center">অবস্থা</th>
@@ -5712,11 +6061,27 @@ export default function ExamResultsPage() {
                 <tbody className="divide-y divide-slate-100 text-sm">
                   {tableStudents.map((s, idx) => {
                     const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
+                    const currentMarkMode = markInputModes[activeKey] || "total"
                     const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
                       ? getDayMarkItem(dayMarksMap[s.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
-                      : null
+                      : (dayMarksMap[s.id]?.["main"] || dayMarksMap[s.id]?.["default"])
+
+                    // Both mode draft / saved values
+                    const draftMcqVal = draftMcqMarks[s.id] ?? (dayObj?.mcq !== undefined ? String(dayObj.mcq) : "")
+                    const draftWrVal = draftWrMarks[s.id] ?? (dayObj?.written !== undefined ? String(dayObj.written) : "")
+                    const mcqNum = draftMcqVal.trim() !== "" ? parseFloat(draftMcqVal.trim()) : null
+                    const wrNum = draftWrVal.trim() !== "" ? parseFloat(draftWrVal.trim()) : null
+                    const isMcqNegative = mcqNum !== null && !isNaN(mcqNum) && mcqNum < 0
+                    const isWrNegative = wrNum !== null && !isNaN(wrNum) && wrNum < 0
+                    const bothSum = (mcqNum !== null && !isNaN(mcqNum) ? mcqNum : 0) + (wrNum !== null && !isNaN(wrNum) ? wrNum : 0)
+                    const isBothOverMax = (mcqNum !== null || wrNum !== null) && bothSum > activeTotalMarks
+                    const isBothRowInvalid = isBothOverMax || isMcqNegative || isWrNegative
+
+                    // Single mode draft / saved values
                     const draftVal = draftMarks[s.id] ?? ""
-                    const currentMarksNum = draftVal !== ""
+                    const currentMarksNum = currentMarkMode === "both"
+                      ? ((mcqNum !== null || wrNum !== null) ? bothSum : (dayObj && !isNaN(Number(dayObj.marks)) ? Number(dayObj.marks) : null))
+                      : draftVal !== ""
                       ? parseFloat(draftVal)
                       : (dayObj && !isNaN(Number(dayObj.marks)))
                       ? Number(dayObj.marks)
@@ -5758,78 +6123,198 @@ export default function ExamResultsPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <form
-                            onSubmit={(e) => {
-                              e.preventDefault()
-                              if (isRowInvalid) return
-                              if (autoSaveTimersRef.current[s.id]) {
-                                clearTimeout(autoSaveTimersRef.current[s.id])
-                                delete autoSaveTimersRef.current[s.id]
-                              }
-                              saveRowMark(s, idx)
-                            }}
-                            className="inline-flex flex-col items-center"
-                          >
-                            <div className="inline-flex items-center gap-1.5">
-                              <input
-                                id={`mark-input-${idx}`}
-                                type="text"
-                                inputMode="decimal"
-                                value={draftVal}
-                                onChange={(e) => handleMarkInputChange(s, e.target.value)}
-                                onBlur={() => handleMarkInputBlur(s)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault()
-                                    if (isRowInvalid) return
-                                    if (autoSaveTimersRef.current[s.id]) {
-                                      clearTimeout(autoSaveTimersRef.current[s.id])
-                                      delete autoSaveTimersRef.current[s.id]
+                          {currentMarkMode === "both" ? (
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault()
+                                if (isBothRowInvalid) return
+                                if (autoSaveTimersRef.current[s.id]) {
+                                  clearTimeout(autoSaveTimersRef.current[s.id])
+                                  delete autoSaveTimersRef.current[s.id]
+                                }
+                                saveBothRowMark(s, idx)
+                              }}
+                              className="inline-flex flex-col items-center"
+                            >
+                              <div className="inline-flex items-center gap-1.5">
+                                <input
+                                  id={`mark-input-mcq-${idx}`}
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={draftMcqVal}
+                                  onChange={(e) => handleBothMarkChange(s, "mcq", e.target.value)}
+                                  onBlur={() => handleBothMarkBlur(s)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault()
+                                      const wrInput = document.getElementById(`mark-input-wr-${idx}`) as HTMLInputElement | null
+                                      if (wrInput) {
+                                        wrInput.focus()
+                                        wrInput.select()
+                                      }
                                     }
-                                    saveRowMark(s, idx)
-                                  }
-                                }}
-                                className={cn(
-                                  "w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all focus:outline-none shadow-xs",
-                                  isRowInvalid
-                                    ? "border-rose-500 bg-rose-50 text-rose-700 ring-2 ring-rose-400/30"
-                                    : isAutoSaving
-                                    ? "border-amber-400 bg-amber-50/50 text-amber-900 ring-2 ring-amber-400/20"
-                                    : isJustSaved
-                                    ? "border-emerald-500 bg-emerald-50 text-emerald-800"
-                                    : hasEntered
-                                    ? "border-emerald-400 bg-white text-emerald-900"
-                                    : "border-slate-300 bg-white text-slate-900 focus:border-amber-500"
-                                )}
-                                placeholder="—"
-                                title={isRowOverMax ? `সর্বোচ্চ নম্বর (${activeTotalMarks})-এর বেশি হতে পারবে না!` : undefined}
-                              />
-                              <button
-                                type="submit"
-                                disabled={savingRowStudentId === s.id || isAutoSaving || isRowInvalid}
-                                title={isRowInvalid ? `সর্বোচ্চ নম্বর (${activeTotalMarks})-এর বেশি হতে পারবে না` : "Save mark (Enter ↵)"}
-                                className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                              >
-                                {savingRowStudentId === s.id || isAutoSaving ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
-                                ) : isJustSaved ? (
-                                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                                ) : (
-                                  <Save className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </div>
-                            {isRowOverMax && (
-                              <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
-                                &gt;{activeTotalMarks}!
-                              </span>
-                            )}
-                            {isRowNegative && (
-                              <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
-                                &lt;0!
-                              </span>
-                            )}
-                          </form>
+                                  }}
+                                  className={cn(
+                                    "w-14 px-2 py-1.5 border-2 rounded-lg text-xs text-center font-black transition-all focus:outline-none shadow-xs",
+                                    isMcqNegative
+                                      ? "border-rose-500 bg-rose-50 text-rose-700"
+                                      : isAutoSaving
+                                      ? "border-amber-400 bg-amber-50/50 text-amber-900"
+                                      : isJustSaved
+                                      ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                      : "border-slate-300 bg-white text-slate-900 focus:border-amber-500"
+                                  )}
+                                  placeholder="MCQ"
+                                />
+                                <span className="text-slate-400 font-bold text-xs">+</span>
+                                <input
+                                  id={`mark-input-wr-${idx}`}
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={draftWrVal}
+                                  onChange={(e) => handleBothMarkChange(s, "written", e.target.value)}
+                                  onBlur={() => handleBothMarkBlur(s)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault()
+                                      if (isBothRowInvalid) return
+                                      if (autoSaveTimersRef.current[s.id]) {
+                                        clearTimeout(autoSaveTimersRef.current[s.id])
+                                        delete autoSaveTimersRef.current[s.id]
+                                      }
+                                      saveBothRowMark(s, idx)
+                                    }
+                                  }}
+                                  className={cn(
+                                    "w-14 px-2 py-1.5 border-2 rounded-lg text-xs text-center font-black transition-all focus:outline-none shadow-xs",
+                                    isWrNegative
+                                      ? "border-rose-500 bg-rose-50 text-rose-700"
+                                      : isAutoSaving
+                                      ? "border-amber-400 bg-amber-50/50 text-amber-900"
+                                      : isJustSaved
+                                      ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                      : "border-slate-300 bg-white text-slate-900 focus:border-amber-500"
+                                  )}
+                                  placeholder="WR"
+                                />
+                                <span className="text-slate-400 font-bold text-xs">=</span>
+                                <span
+                                  className={cn(
+                                    "px-2 py-1.5 rounded-lg text-xs font-black min-w-10 text-center border-2 transition-all",
+                                    isBothOverMax
+                                      ? "border-rose-400 bg-rose-50 text-rose-700"
+                                      : isAutoSaving
+                                      ? "border-amber-400 bg-amber-50 text-amber-900"
+                                      : isJustSaved
+                                      ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                      : hasEntered
+                                      ? "border-emerald-300 bg-emerald-50 text-emerald-900"
+                                      : "border-slate-200 bg-slate-50 text-slate-500"
+                                  )}
+                                  title="MCQ + WR মোট প্রাপ্ত নম্বর"
+                                >
+                                  {hasEntered ? currentMarksNum : "—"}
+                                </span>
+                                <button
+                                  type="submit"
+                                  disabled={savingRowStudentId === s.id || isAutoSaving || isBothRowInvalid}
+                                  title={isBothRowInvalid ? `সর্বোচ্চ নম্বর (${activeTotalMarks})-এর বেশি হতে পারবে না` : "Save mark (Enter ↵)"}
+                                  className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  {savingRowStudentId === s.id || isAutoSaving ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                  ) : isJustSaved ? (
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  ) : (
+                                    <Save className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                              {isBothOverMax && (
+                                <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
+                                  মোট &gt;{activeTotalMarks}!
+                                </span>
+                              )}
+                              {(isMcqNegative || isWrNegative) && (
+                                <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
+                                  নম্বর &lt;0!
+                                </span>
+                              )}
+                            </form>
+                          ) : (
+                            <form
+                              onSubmit={(e) => {
+                                e.preventDefault()
+                                if (isRowInvalid) return
+                                if (autoSaveTimersRef.current[s.id]) {
+                                  clearTimeout(autoSaveTimersRef.current[s.id])
+                                  delete autoSaveTimersRef.current[s.id]
+                                }
+                                saveRowMark(s, idx)
+                              }}
+                              className="inline-flex flex-col items-center"
+                            >
+                              <div className="inline-flex items-center gap-1.5">
+                                <input
+                                  id={`mark-input-${idx}`}
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={draftVal}
+                                  onChange={(e) => handleMarkInputChange(s, e.target.value)}
+                                  onBlur={() => handleMarkInputBlur(s)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault()
+                                      if (isRowInvalid) return
+                                      if (autoSaveTimersRef.current[s.id]) {
+                                        clearTimeout(autoSaveTimersRef.current[s.id])
+                                        delete autoSaveTimersRef.current[s.id]
+                                      }
+                                      saveRowMark(s, idx)
+                                    }
+                                  }}
+                                  className={cn(
+                                    "w-24 px-3 py-1.5 border-2 rounded-lg text-sm text-center font-black transition-all focus:outline-none shadow-xs",
+                                    isRowInvalid
+                                      ? "border-rose-500 bg-rose-50 text-rose-700 ring-2 ring-rose-400/30"
+                                      : isAutoSaving
+                                      ? "border-amber-400 bg-amber-50/50 text-amber-900 ring-2 ring-amber-400/20"
+                                      : isJustSaved
+                                      ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                                      : hasEntered
+                                      ? "border-emerald-400 bg-white text-emerald-900"
+                                      : "border-slate-300 bg-white text-slate-900 focus:border-amber-500"
+                                  )}
+                                  placeholder={currentMarkMode === "mcq" ? "MCQ" : currentMarkMode === "written" ? "WR" : "—"}
+                                  title={isRowOverMax ? `সর্বোচ্চ নম্বর (${activeTotalMarks})-এর বেশি হতে পারবে না!` : undefined}
+                                />
+                                <button
+                                  type="submit"
+                                  disabled={savingRowStudentId === s.id || isAutoSaving || isRowInvalid}
+                                  title={isRowInvalid ? `সর্বোচ্চ নম্বর (${activeTotalMarks})-এর বেশি হতে পারবে না` : "Save mark (Enter ↵)"}
+                                  className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                  {savingRowStudentId === s.id || isAutoSaving ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                                  ) : isJustSaved ? (
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  ) : (
+                                    <Save className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                              {isRowOverMax && (
+                                <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
+                                  &gt;{activeTotalMarks}!
+                                </span>
+                              )}
+                              {isRowNegative && (
+                                <span className="text-[9px] text-rose-600 font-black mt-0.5 whitespace-nowrap">
+                                  &lt;0!
+                                </span>
+                              )}
+                            </form>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-center">
                           {gradeToDisplay ? (
@@ -6156,6 +6641,7 @@ export default function ExamResultsPage() {
         totalToppers={printableTotalToppers}
         seriesTitle={seriesName}
         subjectToppers={printableSubjectToppers}
+        markDisplayMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
       />
     </>
   )
