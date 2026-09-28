@@ -52,17 +52,41 @@ export default async function StudentsPage() {
 
   let batches: any[] = []
   try {
-    const { data: bData } = await admin.from("batches").select("id, name, branch_id, origin_batch_id, class_level, current_seats, max_seats, is_active")
-    if (bData && bData.length > 0) {
+    // 1. Try selecting all columns via admin
+    const { data: bData, error: bErr } = await admin.from("batches").select("*").order("name", { ascending: true })
+    if (!bErr && bData && bData.length > 0) {
       batches = bData
     } else {
-      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, origin_batch_id, class_level, current_seats, max_seats, is_active")
-      if (fbB) batches = fbB
+      // 2. Fallback to selecting all columns via user session
+      const { data: fbB, error: fbErr } = await supabase.from("batches").select("*").order("name", { ascending: true })
+      if (!fbErr && fbB && fbB.length > 0) {
+        batches = fbB
+      } else {
+        // 3. Fallback to base columns that are guaranteed to exist in schema 001
+        const { data: minB } = await admin.from("batches").select("id, name, branch_id, class_level, current_seats, max_seats, is_active").order("name", { ascending: true })
+        if (minB && minB.length > 0) {
+          batches = minB
+        } else {
+          const { data: minFb } = await supabase.from("batches").select("id, name, branch_id, class_level, current_seats, max_seats, is_active").order("name", { ascending: true })
+          if (minFb && minFb.length > 0) {
+            batches = minFb
+          } else {
+            // 4. Absolute minimal fallback (id, name)
+            const { data: idNameB } = await supabase.from("batches").select("id, name").order("name", { ascending: true })
+            if (idNameB) batches = idNameB
+          }
+        }
+      }
     }
   } catch {
     try {
-      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, origin_batch_id, class_level, current_seats, max_seats, is_active")
-      if (fbB) batches = fbB
+      const { data: fbB } = await supabase.from("batches").select("*").order("name", { ascending: true })
+      if (fbB && fbB.length > 0) {
+        batches = fbB
+      } else {
+        const { data: idNameB } = await supabase.from("batches").select("id, name")
+        if (idNameB) batches = idNameB
+      }
     } catch {}
   }
 

@@ -18,11 +18,23 @@ async function getRelatedBatches(admin: any, batchId: string): Promise<{ allBatc
   let currentBatch: any = null
 
   try {
-    const { data: b } = await admin
+    let b = null
+    const { data: bData, error: bErr } = await admin
       .from("batches")
-      .select("id, name, branch_id, origin_batch_id, current_seats, max_seats")
+      .select("*")
       .eq("id", batchId)
       .maybeSingle()
+
+    if (!bErr && bData) {
+      b = bData
+    } else {
+      const { data: minB } = await admin
+        .from("batches")
+        .select("id, name, branch_id")
+        .eq("id", batchId)
+        .maybeSingle()
+      if (minB) b = minB
+    }
 
     if (b) {
       currentBatch = b

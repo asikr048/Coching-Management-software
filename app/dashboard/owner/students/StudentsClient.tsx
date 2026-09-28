@@ -224,12 +224,18 @@ export default function StudentsClient({
 
       const [stRes, bRes, dueRes] = await Promise.all([
         supabase.from("students").select("*").order("created_at", { ascending: false }),
-        supabase.from("batches").select("id, name, branch_id, origin_batch_id, class_level, current_seats, max_seats, is_active"),
+        supabase.from("batches").select("*").order("name", { ascending: true }),
         supabase.from("fee_dues").select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status")
       ])
 
       const rawSt = stRes.data || []
-      const rawBat = bRes.data || []
+      let rawBat = bRes.data || []
+      if (rawBat.length === 0) {
+        try {
+          const { data: fbBat } = await supabase.from("batches").select("id, name, branch_id, class_level").order("name", { ascending: true })
+          if (fbBat && fbBat.length > 0) rawBat = fbBat
+        } catch {}
+      }
       const rawDuesList = dueRes.data || []
 
       if (rawBat.length > 0) {
@@ -343,6 +349,35 @@ export default function StudentsClient({
       fetchStudentsClient()
     }
   }, [students])
+
+  useEffect(() => {
+    if (batches && batches.length > 0) {
+      setLocalBatches(batches)
+    }
+  }, [batches])
+
+  useEffect(() => {
+    if (!batches || batches.length === 0 || localBatches.length === 0) {
+      const loadBatches = async () => {
+        try {
+          const { data, error } = await supabase
+            .from("batches")
+            .select("*")
+            .order("name", { ascending: true })
+          if (!error && data && data.length > 0) {
+            setLocalBatches(data)
+          } else {
+            const { data: minData } = await supabase
+              .from("batches")
+              .select("id, name, branch_id, class_level")
+              .order("name", { ascending: true })
+            if (minData && minData.length > 0) setLocalBatches(minData as any)
+          }
+        } catch {}
+      }
+      loadBatches()
+    }
+  }, [])
 
   // Filters & selection
   const [query, setQuery] = useState("")
@@ -509,9 +544,24 @@ export default function StudentsClient({
 
   const { selectedBranchId, branches: contextBranches = [] } = useBranch()
 
+  const allAvailableDropdownBatches = useMemo(() => {
+    const map = new Map<string, Batch>()
+    localBatches.forEach(b => {
+      if (b?.id && b?.name) map.set(b.id, b)
+    })
+    localStudents.forEach(s => {
+      s.enrollments?.forEach((e: any) => {
+        if (e.batch_id && e.batch?.name && e.batch.name !== "Enrolled Batch" && !map.has(e.batch_id)) {
+          map.set(e.batch_id, { id: e.batch_id, name: e.batch.name } as Batch)
+        }
+      })
+    })
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [localBatches, localStudents])
+
   const selectedBatch = useMemo(() => {
-    return batchFilter ? localBatches.find(b => b.id === batchFilter) : null
-  }, [batchFilter, localBatches])
+    return batchFilter ? (localBatches.find(b => b.id === batchFilter) || allAvailableDropdownBatches.find(b => b.id === batchFilter) || null) : null
+  }, [batchFilter, localBatches, allAvailableDropdownBatches])
 
   const relatedBatchIds = useMemo(() => {
     return selectedBatch ? getBatchFamilyIds(selectedBatch, localBatches) : new Set<string>()
@@ -1229,7 +1279,7 @@ export default function StudentsClient({
               onChange={e => setBatchFilter(e.target.value)}
               className="w-full sm:w-auto px-3.5 py-2.5 text-sm bg-white border border-slate-300 rounded-xl focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 focus:outline-none text-slate-900 min-w-0 sm:min-w-[150px] shadow-2xs">
               <option value="" className="bg-white text-slate-900">All Batches</option>
-              {localBatches.map(b => (
+              {allAvailableDropdownBatches.map(b => (
                 <option key={b.id} value={b.id} className="bg-white text-slate-900">{b.name}</option>
               ))}
             </select>
