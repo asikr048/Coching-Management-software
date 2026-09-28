@@ -19,8 +19,17 @@ import { useBranch } from "@/components/providers/BranchContext"
 import StudentIdCardTrigger from "@/components/id-card/StudentIdCardTrigger"
 import AdmissionSlipTrigger from "@/components/id-card/AdmissionSlipTrigger"
 import BulkDataExportModal from "@/components/export/BulkDataExportModal"
+import { getBatchFamilyIds, isClassLevelMatch } from "@/lib/supabase/safe-enrollments"
 
-interface Batch { id: string; name: string }
+interface Batch { 
+  id: string
+  name: string
+  origin_batch_id?: string | null
+  class_level?: string | null
+  current_seats?: number | null
+  max_seats?: number | null
+  branch_id?: string | null
+}
 interface DueData { 
   id: string
   student_id: string
@@ -109,12 +118,13 @@ export default function StudentsClient({
 
       const [stRes, bRes, dueRes] = await Promise.all([
         supabase.from("students").select("*").order("created_at", { ascending: false }),
-        supabase.from("batches").select("id, name, branch_id, is_active"),
+        supabase.from("batches").select("id, name, branch_id, origin_batch_id, class_level, current_seats, max_seats, is_active"),
         supabase.from("fee_dues").select("id, student_id, batch_id, due_month, due_amount, paid_amount, due_date, status")
       ])
 
       const rawSt = stRes.data || []
       const rawBat = bRes.data || []
+      const rawDuesList = dueRes.data || []
 
       if (rawBat.length > 0) {
         setLocalBatches(rawBat)
@@ -171,6 +181,36 @@ export default function StudentsClient({
 
         const mapped = rawSt.map((s: any) => {
           const sEnrs = enrollmentsByStudent.get(s.id) || []
+
+          if (sEnrs.length === 0) {
+            const sDues = rawDuesList.filter((d: any) => String(d.student_id) === String(s.id) || (s.student_id && String(d.student_id) === String(s.student_id)))
+            const dBatchId = sDues.find((d: any) => d.batch_id)?.batch_id
+            if (dBatchId && batchMap.has(dBatchId)) {
+              sEnrs.push({
+                id: `fb-due-${s.id}`,
+                student_id: s.id,
+                batch_id: dBatchId,
+                roll_no: s.roll_no || s.batch_roll || 1,
+                batch: batchMap.get(dBatchId),
+                status: "active"
+              })
+            }
+          }
+
+          if (sEnrs.length === 0 && s.class_level) {
+            const targetBatch = rawBat.find((b: any) => isClassLevelMatch(s.class_level, b.class_level, b.name))
+            if (targetBatch) {
+              sEnrs.push({
+                id: `fb-class-${s.id}`,
+                student_id: s.id,
+                batch_id: targetBatch.id,
+                roll_no: s.roll_no || s.batch_roll || 1,
+                batch: targetBatch,
+                status: "active"
+              })
+            }
+          }
+
           const firstRoll = sEnrs.find(e => e.roll_no != null)?.roll_no
           return {
             ...s,
@@ -363,6 +403,14 @@ export default function StudentsClient({
 
   const { selectedBranchId, branches: contextBranches = [] } = useBranch()
 
+  const selectedBatch = useMemo(() => {
+    return batchFilter ? localBatches.find(b => b.id === batchFilter) : null
+  }, [batchFilter, localBatches])
+
+  const relatedBatchIds = useMemo(() => {
+    return selectedBatch ? getBatchFamilyIds(selectedBatch, localBatches) : new Set<string>()
+  }, [selectedBatch, localBatches])
+
   const filteredAndSorted = useMemo(() => {
     const pq = parseRollQuery(query)
 
@@ -392,7 +440,16 @@ export default function StudentsClient({
         s.email?.toLowerCase().includes(pq.q) ||
         matchRoll
       
-      const matchB = !batchFilter || (s.enrollments?.some(e => e.batch_id === batchFilter))
+      const matchB = !batchFilter || (
+        s.enrollments?.some((e: any) => {
+          if (relatedBatchIds.has(e.batch_id)) return true
+          if (selectedBatch?.name && e.batch?.name && e.batch.name.trim().toLowerCase() === selectedBatch.name.trim().toLowerCase()) return true
+          return false
+        }) ||
+        s.dues?.some((d: any) => d.batch_id && relatedBatchIds.has(d.batch_id)) ||
+        (Boolean(selectedBatch && isClassLevelMatch(s.class_level, selectedBatch.class_level, selectedBatch.name)) &&
+         (!s.enrollments || s.enrollments.length === 0 || s.enrollments.every((e: any) => !e.batch_id || relatedBatchIds.has(e.batch_id))))
+      )
       const matchBranch = selectedBranchId === "all" || 
         !s.branch_id || 
         s.branch_id === selectedBranchId || 
@@ -416,16 +473,16 @@ export default function StudentsClient({
         break
       case "roll_asc":
         result.sort((a, b) => {
-          const rollA = (batchFilter ? a.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no : null) ?? a.enrollments?.[0]?.roll_no ?? a.roll_no ?? a.batch_roll ?? 999999
-          const rollB = (batchFilter ? b.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no : null) ?? b.enrollments?.[0]?.roll_no ?? b.roll_no ?? b.batch_roll ?? 999999
+          const rollA = (batchFilter ? a.enrollments?.find(e => relatedBatchIds.has(e.batch_id))?.roll_no : null) ?? a.enrollments?.[0]?.roll_no ?? a.roll_no ?? a.batch_roll ?? 999999
+          const rollB = (batchFilter ? b.enrollments?.find(e => relatedBatchIds.has(e.batch_id))?.roll_no : null) ?? b.enrollments?.[0]?.roll_no ?? b.roll_no ?? b.batch_roll ?? 999999
           if (Number(rollA) !== Number(rollB)) return Number(rollA) - Number(rollB)
           return a.name.localeCompare(b.name)
         })
         break
       case "roll_desc":
         result.sort((a, b) => {
-          const rollA = (batchFilter ? a.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no : null) ?? a.enrollments?.[0]?.roll_no ?? a.roll_no ?? a.batch_roll ?? -1
-          const rollB = (batchFilter ? b.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no : null) ?? b.enrollments?.[0]?.roll_no ?? b.roll_no ?? b.batch_roll ?? -1
+          const rollA = (batchFilter ? a.enrollments?.find(e => relatedBatchIds.has(e.batch_id))?.roll_no : null) ?? a.enrollments?.[0]?.roll_no ?? a.roll_no ?? a.batch_roll ?? -1
+          const rollB = (batchFilter ? b.enrollments?.find(e => relatedBatchIds.has(e.batch_id))?.roll_no : null) ?? b.enrollments?.[0]?.roll_no ?? b.roll_no ?? b.batch_roll ?? -1
           if (Number(rollA) !== Number(rollB)) return Number(rollB) - Number(rollA)
           return a.name.localeCompare(b.name)
         })
@@ -435,8 +492,8 @@ export default function StudentsClient({
         if (batchFilter) {
           // When a batch is selected, sort strictly by that batch's roll number (1, 2, 3...)
           result.sort((a, b) => {
-            const rollA = a.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no ?? a.roll_no ?? a.batch_roll ?? 999999
-            const rollB = b.enrollments?.find(e => e.batch_id === batchFilter)?.roll_no ?? b.roll_no ?? b.batch_roll ?? 999999
+            const rollA = a.enrollments?.find(e => relatedBatchIds.has(e.batch_id))?.roll_no ?? a.roll_no ?? a.batch_roll ?? 999999
+            const rollB = b.enrollments?.find(e => relatedBatchIds.has(e.batch_id))?.roll_no ?? b.roll_no ?? b.batch_roll ?? 999999
             if (Number(rollA) !== Number(rollB)) return Number(rollA) - Number(rollB)
             return a.name.localeCompare(b.name)
           })
@@ -458,7 +515,7 @@ export default function StudentsClient({
     }
 
     return result
-  }, [enrichedStudents, query, batchFilter, sortOption, selectedBranchId])
+  }, [enrichedStudents, query, batchFilter, selectedBatch, relatedBatchIds, sortOption, selectedBranchId])
 
   // ==========================================
   // DUE MANAGEMENT ACTION HANDLERS
@@ -1239,7 +1296,7 @@ export default function StudentsClient({
                       <td className="px-4 py-4 text-sm">
                         {batchFilter ? (
                           (() => {
-                            const enr = student.enrollments?.find(e => e.batch_id === batchFilter)
+                            const enr = student.enrollments?.find(e => relatedBatchIds.has(e.batch_id) || (selectedBatch?.name && e.batch?.name && e.batch.name.trim().toLowerCase() === selectedBatch.name.trim().toLowerCase()))
                             const r = enr?.roll_no ?? (effectiveEnrollments.length === 1 ? student.roll_no : null) ?? student.roll_no ?? student.batch_roll ?? 1
                             return (
                               <span className="inline-flex items-center gap-1 font-mono bg-amber-100/90 px-2.5 py-1 rounded-lg text-xs font-black text-amber-950 border border-amber-300 shadow-2xs">
@@ -1283,7 +1340,21 @@ export default function StudentsClient({
                         )}
                       </td>
                       <td className="px-4 py-4 text-sm">
-                        {effectiveEnrollments.length > 0 ? (
+                        {batchFilter ? (
+                          (() => {
+                            const enr = student.enrollments?.find(e => relatedBatchIds.has(e.batch_id) || (selectedBatch?.name && e.batch?.name && e.batch.name.trim().toLowerCase() === selectedBatch.name.trim().toLowerCase()))
+                            const bName = enr?.batch?.name || selectedBatch?.name || "Enrolled Batch"
+                            const roll = enr?.roll_no ?? (effectiveEnrollments.length === 1 ? student.roll_no : null) ?? student.roll_no ?? student.batch_roll ?? 1
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-900 border border-amber-500/30 w-max shadow-2xs">
+                                {roll != null && (
+                                  <b className="font-mono text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded text-[11px] font-black">#{roll}</b>
+                                )}
+                                <span>{bName}</span>
+                              </span>
+                            )
+                          })()
+                        ) : effectiveEnrollments.length > 0 ? (
                           <div className="flex flex-col gap-1">
                             {effectiveEnrollments.map((e, i) => {
                               const roll = e.roll_no ?? (effectiveEnrollments.length === 1 ? student.roll_no : null) ?? student.roll_no ?? student.batch_roll ?? (i + 1)
@@ -1432,13 +1503,12 @@ export default function StudentsClient({
           </table>
         </div>
         
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
-          <p className="text-sm text-slate-400 font-medium">
-            Showing <span className="text-white font-bold">{filteredAndSorted.length}</span> of <span className="text-white font-bold">{localStudents.length}</span> students
+          <p className="text-sm text-slate-600 font-medium">
+            Showing <span className="text-slate-900 font-bold">{filteredAndSorted.length}</span> of <span className="text-slate-900 font-bold">{localStudents.length}</span> students
           </p>
           {selectedIds.size > 0 && (
-            <p className="text-sm text-amber-400 font-bold">
+            <p className="text-sm text-amber-700 font-bold">
               {selectedIds.size} selected
             </p>
           )}

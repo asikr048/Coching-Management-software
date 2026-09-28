@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { safeInsertEnrollments, isClassLevelMatch } from "@/lib/supabase/safe-enrollments"
 import AccountantClient from "./AccountantClient"
 
 export const dynamic = "force-dynamic"
@@ -151,21 +152,15 @@ export default async function AccountantDeskPage() {
     }
   })
 
-  // Source B: Un-enrolled active students matching batch class_level or branch
+  // Source B: Un-enrolled active students matching batch class_level
   const unEnrolledStudents = rawStudents.filter(
     (s: any) => s.is_active !== false && !activeEnrolledStudentIds.has(String(s.id))
   )
   if (unEnrolledStudents.length > 0 && normalizedBatches.length > 0) {
     unEnrolledStudents.forEach((s: any) => {
-      let targetBatch = normalizedBatches.find(
-        (b: any) => b.class_level && s.class_level && b.class_level.toLowerCase() === s.class_level.toLowerCase()
+      const targetBatch = normalizedBatches.find(
+        (b: any) => isClassLevelMatch(s.class_level, b.class_level, b.name)
       )
-      if (!targetBatch && normalizedBatches.length === 1) {
-        targetBatch = normalizedBatches[0]
-      }
-      if (!targetBatch) {
-        targetBatch = normalizedBatches.find((b: any) => b.branch_id && s.branch_id && b.branch_id === s.branch_id) || normalizedBatches[0]
-      }
 
       if (targetBatch && !enrolledStudentBatchSet.has(`${s.id}_${targetBatch.id}`)) {
         enrolledStudentBatchSet.add(`${s.id}_${targetBatch.id}`)
@@ -185,11 +180,11 @@ export default async function AccountantDeskPage() {
     })
   }
 
-  // Insert any healed enrollments in background
+  // Insert any healed enrollments in background safely
   if (newEnrollmentsToInsert.length > 0) {
     ;(async () => {
       try {
-        await admin.from("enrollments").insert(newEnrollmentsToInsert)
+        await safeInsertEnrollments(admin, newEnrollmentsToInsert)
       } catch (e) {
         console.warn("Auto-heal enrollments notice:", e)
       }

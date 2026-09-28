@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { safeInsertEnrollments, isClassLevelMatch } from "@/lib/supabase/safe-enrollments"
 import BatchesClient from "./BatchesClient"
 
 export const dynamic = "force-dynamic"
@@ -147,16 +148,10 @@ export default async function BatchesPage() {
   )
   if (unEnrolledStudents.length > 0 && rawBatches.length > 0) {
     unEnrolledStudents.forEach((s: any) => {
-      // Find target batch: matching class_level, or single active batch, or matching branch
-      let targetBatch = rawBatches.find(
-        (b: any) => b.class_level && s.class_level && b.class_level.toLowerCase() === s.class_level.toLowerCase()
+      // Find target batch ONLY if student has a matching class_level or batch name keyword (e.g. HSC)
+      const targetBatch = rawBatches.find(
+        (b: any) => isClassLevelMatch(s.class_level, b.class_level, b.name)
       )
-      if (!targetBatch && rawBatches.length === 1) {
-        targetBatch = rawBatches[0]
-      }
-      if (!targetBatch) {
-        targetBatch = rawBatches.find((b: any) => b.branch_id && s.branch_id && b.branch_id === s.branch_id) || rawBatches[0]
-      }
 
       if (targetBatch && !studentEnrolledBatchMap.has(`${s.id}_${targetBatch.id}`)) {
         studentEnrolledBatchMap.add(`${s.id}_${targetBatch.id}`)
@@ -180,10 +175,10 @@ export default async function BatchesPage() {
     })
   }
 
-  // Insert any missing enrollments into database
+  // Insert any missing enrollments into database safely
   if (newEnrollmentsToInsert.length > 0) {
     try {
-      await db.from("enrollments").insert(newEnrollmentsToInsert)
+      await safeInsertEnrollments(db, newEnrollmentsToInsert)
     } catch (insertErr) {
       console.warn("Auto-heal enrollments insert notice:", insertErr)
     }
@@ -192,7 +187,7 @@ export default async function BatchesPage() {
   // Count live active enrollments per batch
   const liveCounts = new Map<string, number>()
   rawEnrs.forEach((e: any) => {
-    if (e.batch_id) {
+    if (e.batch_id && (e.status === "active" || !e.status)) {
       liveCounts.set(e.batch_id, (liveCounts.get(e.batch_id) || 0) + 1)
     }
   })
@@ -202,17 +197,16 @@ export default async function BatchesPage() {
 
   const normalizedBatches = rawBatches.map((b: any) => {
     const liveCount = liveCounts.get(b.id) || 0
-    const effectiveCount = Math.max(Number(b.current_seats) || 0, liveCount)
     const teacher = b.teacher || rawTeachers.find((t: any) => t.id === b.teacher_id)
     const branch = b.branch || rawBranches.find((br: any) => br.id === b.branch_id)
 
-    if (b.current_seats !== effectiveCount) {
-      batchesToUpdateSeats.push({ id: b.id, current_seats: effectiveCount })
+    if (Number(b.current_seats) !== liveCount) {
+      batchesToUpdateSeats.push({ id: b.id, current_seats: liveCount })
     }
 
     return {
       ...b,
-      current_seats: effectiveCount,
+      current_seats: liveCount,
       teacher: teacher ? { name: teacher.name, subject: teacher.subject } : null,
       branch: branch ? { id: branch.id, name: branch.name } : null
     }

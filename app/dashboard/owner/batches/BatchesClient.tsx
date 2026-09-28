@@ -96,10 +96,9 @@ export default function BatchesClient({
         if (!error && data && data.length > 0) {
           setBatches(prev => {
             return data.map((nb: any) => {
-              const prevBatch = prev.find(p => p.id === nb.id)
               return {
                 ...nb,
-                current_seats: Math.max(Number(nb.current_seats) || 0, Number(prevBatch?.current_seats) || 0)
+                current_seats: Number(nb.current_seats) ?? 0
               }
             })
           })
@@ -111,10 +110,9 @@ export default function BatchesClient({
           if (fallback.data && fallback.data.length > 0) {
             setBatches(prev => {
               return (fallback.data || []).map((nb: any) => {
-                const prevBatch = prev.find(p => p.id === nb.id)
                 return {
                   ...nb,
-                  current_seats: Math.max(Number(nb.current_seats) || 0, Number(prevBatch?.current_seats) || 0)
+                  current_seats: Number(nb.current_seats) ?? 0
                 }
               })
             })

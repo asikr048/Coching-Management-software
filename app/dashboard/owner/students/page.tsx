@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { safeInsertEnrollments, isClassLevelMatch } from "@/lib/supabase/safe-enrollments"
 import Link from "next/link"
 import StudentsClient from "./StudentsClient"
 
@@ -51,16 +52,16 @@ export default async function StudentsPage() {
 
   let batches: any[] = []
   try {
-    const { data: bData } = await admin.from("batches").select("id, name, branch_id, is_active")
+    const { data: bData } = await admin.from("batches").select("id, name, branch_id, origin_batch_id, class_level, current_seats, max_seats, is_active")
     if (bData && bData.length > 0) {
       batches = bData
     } else {
-      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, is_active")
+      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, origin_batch_id, class_level, current_seats, max_seats, is_active")
       if (fbB) batches = fbB
     }
   } catch {
     try {
-      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, is_active")
+      const { data: fbB } = await supabase.from("batches").select("id, name, branch_id, origin_batch_id, class_level, current_seats, max_seats, is_active")
       if (fbB) batches = fbB
     } catch {}
   }
@@ -155,11 +156,26 @@ export default async function StudentsPage() {
       const dBatchId = sDues.find((d: any) => d.batch_id)?.batch_id
       if (dBatchId && batchMap.has(dBatchId)) {
         uniqueEnrs.push({
-          id: `fb-${s.id}`,
+          id: `fb-due-${s.id}`,
           student_id: s.id,
           batch_id: dBatchId,
           roll_no: s.roll_no || s.batch_roll || 1,
           batch: batchMap.get(dBatchId),
+          status: "active"
+        })
+      }
+    }
+
+    // If still unenrolled, match by student class_level against batch class_level / name
+    if (uniqueEnrs.length === 0 && s.class_level) {
+      const targetBatch = batches.find((b: any) => isClassLevelMatch(s.class_level, b.class_level, b.name))
+      if (targetBatch) {
+        uniqueEnrs.push({
+          id: `fb-class-${s.id}`,
+          student_id: s.id,
+          batch_id: targetBatch.id,
+          roll_no: s.roll_no || s.batch_roll || 1,
+          batch: targetBatch,
           status: "active"
         })
       }
@@ -206,8 +222,28 @@ export default async function StudentsPage() {
           activeEnrStudentIds.add(String(d.student_id))
         }
       }
+
+      // Also auto-heal active students matching batch class_level
+      for (const s of rawStudents) {
+        if (s.is_active !== false && !activeEnrStudentIds.has(String(s.id)) && s.class_level) {
+          const targetBatch = batches.find((b: any) => isClassLevelMatch(s.class_level, b.class_level, b.name))
+          if (targetBatch) {
+            toHeal.push({
+              student_id: s.id,
+              batch_id: targetBatch.id,
+              branch_id: targetBatch.branch_id || s.branch_id || null,
+              status: "active",
+              roll_no: s.roll_no || s.batch_roll || 1,
+              final_monthly_fee: Number(targetBatch.monthly_fee) || 0,
+              enrollment_date: s.enrollment_date || new Date().toISOString().split("T")[0]
+            })
+            activeEnrStudentIds.add(String(s.id))
+          }
+        }
+      }
+
       if (toHeal.length > 0) {
-        await admin.from("enrollments").insert(toHeal)
+        await safeInsertEnrollments(admin, toHeal)
       }
     } catch {}
   })()
