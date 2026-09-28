@@ -882,28 +882,76 @@ export default function ExamPrintModal({
             background: #ffffff !important;
             color: #000000 !important;
             height: auto !important;
-            min-height: 100% !important;
+            min-height: auto !important;
             overflow: visible !important;
             margin: 0 !important;
             padding: 0 !important;
+            width: 100% !important;
+            max-height: none !important;
+            display: block !important;
           }
-          body * {
-            visibility: hidden;
+          /* Hide everything first */
+          body > * {
+            display: none !important;
           }
-          #print-document-container,
-          #print-document-container * {
+          /* Show the full ancestor chain from body down to #print-document-container */
+          body > div:has(#print-document-container),
+          body > div:has(#print-document-container) > *:has(#print-document-container),
+          body > div:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container),
+          body > div:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container),
+          body > div:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container),
+          body > div:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container),
+          body > div:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container),
+          body > div:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) > *:has(#print-document-container) {
+            display: block !important;
             visibility: visible !important;
+            overflow: visible !important;
+            position: static !important;
+            width: 100% !important;
+            max-width: none !important;
+            max-height: none !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+            -webkit-backdrop-filter: none !important;
+            backdrop-filter: none !important;
+            flex: unset !important;
+            inset: unset !important;
+            z-index: auto !important;
           }
+          /* The print container itself */
           #print-document-container {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+            display: block !important;
+            visibility: visible !important;
+            position: static !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             color: #000000 !important;
-            display: block !important;
+            overflow: visible !important;
+            max-width: none !important;
+            max-height: none !important;
+            height: auto !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
+          #print-document-container * {
+            visibility: visible !important;
+          }
+          /* Hide siblings of ancestor chain that are not part of the path */
+          aside,
+          header,
+          nav,
+          .print-controls,
+          [data-no-print="true"] {
+            display: none !important;
           }
           .progress-report-sheet {
             page-break-after: always !important;
@@ -925,15 +973,6 @@ export default function ExamPrintModal({
           }
           thead {
             display: table-header-group !important;
-          }
-          .print-controls,
-          aside,
-          header,
-          nav,
-          button,
-          .print\\:hidden,
-          [data-no-print="true"] {
-            display: none !important;
           }
         }
       `}</style>
