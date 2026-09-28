@@ -864,7 +864,109 @@ export default function ExamPrintModal({
   }
 
   function handlePrint() {
-    window.print()
+    const container = document.getElementById("print-document-container")
+    if (!container) {
+      window.print()
+      return
+    }
+
+    try {
+      const iframe = document.createElement("iframe")
+      iframe.style.position = "fixed"
+      iframe.style.right = "0"
+      iframe.style.bottom = "0"
+      iframe.style.width = "0"
+      iframe.style.height = "0"
+      iframe.style.border = "none"
+      iframe.setAttribute("aria-hidden", "true")
+      document.body.appendChild(iframe)
+
+      const doc = iframe.contentWindow?.document
+      if (!doc) {
+        window.print()
+        return
+      }
+
+      // Collect all styles and stylesheet links from the page
+      let stylesHtml = ""
+      document.querySelectorAll("style, link[rel='stylesheet']").forEach((el) => {
+        stylesHtml += el.outerHTML
+      })
+
+      const isLandscape = orientation === "landscape"
+      const printStyles = `
+        <style>
+          @page {
+            size: ${isLandscape ? "A4 landscape" : "A4 portrait"};
+            margin: 8mm 8mm 8mm 8mm;
+          }
+          *, *::before, *::after {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            font-family: inherit;
+          }
+          .progress-report-sheet {
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            margin: 0 !important;
+          }
+          .section-wise-merit-sheet {
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          thead {
+            display: table-header-group !important;
+          }
+        </style>
+      `
+
+      doc.open()
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            <title>${effectiveDocTitle || "Print Document"}</title>
+            ${stylesHtml}
+            ${printStyles}
+          </head>
+          <body>
+            ${container.innerHTML}
+          </body>
+        </html>
+      `)
+      doc.close()
+
+      setTimeout(() => {
+        iframe.contentWindow?.focus()
+        iframe.contentWindow?.print()
+        setTimeout(() => {
+          if (document.body.contains(iframe)) {
+            document.body.removeChild(iframe)
+          }
+        }, 1500)
+      }, 350)
+    } catch (e) {
+      console.warn("Iframe print error, falling back to window.print():", e)
+      window.print()
+    }
   }
 
   if (!isOpen) return null
@@ -878,22 +980,32 @@ export default function ExamPrintModal({
             size: ${orientation === "landscape" ? "A4 landscape" : "A4 portrait"};
             margin: 8mm 8mm 8mm 8mm;
           }
+          html, body {
+            background: #ffffff !important;
+            color: #000000 !important;
+            height: auto !important;
+            min-height: 100% !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
           body * {
             visibility: hidden;
           }
           #print-document-container,
           #print-document-container * {
-            visibility: visible;
+            visibility: visible !important;
           }
           #print-document-container {
-            position: absolute;
-            left: 0;
-            top: 0;
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
             width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             color: #000000 !important;
+            display: block !important;
           }
           .progress-report-sheet {
             page-break-after: always !important;
@@ -902,13 +1014,27 @@ export default function ExamPrintModal({
             margin: 0 !important;
           }
           .section-wise-merit-sheet {
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          tr {
             page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          thead {
+            display: table-header-group !important;
           }
           .print-controls,
           aside,
           header,
           nav,
-          button {
+          button,
+          .print\\:hidden,
+          [data-no-print="true"] {
             display: none !important;
           }
         }

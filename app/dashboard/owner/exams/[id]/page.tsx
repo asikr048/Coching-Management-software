@@ -3746,44 +3746,47 @@ export default function ExamResultsPage() {
 
   return (
     <>
-      {/* GLOBAL PRINT STYLES */}
-      <style jsx global>{`
-        @media print {
-          @page {
-            size: ${isWeeklyActive ? "A4 landscape" : "A4 portrait"};
-            margin: 8mm 10mm 10mm 10mm;
-          }
-          html, body {
-            background: #ffffff !important;
-            color: #000000 !important;
-            height: auto !important;
-            overflow: visible !important;
-          }
-          aside, header, nav, [role="navigation"], .no-print, [data-no-print="true"] {
-            display: none !important;
-          }
-          #printable-exam-sheet,
-          #printable-exam-sheet * {
-            visibility: visible !important;
-          }
-        }
-      `}</style>
-
       {/* DIRECT PRINT-ONLY SHEET (Rendered on direct Ctrl+P / window.print when modal is not active) */}
-      <div className="hidden print:block">
-        <PrintableExamSheet
-          exam={exam}
-          mode={isWeeklyActive ? "weekly_aggregate" : isWeeklyExam ? "weekly_day" : "one_time"}
-          weeklyDays={parsedWeeklyDays}
-          activeDayConfig={activeDayConfig}
-          totalWeeklyMaxMarks={totalWeeklyMaxMarks}
-          students={students}
-          savedResults={savedResults}
-          dayMarksMap={dayMarksMap}
-          sortBy="rank"
-          markDisplayMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
-        />
-      </div>
+      {!isPrintModalOpen && (
+        <>
+          <style jsx global>{`
+            @media print {
+              @page {
+                size: ${isWeeklyActive ? "A4 landscape" : "A4 portrait"};
+                margin: 8mm 10mm 10mm 10mm;
+              }
+              html, body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                height: auto !important;
+                overflow: visible !important;
+              }
+              aside, header, nav, [role="navigation"], .no-print, [data-no-print="true"] {
+                display: none !important;
+              }
+              #printable-exam-sheet,
+              #printable-exam-sheet * {
+                visibility: visible !important;
+              }
+            }
+          `}</style>
+
+          <div className="hidden print:block">
+            <PrintableExamSheet
+              exam={exam}
+              mode={isWeeklyActive ? "weekly_aggregate" : isWeeklyExam ? "weekly_day" : "one_time"}
+              weeklyDays={parsedWeeklyDays}
+              activeDayConfig={activeDayConfig}
+              totalWeeklyMaxMarks={totalWeeklyMaxMarks}
+              students={students}
+              savedResults={savedResults}
+              dayMarksMap={dayMarksMap}
+              sortBy="rank"
+              markDisplayMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
+            />
+          </div>
+        </>
+      )}
 
       <div className="space-y-6 max-w-7xl mx-auto pb-16 print:hidden">
       {/* Top Header Card */}
