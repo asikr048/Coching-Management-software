@@ -4306,10 +4306,10 @@ export default function ExamResultsPage() {
                 )
               }}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-all shadow-xs cursor-pointer border border-slate-800 active:scale-95 whitespace-nowrap"
-              title="প্রিন্ট রেজাল্ট শিট বা PDF সংরক্ষণ করুন"
+              title="রেজাল্ট শিট প্রিন্ট, PDF ও Word (.DOC) সংরক্ষণ করুন"
             >
               <Printer className="w-3.5 h-3.5 text-amber-400" />
-              <span>🖨️ প্রিন্ট রেজাল্ট (PDF)</span>
+              <span>🖨️ প্রিন্ট ও সংরক্ষণ (PDF / DOC)</span>
             </button>
 
             {/* 5.8. Clean / Reset Week Data Button */}
@@ -4751,9 +4751,10 @@ export default function ExamResultsPage() {
                     type="button"
                     onClick={() => handleOpenPrintModal("all_weeks_combined")}
                     className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
+                    title="নির্বাচিত সপ্তাহগুলোর সমন্বিত শিট PDF বা Word (.DOC) সংরক্ষণ করুন"
                   >
                     <Printer className="w-3.5 h-3.5 text-amber-300" />
-                    <span>🖨️ প্রিন্ট (PDF)</span>
+                    <span>🖨️ প্রিন্ট (PDF / DOC)</span>
                   </button>
                 </div>
               </div>
@@ -5165,9 +5166,10 @@ export default function ExamResultsPage() {
                   type="button"
                   onClick={() => handleOpenPrintModal("all_weeks_combined")}
                   className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                  title="সমন্বিত মেধা তালিকা PDF ও Word (.DOC) হিসেবে সংরক্ষণ করুন"
                 >
                   <Printer className="w-4 h-4 text-amber-300" />
-                  <span>প্রিন্ট সমন্বিত মেধা তালিকা (Pic 2 / PDF)</span>
+                  <span>প্রিন্ট সমন্বিত মেধা তালিকা (PDF / DOC)</span>
                 </button>
               </div>
             </div>
@@ -5481,10 +5483,10 @@ export default function ExamResultsPage() {
                     handleOpenPrintModal("weekly_aggregate")
                   }}
                   className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                  title="টপার তালিকা ও বিষয়ভিত্তিক শীর্ষ শিক্ষার্থীদের A4 শিট প্রিন্ট করুন"
+                  title="টপার তালিকা ও বিষয়ভিত্তিক শীর্ষ শিক্ষার্থীদের শিট (PDF / Word DOC) প্রিন্ট ও সংরক্ষণ করুন"
                 >
                   <Trophy className="w-3.5 h-3.5 text-amber-100" />
-                  <span>🖨️ প্রিন্ট টপার শিট (A4)</span>
+                  <span>🖨️ টপার শিট (PDF / DOC)</span>
                 </button>
 
                 <button
@@ -5494,10 +5496,10 @@ export default function ExamResultsPage() {
                     handleOpenPrintModal("weekly_aggregate")
                   }}
                   className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                  title="সাপ্তাহিক সামগ্রিক মেধা তালিকা প্রিন্ট করুন"
+                  title="সাপ্তাহিক সামগ্রিক মেধা তালিকা PDF ও Word (.DOC) হিসেবে সংরক্ষণ করুন"
                 >
                   <Printer className="w-3.5 h-3.5 text-amber-400" />
-                  <span>প্রিন্ট মেধা তালিকা (PDF)</span>
+                  <span>মেধা তালিকা (PDF / DOC)</span>
                 </button>
               </div>
             </div>
@@ -5775,10 +5777,10 @@ export default function ExamResultsPage() {
                     handleOpenPrintModal("weekly_aggregate")
                   }}
                   className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95"
-                  title="সাপ্তাহিক সামগ্রিক মেধা ও মূল্যায়ন শিট প্রিন্ট করুন"
+                  title="সাপ্তাহিক সামগ্রিক মেধা ও মূল্যায়ন শিট PDF বা Word (.DOC) সংরক্ষণ করুন"
                 >
                   <Printer className="w-3.5 h-3.5 text-amber-400" />
-                  <span>প্রিন্ট শিট (PDF)</span>
+                  <span>প্রিন্ট শিট (PDF / DOC)</span>
                 </button>
 
                 <button
@@ -6247,10 +6249,10 @@ export default function ExamResultsPage() {
                     handleOpenPrintModal(isWeeklyExam ? "weekly_day" : "one_time")
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 active:scale-95"
-                  title="বর্তমান রেজাল্ট শিট প্রিন্ট বা PDF সংরক্ষণ করুন"
+                  title="বর্তমান রেজাল্ট শিট PDF বা Word (.DOC) সংরক্ষণ করুন"
                 >
                   <Printer className="w-3.5 h-3.5 text-amber-400" />
-                  <span>প্রিন্ট শিট (PDF)</span>
+                  <span>প্রিন্ট শিট (PDF / DOC)</span>
                 </button>
               </div>
             </div>

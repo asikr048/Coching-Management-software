@@ -5,6 +5,7 @@ import {
   X,
   Printer,
   FileText,
+  FileDown,
   LayoutTemplate,
   ArrowUpDown,
   Trophy,
@@ -15,7 +16,10 @@ import {
   Users,
   Award,
   Layers,
+  Info,
 } from "lucide-react"
+import { toast } from "sonner"
+import { exportElementToWordDoc } from "@/lib/export-word-doc"
 import PrintableExamSheet, { PrintableExamSheetProps } from "./PrintableExamSheet"
 import StudentProgressReport, {
   ProgressReportStudent,
@@ -878,8 +882,38 @@ export default function ExamPrintModal({
     ]
   }
 
+  const [exportingDoc, setExportingDoc] = useState(false)
+
   function handlePrint() {
     window.print()
+  }
+
+  function handleExportWordDoc() {
+    setExportingDoc(true)
+    try {
+      const container = document.getElementById("print-document-container")
+      if (!container) {
+        toast.error("ডকুমেন্ট কন্টেইনার পাওয়া যায়নি")
+        return
+      }
+      const rawTitle = pdfTitle || displayTitle || "Exam-Result"
+      const batchPart = activeBatchName ? `_${activeBatchName}` : ""
+      const fileName = `${rawTitle}${batchPart}_${template}`
+      const success = exportElementToWordDoc(container, {
+        filename: fileName,
+        title: rawTitle,
+        orientation: orientation,
+      })
+      if (success) {
+        toast.success("Microsoft Word (.doc) ফাইল সফলভাবে তৈরি ও ডাউনলোড হয়েছে!")
+      } else {
+        toast.error("Word ফাইল তৈরিতে সমস্যা হয়েছে")
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Word ফাইল ডাউনলোড করতে ব্যর্থ হয়েছে")
+    } finally {
+      setExportingDoc(false)
+    }
   }
 
   if (!isOpen) return null
@@ -1026,10 +1060,22 @@ export default function ExamPrintModal({
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+                className="px-3.5 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0"
+                title="রেজাল্ট শিটটি প্রিন্ট করুন অথবা ব্রাউজারের Save as PDF দিয়ে সংরক্ষণ করুন"
               >
                 <Printer className="w-4 h-4 text-white" />
-                <span>প্রিন্ট / PDF সংরক্ষণ</span>
+                <span>PDF সংরক্ষণ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportWordDoc}
+                disabled={exportingDoc}
+                className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                title="Microsoft Word (.doc) এডিটেবল ফাইল হিসেবে ডাউনলোড করুন"
+              >
+                <FileDown className="w-4 h-4 text-white" />
+                <span>{exportingDoc ? "Word তৈরি হচ্ছে..." : "Word (.DOC) সংরক্ষণ"}</span>
               </button>
 
               <button
@@ -1514,30 +1560,42 @@ export default function ExamPrintModal({
         </div>
 
         {/* Modal Bottom Footer (Screen only) */}
-        <div className="p-3 bg-white border-t border-slate-200 flex items-center justify-between text-xs text-slate-500 shrink-0 print:hidden">
+        <div className="p-3 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 shrink-0 print:hidden">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-amber-500" />
+            <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
             <span>
               {template === "progress_report"
-                ? `প্রিন্ট ডায়ালগ থেকে "Save as PDF" দিলে প্রতি শিক্ষার্থীর জন্য ১ পেজ হিসেবে মোট ${targetProgressReportStudents.length} পেজ তৈরি হবে।`
-                : "টিপস: ব্রাউজারের প্রিন্ট ডায়ালগ থেকে 'Save as PDF' সিলেক্ট করে A4 সাইজে ডাউনলোড করতে পারবেন।"}
+                ? `প্রিন্ট ডায়ালগ থেকে "Save as PDF" দিলে প্রতি শিক্ষার্থীর জন্য ১ পেজ হিসেবে মোট ${targetProgressReportStudents.length} পেজ তৈরি হবে। অথবা Word ডকুমেন্ট হিসেবে ডাউনলোড করতে পারেন।`
+                : "টিপস: রেজাল্ট শিটটি সরাসরি 'PDF সংরক্ষণ' করতে পারেন অথবা এডিটেবল 'Word (.DOC)' ডকুমেন্ট হিসেবে ডাউনলোড করে নিতে পারেন।"}
             </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer"
+              className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg cursor-pointer text-xs transition"
             >
               বন্ধ করুন
             </button>
             <button
               type="button"
-              onClick={handlePrint}
-              className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs"
+              onClick={handleExportWordDoc}
+              disabled={exportingDoc}
+              className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs text-xs active:scale-95 disabled:opacity-50 transition"
+              title="Microsoft Word (.doc) ফাইল হিসেবে ডাউনলোড করুন"
             >
-              <Printer className="w-3.5 h-3.5" /> প্রিন্ট করুন
+              <FileDown className="w-3.5 h-3.5 text-white" />
+              <span>{exportingDoc ? "Word তৈরি হচ্ছে..." : "Word (.DOC) সংরক্ষণ"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white font-black rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs text-xs active:scale-95 transition"
+              title="ব্রাউজারের প্রিন্ট ডায়ালগ থেকে সরাসরি প্রিন্ট বা Save as PDF করুন"
+            >
+              <Printer className="w-3.5 h-3.5 text-white" />
+              <span>PDF সংরক্ষণ / প্রিন্ট</span>
             </button>
           </div>
         </div>
