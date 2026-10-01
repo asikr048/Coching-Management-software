@@ -622,7 +622,9 @@ export async function POST(
 
     const effectiveTotalMarks = calculatedWeeklyMax > 0 ? calculatedWeeklyMax : (Number(currentExam.total_marks) || 100)
 
-    // Deep merge day marks for every student
+    const studentsToPurge: string[] = []
+
+    // Map and normalize day marks for every student in updates
     const mergedUpdates = updates.map((u) => {
       const existingRow = existingStudentMap[u.student_id]
       let existingDays: Record<string, any> = {}
@@ -637,13 +639,16 @@ export async function POST(
         existingDays = { ...existingNoteMap[u.student_id] }
       }
 
-      // Merge existing days with incoming updates with canonical lowercase keys
-      const mergedDays: Record<string, any> = {
-        ...normalizeDayMarks(existingDays),
-        ...normalizeDayMarks(u.day_marks),
+      // If u.day_marks is explicitly provided (e.g. from saveStudentMark or clearStudentMark),
+      // it is the authoritative day map for this student. Do not revive deleted days from existingDays!
+      let mergedDays: Record<string, any> = {}
+      if (u.day_marks !== undefined && typeof u.day_marks === "object") {
+        mergedDays = normalizeDayMarks(u.day_marks)
+      } else {
+        mergedDays = normalizeDayMarks(existingDays)
       }
 
-      // Recalculate true cumulative grand total across all merged days
+      // Recalculate true cumulative grand total across all days
       let cumulativeGrandTotal = 0
       let hasAnyDay = false
       for (const dayItem of Object.values(mergedDays)) {
@@ -655,6 +660,10 @@ export async function POST(
       }
 
       const finalObtainedMarks = hasAnyDay ? cumulativeGrandTotal : (Number(u.obtained_marks) || 0)
+
+      if (!hasAnyDay && (!u.obtained_marks || Number(u.obtained_marks) === 0)) {
+        studentsToPurge.push(u.student_id)
+      }
       
       // Calculate grade
       let grade = u.grade
@@ -677,62 +686,92 @@ export async function POST(
       }
     })
 
-    // Upsert into exam_results with day_marks
-    const payloadWithDayMarks = mergedUpdates.map((u) => ({
-      exam_id: examId,
-      student_id: u.student_id,
-      obtained_marks: u.obtained_marks,
-      grade: u.grade,
-      day_marks: u.day_marks || {},
-    }))
+    // If any student was completely cleared (no marks, no days), delete their row
+    if (studentsToPurge.length > 0) {
+      await admin
+        .from("exam_results")
+        .delete()
+        .eq("exam_id", examId)
+        .in("student_id", studentsToPurge)
+    }
 
-    const { error: upsertErr } = await admin
-      .from("exam_results")
-      .upsert(payloadWithDayMarks, { onConflict: "exam_id,student_id" })
+    // Upsert remaining students into exam_results
+    const activeUpdates = mergedUpdates.filter((u) => !studentsToPurge.includes(u.student_id))
 
-    if (upsertErr) {
-      console.warn("Attempting exam_results upsert without day_marks column:", upsertErr.message)
-      const payloadWithoutDayMarks = mergedUpdates.map((u) => ({
+    if (activeUpdates.length > 0) {
+      const payloadWithDayMarks = activeUpdates.map((u) => ({
         exam_id: examId,
         student_id: u.student_id,
         obtained_marks: u.obtained_marks,
         grade: u.grade,
+        day_marks: u.day_marks || {},
       }))
 
-      const { error: fbErr } = await admin
+      const { error: upsertErr } = await admin
         .from("exam_results")
-        .upsert(payloadWithoutDayMarks, { onConflict: "exam_id,student_id" })
+        .upsert(payloadWithDayMarks, { onConflict: "exam_id,student_id" })
 
-      if (fbErr) {
-        return NextResponse.json({ error: fbErr.message }, { status: 500 })
+      if (upsertErr) {
+        console.warn("Attempting exam_results upsert without day_marks column:", upsertErr.message)
+        const payloadWithoutDayMarks = activeUpdates.map((u) => ({
+          exam_id: examId,
+          student_id: u.student_id,
+          obtained_marks: u.obtained_marks,
+          grade: u.grade,
+        }))
+
+        const { error: fbErr } = await admin
+          .from("exam_results")
+          .upsert(payloadWithoutDayMarks, { onConflict: "exam_id,student_id" })
+
+        if (fbErr) {
+          return NextResponse.json({ error: fbErr.message }, { status: 500 })
+        }
       }
     }
 
-    // Backup day marks into exams.result_note [STUDENT_DAY_MARKS:...]
+    // Build authoritative backup day marks map for exams.result_note [STUDENT_DAY_MARKS:...]
     const mergedMap: Record<string, Record<string, any>> = {}
-    for (const [stId, dMap] of Object.entries(existingNoteMap)) {
-      mergedMap[stId] = normalizeDayMarks(dMap)
-    }
+
     if (body.all_day_marks && typeof body.all_day_marks === "object") {
+      // If client provided full all_day_marks, it is authoritative
       for (const [stId, dMap] of Object.entries(body.all_day_marks)) {
-        mergedMap[stId] = {
-          ...(mergedMap[stId] || {}),
-          ...normalizeDayMarks(dMap as any),
+        const norm = normalizeDayMarks(dMap as any)
+        if (Object.keys(norm).length > 0) {
+          mergedMap[stId] = norm
+        }
+      }
+    } else {
+      // Otherwise, start from existingNoteMap and merge current updates
+      for (const [stId, dMap] of Object.entries(existingNoteMap)) {
+        const norm = normalizeDayMarks(dMap)
+        if (Object.keys(norm).length > 0) {
+          mergedMap[stId] = norm
+        }
+      }
+      for (const u of mergedUpdates) {
+        const norm = normalizeDayMarks(u.day_marks)
+        if (Object.keys(norm).length > 0) {
+          mergedMap[u.student_id] = norm
+        } else {
+          delete mergedMap[u.student_id]
         }
       }
     }
-    for (const u of mergedUpdates) {
-      if (u.day_marks && Object.keys(u.day_marks).length > 0) {
-        mergedMap[u.student_id] = {
-          ...(mergedMap[u.student_id] || {}),
-          ...normalizeDayMarks(u.day_marks),
-        }
-      }
+
+    // Ensure purged students are deleted from mergedMap
+    for (const pid of studentsToPurge) {
+      delete mergedMap[pid]
+    }
+    if (body.clear_student_id) {
+      delete mergedMap[body.clear_student_id]
     }
 
     const currentNote = currentExam.result_note || ""
-    const updatedNote = currentNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() +
-      ` [STUDENT_DAY_MARKS:${JSON.stringify(mergedMap)}]`
+    const cleanedNoteBase = currentNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim()
+    const updatedNote = Object.keys(mergedMap).length > 0
+      ? `${cleanedNoteBase} [STUDENT_DAY_MARKS:${JSON.stringify(mergedMap)}]`.trim()
+      : cleanedNoteBase
 
     await admin
       .from("exams")

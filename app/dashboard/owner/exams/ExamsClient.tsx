@@ -1247,6 +1247,7 @@ export default function ExamsClient({
       .replace(/\[PUBLIC_RESULT:(true|false)\]/g, "")
       .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
       .replace(/\[IS_WEEKLY_PUBLISHED:(true|false)\]/g, "")
+      .replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "")
       .trim()
 
     let initialTitle = exam.title || ""
@@ -1450,7 +1451,12 @@ export default function ExamsClient({
           show_results_immediately: form.show_results_immediately,
           show_all_results: form.show_all_results,
           result_note: (form.result_note 
-            ? cleanWeeklyScheduleFromNote(form.result_note).replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "").replace(/\[EXAM_SCHEDULE_TYPE:[^\]]*\]/g, "").trim() + " " 
+            ? cleanWeeklyScheduleFromNote(form.result_note)
+                .replace(/\[SHOW_ALL_RESULTS:(true|false)\]/g, "")
+                .replace(/\[EXAM_SCHEDULE_TYPE:[^\]]*\]/g, "")
+                .replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "")
+                .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
+                .trim() + " " 
             : "") + 
             `[SHOW_ALL_RESULTS:${form.show_all_results}]` +
             (form.exam_schedule_type === "weekly" 
@@ -1629,7 +1635,12 @@ export default function ExamsClient({
         show_results_immediately: form.show_results_immediately,
         show_all_results: form.show_all_results,
         result_note: (() => {
-          let baseNote = form.result_note ? form.result_note.trim() + " " : ""
+          let baseNote = form.result_note 
+            ? form.result_note
+                .replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "")
+                .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
+                .trim() + " " 
+            : ""
           if (form.exam_schedule_type === "weekly" && !baseNote.includes("[SERIES_ID:")) {
             const newSeriesId = `series_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
             baseNote = `[SERIES_ID:${newSeriesId}] [SERIES_WEEK:1] ` + baseNote

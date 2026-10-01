@@ -498,6 +498,16 @@ export default function ExamResultsPage() {
 
   // Load Exam and Student Data
   useEffect(() => {
+    // Clear marks, drafts, and results from previous exam/week immediately so nothing leaks across exams
+    setSavedResults({})
+    setDayMarksMap({})
+    setDraftMarks({})
+    setDraftCellMarks({})
+    setDraftMcqMarks({})
+    setDraftWrMarks({})
+    setJustSavedIds(new Set())
+    setFetching(true)
+
     async function load() {
       try {
         let ex: any = null
@@ -743,41 +753,6 @@ export default function ExamResultsPage() {
             }
           } catch (err) {
             console.warn("Could not parse exam fallback day marks:", err)
-          }
-        }
-
-        // Smart Recovery for weekly exams:
-        // If a student already has an obtained_mark (e.g. from Saturday's entry)
-        // but dayMarks[sId] is empty, assign it to the first day so Day 1 is never lost
-        const isWeekly = ex?.exam_schedule_type === "weekly" || (Array.isArray(ex?.recurring_days) && ex?.recurring_days.length > 0) || ex?.result_note?.includes("[WEEKLY_SCHEDULE:") || ex?.title?.includes("সাপ্তাহিক")
-        if (isWeekly) {
-          let firstKey = "saturday"
-          let firstTotal = ex?.total_marks || 50
-          let firstSubj = ex?.subject || ""
-          let firstExamName = "পরীক্ষা"
-          if (Array.isArray(ex?.recurring_days) && ex.recurring_days.length > 0) {
-            const d0 = ex.recurring_days[0]
-            const rawKey = typeof d0 === "object" ? (d0.day || d0.day_bn || "saturday") : d0
-            firstKey = String(rawKey).toLowerCase()
-            firstTotal = typeof d0 === "object" && d0.total_marks ? Number(d0.total_marks) : ex.total_marks || 50
-            firstSubj = typeof d0 === "object" && d0.subject ? d0.subject : ex.subject || ""
-            firstExamName = typeof d0 === "object" && d0.exam_name ? d0.exam_name : "পরীক্ষা"
-          }
-          for (const [sId, res] of Object.entries(map)) {
-            if (resolvedStudents.length > 0 && !validStudentIds.has(sId)) continue
-            const currentDays = dayMarks[sId] || {}
-            if (Object.keys(currentDays).length === 0 && res.obtained_marks !== "" && !isNaN(parseFloat(res.obtained_marks))) {
-              const numVal = parseFloat(res.obtained_marks)
-              dayMarks[sId] = {
-                [firstKey]: {
-                  marks: numVal,
-                  total: firstTotal,
-                  grade: res.grade || getGrade(numVal, firstTotal),
-                  subject: firstSubj,
-                  exam_name: firstExamName,
-                }
-              }
-            }
           }
         }
 
@@ -1942,6 +1917,9 @@ export default function ExamResultsPage() {
   useEffect(() => {
     if (fetching) return
 
+    setDraftMcqMarks({})
+    setDraftWrMarks({})
+
     if (!isWeeklyExam || selectedTab === "weekly_aggregate") {
       const drafts: Record<string, string> = {}
       for (const s of students) {
@@ -1959,7 +1937,7 @@ export default function ExamResultsPage() {
       drafts[s.id] = dMark && !isNaN(Number(dMark.marks)) ? String(dMark.marks) : ""
     }
     setDraftMarks(drafts)
-  }, [selectedTab, isWeeklyExam, students, fetching, activeDayConfig?.key])
+  }, [selectedTab, isWeeklyExam, students, fetching, activeDayConfig?.key, dayMarksMap, savedResults])
 
   // Close search dropdown on outside click
   useEffect(() => {
@@ -2899,6 +2877,9 @@ export default function ExamResultsPage() {
           ...dayMarksMap,
           [studentId]: currentStudentDays,
         }
+        if (remainingValues.length === 0) {
+          delete updatedAllDayMarks[studentId]
+        }
 
         await fetch(`/api/exams/${exam.id}/results`, {
           method: "POST",
@@ -2909,6 +2890,8 @@ export default function ExamResultsPage() {
             grade: overallGrade,
             day_marks: currentStudentDays,
             all_day_marks: updatedAllDayMarks,
+            replace_day_marks: true,
+            clear_student_id: remainingValues.length === 0 ? studentId : undefined,
           }),
         })
 
@@ -2930,10 +2913,22 @@ export default function ExamResultsPage() {
           }))
         }
 
-        setDayMarksMap((prev) => ({
-          ...prev,
-          [studentId]: currentStudentDays,
-        }))
+        const curNote = exam.result_note || ""
+        const cleanedNoteBase = curNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim()
+        const newNote = Object.keys(updatedAllDayMarks).length > 0
+          ? `${cleanedNoteBase} [STUDENT_DAY_MARKS:${JSON.stringify(updatedAllDayMarks)}]`.trim()
+          : cleanedNoteBase
+        setExam((prev: any) => prev ? { ...prev, result_note: newNote } : prev)
+
+        setDayMarksMap((prev) => {
+          const next = { ...prev }
+          if (remainingValues.length === 0) {
+            delete next[studentId]
+          } else {
+            next[studentId] = currentStudentDays
+          }
+          return next
+        })
         setDraftMarks((prev) => ({
           ...prev,
           [studentId]: "",
@@ -2964,7 +2959,27 @@ export default function ExamResultsPage() {
 
     if (!confirm(`Are you sure you want to clear results for ${studentName}?`)) return
     try {
+      const remainingDayMarks = { ...dayMarksMap }
+      delete remainingDayMarks[studentId]
+
+      await fetch(`/api/exams/${exam.id}/results`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clear_student_id: studentId,
+          all_day_marks: remainingDayMarks,
+        }),
+      })
+
       await supabase.from("exam_results").delete().eq("exam_id", exam.id).eq("student_id", studentId)
+
+      const curNote = exam.result_note || ""
+      const cleanedNoteBase = curNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim()
+      const newNote = Object.keys(remainingDayMarks).length > 0
+        ? `${cleanedNoteBase} [STUDENT_DAY_MARKS:${JSON.stringify(remainingDayMarks)}]`.trim()
+        : cleanedNoteBase
+      setExam((prev: any) => prev ? { ...prev, result_note: newNote } : prev)
+
       setSavedResults((prev) => {
         const next = { ...prev }
         delete next[studentId]
@@ -3583,10 +3598,36 @@ export default function ExamResultsPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to clear marks")
 
+      try {
+        await supabase.from("exam_results").delete().eq("exam_id", exam.id)
+      } catch {}
+
+      const cleanedNote = (exam.result_note || "")
+        .replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "")
+        .replace(/\[PUBLISHED_DAYS:[^\]]*\]/g, "")
+        .trim()
+
+      try {
+        await supabase.from("exams").update({
+          result_note: cleanedNote,
+          is_published: false,
+          is_weekly_published: false,
+        }).eq("id", exam.id)
+      } catch {}
+
+      setExam((prev: any) => prev ? {
+        ...prev,
+        result_note: cleanedNote,
+        is_published: false,
+        is_weekly_published: false,
+      } : prev)
+
       setSavedResults({})
       setDayMarksMap({})
       setDraftMarks({})
       setDraftCellMarks({})
+      setDraftMcqMarks({})
+      setDraftWrMarks({})
       setJustSavedIds(new Set())
       setIsWeeklyPublished(false)
       setPublishedDays([])

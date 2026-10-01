@@ -218,6 +218,16 @@ export default function ExamPrintModal({
     }
   }, [template, selectedMode])
 
+  // Close modal on Escape key
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isOpen, onClose])
+
   const currentDayConfig = weeklyDays.find((d) => d.key === selectedDayKey) || activeDayConfig || weeklyDays[0] || null
 
   // Resolved list of batches relevant to this exam (ONLY batches selected at creation time)
@@ -919,7 +929,12 @@ export default function ExamPrintModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-transparent print:static print:z-auto">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-transparent print:static print:z-auto"
+    >
       {/* Dynamic Print CSS for Strict A4 and Clean Pagination */}
       <style jsx global>{`
         @media print {
@@ -1027,62 +1042,68 @@ export default function ExamPrintModal({
       `}</style>
 
       <div
+        onClick={(e) => e.stopPropagation()}
         className={cn(
-          "bg-slate-100 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xl w-full max-h-[96vh] flex flex-col overflow-hidden print:border-none print:shadow-none print:max-w-none print:max-h-none print:bg-white",
+          "bg-slate-100 rounded-2xl sm:rounded-3xl border border-slate-300 shadow-2xl w-full max-h-[96vh] flex flex-col overflow-hidden relative print:border-none print:shadow-none print:max-w-none print:max-h-none print:bg-white",
           orientation === "landscape" ? "max-w-[1180px]" : "max-w-4xl"
         )}
       >
         {/* Top Control Bar (Screen only) */}
-        <div className="p-4 bg-white border-b border-slate-200 flex flex-col gap-3 shrink-0 print:hidden">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <span className="p-2 rounded-xl bg-amber-500 text-white font-bold shadow-xs">
+        <div className="p-3 sm:p-4 bg-white border-b border-slate-200 flex flex-col gap-2.5 sm:gap-3 shrink-0 print:hidden relative">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <span className="p-2 rounded-xl bg-amber-500 text-white font-bold shadow-xs shrink-0">
                 <Printer className="w-5 h-5" />
               </span>
-              <div>
-                <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+              <div className="min-w-0">
+                <h2 className="text-sm sm:text-base font-black text-slate-900 flex items-center gap-1.5 sm:gap-2 flex-wrap">
                   <span>পরীক্ষার রেজাল্ট প্রিন্ট ও PDF প্রিভিউ</span>
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                     A4 Ready
                   </span>
-                  <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="hidden md:inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                     <span>লাইভ রিয়েল-টাইম সিঙ্ক</span>
                   </span>
                 </h2>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-500 truncate">
                   {pdfTitle || displayTitle} • {activeBatchName} ({filteredStudents.length} জন শিক্ষার্থী)
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <button
                 type="button"
                 onClick={handlePrint}
-                className="px-3.5 py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0"
+                className="px-3 sm:px-3.5 py-1.5 sm:py-2 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-red-500/20 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 shrink-0"
                 title="রেজাল্ট শিটটি প্রিন্ট করুন অথবা ব্রাউজারের Save as PDF দিয়ে সংরক্ষণ করুন"
               >
                 <Printer className="w-4 h-4 text-white" />
-                <span>PDF সংরক্ষণ</span>
+                <span className="hidden sm:inline">PDF সংরক্ষণ</span>
+                <span className="sm:hidden">PDF</span>
               </button>
 
               <button
                 type="button"
                 onClick={handleExportWordDoc}
                 disabled={exportingDoc}
-                className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50 shrink-0"
+                className="px-3 sm:px-3.5 py-1.5 sm:py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer transition-all active:scale-95 disabled:opacity-50 shrink-0"
                 title="Microsoft Word (.doc) এডিটেবল ফাইল হিসেবে ডাউনলোড করুন"
               >
                 <FileDown className="w-4 h-4 text-white" />
-                <span>{exportingDoc ? "Word তৈরি হচ্ছে..." : "Word (.DOC) সংরক্ষণ"}</span>
+                <span className="hidden sm:inline">{exportingDoc ? "Word তৈরি হচ্ছে..." : "Word (.DOC) সংরক্ষণ"}</span>
+                <span className="sm:hidden">Word</span>
               </button>
+
+              <div className="h-6 w-px bg-slate-200 mx-0.5 sm:mx-1" />
 
               <button
                 type="button"
                 onClick={onClose}
-                className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-                title="বন্ধ করুন"
+                className="p-1.5 sm:p-2 text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 hover:border-slate-300 rounded-xl transition-all cursor-pointer shadow-2xs shrink-0 flex items-center justify-center active:scale-95"
+                title="বন্ধ করুন (Esc)"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
