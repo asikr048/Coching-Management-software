@@ -643,7 +643,7 @@ export default function NewStudentForm({
   const missingFields = useMemo(() => {
     if (!selectedStudent) return []
     const missing: string[] = []
-    if (!selectedStudent.guardian_phone) missing.push("guardian_phone")
+    // Guardian phone is optional - do not flag as missing
     if (!selectedStudent.guardian_name) missing.push("guardian_name")
     if (!selectedStudent.address) missing.push("address")
     if (!selectedStudent.class_level) missing.push("class_level")
@@ -924,7 +924,7 @@ export default function NewStudentForm({
 
       if (mode === "existing") {
         if (!selectedStudent) { toast.error("Select a student"); setLoading(false); return }
-        if (missingFields.includes("guardian_phone") && !existingFix.guardian_phone.trim()) { toast.error("Guardian phone is required"); setLoading(false); return }
+        // Guardian phone is optional - do not block submission
         sid = selectedStudent.id; dispId = selectedStudent.student_id
         studentName = selectedStudent.name
         studentPhone = selectedStudent.phone || ""
@@ -935,7 +935,7 @@ export default function NewStudentForm({
         // Update missing info
         const updates: Record<string, string> = {}
         if (selectedBranchId && !selectedStudent.branch_id) (updates as any).branch_id = selectedBranchId
-        if (missingFields.includes("guardian_phone") && existingFix.guardian_phone.trim()) updates.guardian_phone = existingFix.guardian_phone.trim()
+        if (existingFix.guardian_phone.trim()) updates.guardian_phone = existingFix.guardian_phone.trim()
         if (missingFields.includes("guardian_name") && existingFix.guardian_name.trim()) updates.guardian_name = existingFix.guardian_name.trim()
         if (missingFields.includes("address") && existingFix.address.trim()) updates.address = existingFix.address.trim()
         if (missingFields.includes("class_level") && existingFix.class_level.trim()) updates.class_level = existingFix.class_level.trim()
@@ -943,7 +943,7 @@ export default function NewStudentForm({
         if (Object.keys(updates).length > 0) await supabase.from("students").update(updates).eq("id", sid)
       } else {
         if (!form.name.trim()) { toast.error("Name required"); setLoading(false); return }
-        if (!form.guardian_phone.trim()) { toast.error("Guardian phone required"); setLoading(false); return }
+        // Guardian phone is optional
         if (!form.password || form.password.length < 6) { toast.error("Password min 6 chars"); setLoading(false); return }
         if (form.password !== form.confirmPassword) { toast.error("Passwords don't match"); setLoading(false); return }
 
@@ -1111,6 +1111,9 @@ export default function NewStudentForm({
         eErr.message?.includes("schema cache") || 
         (eErr as any).code === "PGRST204"
       )) {
+        if (eErr.message?.includes("final_monthly_fee") || eErr.message?.includes("schema cache") || (eErr as any).code === "PGRST204") {
+          delete enrollPayload.final_monthly_fee
+        }
         if (eErr.message?.includes("qr_code")) {
           delete enrollPayload.qr_code
         }
@@ -1805,8 +1808,8 @@ export default function NewStudentForm({
               {missingFields.includes("guardian_name") && (
                 <div><label className={labelCls}>Guardian Name</label><input value={existingFix.guardian_name} onChange={e => setExistingFix(f => ({...f, guardian_name: e.target.value}))} className={ic} placeholder="Guardian name" /></div>
               )}
-              {missingFields.includes("guardian_phone") && (
-                <div><label className={`${labelCls} text-rose-600`}>Guardian Phone *</label><input required value={existingFix.guardian_phone} onChange={e => setExistingFix(f => ({...f, guardian_phone: e.target.value}))} className={`${ic} border-rose-300 focus:border-rose-500 focus:ring-rose-500/20`} placeholder="01..." /></div>
+              {!selectedStudent.guardian_phone && (
+                <div><label className={labelCls}>Guardian Phone (ঐচ্ছিক)</label><input value={existingFix.guardian_phone} onChange={e => setExistingFix(f => ({...f, guardian_phone: e.target.value}))} className={ic} placeholder="01... (ঐচ্ছিক)" /></div>
               )}
               {missingFields.includes("address") && (
                 <div><label className={labelCls}>Address</label><input value={existingFix.address} onChange={e => setExistingFix(f => ({...f, address: e.target.value}))} className={ic} /></div>
@@ -1863,7 +1866,7 @@ export default function NewStudentForm({
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <div><label className={labelCls}>Name</label><input value={form.guardian_name} onChange={e => update("guardian_name", e.target.value)} className={ic} /></div>
-                <div><label className={labelCls}>Phone *</label><input required value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={ic} placeholder="01..." /></div>
+                <div><label className={labelCls}>Phone (ঐচ্ছিক)</label><input value={form.guardian_phone} onChange={e => update("guardian_phone", e.target.value)} className={ic} placeholder="01... (ঐচ্ছিক)" /></div>
                 <div><label className={labelCls}>Relation</label><select value={form.guardian_relation} onChange={e => update("guardian_relation", e.target.value)} className={ic}><option>Parent</option><option>Father</option><option>Mother</option><option>Uncle</option><option>Other</option></select></div>
                 <div><label className={labelCls}>Address</label><input value={form.address} onChange={e => update("address", e.target.value)} className={ic} /></div>
               </div>

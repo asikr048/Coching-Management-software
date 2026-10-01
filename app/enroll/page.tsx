@@ -596,7 +596,7 @@ function EnrollContent() {
         toast.error("Please enter a valid 11-digit student phone number (01XXXXXXXXX)")
         return
       }
-      if (!form.guardian_phone.trim() || form.guardian_phone.trim().length < 11) {
+      if (form.guardian_phone.trim() && form.guardian_phone.trim().length < 11) {
         toast.error("Please enter a valid 11-digit guardian phone number (01XXXXXXXXX)")
         return
       }
@@ -2115,16 +2115,15 @@ function EnrollContent() {
                 </div>
 
                 <div>
-                  <label className={labelClass}>Guardian Phone Number <span className="text-red-500">*</span></label>
+                  <label className={labelClass}>Guardian Phone Number <span className="text-gray-400 font-normal text-xs">(Optional)</span></label>
                   <div className="relative">
                     <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
-                      required
                       type="tel"
                       value={form.guardian_phone}
                       onChange={e => updateForm("guardian_phone", e.target.value)}
                       className={`${inputClass} pl-10 font-mono`}
-                      placeholder="01XXXXXXXXX"
+                      placeholder="01XXXXXXXXX (optional)"
                     />
                   </div>
                 </div>

@@ -21,13 +21,11 @@ export function normalizeDayMarks(days: Record<string, any> | undefined | null):
   if (!days || typeof days !== "object") return {}
   const normalized: Record<string, any> = {}
   for (const [key, val] of Object.entries(days)) {
-    if (!val) continue
+    if (val === undefined || val === null || val === "") continue
     const lowerKey = key.trim().toLowerCase()
     const matched = ALL_WEEK_DAYS.find((d) => d.id === lowerKey || d.bn === key || d.en.toLowerCase() === lowerKey)
     const canonicalKey = matched ? matched.id : lowerKey
-    if (!normalized[canonicalKey] || (typeof val === "object" && val !== null && "marks" in val)) {
-      normalized[canonicalKey] = val
-    }
+    normalized[canonicalKey] = val
   }
   return normalized
 }
@@ -268,8 +266,23 @@ export async function GET(
           sDayMarks = normalizeDayMarks(fallbackStudentDayMarks[item.student_id])
         }
         const studentRoll = rollMap.get(item.student_id) || item.student?.roll_no || item.student?.batch_roll || null
+        let obt = Number(item.obtained_marks) || 0
+        if (isWeeklyExam && Object.keys(sDayMarks).length > 0) {
+          let sumDay = 0
+          let hasAny = false
+          for (const dItem of Object.values(sDayMarks)) {
+            const m = typeof dItem === "object" && dItem !== null ? Number((dItem as any).marks) : Number(dItem)
+            if (!isNaN(m)) {
+              sumDay += m
+              hasAny = true
+            }
+          }
+          if (hasAny) obt = sumDay
+        }
+
         return {
           ...item,
+          obtained_marks: obt,
           roll_no: studentRoll,
           student: item.student ? { ...item.student, roll_no: studentRoll } : item.student,
           day_marks: sDayMarks,
@@ -387,6 +400,20 @@ export async function GET(
         admin.from("exam_results").update({ rank: computedRank }).eq("id", ownResult.id).then(() => {})
       }
 
+      let ownObt = Number(ownResult?.obtained_marks) || 0
+      if (isWeeklyExam && Object.keys(ownDayMarks).length > 0) {
+        let sumDay = 0
+        let hasAny = false
+        for (const dItem of Object.values(ownDayMarks)) {
+          const m = typeof dItem === "object" && dItem !== null ? Number((dItem as any).marks) : Number(dItem)
+          if (!isNaN(m)) {
+            sumDay += m
+            hasAny = true
+          }
+        }
+        if (hasAny) ownObt = sumDay
+      }
+
       return NextResponse.json({
         success: true,
         exam: {
@@ -395,7 +422,7 @@ export async function GET(
           pass_marks: cumulativePass,
           show_all_results: false,
         },
-        results: ownResult ? [{ ...ownResult, day_marks: ownDayMarks || {}, rank: computedRank, is_current_student: true }] : [],
+        results: ownResult ? [{ ...ownResult, obtained_marks: ownObt, day_marks: ownDayMarks || {}, rank: computedRank, is_current_student: true }] : [],
         can_view_all: false,
         is_private: true,
         current_student_id: currentStudentId,
@@ -637,28 +664,41 @@ export async function POST(
         existingDays = { ...existingNoteMap[u.student_id] }
       }
 
+      const hasIncomingDayMarks = u.day_marks && typeof u.day_marks === "object" && Object.keys(u.day_marks).length > 0
+
       // Merge existing days with incoming updates with canonical lowercase keys
-      const mergedDays: Record<string, any> = {
-        ...normalizeDayMarks(existingDays),
-        ...normalizeDayMarks(u.day_marks),
-      }
+      const mergedDays: Record<string, any> = isWeekly
+        ? {
+            ...normalizeDayMarks(existingDays),
+            ...(hasIncomingDayMarks ? normalizeDayMarks(u.day_marks) : {}),
+          }
+        : {}
 
-      // Recalculate true cumulative grand total across all merged days
-      let cumulativeGrandTotal = 0
-      let hasAnyDay = false
-      for (const dayItem of Object.values(mergedDays)) {
-        const m = typeof dayItem === "object" && dayItem !== null ? Number((dayItem as any).marks) : Number(dayItem)
-        if (!isNaN(m)) {
-          cumulativeGrandTotal += m
-          hasAnyDay = true
+      let finalObtainedMarks: number
+
+      if (!isWeekly) {
+        // ONE-TIME EXAM: obtained_marks is strictly the mark sent by the user!
+        finalObtainedMarks = Number(u.obtained_marks) || 0
+      } else if (hasIncomingDayMarks) {
+        // WEEKLY EXAM WITH DAY-LEVEL UPDATE: Calculate grand total from merged daily marks
+        let cumulativeGrandTotal = 0
+        let hasAnyValidDay = false
+        for (const dayItem of Object.values(mergedDays)) {
+          const m = typeof dayItem === "object" && dayItem !== null ? Number((dayItem as any).marks) : Number(dayItem)
+          if (!isNaN(m)) {
+            cumulativeGrandTotal += m
+            hasAnyValidDay = true
+          }
         }
+        finalObtainedMarks = hasAnyValidDay ? cumulativeGrandTotal : (Number(u.obtained_marks) || 0)
+      } else {
+        // WEEKLY EXAM BUT DIRECT OBTAINED MARKS UPDATE (e.g. from weekly_aggregate tab)
+        finalObtainedMarks = Number(u.obtained_marks) || 0
       }
 
-      const finalObtainedMarks = hasAnyDay ? cumulativeGrandTotal : (Number(u.obtained_marks) || 0)
-      
       // Calculate grade
       let grade = u.grade
-      if (!grade || hasAnyDay) {
+      if (!grade || isWeekly) {
         const pct = (finalObtainedMarks / effectiveTotalMarks) * 100
         if (pct >= 80) grade = "A+"
         else if (pct >= 70) grade = "A"
@@ -708,36 +748,38 @@ export async function POST(
       }
     }
 
-    // Backup day marks into exams.result_note [STUDENT_DAY_MARKS:...]
-    const mergedMap: Record<string, Record<string, any>> = {}
-    for (const [stId, dMap] of Object.entries(existingNoteMap)) {
-      mergedMap[stId] = normalizeDayMarks(dMap)
-    }
-    if (body.all_day_marks && typeof body.all_day_marks === "object") {
-      for (const [stId, dMap] of Object.entries(body.all_day_marks)) {
-        mergedMap[stId] = {
-          ...(mergedMap[stId] || {}),
-          ...normalizeDayMarks(dMap as any),
+    // Backup day marks into exams.result_note ONLY for weekly exams
+    let mergedMap: Record<string, Record<string, any>> = {}
+    if (isWeekly) {
+      for (const [stId, dMap] of Object.entries(existingNoteMap)) {
+        mergedMap[stId] = normalizeDayMarks(dMap)
+      }
+      if (body.all_day_marks && typeof body.all_day_marks === "object") {
+        for (const [stId, dMap] of Object.entries(body.all_day_marks)) {
+          mergedMap[stId] = {
+            ...(mergedMap[stId] || {}),
+            ...normalizeDayMarks(dMap as any),
+          }
         }
       }
-    }
-    for (const u of mergedUpdates) {
-      if (u.day_marks && Object.keys(u.day_marks).length > 0) {
-        mergedMap[u.student_id] = {
-          ...(mergedMap[u.student_id] || {}),
-          ...normalizeDayMarks(u.day_marks),
+      for (const u of mergedUpdates) {
+        if (u.day_marks && Object.keys(u.day_marks).length > 0) {
+          mergedMap[u.student_id] = {
+            ...(mergedMap[u.student_id] || {}),
+            ...normalizeDayMarks(u.day_marks),
+          }
         }
       }
+
+      const currentNote = currentExam.result_note || ""
+      const updatedNote = currentNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() +
+        ` [STUDENT_DAY_MARKS:${JSON.stringify(mergedMap)}]`
+
+      await admin
+        .from("exams")
+        .update({ result_note: updatedNote })
+        .eq("id", examId)
     }
-
-    const currentNote = currentExam.result_note || ""
-    const updatedNote = currentNote.replace(/\[STUDENT_DAY_MARKS:[^\]]*\]/g, "").trim() +
-      ` [STUDENT_DAY_MARKS:${JSON.stringify(mergedMap)}]`
-
-    await admin
-      .from("exams")
-      .update({ result_note: updatedNote })
-      .eq("id", examId)
 
     return NextResponse.json({
       success: true,

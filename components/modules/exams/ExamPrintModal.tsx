@@ -175,14 +175,29 @@ export default function ExamPrintModal({
     setPdfTitle((isWeeklyExam && seriesTitle) ? seriesTitle : (exam.title || ""))
   }, [exam.id, exam.exam_date, exam.title, isWeeklyExam, seriesTitle])
 
-  // Sync mode and orientation when defaultMode changes
+  // Sync mode, day key, and template when props change or modal opens
   useEffect(() => {
-    if (isWeeklyExam) {
-      setSelectedMode(defaultMode)
-    } else {
-      setSelectedMode("one_time")
+    if (isOpen) {
+      if (isWeeklyExam) {
+        setSelectedMode(defaultMode)
+      } else {
+        setSelectedMode("one_time")
+      }
+      if (activeDayConfig?.key) {
+        setSelectedDayKey(activeDayConfig.key.toLowerCase())
+      } else if (weeklyDays.length > 0) {
+        setSelectedDayKey(weeklyDays[0].key.toLowerCase())
+      }
+      setTemplate(defaultTemplate)
     }
-  }, [defaultMode, isWeeklyExam])
+  }, [isOpen, defaultMode, isWeeklyExam, activeDayConfig?.key, defaultTemplate, weeklyDays])
+
+  // Sync day key when activeDayConfig changes
+  useEffect(() => {
+    if (activeDayConfig?.key) {
+      setSelectedDayKey(activeDayConfig.key.toLowerCase())
+    }
+  }, [activeDayConfig?.key])
 
   // Adapt orientation to template
   useEffect(() => {
@@ -193,7 +208,11 @@ export default function ExamPrintModal({
     }
   }, [template, selectedMode])
 
-  const currentDayConfig = weeklyDays.find((d) => d.key === selectedDayKey) || activeDayConfig || weeklyDays[0] || null
+  const currentDayConfig =
+    weeklyDays.find((d) => d.key.toLowerCase() === selectedDayKey.toLowerCase()) ||
+    activeDayConfig ||
+    weeklyDays[0] ||
+    null
 
   // Resolved list of batches relevant to this exam (ONLY batches selected at creation time)
   const relevantBatches = useMemo<BatchItem[]>(() => {
@@ -310,7 +329,7 @@ export default function ExamPrintModal({
         let hasAnyDayMark = false
 
         for (const d of weeklyDays) {
-          const item = studentDays[d.key] || (d.day_bn && studentDays[d.day_bn])
+          const item = getDayMarkItemHelper(studentDays, d.key, d.day_bn, (d as any).day_en)
           if (item && !isNaN(Number(item.marks))) {
             sumMarks += Number(item.marks)
             hasAnyDayMark = true
@@ -338,7 +357,7 @@ export default function ExamPrintModal({
         }
       } else if (isWeeklyDay && currentDayConfig) {
         const studentDays = dayMarksMap[s.id] || {}
-        const item = studentDays[currentDayConfig.key] || (currentDayConfig.day_bn && studentDays[currentDayConfig.day_bn])
+        const item = getDayMarkItemHelper(studentDays, currentDayConfig.key, currentDayConfig.day_bn, (currentDayConfig as any).day_en)
         const hasMark = Boolean(item && !isNaN(Number(item.marks)))
         const mark = hasMark ? Number(item.marks) : 0
         const gradeInfo = calculateCoachingGrade(mark, currentDayConfig.total_marks || 50)
@@ -592,7 +611,7 @@ export default function ExamPrintModal({
     if (isWeeklyAggregate && weeklyDays.length > 0) {
       const sDays = dayMarksMap[studentId] || {}
       return weeklyDays.map((d) => {
-        const item = sDays[d.key] || (d.day_bn && sDays[d.day_bn])
+        const item = getDayMarkItemHelper(sDays, d.key, d.day_bn, (d as any).day_en)
         const score = item && !isNaN(Number(item.marks)) ? Number(item.marks) : 0
         const gradeInfo = calculateCoachingGrade(score, d.total_marks || 50)
         return {
