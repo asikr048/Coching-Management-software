@@ -47,13 +47,21 @@ export async function POST(req: NextRequest) {
           .maybeSingle()
 
         if (!existingEnr) {
-          await admin.from("enrollments").upsert({
+          const { error: insErr } = await admin.from("enrollments").upsert({
             student_id: sub.student_id,
             batch_id: sub.batch_id,
             status: "active",
             enrollment_date: new Date().toISOString().split("T")[0],
             final_monthly_fee: batchFee,
           }, { onConflict: "student_id,batch_id" })
+
+          if (insErr && (insErr.message?.includes("final_monthly_fee") || insErr.message?.includes("schema cache") || (insErr as any).code === "PGRST204")) {
+            await admin.from("enrollments").upsert({
+              student_id: sub.student_id,
+              batch_id: sub.batch_id,
+              status: "active",
+            }, { onConflict: "student_id,batch_id" })
+          }
         } else if (existingEnr.status !== "active") {
           await admin.from("enrollments").update({ status: "active" }).eq("id", existingEnr.id)
         }
@@ -260,8 +268,8 @@ export async function POST(req: NextRequest) {
         enrErr.message?.includes("schema cache") || 
         (enrErr as any).code === "PGRST204"
       )) {
-        if (enrErr.message?.includes("final_monthly_fee") && enrErr.message?.includes("does not exist")) delete enrPayload.final_monthly_fee
-        if (enrErr.message?.includes("enrollment_date") && enrErr.message?.includes("does not exist")) delete enrPayload.enrollment_date
+        if (enrErr.message?.includes("final_monthly_fee") || enrErr.message?.includes("schema cache") || (enrErr as any).code === "PGRST204") delete enrPayload.final_monthly_fee
+        if (enrErr.message?.includes("enrollment_date")) delete enrPayload.enrollment_date
         if (enrErr.message?.includes("roll_no")) delete enrPayload.roll_no
         if (enrErr.message?.includes("branch_id")) delete enrPayload.branch_id
         const retryRes = await admin.from("enrollments").upsert(
@@ -273,20 +281,21 @@ export async function POST(req: NextRequest) {
 
       if (enrErr && !enrErr.message?.includes("duplicate")) {
         console.warn("Enrollment upsert note, trying fallback:", enrErr.message)
+        delete enrPayload.final_monthly_fee
+        delete enrPayload.roll_no
+        delete enrPayload.branch_id
         const fallbackRes = await admin.from("enrollments").insert(enrPayload)
         if (fallbackRes.error && (
           fallbackRes.error.message?.includes("roll_no") ||
           fallbackRes.error.message?.includes("branch_id") || 
           fallbackRes.error.message?.includes("schema cache") || 
+          fallbackRes.error.message?.includes("final_monthly_fee") ||
           (fallbackRes.error as any).code === "PGRST204"
         )) {
-          delete enrPayload.roll_no
-          delete enrPayload.branch_id
           await admin.from("enrollments").insert({
             student_id: sub.student_id,
             batch_id: sub.batch_id,
-            status: "active",
-            final_monthly_fee: batchMonthlyFee
+            status: "active"
           })
         }
       }

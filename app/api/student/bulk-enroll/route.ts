@@ -564,12 +564,13 @@ export async function POST(req: NextRequest) {
           enrErr.message?.includes("roll_no") ||
           enrErr.message?.includes("branch_id") ||
           enrErr.message?.includes("qr_code") ||
+          enrErr.message?.includes("schema cache") ||
           (enrErr as any).code === "PGRST204"
         )) {
-          if (enrErr.message?.includes("final_monthly_fee") && enrErr.message?.includes("does not exist")) {
+          if (enrErr.message?.includes("final_monthly_fee") || enrErr.message?.includes("schema cache") || (enrErr as any).code === "PGRST204") {
             delete enrPayload.final_monthly_fee
           }
-          if (enrErr.message?.includes("enrollment_date") && enrErr.message?.includes("does not exist")) {
+          if (enrErr.message?.includes("enrollment_date")) {
             delete enrPayload.enrollment_date
           }
           delete enrPayload.roll_no
@@ -591,12 +592,13 @@ export async function POST(req: NextRequest) {
             retryUser.error.message?.includes("roll_no") ||
             retryUser.error.message?.includes("branch_id") ||
             retryUser.error.message?.includes("qr_code") ||
+            retryUser.error.message?.includes("schema cache") ||
             (retryUser.error as any).code === "PGRST204"
           )) {
-            if (retryUser.error.message?.includes("final_monthly_fee") && retryUser.error.message?.includes("does not exist")) {
+            if (retryUser.error.message?.includes("final_monthly_fee") || retryUser.error.message?.includes("schema cache") || (retryUser.error as any).code === "PGRST204") {
               delete enrPayload.final_monthly_fee
             }
-            if (retryUser.error.message?.includes("enrollment_date") && retryUser.error.message?.includes("does not exist")) {
+            if (retryUser.error.message?.includes("enrollment_date")) {
               delete enrPayload.enrollment_date
             }
             delete enrPayload.roll_no

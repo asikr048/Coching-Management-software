@@ -331,12 +331,13 @@ export async function POST(req: NextRequest) {
         insErr.message?.includes("final_monthly_fee") ||
         insErr.message?.includes("enrollment_date") ||
         insErr.message?.includes("qr_code") ||
+        insErr.message?.includes("schema cache") ||
         (insErr as any).code === "PGRST204"
       )) {
-        if (insErr.message?.includes("final_monthly_fee") && insErr.message?.includes("does not exist")) {
+        if (insErr.message?.includes("final_monthly_fee") || insErr.message?.includes("schema cache") || (insErr as any).code === "PGRST204") {
           delete enrPayload.final_monthly_fee
         }
-        if (insErr.message?.includes("enrollment_date") && insErr.message?.includes("does not exist")) {
+        if (insErr.message?.includes("enrollment_date")) {
           delete enrPayload.enrollment_date
         }
         delete enrPayload.qr_code
@@ -347,6 +348,26 @@ export async function POST(req: NextRequest) {
           .single()
         newEnr = retry.data
         insErr = retry.error
+
+        // Minimal fallback if still failing with schema cache or column issues
+        if (insErr && (
+          insErr.message?.includes("schema cache") ||
+          insErr.message?.includes("final_monthly_fee") ||
+          (insErr as any).code === "PGRST204" ||
+          (insErr as any).code === "42703"
+        )) {
+          const minimalRetry = await admin
+            .from("enrollments")
+            .insert({
+              student_id,
+              batch_id: targetBatchId,
+              status: "active"
+            })
+            .select("*, batch:batches(name, subject, monthly_fee, admission_fee, class_level)")
+            .single()
+          newEnr = minimalRetry.data
+          insErr = minimalRetry.error
+        }
       }
 
       if (insErr) {

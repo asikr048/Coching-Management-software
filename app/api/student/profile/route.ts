@@ -1005,7 +1005,15 @@ export async function GET(req: NextRequest) {
               status: "active",
               enrollment_date: (sub.approved_at || sub.created_at || new Date().toISOString()).slice(0, 10),
               final_monthly_fee: Number(batchData?.monthly_fee) || 0,
-            }, { onConflict: "student_id,batch_id" }).then()
+            }, { onConflict: "student_id,batch_id" }).then(({ error }: any) => {
+              if (error && (error.message?.includes("final_monthly_fee") || error.message?.includes("schema cache") || (error as any).code === "PGRST204")) {
+                admin.from("enrollments").upsert({
+                  student_id: finalStudentId,
+                  batch_id: sub.batch_id,
+                  status: "active",
+                }, { onConflict: "student_id,batch_id" }).then()
+              }
+            })
           }
         }
       }
