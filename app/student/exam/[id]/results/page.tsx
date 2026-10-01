@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -20,7 +20,7 @@ import {
   Sparkles,
   Users
 } from "lucide-react"
-import { getGrade, formatDate } from "@/lib/utils"
+import { getGrade, formatDate, cn } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
 
 export default function StudentExamResultsPage() {
@@ -33,6 +33,7 @@ export default function StudentExamResultsPage() {
   const [myResult, setMyResult] = useState<any>(null)
   const [leaderboard, setLeaderboard] = useState<any[]>([])
   const [canViewAll, setCanViewAll] = useState(false)
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null)
   
   // MCQ Quiz Submissions (if online test)
   const [submission, setSubmission] = useState<any>(null)
@@ -52,6 +53,18 @@ export default function StudentExamResultsPage() {
         const examData = json.exam || {}
         setExam(examData)
         setCanViewAll(!!json.can_view_all)
+
+        const isWeeklyCheck =
+          examData.exam_schedule_type === "weekly" ||
+          (Array.isArray(examData.recurring_days) && examData.recurring_days.length > 0)
+        if (
+          isWeeklyCheck &&
+          !examData.is_weekly_published &&
+          Array.isArray(examData.published_days) &&
+          examData.published_days.length > 0
+        ) {
+          setSelectedDayKey(examData.published_days[0])
+        }
 
         const resultsList: any[] = json.results || []
         setLeaderboard(resultsList)
@@ -150,28 +163,93 @@ export default function StudentExamResultsPage() {
     (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
     exam.is_weekly_published === true
 
-  const totalMarks =
-    isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-      ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-      : (Number(exam.total_marks) || 100)
+  const recurringDays = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
+  const publishedDays = Array.isArray(exam.published_days) ? exam.published_days : []
+  const isWeeklyPub = exam.is_weekly_published === true
 
-  const passMarks =
-    isWeekly && Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0
-      ? exam.recurring_days.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
-      : (Number(exam.pass_marks) || 33)
+  // If selectedDayKey is explicitly set, use it.
+  // Otherwise, if weekly total is NOT published and we have published days, default to the first published day.
+  const effectiveDayKey =
+    selectedDayKey !== null
+      ? selectedDayKey
+      : (!isWeeklyPub && publishedDays.length > 0)
+      ? publishedDays[0]
+      : null
 
-  // Score determination: preference to myResult, then submission
-  const obtainedMarks = myResult
+  const activeDayConf = effectiveDayKey
+    ? recurringDays.find((d: any) => (d.day || "").toLowerCase() === effectiveDayKey.toLowerCase())
+    : null
+
+  const totalMarks = effectiveDayKey && activeDayConf
+    ? (Number(activeDayConf.total_marks) || 50)
+    : isWeekly && recurringDays.length > 0
+    ? recurringDays.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
+    : (Number(exam.total_marks) || 100)
+
+  const passMarks = effectiveDayKey && activeDayConf
+    ? (Number(activeDayConf.pass_marks) || 20)
+    : isWeekly && recurringDays.length > 0
+    ? recurringDays.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+    : (Number(exam.pass_marks) || 33)
+
+  // Student's day score if viewing a specific day
+  let studentDayMark: number | null = null
+  if (effectiveDayKey && myResult?.day_marks) {
+    const raw = myResult.day_marks[effectiveDayKey] || myResult.day_marks[effectiveDayKey.toLowerCase()]
+    if (raw !== undefined && raw !== null) {
+      studentDayMark = typeof raw === "object" ? Number(raw.marks ?? 0) : Number(raw)
+      if (activeDayConf?.total_marks && studentDayMark > Number(activeDayConf.total_marks)) {
+        studentDayMark = Math.min(studentDayMark, Number(activeDayConf.total_marks))
+      }
+    }
+  }
+
+  // Score determination: preference to day mark if viewing a day, else myResult weekly, then submission
+  const obtainedMarks = effectiveDayKey
+    ? (studentDayMark ?? 0)
+    : myResult
     ? Number(myResult.obtained_marks ?? myResult.marks_obtained ?? 0)
     : submission
     ? Number(submission.total_obtained ?? 0)
     : 0
 
-  const hasScore = !!myResult || !!submission
+  const hasScore = effectiveDayKey ? studentDayMark !== null : (!!myResult || !!submission)
   const isPass = obtainedMarks >= passMarks
   const grade = myResult?.grade || getGrade(obtainedMarks, totalMarks)
-  const rank = myResult?.rank || null
   const dayMarks = myResult?.day_marks || {}
+
+  // Leaderboard dynamically evaluated for the active day or weekly total
+  const displayedLeaderboard = useMemo(() => {
+    if (!effectiveDayKey) return leaderboard
+
+    return leaderboard
+      .map((r: any) => {
+        let dMark = 0
+        if (r.day_marks) {
+          const raw = r.day_marks[effectiveDayKey] || r.day_marks[effectiveDayKey.toLowerCase()]
+          if (raw !== undefined && raw !== null) {
+            dMark = typeof raw === "object" ? Number(raw.marks ?? 0) : Number(raw)
+            if (activeDayConf?.total_marks && dMark > Number(activeDayConf.total_marks)) {
+              dMark = Math.min(dMark, Number(activeDayConf.total_marks))
+            }
+          }
+        }
+        return {
+          ...r,
+          obtained_marks: dMark,
+          grade: getGrade(dMark, totalMarks),
+        }
+      })
+      .sort((a: any, b: any) => b.obtained_marks - a.obtained_marks)
+      .map((r: any, idx: number) => ({ ...r, rank: idx + 1 }))
+  }, [leaderboard, effectiveDayKey, activeDayConf, totalMarks])
+
+  const rank = useMemo(() => {
+    if (!effectiveDayKey) return myResult?.rank || null
+    if (!myResult) return null
+    const found = displayedLeaderboard.find((r: any) => r.is_current_student || r.student_id === myResult.student_id)
+    return found?.rank || null
+  }, [effectiveDayKey, myResult, displayedLeaderboard])
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 space-y-8">
@@ -194,6 +272,64 @@ export default function StudentExamResultsPage() {
         </Link>
       </div>
 
+      {/* Weekly Day Switcher (if weekly exam) */}
+      {isWeekly && recurringDays.length > 0 && (
+        <div className="flex items-center gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200 overflow-x-auto shadow-2xs">
+          {/* Weekly Overall Tab (only if weekly is published) */}
+          {isWeeklyPub && (
+            <button
+              type="button"
+              onClick={() => setSelectedDayKey(null)}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5",
+                selectedDayKey === null
+                  ? "bg-white text-indigo-700 shadow-sm border border-slate-200"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+              )}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+              <span>সাপ্তাহিক মোট (Weekly Total)</span>
+            </button>
+          )}
+
+          {/* Each recurring day */}
+          {recurringDays.map((d: any) => {
+            const dKey = (d.day || "").toLowerCase()
+            const isPub = isWeeklyPub || publishedDays.includes(dKey)
+            const isSelected = effectiveDayKey === dKey
+
+            return (
+              <button
+                key={dKey}
+                type="button"
+                onClick={() => setSelectedDayKey(dKey)}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5",
+                  isSelected
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : isPub
+                    ? "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+                    : "bg-slate-100 text-slate-400 opacity-60 cursor-not-allowed"
+                )}
+                disabled={!isPub}
+              >
+                <span className="capitalize">{d.day}</span>
+                {d.subject && <span className="opacity-80 text-[10px]">({d.subject})</span>}
+                <span
+                  className={cn(
+                    "text-[10px] px-1 py-0.2 rounded font-mono",
+                    isSelected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+                  )}
+                >
+                  {d.total_marks || 50}
+                </span>
+                {!isPub && <span className="text-[10px] text-amber-500 font-medium">(খসড়া)</span>}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Hero Overview Card */}
       <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="bg-gradient-to-r from-indigo-700 via-indigo-800 to-purple-800 p-6 sm:p-8 text-white relative">
@@ -201,7 +337,7 @@ export default function StudentExamResultsPage() {
             {isWeekly ? (
               <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-black bg-purple-400/20 text-purple-200 border border-purple-400/30">
                 <CalendarDays className="w-3.5 h-3.5" />
-                সাপ্তাহিক পরীক্ষা
+                {effectiveDayKey ? `দৈনিক ফলাফল (${activeDayConf?.day || effectiveDayKey})` : "সাপ্তাহিক সামগ্রিক মূল্যায়ন"}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-black bg-amber-400/20 text-amber-200 border border-amber-400/30">
@@ -210,9 +346,9 @@ export default function StudentExamResultsPage() {
               </span>
             )}
 
-            {exam.subject && (
+            {(activeDayConf?.subject || exam.subject) && (
               <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white/15 text-white border border-white/20">
-                {exam.subject}
+                {activeDayConf?.subject || exam.subject}
               </span>
             )}
           </div>
@@ -342,7 +478,7 @@ export default function StudentExamResultsPage() {
               <h3 className="text-lg font-black text-slate-900">ব্যাচ মেধাতালিকা (Batch Merit List)</h3>
             </div>
             <span className="text-xs text-slate-500 font-bold">
-              মোট শিক্ষার্থী: {leaderboard.length} জন
+              মোট শিক্ষার্থী: {displayedLeaderboard.length} জন
             </span>
           </div>
 
@@ -358,7 +494,7 @@ export default function StudentExamResultsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {leaderboard.map((r, idx) => {
+                {displayedLeaderboard.map((r, idx) => {
                   const isCurrent = r.is_current_student || (myResult && r.student_id === myResult.student_id)
                   const rRank = r.rank || idx + 1
 
@@ -394,8 +530,8 @@ export default function StudentExamResultsPage() {
                           )}
                         </div>
 
-                        {/* Day breakdown inside leaderboard row */}
-                        {r.day_marks && Object.keys(r.day_marks).length > 0 && (
+                        {/* Day breakdown inside leaderboard row (only shown in weekly overall view) */}
+                        {!effectiveDayKey && r.day_marks && Object.keys(r.day_marks).length > 0 && (
                           <div className="flex items-center gap-1 flex-wrap mt-1">
                             {Object.entries(r.day_marks).map(([dKey, dVal]: any) => {
                               const mVal = typeof dVal === "object" && dVal !== null ? (dVal.marks ?? 0) : dVal

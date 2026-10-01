@@ -429,8 +429,15 @@ export default function OnlineResultPortalPage() {
 
   // Open Full Merit List
   async function handleOpenMeritList(exam: PublicExam, dayKey: string | null = null) {
+    let targetDayKey = dayKey
+    if (!targetDayKey && checkIsWeeklyExam(exam) && !exam.is_weekly_published) {
+      const pub = Array.isArray(exam.published_days) ? exam.published_days : []
+      if (pub.length > 0) {
+        targetDayKey = String(pub[0]).toLowerCase()
+      }
+    }
     setSelectedExam(exam)
-    setSelectedDayKey(dayKey)
+    setSelectedDayKey(targetDayKey)
     setLoadingResults(true)
     setStudentSearchInModal("")
     setExamResults([])
@@ -538,9 +545,9 @@ export default function OnlineResultPortalPage() {
         }
 
         // 1. WEEKLY CONSOLIDATED EXAM CARD (350 marks):
-        // Show weekly card unless explicitly disabled
-        const isWeeklyExplicitlyFalse = note.includes("[IS_WEEKLY_PUBLISHED:false]")
-        if (!isWeeklyExplicitlyFalse) {
+        // Show weekly card ONLY if weekly result is published, or if no specific days are published yet
+        const isWeeklyPub = ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]") || (!note.includes("[IS_WEEKLY_PUBLISHED:false]") && pubDays.length === 0)
+        if (isWeeklyPub) {
           items.push({
             id: `${ex.id}-weekly`,
             parentExam: ex,

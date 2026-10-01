@@ -107,6 +107,17 @@ export async function POST(
     let noticeTitle = ""
     let noticeContent = ""
 
+    // Extract day marks fallback note if available
+    let fallbackStudentDayMarks: Record<string, any> = {}
+    if (exam.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+      try {
+        const match = exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+        if (match && match[1]) {
+          fallbackStudentDayMarks = JSON.parse(match[1])
+        }
+      } catch {}
+    }
+
     if (type === "weekly_aggregate") {
       // Consolidated Weekly Results with Total Toppers & Subject-wise Toppers
       const { data: results } = await admin
@@ -149,16 +160,6 @@ export async function POST(
           }).join("\n")
       }
 
-      // Extract day marks fallback note if available
-      let fallbackStudentDayMarks: Record<string, any> = {}
-      if (exam.result_note?.includes("[STUDENT_DAY_MARKS:")) {
-        try {
-          const match = exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
-          if (match && match[1]) {
-            fallbackStudentDayMarks = JSON.parse(match[1])
-          }
-        } catch {}
-      }
 
       // Subject-wise Toppers (supporting ties)
       let subjectToppersText = ""
@@ -237,19 +238,79 @@ export async function POST(
 
     } else if (type === "results") {
       // Fetch results
-      const { data: results } = await admin
+      const { data: rawResults } = await admin
         .from("exam_results")
         .select("*, student:students(id, name, student_id, roll_no, batch_roll)")
         .eq("exam_id", examId)
-        .order("obtained_marks", { ascending: false })
 
-      const count = results?.length || 0
-      const highest = count > 0 ? results![0].obtained_marks : 0
-      const passMarks = exam.pass_marks || 0
-      const passedCount = results?.filter((r) => Number(r.obtained_marks) >= passMarks).length || 0
-
+      let results = rawResults || []
       const activeTitle = day_exam_name ? `${exam.title} (${day_exam_name})` : exam.title
-      const activeTotalMarks = day_total_marks || exam.total_marks
+      const activeTotalMarks = Number(day_total_marks || exam.total_marks) || 100
+      let passMarks = Number(exam.pass_marks) || 33
+
+      if (day) {
+        const dayLower = String(day).toLowerCase().trim()
+        const recDays = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
+        const matchedDayConf = recDays.find((d: any) => {
+          const isObj = typeof d === "object" && d !== null
+          const dKey = isObj ? (d.day || d.key || "") : String(d)
+          const dBn = isObj ? (d.day_bn || "") : ""
+          const dEn = isObj ? (d.day_en || "") : ""
+          return (
+            dKey.toLowerCase() === dayLower ||
+            dBn.toLowerCase() === dayLower ||
+            dEn.toLowerCase() === dayLower
+          )
+        })
+
+        if (matchedDayConf && typeof matchedDayConf === "object" && matchedDayConf.pass_marks) {
+          passMarks = Number(matchedDayConf.pass_marks)
+        } else if (day_total_marks) {
+          passMarks = Math.round(Number(day_total_marks) * 0.33)
+        }
+
+        results = (rawResults || []).map((r: any) => {
+          let sDayMarks = r.day_marks
+          if (typeof sDayMarks === "string") {
+            try { sDayMarks = JSON.parse(sDayMarks) } catch {}
+          }
+          if ((!sDayMarks || typeof sDayMarks !== "object" || Object.keys(sDayMarks).length === 0) && fallbackStudentDayMarks[r.student_id]) {
+            sDayMarks = fallbackStudentDayMarks[r.student_id]
+          }
+
+          let dayMarkVal: number | null = null
+          if (sDayMarks && typeof sDayMarks === "object") {
+            for (const [k, v] of Object.entries(sDayMarks)) {
+              const kLower = k.toLowerCase().trim()
+              if (
+                kLower === dayLower ||
+                k === day ||
+                (matchedDayConf && typeof matchedDayConf === "object" && (kLower === String(matchedDayConf.day || "").toLowerCase() || k === matchedDayConf.day_bn))
+              ) {
+                const num = typeof v === "object" && v !== null ? Number((v as any).marks) : Number(v)
+                if (!isNaN(num)) {
+                  dayMarkVal = num
+                  break
+                }
+              }
+            }
+          }
+
+          return {
+            ...r,
+            obtained_marks: dayMarkVal,
+            has_day_mark: dayMarkVal !== null,
+          }
+        })
+        .filter((r: any) => r.has_day_mark)
+        .sort((a: any, b: any) => (Number(b.obtained_marks) || 0) - (Number(a.obtained_marks) || 0))
+      } else {
+        results = [...(rawResults || [])].sort((a: any, b: any) => (Number(b.obtained_marks) || 0) - (Number(a.obtained_marks) || 0))
+      }
+
+      const count = results.length
+      const highest = count > 0 ? (results[0].obtained_marks ?? 0) : 0
+      const passedCount = results.filter((r) => Number(r.obtained_marks) >= passMarks).length
 
       // Distinct Top 3 Score Tiers for single exam (supporting ties)
       const topTiers = computeDistinctScoreTiers(results || [])

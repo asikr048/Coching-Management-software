@@ -525,6 +525,36 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      let effectiveExamTotal = Number(normalizedExam?.total_marks) || 100
+      let effectiveExamPass = Number(normalizedExam?.pass_marks) || 33
+
+      const isWeeklyPub = normalizedExam?.is_weekly_published === true
+      const pubDays: string[] = Array.isArray(normalizedExam?.published_days) ? normalizedExam.published_days : []
+      const recDays: any[] = Array.isArray(normalizedExam?.recurring_days) ? normalizedExam.recurring_days : []
+
+      // If weekly and only specific days are published, calculate total & pass strictly for those published days!
+      if (normalizedExam?.exam_schedule_type === "weekly" && !isWeeklyPub && pubDays.length > 0) {
+        let pubTotal = 0
+        let pubPass = 0
+        const pubDaysLower = pubDays.map((p: string) => String(p).toLowerCase().trim())
+        for (const d of recDays) {
+          const isObj = typeof d === "object" && d !== null
+          const rawKey = isObj ? (d.day || d.day_bn || d.day_en || "") : String(d)
+          const lowerKey = String(rawKey).toLowerCase().trim()
+          if (pubDaysLower.includes(lowerKey) || pubDaysLower.includes(String(d?.day_bn || "").toLowerCase().trim())) {
+            pubTotal += (isObj && d.total_marks ? Number(d.total_marks) : 50)
+            pubPass += (isObj && d.pass_marks ? Number(d.pass_marks) : 20)
+          }
+        }
+        if (pubTotal > 0) effectiveExamTotal = pubTotal
+        if (pubPass > 0) effectiveExamPass = pubPass
+        normalizedExam = {
+          ...normalizedExam,
+          total_marks: effectiveExamTotal,
+          pass_marks: effectiveExamPass,
+        }
+      }
+
       // Check day marks sum
       let finalObt = obt
       if (normalizedExam?.exam_schedule_type === "weekly" && sDayMarks && typeof sDayMarks === "object") {
@@ -533,12 +563,12 @@ export async function GET(req: NextRequest) {
           const m = typeof v === "object" && v !== null ? Number((v as any).marks) : Number(v)
           if (!isNaN(m) && m > 0) daySum += m
         }
-        if (daySum > 0 && (finalObt === 0 || daySum > finalObt)) {
+        if (daySum > 0 || (!isWeeklyPub && pubDays.length > 0)) {
           finalObt = daySum
         }
       }
 
-      const totalMarks = Number(normalizedExam?.total_marks) || 100
+      const totalMarks = effectiveExamTotal
       const pct = totalMarks > 0 ? Math.round((finalObt / totalMarks) * 100) : 0
       let autoGrade = r.grade
       if (!autoGrade || autoGrade === "Pass" || autoGrade === "Fail") {

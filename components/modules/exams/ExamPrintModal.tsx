@@ -200,6 +200,13 @@ export default function ExamPrintModal({
     }
   }, [branding.nameBn, branding.name, branding.address, exam.branch?.name])
 
+  // Keep selectedDayKey synced with activeDayConfig when modal opens
+  useEffect(() => {
+    if (activeDayConfig?.key) {
+      setSelectedDayKey(activeDayConfig.key)
+    }
+  }, [activeDayConfig?.key, isOpen])
+
   // Sync mode and orientation when defaultMode changes
   useEffect(() => {
     if (isWeeklyExam) {
@@ -207,7 +214,7 @@ export default function ExamPrintModal({
     } else {
       setSelectedMode("one_time")
     }
-  }, [defaultMode, isWeeklyExam])
+  }, [defaultMode, isWeeklyExam, isOpen])
 
   // Adapt orientation to template
   useEffect(() => {
@@ -315,7 +322,7 @@ export default function ExamPrintModal({
     : isWeeklyAggregate
     ? totalWeeklyMaxMarks
     : isWeeklyDay
-    ? activeDayConfig?.total_marks || 50
+    ? currentDayConfig?.total_marks || activeDayConfig?.total_marks || 50
     : exam.total_marks || 100
 
   // Build merit ranking for filtered students
@@ -374,20 +381,14 @@ export default function ExamPrintModal({
         }
       } else if (isWeeklyDay && currentDayConfig) {
         const studentDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
-        const item = getDayMarkItemHelper(studentDays, currentDayConfig.key, currentDayConfig.day_bn, currentDayConfig.day_en)
-        let hasMark = Boolean(item && !isNaN(Number(item.marks)))
-        let mark = hasMark ? Number(item.marks) : 0
-
-        // Robust fallback to savedResults if day marks are not keyed under this day
-        if (!hasMark) {
-          const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
-          if (fbRes?.obtained_marks !== undefined && fbRes?.obtained_marks !== "" && !isNaN(parseFloat(fbRes.obtained_marks))) {
-            mark = parseFloat(fbRes.obtained_marks)
-            hasMark = true
-          }
-        }
-
-        const gradeInfo = calculateCoachingGrade(mark, currentDayConfig.total_marks || 50)
+        const item = getDayMarkItemHelper(studentDays, currentDayConfig.key, currentDayConfig.day_bn, (currentDayConfig as any).day_en)
+        const dMax = currentDayConfig.total_marks || 50
+        const dayMarkVal = item && typeof item === "object" ? item.marks : item
+        const rawMark = dayMarkVal !== undefined && dayMarkVal !== null && !isNaN(Number(dayMarkVal)) ? Number(dayMarkVal) : null
+        // Ensure mark does not exceed day max (e.g. if contaminated by weekly total)
+        const hasMark = Boolean(rawMark !== null && rawMark >= 0 && rawMark <= dMax)
+        const mark = hasMark ? rawMark! : 0
+        const gradeInfo = calculateCoachingGrade(mark, dMax)
 
         return {
           student: s,
@@ -854,6 +855,35 @@ export default function ExamPrintModal({
           gp: gradeInfo.gp,
         }
       })
+    }
+
+    if (isWeeklyDay && currentDayConfig) {
+      const targetSt = students.find((s) => s.id === studentId || s.student_id === studentId)
+      const sDays = dayMarksMap[studentId] || (targetSt?.student_id ? dayMarksMap[targetSt.student_id] : undefined) || (targetSt?.id ? dayMarksMap[targetSt.id] : undefined) || {}
+      const item = getDayMarkItemHelper(sDays, currentDayConfig.key, currentDayConfig.day_bn, (currentDayConfig as any).day_en)
+      const dayMarkVal = item && typeof item === "object" ? item.marks : item
+      const hasMark = dayMarkVal !== undefined && dayMarkVal !== null && !isNaN(Number(dayMarkVal))
+      const dMax = currentDayConfig.total_marks || 50
+      const score = hasMark ? Math.min(Math.max(Number(dayMarkVal), 0), dMax) : 0
+      const gradeInfo = calculateCoachingGrade(score, dMax)
+      const itemWr = item && typeof item === "object" && item.written !== undefined
+        ? Number(item.written)
+        : (item?.mode === "written" ? score : 0)
+      const itemMcq = item && typeof item === "object" && item.mcq !== undefined
+        ? Number(item.mcq)
+        : (item?.mode === "mcq" ? score : (item && typeof item === "object" && item.written !== undefined ? 0 : score))
+      return [
+        {
+          name: `${currentDayConfig.day_bn}: ${currentDayConfig.subject || currentDayConfig.exam_name || "দৈনিক পরীক্ষা"}`,
+          fullMarks: dMax,
+          highestMarks: subjectHighestMap.get(currentDayConfig.key) || score,
+          wrMarks: itemWr,
+          mcqMarks: itemMcq,
+          totalMarks: score,
+          grade: hasMark ? gradeInfo.grade : "—",
+          gp: hasMark ? gradeInfo.gp : 0,
+        },
+      ]
     }
 
     // Default single subject exam

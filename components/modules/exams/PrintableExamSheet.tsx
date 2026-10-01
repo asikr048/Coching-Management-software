@@ -227,18 +227,10 @@ export default function PrintableExamSheet({
       } else if (isWeeklyDay && activeDayConfig) {
         const studentDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
         const item = getDayMarkItemHelper(studentDays, activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
-        let hasMark = Boolean(item && !isNaN(Number(item.marks)))
-        let mark = hasMark ? Number(item.marks) : null
-
-        // Fallback to saved result if this day not found in dayMarksMap
-        if (!hasMark) {
-          const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
-          if (fbRes?.obtained_marks !== undefined && fbRes?.obtained_marks !== "" && !isNaN(parseFloat(fbRes.obtained_marks))) {
-            mark = parseFloat(fbRes.obtained_marks)
-            hasMark = true
-          }
-        }
-
+        const dayMarkVal = item && typeof item === "object" ? item.marks : item
+        const rawMark = dayMarkVal !== undefined && dayMarkVal !== null && !isNaN(Number(dayMarkVal)) ? Number(dayMarkVal) : null
+        const hasMark = Boolean(rawMark !== null && rawMark >= 0 && rawMark <= activeTotalMarks)
+        const mark = hasMark ? rawMark : null
         const pct = mark !== null ? Math.round((mark / activeTotalMarks) * 100) : null
         const grade = mark !== null ? getGrade(mark, activeTotalMarks) : "—"
         const isPass = mark !== null && mark >= activePassMarks

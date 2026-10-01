@@ -756,6 +756,21 @@ export default function ExamResultsPage() {
           }
         }
 
+        // Cleanse any day marks that were corrupted by weekly cumulative total (e.g. mark > day total)
+        for (const [stId, sMap] of Object.entries(dayMarks)) {
+          if (!sMap || typeof sMap !== "object") continue
+          for (const [dKey, dItem] of Object.entries(sMap)) {
+            if (!dItem) continue
+            const m = typeof dItem === "object" ? Number(dItem.marks) : Number(dItem)
+            const dTot = typeof dItem === "object" && dItem.total ? Number(dItem.total) : null
+            const stRes = map[stId]
+            const weeklyObt = stRes ? parseFloat(stRes.obtained_marks) : null
+            if (dTot && !isNaN(m) && m > dTot && weeklyObt !== null && m === weeklyObt) {
+              delete sMap[dKey]
+            }
+          }
+        }
+
         // Load or auto-detect mark input modes
         let loadedModes: Record<string, MarkInputMode> = {}
         if (ex?.result_note?.includes("[MARK_INPUT_MODES:")) {
@@ -3786,18 +3801,43 @@ export default function ExamResultsPage() {
     } else {
       for (const s of students) {
         let markVal: number | null = null
-        if (isWeeklyExam && selectedTab !== "weekly_aggregate" && activeDayConfig) {
-          const sDays = effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined)
-          const dObj = getDayMarkItem(sDays, activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
-          if (dObj && !isNaN(Number(dObj.marks))) {
-            markVal = Number(dObj.marks)
+        if (isWeeklyExam && selectedTab !== "weekly_aggregate" && selectedTab !== "all_weeks_combined") {
+          // STRICTLY daily mode: only evaluate this active day's mark, NEVER fall back to weekly total!
+          if (activeDayConfig) {
+            const sDays = effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined)
+            const dObj = getDayMarkItem(sDays, activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
+            const dMarkVal = dObj && typeof dObj === "object" ? dObj.marks : dObj
+            if (dMarkVal !== undefined && dMarkVal !== null && !isNaN(Number(dMarkVal))) {
+              const numVal = Number(dMarkVal)
+              if (numVal >= 0 && numVal <= activeMax) {
+                markVal = numVal
+              }
+            }
+          }
+        } else if (isWeeklyExam && selectedTab === "weekly_aggregate") {
+          // Weekly aggregate mode: calculate sum of all days
+          const studentDays = effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined) || {}
+          let grandTotal = 0
+          let hasAny = false
+          for (const d of parsedWeeklyDays) {
+            const item = getDayMarkItem(studentDays, d.key, d.day_bn, d.day_en)
+            const dMarkVal = item && typeof item === "object" ? item.marks : item
+            if (dMarkVal !== undefined && dMarkVal !== null && !isNaN(Number(dMarkVal))) {
+              grandTotal += Number(dMarkVal)
+              hasAny = true
+            }
+          }
+          if (hasAny) {
+            markVal = grandTotal
           } else {
             const sr = effectiveSavedResults[s.id] || (s.student_id ? effectiveSavedResults[s.student_id] : undefined)
-            if (sr?.obtained_marks !== undefined && sr?.obtained_marks !== "" && !isNaN(parseFloat(sr.obtained_marks))) {
-              markVal = parseFloat(sr.obtained_marks)
+            const raw = sr?.obtained_marks
+            if (raw !== undefined && raw !== "" && !isNaN(parseFloat(raw))) {
+              markVal = parseFloat(raw)
             }
           }
         } else {
+          // One-time exam
           const sr = effectiveSavedResults[s.id] || (s.student_id ? effectiveSavedResults[s.student_id] : undefined)
           const raw = sr?.obtained_marks
           if (raw !== undefined && raw !== "" && !isNaN(parseFloat(raw))) {
@@ -3818,7 +3858,7 @@ export default function ExamResultsPage() {
     const passRate = marksArr.length ? Math.round((passedCount / marksArr.length) * 100) : 0
 
     return { total, count: enteredCount, avg, highest, passRate, passedCount, failedCount: enteredCount - passedCount, max: activeMax, pass: activePass }
-  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, effectiveDayMarksMap, effectiveSavedResults, exam, activeCombinedExams, combinedWeekData])
+  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, effectiveDayMarksMap, effectiveSavedResults, parsedWeeklyDays, exam, activeCombinedExams, combinedWeekData, activeMax, activePass])
 
   // Total Toppers for Weekly View (supports ties and all tied students)
   const totalToppers = useMemo(() => {
@@ -4080,8 +4120,8 @@ export default function ExamResultsPage() {
               activeDayConfig={activeDayConfig}
               totalWeeklyMaxMarks={totalWeeklyMaxMarks}
               students={students}
-              savedResults={savedResults}
-              dayMarksMap={dayMarksMap}
+              savedResults={effectiveSavedResults}
+              dayMarksMap={effectiveDayMarksMap}
               sortBy="rank"
               markDisplayMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
             />
@@ -4893,7 +4933,13 @@ export default function ExamResultsPage() {
                     ? "বার ও বিষয়ভিত্তিক নম্বরে দ্রুত যেতে ক্লিক করুন:"
                     : "বার নির্বাচন করুন (দিনভিত্তিক পরীক্ষা ও বিষয়):"}
                 </span>
-                <span className="text-[11px] text-slate-500 font-mono">মোট পূর্ণমান: {totalWeeklyMaxMarks} নম্বর</span>
+                <span className="text-[11px] text-slate-500 font-mono">
+                  {selectedTab === "weekly_aggregate"
+                    ? `মোট পূর্ণমান: ${totalWeeklyMaxMarks} নম্বর`
+                    : activeDayConfig
+                    ? `${activeDayConfig.day_bn} পূর্ণমান: ${activeDayConfig.total_marks || 50} নম্বর (পাস: ${activeDayConfig.pass_marks || 20}) • সাপ্তাহিক মোট: ${totalWeeklyMaxMarks} নম্বর`
+                    : `মোট পূর্ণমান: ${totalWeeklyMaxMarks} নম্বর`}
+                </span>
               </div>
 
               <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5">
