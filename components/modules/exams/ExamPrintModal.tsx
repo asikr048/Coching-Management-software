@@ -326,20 +326,21 @@ export default function ExamPrintModal({
       }
 
       if (isWeeklyAggregate) {
-        const studentDays = dayMarksMap[s.id] || {}
+        const studentDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
         let sumMarks = 0
         let hasAnyDayMark = false
 
         for (const d of weeklyDays) {
-          const item = studentDays[d.key] || (d.day_bn && studentDays[d.day_bn])
+          const item = getDayMarkItemHelper(studentDays, d.key, d.day_bn, d.day_en)
           if (item && !isNaN(Number(item.marks))) {
             sumMarks += Number(item.marks)
             hasAnyDayMark = true
           }
         }
 
-        if (!hasAnyDayMark && savedResults[s.id]?.obtained_marks) {
-          const fbVal = parseFloat(savedResults[s.id].obtained_marks)
+        const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
+        if (!hasAnyDayMark && fbRes?.obtained_marks) {
+          const fbVal = parseFloat(fbRes.obtained_marks)
           if (!isNaN(fbVal)) {
             sumMarks = fbVal
             hasAnyDayMark = true
@@ -358,10 +359,20 @@ export default function ExamPrintModal({
           hasEvaluated: hasAnyDayMark,
         }
       } else if (isWeeklyDay && currentDayConfig) {
-        const studentDays = dayMarksMap[s.id] || {}
-        const item = studentDays[currentDayConfig.key] || (currentDayConfig.day_bn && studentDays[currentDayConfig.day_bn])
-        const hasMark = Boolean(item && !isNaN(Number(item.marks)))
-        const mark = hasMark ? Number(item.marks) : 0
+        const studentDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
+        const item = getDayMarkItemHelper(studentDays, currentDayConfig.key, currentDayConfig.day_bn, currentDayConfig.day_en)
+        let hasMark = Boolean(item && !isNaN(Number(item.marks)))
+        let mark = hasMark ? Number(item.marks) : 0
+
+        // Robust fallback to savedResults if day marks are not keyed under this day
+        if (!hasMark) {
+          const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
+          if (fbRes?.obtained_marks !== undefined && fbRes?.obtained_marks !== "" && !isNaN(parseFloat(fbRes.obtained_marks))) {
+            mark = parseFloat(fbRes.obtained_marks)
+            hasMark = true
+          }
+        }
+
         const gradeInfo = calculateCoachingGrade(mark, currentDayConfig.total_marks || 50)
 
         return {
@@ -373,7 +384,8 @@ export default function ExamPrintModal({
           hasEvaluated: hasMark,
         }
       } else {
-        const raw = savedResults[s.id]?.obtained_marks
+        const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
+        const raw = fbRes?.obtained_marks
         const hasMark = raw !== undefined && raw !== "" && !isNaN(parseFloat(raw))
         const mark = hasMark ? parseFloat(raw) : 0
         const gradeInfo = calculateCoachingGrade(mark, activeTotalMarks)
@@ -415,8 +427,8 @@ export default function ExamPrintModal({
     for (const d of weeklyDays) {
       let maxScore = 0
       for (const s of students) {
-        const sDays = dayMarksMap[s.id] || {}
-        const item = sDays[d.key] || (d.day_bn && sDays[d.day_bn])
+        const sDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
+        const item = getDayMarkItemHelper(sDays, d.key, d.day_bn, d.day_en)
         if (item && !isNaN(Number(item.marks))) {
           if (Number(item.marks) > maxScore) maxScore = Number(item.marks)
         }
@@ -805,9 +817,10 @@ export default function ExamPrintModal({
     }
 
     if (isWeeklyAggregate && weeklyDays.length > 0) {
-      const sDays = dayMarksMap[studentId] || {}
+      const targetSt = students.find((s) => s.id === studentId || s.student_id === studentId)
+      const sDays = dayMarksMap[studentId] || (targetSt?.student_id ? dayMarksMap[targetSt.student_id] : undefined) || (targetSt?.id ? dayMarksMap[targetSt.id] : undefined) || {}
       return weeklyDays.map((d) => {
-        const item = sDays[d.key] || (d.day_bn && sDays[d.day_bn])
+        const item = getDayMarkItemHelper(sDays, d.key, d.day_bn, d.day_en)
         const score = item && !isNaN(Number(item.marks)) ? Number(item.marks) : 0
         const gradeInfo = calculateCoachingGrade(score, d.total_marks || 50)
         const itemWr = item && typeof item === "object" && item.written !== undefined
@@ -830,11 +843,13 @@ export default function ExamPrintModal({
     }
 
     // Default single subject exam
-    const raw = savedResults[studentId]?.obtained_marks
+    const targetSt = students.find((s) => s.id === studentId || s.student_id === studentId)
+    const fbRes = savedResults[studentId] || (targetSt?.student_id ? savedResults[targetSt.student_id] : undefined) || (targetSt?.id ? savedResults[targetSt.id] : undefined)
+    const raw = fbRes?.obtained_marks
     const score = raw !== undefined && raw !== "" && !isNaN(parseFloat(raw)) ? parseFloat(raw) : 0
-    const sDays = dayMarksMap[studentId] || {}
+    const sDays = dayMarksMap[studentId] || (targetSt?.student_id ? dayMarksMap[targetSt.student_id] : undefined) || (targetSt?.id ? dayMarksMap[targetSt.id] : undefined) || {}
     const mainItem = sDays["main"] || sDays["default"] || sDays[exam.id]
-    const resItem = savedResults[studentId] as any
+    const resItem = fbRes as any
 
     const itemWr = mainItem?.written !== undefined
       ? Number(mainItem.written)
@@ -995,6 +1010,10 @@ export default function ExamPrintModal({
                   <span>পরীক্ষার রেজাল্ট প্রিন্ট ও PDF প্রিভিউ</span>
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
                     A4 Ready
+                  </span>
+                  <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>লাইভ রিয়েল-টাইম সিঙ্ক</span>
                   </span>
                 </h2>
                 <p className="text-xs text-slate-500">

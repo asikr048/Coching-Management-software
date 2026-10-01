@@ -232,8 +232,11 @@ export default function ExamResultsPage() {
   const [autoSavingIds, setAutoSavingIds] = useState<Set<string>>(new Set())
   const autoSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
   const inflightSavesRef = useRef<Record<string, boolean>>({})
+  const pendingSavesRef = useRef<Record<string, { rawMark: string; rowIndex?: number; silent?: boolean; extra?: any }>>({})
   const [draftCellMarks, setDraftCellMarks] = useState<Record<string, string>>({})
   const cellAutoSaveTimersRef = useRef<Record<string, NodeJS.Timeout>>({})
+  const cellInflightSavesRef = useRef<Record<string, boolean>>({})
+  const pendingCellSavesRef = useRef<Record<string, { student: Student; day: ParsedWeeklyDay; rawMark: string; silent?: boolean }>>({})
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(true)
 
@@ -811,6 +814,113 @@ export default function ExamResultsPage() {
       }
     }
     load()
+  }, [params.id, supabase])
+
+  // REAL-TIME SYNC: Live bidirectional updates for exam results & notes across all clients/devices
+  useEffect(() => {
+    if (!params.id) return
+    const examId = params.id
+
+    const channel = supabase
+      .channel(`realtime-exam-results-${examId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "exam_results",
+          filter: `exam_id=eq.${examId}`,
+        },
+        (payload: any) => {
+          if (payload.eventType === "DELETE") {
+            const oldId = payload.old?.student_id
+            if (oldId) {
+              setSavedResults((prev) => {
+                const next = { ...prev }
+                delete next[oldId]
+                return next
+              })
+              setDayMarksMap((prev) => {
+                const next = { ...prev }
+                delete next[oldId]
+                return next
+              })
+            }
+          } else if (payload.eventType === "INSERT" || payload.eventType === "UPDATE") {
+            const newRow = payload.new
+            if (newRow && newRow.student_id) {
+              const sid = newRow.student_id
+              setSavedResults((prev) => ({
+                ...prev,
+                [sid]: {
+                  student_id: sid,
+                  obtained_marks: String(newRow.obtained_marks ?? ""),
+                  grade: newRow.grade || "",
+                  mcq: newRow.mcq,
+                  written: newRow.written,
+                },
+              }))
+
+              if (newRow.day_marks) {
+                let parsedDays = newRow.day_marks
+                if (typeof parsedDays === "string") {
+                  try {
+                    parsedDays = JSON.parse(parsedDays)
+                  } catch {}
+                }
+                if (typeof parsedDays === "object" && parsedDays !== null) {
+                  const normalized = normalizeDayMarks(parsedDays)
+                  setDayMarksMap((prev) => ({
+                    ...prev,
+                    [sid]: {
+                      ...(prev[sid] || {}),
+                      ...normalized,
+                    },
+                  }))
+                }
+              }
+            }
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "exams",
+          filter: `id=eq.${examId}`,
+        },
+        (payload: any) => {
+          const newExam = payload.new
+          if (newExam) {
+            setExam((prev: any) => (prev ? { ...prev, ...newExam } : newExam))
+            if (newExam.result_note && newExam.result_note.includes("[STUDENT_DAY_MARKS:")) {
+              try {
+                const m = newExam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+                if (m && m[1]) {
+                  const parsedAll = JSON.parse(m[1])
+                  setDayMarksMap((prev) => {
+                    const next = { ...prev }
+                    for (const [stId, sMap] of Object.entries(parsedAll)) {
+                      next[stId] = {
+                        ...(next[stId] || {}),
+                        ...normalizeDayMarks(sMap as any),
+                      }
+                    }
+                    return next
+                  })
+                }
+              } catch {}
+            }
+          }
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [params.id, supabase])
 
   // Switch Target Batch or View All Students
@@ -1971,18 +2081,22 @@ export default function ExamResultsPage() {
 
   // Save specific day mark for a student (works from breakdown table or day view)
   async function saveStudentDayMark(student: Student, day: ParsedWeeklyDay, rawMark: string, silent?: boolean) {
-    if (inflightSavesRef.current[student.id]) return
-    inflightSavesRef.current[student.id] = true
+    const cellKey = `${student.id}_${day.key.toLowerCase()}`
+    if (cellInflightSavesRef.current[cellKey]) {
+      pendingCellSavesRef.current[cellKey] = { student, day, rawMark, silent }
+      return
+    }
+    cellInflightSavesRef.current[cellKey] = true
 
-    if (!exam) { inflightSavesRef.current[student.id] = false; return }
+    if (!exam) { cellInflightSavesRef.current[cellKey] = false; return }
     const raw = rawMark.trim()
-    if (raw === "") { inflightSavesRef.current[student.id] = false; return }
+    if (raw === "") { cellInflightSavesRef.current[cellKey] = false; return }
 
     const numMarks = parseFloat(raw)
     const dayMax = day.total_marks || 50
     if (isNaN(numMarks) || numMarks < 0 || numMarks > dayMax) {
       if (!silent) toast.error(`নম্বরটি অবশ্যই 0 থেকে ${dayMax}-এর মধ্যে হতে হবে`)
-      inflightSavesRef.current[student.id] = false
+      cellInflightSavesRef.current[cellKey] = false
       return
     }
 
@@ -2065,7 +2179,12 @@ export default function ExamResultsPage() {
       console.error("Save day mark error:", err)
       if (!silent) toast.error(err.message || "Failed to save mark")
     } finally {
-      inflightSavesRef.current[student.id] = false
+      cellInflightSavesRef.current[cellKey] = false
+      if (pendingCellSavesRef.current[cellKey]) {
+        const next = pendingCellSavesRef.current[cellKey]
+        delete pendingCellSavesRef.current[cellKey]
+        saveStudentDayMark(next.student, next.day, next.rawMark, next.silent)
+      }
     }
   }
 
@@ -2271,7 +2390,10 @@ export default function ExamResultsPage() {
     silent?: boolean,
     extra?: { mcq?: number; written?: number; mode?: MarkInputMode }
   ) {
-    if (inflightSavesRef.current[student.id]) return
+    if (inflightSavesRef.current[student.id]) {
+      pendingSavesRef.current[student.id] = { rawMark, rowIndex, silent, extra }
+      return
+    }
     inflightSavesRef.current[student.id] = true
 
     if (!exam) { inflightSavesRef.current[student.id] = false; return }
@@ -2473,6 +2595,11 @@ export default function ExamResultsPage() {
     }
     
     inflightSavesRef.current[student.id] = false
+    if (pendingSavesRef.current[student.id]) {
+      const next = pendingSavesRef.current[student.id]
+      delete pendingSavesRef.current[student.id]
+      saveStudentMark(student, next.rawMark, next.rowIndex, next.silent, next.extra)
+    }
   }
 
   // Auto-save mark for a student with debounce or onBlur
@@ -3472,6 +3599,128 @@ export default function ExamResultsPage() {
     }
   }
 
+  // Live Effective Marks (merging any active drafts for real-time presentation)
+  const effectiveDayMarksMap = useMemo(() => {
+    const merged: Record<string, Record<string, DayMarkItem>> = {}
+    for (const [stId, sDays] of Object.entries(dayMarksMap)) {
+      merged[stId] = { ...sDays }
+    }
+
+    // Merge cell drafts from weekly breakdown table
+    for (const [cellKey, rawVal] of Object.entries(draftCellMarks)) {
+      if (rawVal === undefined || rawVal.trim() === "") continue
+      const num = parseFloat(rawVal.trim())
+      if (isNaN(num) || num < 0) continue
+      const splitIdx = cellKey.lastIndexOf("_")
+      if (splitIdx === -1) continue
+      const studentId = cellKey.substring(0, splitIdx)
+      const dayKey = cellKey.substring(splitIdx + 1).toLowerCase()
+      const d = parsedWeeklyDays.find((item) => item.key.toLowerCase() === dayKey)
+      const dayMax = d?.total_marks || 50
+
+      const sDays = normalizeDayMarks(merged[studentId])
+      sDays[dayKey] = {
+        marks: num,
+        total: dayMax,
+        grade: getGrade(num, dayMax),
+        subject: d?.subject,
+        exam_name: d?.exam_name,
+      }
+      merged[studentId] = sDays
+    }
+
+    // Merge single day draft marks
+    if (activeDayConfig && selectedTab !== "weekly_aggregate") {
+      const activeKey = (activeDayConfig.key || selectedTab).toLowerCase()
+      const dayMax = activeDayConfig.total_marks || 50
+      for (const [studentId, rawVal] of Object.entries(draftMarks)) {
+        if (!rawVal || rawVal.trim() === "") continue
+        const num = parseFloat(rawVal.trim())
+        if (isNaN(num) || num < 0) continue
+        const sDays = normalizeDayMarks(merged[studentId])
+        sDays[activeKey] = {
+          marks: num,
+          total: dayMax,
+          grade: getGrade(num, dayMax),
+          subject: activeDayConfig.subject,
+          exam_name: activeDayConfig.exam_name,
+        }
+        merged[studentId] = sDays
+      }
+    }
+
+    return merged
+  }, [dayMarksMap, draftCellMarks, draftMarks, parsedWeeklyDays, activeDayConfig, selectedTab])
+
+  const effectiveSavedResults = useMemo(() => {
+    const merged: Record<string, Result> = { ...savedResults }
+    for (const [studentId, sDays] of Object.entries(effectiveDayMarksMap)) {
+      const grandTotal = Object.values(sDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
+      if (grandTotal > 0 || Object.keys(sDays).length > 0) {
+        merged[studentId] = {
+          student_id: studentId,
+          obtained_marks: String(grandTotal),
+          grade: getGrade(grandTotal, totalWeeklyMaxMarks),
+        }
+      }
+    }
+    if (!isWeeklyExam) {
+      for (const [studentId, rawVal] of Object.entries(draftMarks)) {
+        if (rawVal && rawVal.trim() !== "") {
+          const num = parseFloat(rawVal.trim())
+          if (!isNaN(num) && num >= 0) {
+            merged[studentId] = {
+              student_id: studentId,
+              obtained_marks: String(num),
+              grade: getGrade(num, exam?.total_marks || 100),
+            }
+          }
+        }
+      }
+    }
+    return merged
+  }, [savedResults, effectiveDayMarksMap, isWeeklyExam, draftMarks, totalWeeklyMaxMarks, exam?.total_marks])
+
+  // Flush all drafts and open print modal
+  function handleOpenPrintModal(mode?: "one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined") {
+    // 1. Immediately trigger save for any pending single drafts
+    for (const [studentId, raw] of Object.entries(draftMarks)) {
+      if (raw && raw.trim() !== "") {
+        const st = students.find((s) => s.id === studentId)
+        if (st) {
+          if (autoSaveTimersRef.current[studentId]) {
+            clearTimeout(autoSaveTimersRef.current[studentId])
+            delete autoSaveTimersRef.current[studentId]
+          }
+          triggerAutoSave(st, raw)
+        }
+      }
+    }
+    // 2. Immediately trigger save for any pending cell drafts
+    for (const [cellKey, raw] of Object.entries(draftCellMarks)) {
+      if (raw && raw.trim() !== "") {
+        const splitIdx = cellKey.lastIndexOf("_")
+        if (splitIdx !== -1) {
+          const studentId = cellKey.substring(0, splitIdx)
+          const dayKey = cellKey.substring(splitIdx + 1).toLowerCase()
+          const st = students.find((s) => s.id === studentId)
+          const d = parsedWeeklyDays.find((item) => item.key.toLowerCase() === dayKey)
+          if (st && d) {
+            if (cellAutoSaveTimersRef.current[cellKey]) {
+              clearTimeout(cellAutoSaveTimersRef.current[cellKey])
+              delete cellAutoSaveTimersRef.current[cellKey]
+            }
+            saveStudentDayMark(st, d, raw, true)
+          }
+        }
+      }
+    }
+
+    const targetMode = mode || (selectedTab === "all_weeks_combined" ? "all_weeks_combined" : (isWeeklyExam ? (selectedTab === "weekly_aggregate" ? "weekly_aggregate" : "weekly_day") : "one_time"))
+    setPrintModalDefaultMode(targetMode)
+    setIsPrintModalOpen(true)
+  }
+
   // Statistics for the Active View
   const stats = useMemo(() => {
     const total = students.length
@@ -3497,12 +3746,19 @@ export default function ExamResultsPage() {
       for (const s of students) {
         let markVal: number | null = null
         if (isWeeklyExam && selectedTab !== "weekly_aggregate" && activeDayConfig) {
-          const dObj = getDayMarkItem(dayMarksMap[s.id], activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
+          const sDays = effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined)
+          const dObj = getDayMarkItem(sDays, activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
           if (dObj && !isNaN(Number(dObj.marks))) {
             markVal = Number(dObj.marks)
+          } else {
+            const sr = effectiveSavedResults[s.id] || (s.student_id ? effectiveSavedResults[s.student_id] : undefined)
+            if (sr?.obtained_marks !== undefined && sr?.obtained_marks !== "" && !isNaN(parseFloat(sr.obtained_marks))) {
+              markVal = parseFloat(sr.obtained_marks)
+            }
           }
         } else {
-          const raw = savedResults[s.id]?.obtained_marks
+          const sr = effectiveSavedResults[s.id] || (s.student_id ? effectiveSavedResults[s.student_id] : undefined)
+          const raw = sr?.obtained_marks
           if (raw !== undefined && raw !== "" && !isNaN(parseFloat(raw))) {
             markVal = parseFloat(raw)
           }
@@ -3521,18 +3777,18 @@ export default function ExamResultsPage() {
     const passRate = marksArr.length ? Math.round((passedCount / marksArr.length) * 100) : 0
 
     return { total, count: enteredCount, avg, highest, passRate, passedCount, failedCount: enteredCount - passedCount, max: activeMax, pass: activePass }
-  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, dayMarksMap, savedResults, exam, activeCombinedExams, combinedWeekData])
+  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, effectiveDayMarksMap, effectiveSavedResults, exam, activeCombinedExams, combinedWeekData])
 
-  // Total Toppers for Weekly View
   // Total Toppers for Weekly View (supports ties and all tied students)
   const totalToppers = useMemo(() => {
     if (!isWeeklyExam) return []
     const scoredList = students
       .map((s) => {
-        const studentDays = dayMarksMap[s.id] || {}
+        const studentDays = effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined) || {}
         const grandTotal = Object.values(studentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
-        const hasAnyMark = Object.keys(studentDays).length > 0 || (savedResults[s.id]?.obtained_marks !== "" && savedResults[s.id]?.obtained_marks !== undefined)
-        const obt = hasAnyMark ? (grandTotal > 0 ? grandTotal : parseFloat(savedResults[s.id]?.obtained_marks || "0")) : null
+        const sr = effectiveSavedResults[s.id] || (s.student_id ? effectiveSavedResults[s.student_id] : undefined)
+        const hasAnyMark = Object.keys(studentDays).length > 0 || (sr?.obtained_marks !== "" && sr?.obtained_marks !== undefined)
+        const obt = hasAnyMark ? (grandTotal > 0 ? grandTotal : parseFloat(sr?.obtained_marks || "0")) : null
         return {
           student: s,
           obtained_marks: obt,
@@ -3566,7 +3822,7 @@ export default function ExamResultsPage() {
         students: studentsInTier.map((x) => x.student),
       }
     })
-  }, [isWeeklyExam, students, dayMarksMap, savedResults, totalWeeklyMaxMarks])
+  }, [isWeeklyExam, students, effectiveDayMarksMap, effectiveSavedResults, totalWeeklyMaxMarks])
 
   // Subject-wise Toppers for Weekly View (supports ties and all tied students)
   const subjectToppers = useMemo(() => {
@@ -3576,7 +3832,8 @@ export default function ExamResultsPage() {
       let topScore = -1
 
       for (const s of students) {
-        const dObj = getDayMarkItem(dayMarksMap[s.id], d.key, d.day_bn, d.day_en)
+        const sDays = effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined)
+        const dObj = getDayMarkItem(sDays, d.key, d.day_bn, d.day_en)
         if (dObj && !isNaN(Number(dObj.marks))) {
           const score = Number(dObj.marks)
           if (score > topScore) {
@@ -3587,7 +3844,8 @@ export default function ExamResultsPage() {
 
       const winners = topScore >= 0
         ? students.filter((s) => {
-            const dObj = getDayMarkItem(dayMarksMap[s.id], d.key, d.day_bn, d.day_en)
+            const sDays = effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined)
+            const dObj = getDayMarkItem(sDays, d.key, d.day_bn, d.day_en)
             return dObj && !isNaN(Number(dObj.marks)) && Number(dObj.marks) === topScore
           })
         : []
@@ -3598,7 +3856,7 @@ export default function ExamResultsPage() {
         score: topScore,
       }
     })
-  }, [isWeeklyExam, parsedWeeklyDays, students, dayMarksMap])
+  }, [isWeeklyExam, parsedWeeklyDays, students, effectiveDayMarksMap])
 
   // Prepared Printable Toppers for A4 Toppers Sheet Modal
   const printableTotalToppers = useMemo(() => {
@@ -3648,12 +3906,14 @@ export default function ExamResultsPage() {
       }
 
       const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
+      const sDays = effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined)
+      const sr = effectiveSavedResults[s.id] || (s.student_id ? effectiveSavedResults[s.student_id] : undefined)
       const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
-        ? getDayMarkItem(dayMarksMap[s.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+        ? getDayMarkItem(sDays, activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
         : null
       const hasEntered = isWeeklyExam && selectedTab !== "weekly_aggregate"
-        ? Boolean(dayObj && !isNaN(Number(dayObj.marks)))
-        : Boolean(savedResults[s.id] && savedResults[s.id].obtained_marks !== "")
+        ? Boolean((dayObj && !isNaN(Number(dayObj.marks))) || draftMarks[s.id] !== undefined)
+        : Boolean((sr && sr.obtained_marks !== "") || draftMarks[s.id] !== undefined)
 
       const isJustSaved = justSavedIds.has(s.id)
 
@@ -3661,20 +3921,20 @@ export default function ExamResultsPage() {
       if (statusFilter === "pending") return isJustSaved || !hasEntered
       if (statusFilter === "passed") {
         const mark = isWeeklyExam && selectedTab !== "weekly_aggregate"
-          ? (dayObj ? Number(dayObj.marks) : null)
-          : (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
+          ? (dayObj ? Number(dayObj.marks) : (sr?.obtained_marks ? parseFloat(sr.obtained_marks) : null))
+          : (sr?.obtained_marks ? parseFloat(sr.obtained_marks) : null)
         return mark !== null && mark >= stats.pass
       }
       if (statusFilter === "failed") {
         const mark = isWeeklyExam && selectedTab !== "weekly_aggregate"
-          ? (dayObj ? Number(dayObj.marks) : null)
-          : (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
+          ? (dayObj ? Number(dayObj.marks) : (sr?.obtained_marks ? parseFloat(sr.obtained_marks) : null))
+          : (sr?.obtained_marks ? parseFloat(sr.obtained_marks) : null)
         return mark !== null && mark < stats.pass
       }
 
       return true
     })
-  }, [students, tableSearchQuery, statusFilter, isWeeklyExam, selectedTab, activeDayConfig, dayMarksMap, savedResults, justSavedIds, stats.pass])
+  }, [students, tableSearchQuery, statusFilter, isWeeklyExam, selectedTab, activeDayConfig, effectiveDayMarksMap, effectiveSavedResults, draftMarks, justSavedIds, stats.pass])
 
   // Filtered Students for Weekly Multi-Column Table
   const filteredWeeklyStudents = useMemo(() => {
@@ -4035,7 +4295,7 @@ export default function ExamResultsPage() {
             <button
               type="button"
               onClick={() => {
-                setPrintModalDefaultMode(
+                handleOpenPrintModal(
                   selectedTab === "all_weeks_combined"
                     ? "all_weeks_combined"
                     : isWeeklyActive
@@ -4044,7 +4304,6 @@ export default function ExamResultsPage() {
                     ? "weekly_day"
                     : "one_time"
                 )
-                setIsPrintModalOpen(true)
               }}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-all shadow-xs cursor-pointer border border-slate-800 active:scale-95 whitespace-nowrap"
               title="প্রিন্ট রেজাল্ট শিট বা PDF সংরক্ষণ করুন"
@@ -4490,10 +4749,7 @@ export default function ExamResultsPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      setPrintModalDefaultMode("all_weeks_combined")
-                      setIsPrintModalOpen(true)
-                    }}
+                    onClick={() => handleOpenPrintModal("all_weeks_combined")}
                     className="px-3 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
                   >
                     <Printer className="w-3.5 h-3.5 text-amber-300" />
@@ -4907,10 +5163,7 @@ export default function ExamResultsPage() {
 
                 <button
                   type="button"
-                  onClick={() => {
-                    setPrintModalDefaultMode("all_weeks_combined")
-                    setIsPrintModalOpen(true)
-                  }}
+                  onClick={() => handleOpenPrintModal("all_weeks_combined")}
                   className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
                 >
                   <Printer className="w-4 h-4 text-amber-300" />
@@ -5225,8 +5478,7 @@ export default function ExamResultsPage() {
                   type="button"
                   onClick={() => {
                     setPrintModalDefaultTemplate("toppers_sheet")
-                    setPrintModalDefaultMode("weekly_aggregate")
-                    setIsPrintModalOpen(true)
+                    handleOpenPrintModal("weekly_aggregate")
                   }}
                   className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                   title="টপার তালিকা ও বিষয়ভিত্তিক শীর্ষ শিক্ষার্থীদের A4 শিট প্রিন্ট করুন"
@@ -5239,8 +5491,7 @@ export default function ExamResultsPage() {
                   type="button"
                   onClick={() => {
                     setPrintModalDefaultTemplate("merit_list")
-                    setPrintModalDefaultMode("weekly_aggregate")
-                    setIsPrintModalOpen(true)
+                    handleOpenPrintModal("weekly_aggregate")
                   }}
                   className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                   title="সাপ্তাহিক সামগ্রিক মেধা তালিকা প্রিন্ট করুন"
@@ -5521,8 +5772,7 @@ export default function ExamResultsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setPrintModalDefaultMode("weekly_aggregate")
-                    setIsPrintModalOpen(true)
+                    handleOpenPrintModal("weekly_aggregate")
                   }}
                   className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95"
                   title="সাপ্তাহিক সামগ্রিক মেধা ও মূল্যায়ন শিট প্রিন্ট করুন"
@@ -5568,29 +5818,13 @@ export default function ExamResultsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {filteredWeeklyStudents
                     .map((s) => {
-                      const studentDays = { ...(dayMarksMap[s.id] || {}) }
-                      
-                      // Integrate any active cell drafts into the row's live calculation
-                      for (const d of parsedWeeklyDays) {
-                        const dayKey = d.key.toLowerCase()
-                        const cellKey = `${s.id}_${dayKey}`
-                        if (draftCellMarks[cellKey] !== undefined) {
-                          const num = parseFloat(draftCellMarks[cellKey].trim())
-                          if (!isNaN(num) && num >= 0) {
-                            studentDays[dayKey] = {
-                              marks: num,
-                              total: d.total_marks,
-                              grade: getGrade(num, d.total_marks),
-                              subject: d.subject,
-                              exam_name: d.exam_name,
-                            }
-                          }
-                        }
+                      const studentDays = {
+                        ...(effectiveDayMarksMap[s.id] || (s.student_id ? effectiveDayMarksMap[s.student_id] : undefined) || {})
                       }
-
                       const grandTotal = Object.values(studentDays).reduce((acc, curr) => acc + (Number(curr?.marks) || 0), 0)
-                      const hasMarks = Object.keys(studentDays).length > 0 || (savedResults[s.id]?.obtained_marks !== "" && savedResults[s.id]?.obtained_marks !== undefined)
-                      const obtVal = hasMarks ? (grandTotal > 0 ? grandTotal : parseFloat(savedResults[s.id]?.obtained_marks || "0")) : null
+                      const sr = effectiveSavedResults[s.id] || (s.student_id ? effectiveSavedResults[s.student_id] : undefined)
+                      const hasMarks = Object.keys(studentDays).length > 0 || (sr?.obtained_marks !== "" && sr?.obtained_marks !== undefined)
+                      const obtVal = hasMarks ? (grandTotal > 0 ? grandTotal : parseFloat(sr?.obtained_marks || "0")) : null
                       return { student: s, grandTotal: obtVal, days: studentDays }
                     })
                     .sort((a, b) => (b.grandTotal ?? -1) - (a.grandTotal ?? -1))
@@ -6010,8 +6244,7 @@ export default function ExamResultsPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setPrintModalDefaultMode(isWeeklyExam ? "weekly_day" : "one_time")
-                    setIsPrintModalOpen(true)
+                    handleOpenPrintModal(isWeeklyExam ? "weekly_day" : "one_time")
                   }}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 active:scale-95"
                   title="বর্তমান রেজাল্ট শিট প্রিন্ট বা PDF সংরক্ষণ করুন"
@@ -6065,9 +6298,10 @@ export default function ExamResultsPage() {
                   {tableStudents.map((s, idx) => {
                     const activeKey = (activeDayConfig?.key || selectedTab).toLowerCase()
                     const currentMarkMode = markInputModes[activeKey] || "total"
+                    const sDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined)
                     const dayObj = isWeeklyExam && selectedTab !== "weekly_aggregate"
-                      ? getDayMarkItem(dayMarksMap[s.id], activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
-                      : (dayMarksMap[s.id]?.["main"] || dayMarksMap[s.id]?.["default"])
+                      ? getDayMarkItem(sDays, activeKey, activeDayConfig?.day_bn, activeDayConfig?.day_en)
+                      : (sDays?.["main"] || sDays?.["default"])
 
                     // Both mode draft / saved values
                     const draftMcqVal = draftMcqMarks[s.id] ?? (dayObj?.mcq !== undefined ? String(dayObj.mcq) : "")
@@ -6089,7 +6323,7 @@ export default function ExamResultsPage() {
                       : (dayObj && !isNaN(Number(dayObj.marks)))
                       ? Number(dayObj.marks)
                       : (!isWeeklyExam || selectedTab === "weekly_aggregate")
-                      ? (savedResults[s.id]?.obtained_marks ? parseFloat(savedResults[s.id].obtained_marks) : null)
+                      ? ((savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined))?.obtained_marks ? parseFloat((savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined))!.obtained_marks) : null)
                       : null
                     const draftNum = draftVal !== "" ? parseFloat(draftVal) : null
                     const isRowOverMax = draftNum !== null && !isNaN(draftNum) && draftNum > activeTotalMarks
@@ -6631,8 +6865,8 @@ export default function ExamResultsPage() {
         activeDayConfig={activeDayConfig}
         totalWeeklyMaxMarks={totalWeeklyMaxMarks}
         students={students as any}
-        savedResults={savedResults}
-        dayMarksMap={dayMarksMap}
+        savedResults={effectiveSavedResults}
+        dayMarksMap={effectiveDayMarksMap}
         defaultMode={selectedTab === "all_weeks_combined" ? "all_weeks_combined" : printModalDefaultMode}
         availableBatches={availableBatches}
         combinedWeekData={combinedWeekData}

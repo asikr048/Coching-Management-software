@@ -176,7 +176,7 @@ export default function PrintableExamSheet({
           hasEvaluated: hasMark,
         }
       } else if (isWeeklyAggregate) {
-        const studentDays = dayMarksMap[s.id] || {}
+        const studentDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
         let sumMarks = 0
         let hasAnyDayMark = false
 
@@ -190,8 +190,9 @@ export default function PrintableExamSheet({
         }
 
         // Fallback to saved result if no day marks entered
-        if (!hasAnyDayMark && savedResults[s.id]?.obtained_marks) {
-          const fbVal = parseFloat(savedResults[s.id].obtained_marks)
+        const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
+        if (!hasAnyDayMark && fbRes?.obtained_marks) {
+          const fbVal = parseFloat(fbRes.obtained_marks)
           if (!isNaN(fbVal)) {
             sumMarks = fbVal
             hasAnyDayMark = true
@@ -224,10 +225,20 @@ export default function PrintableExamSheet({
           hasEvaluated: hasAnyDayMark,
         }
       } else if (isWeeklyDay && activeDayConfig) {
-        const studentDays = dayMarksMap[s.id] || {}
+        const studentDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
         const item = getDayMarkItemHelper(studentDays, activeDayConfig.key, activeDayConfig.day_bn, activeDayConfig.day_en)
-        const hasMark = Boolean(item && !isNaN(Number(item.marks)))
-        const mark = hasMark ? Number(item.marks) : null
+        let hasMark = Boolean(item && !isNaN(Number(item.marks)))
+        let mark = hasMark ? Number(item.marks) : null
+
+        // Fallback to saved result if this day not found in dayMarksMap
+        if (!hasMark) {
+          const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
+          if (fbRes?.obtained_marks !== undefined && fbRes?.obtained_marks !== "" && !isNaN(parseFloat(fbRes.obtained_marks))) {
+            mark = parseFloat(fbRes.obtained_marks)
+            hasMark = true
+          }
+        }
+
         const pct = mark !== null ? Math.round((mark / activeTotalMarks) * 100) : null
         const grade = mark !== null ? getGrade(mark, activeTotalMarks) : "—"
         const isPass = mark !== null && mark >= activePassMarks
@@ -248,15 +259,16 @@ export default function PrintableExamSheet({
         }
       } else {
         // One-Time Exam
-        const raw = savedResults[s.id]?.obtained_marks
+        const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
+        const raw = fbRes?.obtained_marks
         const hasMark = raw !== undefined && raw !== "" && !isNaN(parseFloat(raw))
         const mark = hasMark ? parseFloat(raw) : null
         const pct = mark !== null ? Math.round((mark / activeTotalMarks) * 100) : null
         const grade = mark !== null ? getGrade(mark, activeTotalMarks) : "—"
         const isPass = mark !== null && mark >= activePassMarks
-        const sDays = dayMarksMap[s.id] || {}
+        const sDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
         const mainItem = sDays["main"] || sDays["default"] || sDays[exam.id]
-        const resItem = savedResults[s.id] as any
+        const resItem = fbRes as any
         const wr = mainItem?.written !== undefined ? Number(mainItem.written) : (resItem?.written !== undefined ? Number(resItem.written) : null)
         const mcq = mainItem?.mcq !== undefined ? Number(mainItem.mcq) : (resItem?.mcq !== undefined ? Number(resItem.mcq) : null)
 
