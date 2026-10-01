@@ -1008,7 +1008,7 @@ export default function NewStudentForm({
           gender: form.gender,
           date_of_birth: form.date_of_birth || null,
           guardian_name: form.guardian_name.trim() || null,
-          guardian_phone: form.guardian_phone.trim() || null,
+          guardian_phone: form.guardian_phone.trim() || form.phone.trim() || "N/A",
           guardian_relation: form.guardian_relation,
           address: form.address.trim() || null,
           school_college: form.school_college.trim() || null,
@@ -1018,6 +1018,12 @@ export default function NewStudentForm({
         }
 
         let { data: st, error: sErr } = await supabase.from("students").insert(studentPayload).select().single()
+        if (sErr && (sErr.message?.includes("guardian_phone") || sErr.message?.includes("not-null"))) {
+          studentPayload.guardian_phone = form.phone.trim() || "N/A"
+          const retryG = await supabase.from("students").insert(studentPayload).select().single()
+          st = retryG.data
+          sErr = retryG.error
+        }
         if (sErr && sErr.message?.includes("qr_code")) {
           delete studentPayload.qr_code
           const retryRes = await supabase.from("students").insert(studentPayload).select().single()
@@ -1030,7 +1036,7 @@ export default function NewStudentForm({
         studentPhone = st.phone || ""
         studentEmail = st.email || ""
         guardianName = st.guardian_name || ""
-        guardianPhone = st.guardian_phone || ""
+        guardianPhone = (st.guardian_phone && st.guardian_phone !== "N/A") ? st.guardian_phone : ""
       }
 
       // Check if student is already enrolled in this batch
@@ -1555,7 +1561,7 @@ export default function NewStudentForm({
       <div class="row"><span class="label">Full Name:</span><span class="value">${target.student_name}</span></div>
       ${target.student_phone ? `<div class="row"><span class="label">Phone:</span><span class="value">${target.student_phone}</span></div>` : ''}
       ${target.guardian_name ? `<div class="row"><span class="label">Guardian:</span><span class="value">${target.guardian_name}</span></div>` : ''}
-      ${target.guardian_phone ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${target.guardian_phone}</span></div>` : ''}
+      ${target.guardian_phone && target.guardian_phone !== 'N/A' ? `<div class="row"><span class="label">Guardian Phone:</span><span class="value">${target.guardian_phone}</span></div>` : ''}
 
       ${target.password ? `
       <div class="cred-box">
@@ -1636,7 +1642,7 @@ export default function NewStudentForm({
         doc.text("Phone: " + target.student_phone, 10, y)
         y += 5
       }
-      if (target.guardian_phone) {
+      if (target.guardian_phone && target.guardian_phone !== 'N/A') {
         doc.text("Guardian Phone: " + target.guardian_phone, 10, y)
         y += 5
       }
@@ -3004,7 +3010,7 @@ export default function NewStudentForm({
                               </span>
                               {student.phone && <span className="text-[11px] text-slate-500 font-medium">📞 {student.phone}</span>}
                             </div>
-                            {student.guardian_phone && (
+                            {student.guardian_phone && student.guardian_phone !== "N/A" && (
                               <div className="text-[10px] text-slate-400 mt-0.5">
                                 Guardian: {student.guardian_phone} {student.guardian_name ? `(${student.guardian_name})` : ""}
                               </div>
@@ -3207,7 +3213,7 @@ export default function NewStudentForm({
                   <div className="space-y-1.5 text-xs">
                     <div className="flex justify-between"><span className="text-slate-500">Student Name:</span><span className="font-bold text-slate-900">{receipt.student_name}</span></div>
                     {receipt.student_phone && <div className="flex justify-between"><span className="text-slate-500">Phone:</span><span className="font-medium text-slate-700">{receipt.student_phone}</span></div>}
-                    {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-500">Guardian Contact:</span><span className="font-medium text-slate-700">{receipt.guardian_phone}</span></div>}
+                    {receipt.guardian_phone && receipt.guardian_phone !== "N/A" && <div className="flex justify-between"><span className="text-slate-500">Guardian Contact:</span><span className="font-medium text-slate-700">{receipt.guardian_phone}</span></div>}
                     <div className="flex justify-between"><span className="text-slate-500">Batch Enrolled:</span><span className="font-bold text-indigo-700">{receipt.batch_name}</span></div>
                     {receipt.branch_name && <div className="flex justify-between"><span className="text-slate-500">Campus/Branch:</span><span className="font-semibold text-slate-700">{receipt.branch_name}</span></div>}
                     <div className="flex justify-between"><span className="text-slate-500">Date:</span><span className="text-slate-700">{receipt.date}</span></div>
@@ -3301,7 +3307,7 @@ export default function NewStudentForm({
 
                       <div className="space-y-1 text-[10px] border-t border-slate-100 pt-2">
                         <div className="flex justify-between"><span className="text-slate-400">Batch:</span><span className="font-bold text-slate-800 truncate max-w-[130px]">{receipt.batch_name}</span></div>
-                        {receipt.guardian_phone && <div className="flex justify-between"><span className="text-slate-400">Guardian:</span><span className="font-mono text-slate-700">{receipt.guardian_phone}</span></div>}
+                        {receipt.guardian_phone && receipt.guardian_phone !== "N/A" && <div className="flex justify-between"><span className="text-slate-400">Guardian:</span><span className="font-mono text-slate-700">{receipt.guardian_phone}</span></div>}
                       </div>
 
                       <div className="bg-slate-50 rounded-lg p-1 text-center text-[9px] font-bold text-slate-600 mt-2">

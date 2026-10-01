@@ -63,13 +63,12 @@ export default function MarketplaceClient({ courses, students: initialStudents }
       // If new student, create account first
       if (isNewStudent) {
         if (!newForm.name.trim()) { toast.error("Student name is required"); setLoading(false); return }
-        if (!newForm.guardian_phone.trim()) { toast.error("Guardian phone is required"); setLoading(false); return }
 
         const { data: newStudent, error: sErr } = await supabase.from("students").insert({
           name: newForm.name.trim(),
           phone: newForm.phone.trim() || null,
           email: newForm.email.trim() || null,
-          guardian_phone: newForm.guardian_phone.trim(),
+          guardian_phone: newForm.guardian_phone.trim() || newForm.phone.trim() || "N/A",
           guardian_relation: "Parent",
         }).select().single()
         if (sErr) throw new Error(sErr.message || "Failed to create student")
