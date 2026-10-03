@@ -1923,7 +1923,7 @@ export default function ExamResultsPage() {
   useEffect(() => {
     if (parsedWeeklyDays.length > 0) {
       if (!selectedTab || (selectedTab !== "weekly_aggregate" && selectedTab !== "all_weeks_combined" && !parsedWeeklyDays.some((d) => d.key === selectedTab))) {
-        setSelectedTab(parsedWeeklyDays[0].key)
+        setSelectedTab("weekly_aggregate")
       }
     }
   }, [parsedWeeklyDays, selectedTab])
@@ -3858,7 +3858,7 @@ export default function ExamResultsPage() {
     const passRate = marksArr.length ? Math.round((passedCount / marksArr.length) * 100) : 0
 
     return { total, count: enteredCount, avg, highest, passRate, passedCount, failedCount: enteredCount - passedCount, max: activeMax, pass: activePass }
-  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, effectiveDayMarksMap, effectiveSavedResults, parsedWeeklyDays, exam, activeCombinedExams, combinedWeekData, activeMax, activePass])
+  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, effectiveDayMarksMap, effectiveSavedResults, parsedWeeklyDays, exam, activeCombinedExams, combinedWeekData])
 
   // Total Toppers for Weekly View (supports ties and all tied students)
   const totalToppers = useMemo(() => {
