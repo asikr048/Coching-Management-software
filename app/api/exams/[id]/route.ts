@@ -188,54 +188,46 @@ export async function GET(
       }
     }
 
+    // CRITICAL: Any student who already has existing marks in this exam MUST ALWAYS be included!
+    // Never exclude, hide, or delete a student who was already graded.
+    const selectedIdSet = new Set(selectedStudents.map((s) => s.id))
+    for (const r of existingResults) {
+      if (r.student_id && !selectedIdSet.has(r.student_id)) {
+        const found = rawStudents.find((s) => s.id === r.student_id)
+        if (found) {
+          selectedStudents.push(found)
+          selectedIdSet.add(found.id)
+        }
+      }
+    }
+
+    // Also check student IDs stored in fallback [STUDENT_DAY_MARKS:...] from exam.result_note
+    if (exam.result_note && exam.result_note.includes("[STUDENT_DAY_MARKS:")) {
+      try {
+        const match = exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+        if (match && match[1]) {
+          const noteMap = JSON.parse(match[1])
+          for (const sId of Object.keys(noteMap)) {
+            if (!selectedIdSet.has(sId)) {
+              const found = rawStudents.find((s) => s.id === sId)
+              if (found) {
+                selectedStudents.push(found)
+                selectedIdSet.add(found.id)
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not parse fallback day marks from result_note:", err)
+      }
+    }
+
     // Deduplicate students by id
     const uniqueMap = new Map<string, any>()
     selectedStudents.forEach((s) => {
       if (!uniqueMap.has(s.id)) uniqueMap.set(s.id, s)
     })
     selectedStudents = Array.from(uniqueMap.values())
-
-    // If target batches are defined, clean up and purge any results belonging to students outside those batches
-    const validStudentIdSet = new Set(selectedStudents.map((s) => s.id))
-    if (selectedStudents.length > 0) {
-      const orphanResults = existingResults.filter((r) => !validStudentIdSet.has(r.student_id))
-      if (orphanResults.length > 0) {
-        const orphanIds = orphanResults.map((r) => r.student_id)
-        try {
-          await admin.from("exam_results").delete().eq("exam_id", examId).in("student_id", orphanIds)
-        } catch (e) {
-          console.warn("Failed to delete orphan exam_results:", e)
-        }
-      }
-      existingResults = existingResults.filter((r) => validStudentIdSet.has(r.student_id))
-
-      // Clean [STUDENT_DAY_MARKS:...] in result_note if present
-      if (exam.result_note && exam.result_note.includes("[STUDENT_DAY_MARKS:")) {
-        try {
-          const match = exam.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
-          if (match && match[1]) {
-            const parsedNote = JSON.parse(match[1])
-            let noteChanged = false
-            const cleanedNoteMap: Record<string, any> = {}
-            for (const [sId, sDays] of Object.entries(parsedNote)) {
-              if (validStudentIdSet.has(sId)) {
-                cleanedNoteMap[sId] = sDays
-              } else {
-                noteChanged = true
-              }
-            }
-            if (noteChanged) {
-              const newTag = `[STUDENT_DAY_MARKS:${JSON.stringify(cleanedNoteMap)}]`
-              const newNote = exam.result_note.replace(/\[STUDENT_DAY_MARKS:.*?\]/, newTag)
-              exam.result_note = newNote
-              await admin.from("exams").update({ result_note: newNote }).eq("id", examId)
-            }
-          }
-        } catch (err) {
-          console.warn("Could not clean fallback day marks in result_note:", err)
-        }
-      }
-    }
 
     // 8. Map students with clean, normalized fields and sequential roll numbers
     const resolvedStudents = selectedStudents.map((s, idx) => {
@@ -473,39 +465,7 @@ export async function PATCH(
           .neq("status", "inactive")
           .neq("status", "transferred")
 
-        const validNewStudentIds = new Set((newEnrs || []).map((e: any) => e.student_id).filter(Boolean))
-
-        // Find existing exam_results for this exam
-        const { data: currentResults } = await admin
-          .from("exam_results")
-          .select("id, student_id")
-          .eq("exam_id", examId)
-
-        const toDeleteStudentIds = (currentResults || [])
-          .map((r: any) => r.student_id)
-          .filter((stId: string) => !validNewStudentIds.has(stId))
-
-        if (toDeleteStudentIds.length > 0) {
-          await admin.from("exam_results").delete().eq("exam_id", examId).in("student_id", toDeleteStudentIds)
-        }
-
-        // Also clean [STUDENT_DAY_MARKS:...] in updatedNote
-        if (updatedNote.includes("[STUDENT_DAY_MARKS:")) {
-          const match = updatedNote.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
-          if (match && match[1]) {
-            try {
-              const noteMap = JSON.parse(match[1])
-              const cleanedMap: Record<string, any> = {}
-              for (const [sId, sDays] of Object.entries(noteMap)) {
-                if (validNewStudentIds.has(sId)) {
-                  cleanedMap[sId] = sDays
-                }
-              }
-              const newTag = `[STUDENT_DAY_MARKS:${JSON.stringify(cleanedMap)}]`
-              updatedNote = updatedNote.replace(/\[STUDENT_DAY_MARKS:.*?\]/, newTag)
-            } catch {}
-          }
-        }
+        // Existing results and day marks are preserved permanently across batch or title updates
 
         // If part of weekly series, sync batch change across all sibling exams
         const curSeriesId = currentExam.result_note ? currentExam.result_note.match(/\[SERIES_ID:(.*?)\]/)?.[1] : null

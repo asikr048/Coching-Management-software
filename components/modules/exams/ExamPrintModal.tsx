@@ -145,7 +145,7 @@ export default function ExamPrintModal({
 
   // 2. Exam Mode / Scope
   const [selectedMode, setSelectedMode] = useState<"one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined">(
-    isWeeklyExam ? defaultMode : "one_time"
+    isWeeklyExam ? (defaultMode === "one_time" ? "weekly_day" : defaultMode) : "one_time"
   )
   const [selectedDayKey, setSelectedDayKey] = useState<string>(
     activeDayConfig?.key || weeklyDays[0]?.key || "saturday"

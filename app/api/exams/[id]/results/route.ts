@@ -515,6 +515,8 @@ export async function POST(
       obtained_marks: number
       grade: string
       day_marks?: Record<string, any>
+      replace_day_marks?: boolean
+      clear_student_id?: boolean
     }> = []
 
     if (Array.isArray(body.batch_updates)) {
@@ -525,6 +527,8 @@ export async function POST(
             obtained_marks: Number(u.obtained_marks) || 0,
             grade: u.grade || "",
             day_marks: u.day_marks || {},
+            replace_day_marks: Boolean(u.replace_day_marks || body.replace_day_marks),
+            clear_student_id: Boolean(u.clear_student_id || body.clear_student_id === u.student_id),
           })
         }
       }
@@ -534,6 +538,8 @@ export async function POST(
         obtained_marks: Number(body.obtained_marks) || 0,
         grade: body.grade || "",
         day_marks: body.day_marks || {},
+        replace_day_marks: Boolean(body.replace_day_marks),
+        clear_student_id: Boolean(body.clear_student_id === body.student_id),
       })
     }
 
@@ -639,13 +645,15 @@ export async function POST(
         existingDays = { ...existingNoteMap[u.student_id] }
       }
 
-      // If u.day_marks is explicitly provided (e.g. from saveStudentMark or clearStudentMark),
-      // it is the authoritative day map for this student. Do not revive deleted days from existingDays!
+      // Deep-merge day_marks with existing days so saving one day never deletes other days
       let mergedDays: Record<string, any> = {}
-      if (u.day_marks !== undefined && typeof u.day_marks === "object") {
-        mergedDays = normalizeDayMarks(u.day_marks)
+      if (u.replace_day_marks === true) {
+        mergedDays = normalizeDayMarks(u.day_marks || {})
       } else {
-        mergedDays = normalizeDayMarks(existingDays)
+        mergedDays = {
+          ...normalizeDayMarks(existingDays),
+          ...(u.day_marks ? normalizeDayMarks(u.day_marks) : {}),
+        }
       }
 
       // Recalculate true cumulative grand total across all days
@@ -661,7 +669,7 @@ export async function POST(
 
       const finalObtainedMarks = hasAnyDay ? cumulativeGrandTotal : (Number(u.obtained_marks) || 0)
 
-      if (!hasAnyDay && (!u.obtained_marks || Number(u.obtained_marks) === 0)) {
+      if (u.clear_student_id) {
         studentsToPurge.push(u.student_id)
       }
       
@@ -683,6 +691,7 @@ export async function POST(
         obtained_marks: finalObtainedMarks,
         grade,
         day_marks: mergedDays,
+        clear_student_id: u.clear_student_id,
       }
     })
 
@@ -731,29 +740,39 @@ export async function POST(
     }
 
     // Build authoritative backup day marks map for exams.result_note [STUDENT_DAY_MARKS:...]
-    const mergedMap: Record<string, Record<string, any>> = {}
+    // Start with all existing student day marks from database and notes so other students are NEVER lost!
+    const mergedMap: Record<string, Record<string, any>> = { ...existingNoteMap }
+
+    // Also include existing days from database rows
+    for (const [stId, row] of Object.entries(existingStudentMap)) {
+      if (row?.day_marks && typeof row.day_marks === "object") {
+        const norm = normalizeDayMarks(row.day_marks)
+        if (Object.keys(norm).length > 0) {
+          mergedMap[stId] = {
+            ...(mergedMap[stId] || {}),
+            ...norm,
+          }
+        }
+      }
+    }
 
     if (body.all_day_marks && typeof body.all_day_marks === "object") {
-      // If client provided full all_day_marks, it is authoritative
+      // Merge client all_day_marks on top of existing student records without wiping absent students
       for (const [stId, dMap] of Object.entries(body.all_day_marks)) {
         const norm = normalizeDayMarks(dMap as any)
         if (Object.keys(norm).length > 0) {
-          mergedMap[stId] = norm
+          mergedMap[stId] = {
+            ...(mergedMap[stId] || {}),
+            ...norm,
+          }
         }
       }
     } else {
-      // Otherwise, start from existingNoteMap and merge current updates
-      for (const [stId, dMap] of Object.entries(existingNoteMap)) {
-        const norm = normalizeDayMarks(dMap)
-        if (Object.keys(norm).length > 0) {
-          mergedMap[stId] = norm
-        }
-      }
       for (const u of mergedUpdates) {
         const norm = normalizeDayMarks(u.day_marks)
         if (Object.keys(norm).length > 0) {
           mergedMap[u.student_id] = norm
-        } else {
+        } else if (u.clear_student_id) {
           delete mergedMap[u.student_id]
         }
       }

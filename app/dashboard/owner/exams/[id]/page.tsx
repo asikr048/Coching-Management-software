@@ -41,10 +41,12 @@ import {
   CheckSquare,
   Square,
   RotateCcw,
+  FileSpreadsheet,
 } from "lucide-react"
 import { getGrade, getGradePoint, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch, extractSeriesId, extractSeriesWeek, getExamSeriesKey } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
 import ExamPrintModal, { PrintTemplateType } from "@/components/modules/exams/ExamPrintModal"
+import BulkResultUploadModal from "@/components/modules/exams/BulkResultUploadModal"
 import { calculateCoachingGrade } from "@/components/modules/exams/StudentProgressReport"
 
 interface Student {
@@ -69,6 +71,7 @@ interface Result {
   student_id: string
   obtained_marks: string
   grade: string
+  rank?: number
   mcq?: number
   written?: number
 }
@@ -258,6 +261,9 @@ export default function ExamResultsPage() {
   // Batch Results Visibility
   const [showAllResults, setShowAllResults] = useState<boolean>(true)
   const [updatingVisibility, setUpdatingVisibility] = useState(false)
+
+  // Bulk Excel Import Modal State
+  const [showBulkUploadModal, setShowBulkUploadModal] = useState<boolean>(false)
 
   // Delete Exam State
   const [showDeleteModal, setShowDeleteModal] = useState(false)
@@ -690,20 +696,49 @@ export default function ExamResultsPage() {
         }
 
         const validStudentIds = new Set(resolvedStudents.map((s) => s.id))
-        // If the exam has students loaded, purge and filter any stale results from previous batches
-        if (resolvedStudents.length > 0) {
-          const orphanIds = (existing || []).map((r: any) => r.student_id).filter((id: string) => !validStudentIds.has(id))
-          if (orphanIds.length > 0) {
-            supabase.from("exam_results").delete().eq("exam_id", params.id).in("student_id", orphanIds).then(() => {})
+
+        // CRITICAL: Ensure any student who already has existing marks is ALWAYS preserved in resolvedStudents!
+        const existingStudentIds = Array.from(new Set((existing || []).map((r: any) => r.student_id).filter(Boolean)))
+        
+        // Also collect student IDs from fallback [STUDENT_DAY_MARKS:...] in result_note
+        if (ex?.result_note?.includes("[STUDENT_DAY_MARKS:")) {
+          try {
+            const m = ex.result_note.match(/\[STUDENT_DAY_MARKS:(.*?)\]/)
+            if (m && m[1]) {
+              const noteMap = JSON.parse(m[1])
+              for (const sId of Object.keys(noteMap)) {
+                if (sId && !existingStudentIds.includes(sId)) {
+                  existingStudentIds.push(sId)
+                }
+              }
+            }
+          } catch {}
+        }
+
+        const missingStudentIds = existingStudentIds.filter((id) => !validStudentIds.has(id))
+        if (missingStudentIds.length > 0) {
+          const { data: missingData } = await supabase.from("students").select("*").in("id", missingStudentIds)
+          if (missingData && missingData.length > 0) {
+            const addedStudents = missingData.map((s: any, idx: number) => ({
+              ...s,
+              roll_no: s.roll_no || s.batch_roll || idx + 1,
+              batch_roll: s.roll_no || s.batch_roll || idx + 1,
+              father_name: s.father_name || s.guardian_name || "",
+              mother_name: s.mother_name || "",
+              guardian_name: s.guardian_name || "",
+              group: s.class_level || s.group || "HUMANITIES",
+              qr_code: s.qr_code || s.student_id,
+            })) as Student[]
+            resolvedStudents = [...resolvedStudents, ...addedStudents]
+            setStudents(resolvedStudents)
+            resolvedStudents.forEach((s) => validStudentIds.add(s.id))
           }
-          existing = (existing || []).filter((r: any) => validStudentIds.has(r.student_id))
         }
 
         const map: Record<string, Result> = {}
         const dayMarks: Record<string, Record<string, DayMarkItem>> = {}
 
         for (const r of existing || []) {
-          if (resolvedStudents.length > 0 && !validStudentIds.has(r.student_id)) continue
           const markStr = String(r.obtained_marks ?? "")
           map[r.student_id] = {
             student_id: r.student_id,
@@ -739,7 +774,6 @@ export default function ExamResultsPage() {
             if (m && m[1]) {
               const parsedAll = JSON.parse(m[1])
               for (const [stId, sMap] of Object.entries(parsedAll)) {
-                if (resolvedStudents.length > 0 && !validStudentIds.has(stId)) continue
                 if (!dayMarks[stId] || Object.keys(dayMarks[stId]).length === 0) {
                   dayMarks[stId] = sMap as Record<string, DayMarkItem>
                 } else {
@@ -1919,11 +1953,16 @@ export default function ExamResultsPage() {
     }
   }, [exam?.id, isWeeklyExam, students.length, weeklySeriesExams.length])
 
-  // Initialize selectedTab once parsedWeeklyDays is available
+  // Initialize selectedTab once parsedWeeklyDays is available (Default to Daily Result / Entry)
   useEffect(() => {
     if (parsedWeeklyDays.length > 0) {
       if (!selectedTab || (selectedTab !== "weekly_aggregate" && selectedTab !== "all_weeks_combined" && !parsedWeeklyDays.some((d) => d.key === selectedTab))) {
-        setSelectedTab("weekly_aggregate")
+        // If today matches one of the exam's scheduled days, select today; otherwise default to first day (e.g. Saturday)
+        const todayEn = new Date().toLocaleDateString("en-US", { weekday: "long" }).toLowerCase()
+        const matchedToday = parsedWeeklyDays.find(
+          (d) => d.key.toLowerCase() === todayEn || d.day_en?.toLowerCase() === todayEn
+        )
+        setSelectedTab(matchedToday ? matchedToday.key : (parsedWeeklyDays[0]?.key || "saturday"))
       }
     }
   }, [parsedWeeklyDays, selectedTab])
@@ -4393,6 +4432,17 @@ export default function ExamResultsPage() {
               <span>🖨️ প্রিন্ট ও সংরক্ষণ (PDF / DOC)</span>
             </button>
 
+            {/* 5.7. Bulk Excel Import Button */}
+            <button
+              type="button"
+              onClick={() => setShowBulkUploadModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-bold text-xs transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
+              title="এক্সেল ফাইল দিয়ে এক ক্লিকে সকল শিক্ষার্থীর নম্বর এন্ট্রি ও বাল্ক আপলোড করুন"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+              <span>📊 বাল্ক রেজাল্ট (Excel)</span>
+            </button>
+
             {/* 5.8. Clean / Reset Week Data Button */}
             <button
               type="button"
@@ -5860,6 +5910,16 @@ export default function ExamResultsPage() {
 
                 <button
                   type="button"
+                  onClick={() => setShowBulkUploadModal(true)}
+                  className="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95"
+                  title="এক্সেল ফাইল দিয়ে এক ক্লিকে সকল শিক্ষার্থীর নম্বর বাল্ক আপলোড করুন"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>বাল্ক রেজাল্ট (Excel)</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => {
                     handleOpenPrintModal("weekly_aggregate")
                   }}
@@ -6304,6 +6364,15 @@ export default function ExamResultsPage() {
               </div>
 
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkUploadModal(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold shrink-0 transition-all cursor-pointer shadow-2xs active:scale-95"
+                  title="এক্সেল ফাইলের মাধ্যমে বাল্ক রেজাল্ট আপলোড করুন"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>বাল্ক রেজাল্ট (Excel)</span>
+                </button>
                 <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-xs font-bold shrink-0">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span>⚡ Auto-Save Active</span>
@@ -6968,6 +7037,52 @@ export default function ExamResultsPage() {
         seriesTitle={seriesName}
         subjectToppers={printableSubjectToppers}
         markDisplayMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
+      />
+
+      {/* BULK RESULT EXCEL UPLOAD MODAL */}
+      <BulkResultUploadModal
+        isOpen={showBulkUploadModal}
+        onClose={() => setShowBulkUploadModal(false)}
+        exam={exam}
+        isWeeklyExam={isWeeklyExam}
+        parsedWeeklyDays={parsedWeeklyDays}
+        students={students}
+        dayMarksMap={effectiveDayMarksMap}
+        markInputModes={markInputModes}
+        totalWeeklyMaxMarks={totalWeeklyMaxMarks}
+        onSuccess={(updatedDayMarksMap, updatedSavedResults) => {
+          setDayMarksMap((prev) => ({
+            ...prev,
+            ...updatedDayMarksMap,
+          }))
+          setSavedResults((prev) => ({
+            ...prev,
+            ...updatedSavedResults,
+          }))
+          if (params.id) {
+            fetch(`/api/exams/${params.id}`)
+              .then((r) => r.json())
+              .then((data) => {
+                if (data.existing_results && Array.isArray(data.existing_results)) {
+                  const sMap: Record<string, Result> = {}
+                  data.existing_results.forEach((r: any) => {
+                    if (r.student_id) {
+                      sMap[r.student_id] = {
+                        student_id: r.student_id,
+                        obtained_marks: String(r.obtained_marks ?? ""),
+                        grade: r.grade || "",
+                        rank: r.rank,
+                        mcq: r.mcq,
+                        written: r.written,
+                      }
+                    }
+                  })
+                  setSavedResults((prev) => ({ ...prev, ...sMap }))
+                }
+              })
+              .catch(() => {})
+          }
+        }}
       />
     </>
   )
