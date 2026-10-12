@@ -143,9 +143,12 @@ export default function ExamPrintModal({
   // 1. Template Type: Merit List (Pic 2), Progress Report (Pic 1), Tabulation, or Toppers Sheet
   const [template, setTemplate] = useState<PrintTemplateType>(defaultTemplate)
 
-  // 2. Exam Mode / Scope
+  // 2. Exam Mode / Scope: ALWAYS default weekly exams to daily entry (weekly_day)
+  const resolvedDefaultMode = isWeeklyExam
+    ? (defaultMode === "one_time" || !defaultMode ? "weekly_day" : defaultMode)
+    : "one_time"
   const [selectedMode, setSelectedMode] = useState<"one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined">(
-    isWeeklyExam ? defaultMode : "one_time"
+    resolvedDefaultMode
   )
   const [selectedDayKey, setSelectedDayKey] = useState<string>(
     activeDayConfig?.key || weeklyDays[0]?.key || "saturday"
@@ -210,7 +213,8 @@ export default function ExamPrintModal({
   // Sync mode and orientation when defaultMode changes
   useEffect(() => {
     if (isWeeklyExam) {
-      setSelectedMode(defaultMode)
+      const target = defaultMode === "one_time" || !defaultMode ? "weekly_day" : defaultMode
+      setSelectedMode(target)
     } else {
       setSelectedMode("one_time")
     }
@@ -354,7 +358,10 @@ export default function ExamPrintModal({
         for (const d of weeklyDays) {
           const item = getDayMarkItemHelper(studentDays, d.key, d.day_bn, d.day_en)
           if (item && !isNaN(Number(item.marks))) {
-            sumMarks += Number(item.marks)
+            const rawScore = Number(item.marks)
+            // Clamp score to this day's maximum marks to prevent contaminated/cumulative leaks
+            const dayScore = Math.min(Math.max(0, rawScore), d.total_marks || 50)
+            sumMarks += dayScore
             hasAnyDayMark = true
           }
         }
@@ -363,7 +370,7 @@ export default function ExamPrintModal({
         if (!hasAnyDayMark && fbRes?.obtained_marks) {
           const fbVal = parseFloat(fbRes.obtained_marks)
           if (!isNaN(fbVal)) {
-            sumMarks = fbVal
+            sumMarks = Math.min(Math.max(0, fbVal), activeTotalMarks)
             hasAnyDayMark = true
           }
         }
@@ -1502,12 +1509,30 @@ export default function ExamPrintModal({
                 examTitle={
                   isCombinedWeeks && activeCombinedExams.length > 0
                     ? `${pdfTitle || displayTitle} (${activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})`
+                    : isWeeklyDay && currentDayConfig
+                    ? `${pdfTitle || displayTitle} (${currentDayConfig.day_bn} - ${currentDayConfig.subject || currentDayConfig.exam_name || "পরীক্ষা"})`
                     : (pdfTitle || displayTitle)
                 }
                 academicYear={customAcademicYear}
                 rows={meritListRows}
                 documentTitle={effectiveDocTitle}
-                documentSubtitle={effectiveDocSubtitle}
+                documentSubtitle={
+                  effectiveDocSubtitle ||
+                  (isWeeklyDay && currentDayConfig
+                    ? `দৈনিক বিষয়ভিত্তিক মূল্যায়ন • ${currentDayConfig.day_bn}`
+                    : isWeeklyAggregate
+                    ? `সাপ্তাহিক সামগ্রিক মূল্যায়ন (${weeklyDays.length} দিনের সমন্বিত মোট)`
+                    : undefined)
+                }
+                marksColumnHeader={
+                  isWeeklyDay
+                    ? `নম্বর (/${activeTotalMarks})`
+                    : isWeeklyAggregate
+                    ? `সাপ্তাহিক মোট (/${activeTotalMarks})`
+                    : isCombinedWeeks
+                    ? `সম্মিলিত মোট (/${activeTotalMarks})`
+                    : `মোট নম্বর (/${activeTotalMarks})`
+                }
               />
             )}
 

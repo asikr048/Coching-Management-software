@@ -17,12 +17,15 @@ const ALL_WEEK_DAYS = [
   { id: "friday", bn: "শুক্রবার", en: "Friday" },
 ]
 
-export function normalizeDayMarks(days: Record<string, any> | undefined | null): Record<string, any> {
+export function normalizeDayMarks(days: Record<string, any> | undefined | null, isWeekly?: boolean): Record<string, any> {
   if (!days || typeof days !== "object") return {}
   const normalized: Record<string, any> = {}
   for (const [key, val] of Object.entries(days)) {
     if (!val) continue
     const lowerKey = key.trim().toLowerCase()
+    if (isWeekly && (lowerKey === "main" || lowerKey === "default" || lowerKey === "total" || lowerKey === "weekly_aggregate" || lowerKey === "all_weeks_combined")) {
+      continue
+    }
     const matched = ALL_WEEK_DAYS.find((d) => d.id === lowerKey || d.bn === key || d.en.toLowerCase() === lowerKey)
     const canonicalKey = matched ? matched.id : lowerKey
     if (!normalized[canonicalKey] || (typeof val === "object" && val !== null && "marks" in val)) {
@@ -575,6 +578,7 @@ export async function POST(
 
     let calculatedWeeklyMax = 0
     let calculatedWeeklyPass = 0
+    let targetDays: any[] = []
     if (isWeekly) {
       let recDays = Array.isArray(currentExam.recurring_days) ? currentExam.recurring_days : []
       const confMap: Record<string, any> = {}
@@ -599,7 +603,7 @@ export async function POST(
       }
 
       const confKeys = Object.keys(confMap)
-      const targetDays = confKeys.length > 0
+      targetDays = confKeys.length > 0
         ? ALL_WEEK_DAYS.filter((w) => !!confMap[w.id])
         : ALL_WEEK_DAYS
 
@@ -643,19 +647,33 @@ export async function POST(
       // it is the authoritative day map for this student. Do not revive deleted days from existingDays!
       let mergedDays: Record<string, any> = {}
       if (u.day_marks !== undefined && typeof u.day_marks === "object") {
-        mergedDays = normalizeDayMarks(u.day_marks)
+        mergedDays = normalizeDayMarks(u.day_marks, isWeekly)
       } else {
-        mergedDays = normalizeDayMarks(existingDays)
+        mergedDays = normalizeDayMarks(existingDays, isWeekly)
       }
 
-      // Recalculate true cumulative grand total across all days
+      // Recalculate true cumulative grand total across all scheduled days
       let cumulativeGrandTotal = 0
       let hasAnyDay = false
-      for (const dayItem of Object.values(mergedDays)) {
-        const m = typeof dayItem === "object" && dayItem !== null ? Number((dayItem as any).marks) : Number(dayItem)
-        if (!isNaN(m)) {
-          cumulativeGrandTotal += m
-          hasAnyDay = true
+      if (isWeekly && targetDays && targetDays.length > 0) {
+        for (const w of targetDays) {
+          const dayItem = mergedDays[w.id]
+          const m = typeof dayItem === "object" && dayItem !== null ? Number((dayItem as any).marks) : Number(dayItem)
+          if (!isNaN(m)) {
+            cumulativeGrandTotal += m
+            hasAnyDay = true
+          }
+        }
+      } else {
+        for (const [dayKey, dayItem] of Object.entries(mergedDays)) {
+          if (isWeekly && (dayKey === "main" || dayKey === "default" || dayKey === "total" || dayKey === "weekly_aggregate")) {
+            continue
+          }
+          const m = typeof dayItem === "object" && dayItem !== null ? Number((dayItem as any).marks) : Number(dayItem)
+          if (!isNaN(m)) {
+            cumulativeGrandTotal += m
+            hasAnyDay = true
+          }
         }
       }
 

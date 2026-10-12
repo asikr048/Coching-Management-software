@@ -24,6 +24,7 @@ export interface SectionWiseMeritListProps {
   breakBefore?: boolean
   documentTitle?: string
   documentSubtitle?: string
+  marksColumnHeader?: string
 }
 
 export default function SectionWiseMeritList({
@@ -37,6 +38,7 @@ export default function SectionWiseMeritList({
   breakBefore = false,
   documentTitle = "Section Wise Merit List",
   documentSubtitle,
+  marksColumnHeader,
 }: SectionWiseMeritListProps) {
   // Sort rows strictly by Section Merit if numeric, or fallback to roll
   const sortedRows = useMemo(() => {
@@ -123,7 +125,7 @@ export default function SectionWiseMeritList({
               <th className="border border-black py-1 px-1.5 w-24 font-mono">Student ID</th>
               <th className="border border-black py-1 px-1.5 w-16 font-mono">Roll No.</th>
               <th className="border border-black py-1 px-3 text-left min-w-[170px]">Name</th>
-              <th className="border border-black py-1 px-2 w-20 font-mono">Total Marks</th>
+              <th className="border border-black py-1 px-2 w-20 font-mono">{marksColumnHeader || "Total Marks"}</th>
               <th className="border border-black py-1 px-2 w-24">Section Merit</th>
               <th className="border border-black py-1 px-1.5 w-16">Grade</th>
               <th className="border border-black py-1 px-1.5 w-16 font-mono">GPA</th>

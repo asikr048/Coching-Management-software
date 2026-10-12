@@ -41,10 +41,12 @@ import {
   CheckSquare,
   Square,
   RotateCcw,
+  FileSpreadsheet,
 } from "lucide-react"
 import { getGrade, getGradePoint, cn, extractWeeklyScheduleFromNote, parseRollQuery, isRollMatch, extractSeriesId, extractSeriesWeek, getExamSeriesKey } from "@/lib/utils"
 import PrintableExamSheet from "@/components/modules/exams/PrintableExamSheet"
 import ExamPrintModal, { PrintTemplateType } from "@/components/modules/exams/ExamPrintModal"
+import ExcelBulkMarkModal, { BulkMarkInputMode } from "@/components/modules/exams/ExcelBulkMarkModal"
 import { calculateCoachingGrade } from "@/components/modules/exams/StudentProgressReport"
 
 interface Student {
@@ -157,11 +159,15 @@ function extractWeekNumber(title?: string | null, note?: string | null): number 
   return null
 }
 
-function normalizeDayMarks(rawDays: Record<string, any> | undefined): Record<string, DayMarkItem> {
+function normalizeDayMarks(rawDays: Record<string, any> | undefined, isWeekly?: boolean): Record<string, DayMarkItem> {
   if (!rawDays || typeof rawDays !== "object") return {}
   const normalized: Record<string, DayMarkItem> = {}
   for (const [k, v] of Object.entries(rawDays)) {
     const lk = k.toLowerCase()
+    // When processing a weekly exam, strictly ignore non-day keys that could leak into daily calculations
+    if (isWeekly && (lk === "main" || lk === "default" || lk === "total" || lk === "weekly_aggregate" || lk === "all_weeks_combined")) {
+      continue
+    }
     const matched = ALL_WEEK_DAYS.find((d) => d.id === lk || d.bn === k || d.en.toLowerCase() === lk)
     const canonicalKey = matched?.id || lk
     const item = typeof v === "object" && v !== null ? v : { marks: Number(v), total: 50, grade: "" }
@@ -289,8 +295,12 @@ export default function ExamResultsPage() {
 
   // Print Modal State
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
-  const [printModalDefaultMode, setPrintModalDefaultMode] = useState<"one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined">("one_time")
+  const [printModalDefaultMode, setPrintModalDefaultMode] = useState<"one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined">("weekly_day")
   const [printModalDefaultTemplate, setPrintModalDefaultTemplate] = useState<PrintTemplateType>("merit_list")
+
+  // Excel Bulk Mark Modal State
+  const [isExcelBulkModalOpen, setIsExcelBulkModalOpen] = useState(false)
+  const [excelBulkScope, setExcelBulkScope] = useState<"daily" | "weekly" | "routine" | "one_time" | "combined">("daily")
 
   // Batch Selection & Students State
   const [availableBatches, setAvailableBatches] = useState<{ id: string; name: string }[]>([])
@@ -3224,6 +3234,278 @@ export default function ExamResultsPage() {
     }
   }
 
+  // Save Excel Bulk Marks across all scopes (Daily, Weekly, Routine, One-time, Combined)
+  async function handleSaveExcelBulkMarks(
+    results: Array<{
+      studentId: string
+      marks: number
+      mcq?: number
+      written?: number
+      mode: BulkMarkInputMode
+      dayMarks?: Record<string, number>
+    }>,
+    mode: BulkMarkInputMode
+  ) {
+    if (!exam || results.length === 0) return
+    setLoading(true)
+    try {
+      if (isWeeklyExam && activeDayConfig && selectedTab !== "weekly_aggregate" && selectedTab !== "all_weeks_combined") {
+        // 1. Single Day of Weekly Exam
+        const activeKey = (activeDayConfig.key || selectedTab).toLowerCase()
+        const activeMax = activeDayConfig.total_marks || 50
+        const batchUpdates: any[] = []
+        const nextDayMarksMap: Record<string, Record<string, DayMarkItem>> = { ...dayMarksMap }
+
+        for (const item of results) {
+          const st = students.find((s) => s.id === item.studentId)
+          if (!st) continue
+
+          const sDays = normalizeDayMarks(nextDayMarksMap[st.id], true)
+          const dayGrade = getGrade(item.marks, activeMax)
+          sDays[activeKey] = {
+            marks: item.marks,
+            total: activeMax,
+            grade: dayGrade,
+            subject: activeDayConfig.subject,
+            exam_name: activeDayConfig.exam_name,
+            mcq: item.mcq,
+            written: item.written,
+            mode: mode as any,
+          }
+          nextDayMarksMap[st.id] = sDays
+
+          const grandTotal = parsedWeeklyDays.reduce((acc, d) => {
+            const dItem = sDays[d.key.toLowerCase()] || sDays[d.key]
+            return acc + (dItem && !isNaN(Number(dItem.marks)) ? Number(dItem.marks) : 0)
+          }, 0)
+          const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
+
+          batchUpdates.push({
+            student_id: st.id,
+            obtained_marks: grandTotal,
+            grade: overallGrade,
+            day_marks: sDays,
+          })
+        }
+
+        const res = await fetch(`/api/exams/${exam.id}/results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            batch_updates: batchUpdates,
+            all_day_marks: nextDayMarksMap,
+          }),
+        })
+
+        if (!res.ok) {
+          for (const u of batchUpdates) {
+            const payload: any = {
+              exam_id: exam.id,
+              student_id: u.student_id,
+              obtained_marks: u.obtained_marks,
+              grade: u.grade,
+              day_marks: u.day_marks,
+            }
+            await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          }
+        }
+
+        setDayMarksMap(nextDayMarksMap)
+        setSavedResults((prev) => {
+          const next = { ...prev }
+          for (const u of batchUpdates) {
+            next[u.student_id] = {
+              student_id: u.student_id,
+              obtained_marks: String(u.obtained_marks),
+              grade: u.grade,
+            }
+          }
+          return next
+        })
+        setDraftMarks((prev) => {
+          const next = { ...prev }
+          for (const item of results) {
+            next[item.studentId] = String(item.marks)
+          }
+          return next
+        })
+        if (mode === "both") {
+          setDraftMcqMarks((prev) => {
+            const next = { ...prev }
+            for (const item of results) {
+              if (item.mcq !== undefined) next[item.studentId] = String(item.mcq)
+            }
+            return next
+          })
+          setDraftWrMarks((prev) => {
+            const next = { ...prev }
+            for (const item of results) {
+              if (item.written !== undefined) next[item.studentId] = String(item.written)
+            }
+            return next
+          })
+        }
+      } else if (isWeeklyExam && selectedTab === "weekly_aggregate") {
+        // 2. Full Weekly Multi-day Breakdown
+        const batchUpdates: any[] = []
+        const nextDayMarksMap: Record<string, Record<string, DayMarkItem>> = { ...dayMarksMap }
+
+        for (const item of results) {
+          const st = students.find((s) => s.id === item.studentId)
+          if (!st || !item.dayMarks) continue
+
+          const sDays = normalizeDayMarks(nextDayMarksMap[st.id], true)
+          for (const [dKey, dMark] of Object.entries(item.dayMarks)) {
+            const dConf = parsedWeeklyDays.find((d) => d.key.toLowerCase() === dKey.toLowerCase())
+            const dMax = dConf?.total_marks || 50
+            if (dMark !== null && !isNaN(dMark)) {
+              sDays[dKey.toLowerCase()] = {
+                marks: dMark,
+                total: dMax,
+                grade: getGrade(dMark, dMax),
+                subject: dConf?.subject,
+                exam_name: dConf?.exam_name,
+              }
+            }
+          }
+          nextDayMarksMap[st.id] = sDays
+
+          const grandTotal = parsedWeeklyDays.reduce((acc, d) => {
+            const dItem = sDays[d.key.toLowerCase()] || sDays[d.key]
+            return acc + (dItem && !isNaN(Number(dItem.marks)) ? Number(dItem.marks) : 0)
+          }, 0)
+          const overallGrade = getGrade(grandTotal, totalWeeklyMaxMarks)
+
+          batchUpdates.push({
+            student_id: st.id,
+            obtained_marks: grandTotal,
+            grade: overallGrade,
+            day_marks: sDays,
+          })
+        }
+
+        const res = await fetch(`/api/exams/${exam.id}/results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            batch_updates: batchUpdates,
+            all_day_marks: nextDayMarksMap,
+          }),
+        })
+
+        if (!res.ok) {
+          for (const u of batchUpdates) {
+            const payload: any = {
+              exam_id: exam.id,
+              student_id: u.student_id,
+              obtained_marks: u.obtained_marks,
+              grade: u.grade,
+              day_marks: u.day_marks,
+            }
+            await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          }
+        }
+
+        setDayMarksMap(nextDayMarksMap)
+        setSavedResults((prev) => {
+          const next = { ...prev }
+          for (const u of batchUpdates) {
+            next[u.student_id] = {
+              student_id: u.student_id,
+              obtained_marks: String(u.obtained_marks),
+              grade: u.grade,
+            }
+          }
+          return next
+        })
+      } else {
+        // 3. One-time Exam or Single Combined view
+        const activeMax = exam.total_marks || 100
+        const batchUpdates: any[] = []
+
+        for (const item of results) {
+          const st = students.find((s) => s.id === item.studentId)
+          if (!st) continue
+          const grade = getGrade(item.marks, activeMax)
+          const mainDayItem: DayMarkItem = {
+            marks: item.marks,
+            total: activeMax,
+            grade,
+            mcq: item.mcq,
+            written: item.written,
+            mode: mode as any,
+          }
+          batchUpdates.push({
+            student_id: st.id,
+            obtained_marks: item.marks,
+            grade,
+            day_marks: { main: mainDayItem },
+          })
+        }
+
+        const res = await fetch(`/api/exams/${exam.id}/results`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            batch_updates: batchUpdates,
+          }),
+        })
+
+        if (!res.ok) {
+          for (const u of batchUpdates) {
+            const payload: any = {
+              exam_id: exam.id,
+              student_id: u.student_id,
+              obtained_marks: u.obtained_marks,
+              grade: u.grade,
+              day_marks: u.day_marks,
+            }
+            await supabase.from("exam_results").upsert(payload, { onConflict: "exam_id,student_id" })
+          }
+        }
+
+        setSavedResults((prev) => {
+          const next = { ...prev }
+          for (const u of batchUpdates) {
+            next[u.student_id] = {
+              student_id: u.student_id,
+              obtained_marks: String(u.obtained_marks),
+              grade: u.grade,
+              mcq: u.day_marks?.main?.mcq,
+              written: u.day_marks?.main?.written,
+            }
+          }
+          return next
+        })
+        setDraftMarks((prev) => {
+          const next = { ...prev }
+          for (const item of results) {
+            next[item.studentId] = String(item.marks)
+          }
+          return next
+        })
+        if (mode === "both") {
+          setDraftMcqMarks((prev) => {
+            const next = { ...prev }
+            for (const item of results) {
+              if (item.mcq !== undefined) next[item.studentId] = String(item.mcq)
+            }
+            return next
+          })
+          setDraftWrMarks((prev) => {
+            const next = { ...prev }
+            for (const item of results) {
+              if (item.written !== undefined) next[item.studentId] = String(item.written)
+            }
+            return next
+          })
+        }
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Publish / Unpublish Individual Day Result (For Batch Students)
   async function handleTogglePublishDay(dayKey: string) {
     if (!exam) return
@@ -3858,7 +4140,7 @@ export default function ExamResultsPage() {
     const passRate = marksArr.length ? Math.round((passedCount / marksArr.length) * 100) : 0
 
     return { total, count: enteredCount, avg, highest, passRate, passedCount, failedCount: enteredCount - passedCount, max: activeMax, pass: activePass }
-  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, effectiveDayMarksMap, effectiveSavedResults, parsedWeeklyDays, exam, activeCombinedExams, combinedWeekData, activeMax, activePass])
+  }, [students, isWeeklyExam, selectedTab, activeDayConfig, totalWeeklyMaxMarks, effectiveDayMarksMap, effectiveSavedResults, parsedWeeklyDays, exam, activeCombinedExams, combinedWeekData])
 
   // Total Toppers for Weekly View (supports ties and all tied students)
   const totalToppers = useMemo(() => {
@@ -4372,15 +4654,32 @@ export default function ExamResultsPage() {
               </button>
             )}
 
-            {/* 5.6. Print Result Sheet Button (PDF) */}
+            {/* 5.5. Excel Bulk Marks Import Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const scope = isWeeklyExam
+                  ? (selectedTab === "weekly_aggregate" ? "weekly" : selectedTab === "all_weeks_combined" ? "combined" : "daily")
+                  : isRoutineExam
+                  ? (selectedTab === "weekly_aggregate" ? "routine" : "daily")
+                  : "one_time"
+                setExcelBulkScope(scope)
+                setIsExcelBulkModalOpen(true)
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl font-bold text-xs transition-all shadow-xs cursor-pointer border border-emerald-600 active:scale-95 whitespace-nowrap shrink-0"
+              title="এক্সেল ফাইল আপলোড করে এক ক্লিকে সকল শিক্ষার্থীর নম্বর ইনপুট করুন"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+              <span>📥 এক্সেল বাল্ক ইনপুট (Excel Marks)</span>
+            </button>
+
+            {/* 5.6. Print Result Sheet Button (PDF) - ALWAYS defaults to daily entry for weekly exams */}
             <button
               type="button"
               onClick={() => {
                 handleOpenPrintModal(
                   selectedTab === "all_weeks_combined"
                     ? "all_weeks_combined"
-                    : isWeeklyActive
-                    ? "weekly_aggregate"
                     : isWeeklyExam
                     ? "weekly_day"
                     : "one_time"
@@ -5251,6 +5550,19 @@ export default function ExamResultsPage() {
 
                 <button
                   type="button"
+                  onClick={() => {
+                    setExcelBulkScope("combined")
+                    setIsExcelBulkModalOpen(true)
+                  }}
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
+                  title="এক্সেল ফাইল দিয়ে সমন্বিত নম্বর আপডেট করুন"
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-200" />
+                  <span>📥 এক্সেল বাল্ক ইনপুট</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => handleOpenPrintModal("all_weeks_combined")}
                   className="px-4 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
                   title="সমন্বিত মেধা তালিকা PDF ও Word (.DOC) হিসেবে সংরক্ষণ করুন"
@@ -5861,6 +6173,19 @@ export default function ExamResultsPage() {
                 <button
                   type="button"
                   onClick={() => {
+                    setExcelBulkScope("weekly")
+                    setIsExcelBulkModalOpen(true)
+                  }}
+                  className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95"
+                  title="সম্পূর্ণ সপ্তাহের সকল দিনের নম্বর এক্সেল ফাইল দিয়ে এক ক্লিকে ইনপুট করুন"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>📥 সাপ্তাহিক এক্সেল বাল্ক ইনপুট</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
                     handleOpenPrintModal("weekly_aggregate")
                   }}
                   className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer shrink-0 active:scale-95"
@@ -6329,6 +6654,19 @@ export default function ExamResultsPage() {
                     {tab.label}
                   </button>
                 ))}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExcelBulkScope(isWeeklyExam ? "daily" : isRoutineExam ? "routine" : "one_time")
+                    setIsExcelBulkModalOpen(true)
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0 active:scale-95"
+                  title="এক্সেল ফাইল আপলোড করে এক ক্লিকে সকল শিক্ষার্থীর নম্বর ইনপুট করুন"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-200" />
+                  <span>📥 এক্সেল বাল্ক ইনপুট</span>
+                </button>
 
                 <button
                   type="button"
@@ -6968,6 +7306,42 @@ export default function ExamResultsPage() {
         seriesTitle={seriesName}
         subjectToppers={printableSubjectToppers}
         markDisplayMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
+      />
+
+      {/* EXCEL BULK MARK INPUT MODAL */}
+      <ExcelBulkMarkModal
+        isOpen={isExcelBulkModalOpen}
+        onClose={() => setIsExcelBulkModalOpen(false)}
+        examTitle={seriesName || exam?.title || "পরীক্ষা"}
+        scopeTitle={
+          excelBulkScope === "weekly"
+            ? "সাপ্তাহিক সকল দিন"
+            : excelBulkScope === "combined"
+            ? "সমন্বিত সিরিজ"
+            : activeDayConfig?.day_bn
+            ? `${activeDayConfig.day_bn} - ${activeDayConfig.subject || activeDayConfig.exam_name || "বিষয়"}`
+            : (exam?.subject || "একক পরীক্ষা")
+        }
+        scopeType={excelBulkScope}
+        activeDayConfig={activeDayConfig}
+        weeklyDays={parsedWeeklyDays}
+        maxMarks={
+          excelBulkScope === "weekly"
+            ? totalWeeklyMaxMarks
+            : excelBulkScope === "combined"
+            ? stats.max
+            : (activeDayConfig?.total_marks || exam?.total_marks || 100)
+        }
+        passMarks={
+          excelBulkScope === "weekly"
+            ? Math.round(totalWeeklyMaxMarks * 0.4)
+            : excelBulkScope === "combined"
+            ? stats.pass
+            : (activeDayConfig?.pass_marks || exam?.pass_marks || 33)
+        }
+        currentMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
+        students={students as any}
+        onApplyMarks={handleSaveExcelBulkMarks}
       />
     </>
   )
