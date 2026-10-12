@@ -192,9 +192,11 @@ export async function GET(req: NextRequest) {
       currentProfile.email = primaryStudent.email || currentProfile.email
       currentProfile.phone = primaryStudent.phone || currentProfile.phone
 
-      // Background link auth_user_id (non-blocking)
-      if (!primaryStudent.auth_user_id) {
-        admin.from("students").update({ auth_user_id: user.id }).eq("id", primaryStudent.id).then()
+      // Background link auth_user_id for all matched student records (non-blocking)
+      for (const ms of matchedStudents) {
+        if (!ms.auth_user_id) {
+          admin.from("students").update({ auth_user_id: user.id }).eq("id", ms.id).then()
+        }
       }
     }
 
@@ -253,6 +255,7 @@ export async function GET(req: NextRequest) {
 
     const sid = primaryStudent?.id || null
     const studentDbIdArray = Array.from(candidateDbIds)
+    const candidateExamStudentIds = Array.from(new Set([...studentDbIdArray, ...Array.from(candidateCodes)]))
 
     // 3. Parallel Batch Execution of all core datasets
     const subQueries: any[] = []
@@ -305,19 +308,19 @@ export async function GET(req: NextRequest) {
             .order("due_month", { ascending: false })
         : Promise.resolve({ data: [] }),
 
-      studentDbIdArray.length > 0
+      candidateExamStudentIds.length > 0
         ? admin
             .from("exam_results")
             .select("*, exam:exams(*)")
-            .in("student_id", studentDbIdArray)
+            .in("student_id", candidateExamStudentIds)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] }),
 
-      studentDbIdArray.length > 0
+      candidateExamStudentIds.length > 0
         ? admin
             .from("exam_submissions")
             .select("*, exam:exams(id, title, total_marks, pass_marks, exam_date, subject, batch_id, result_note)")
-            .in("student_id", studentDbIdArray)
+            .in("student_id", candidateExamStudentIds)
             .eq("is_submitted", true)
             .order("submitted_at", { ascending: false })
         : Promise.resolve({ data: [] }),
@@ -591,19 +594,24 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // Filter out unpublished exam results so draft marks do not leak to student profile
+    // Include exam results for student profile (unless explicitly unpublished via [BATCH_PUBLISHED:false] or [IS_WEEKLY_PUBLISHED:false])
     examResults = examResults.filter((r: any) => {
       const ex = r.exam
       if (!ex) return false
       const note = ex.result_note || ""
+      const isExplicitlyUnpublished = note.includes("[BATCH_PUBLISHED:false]") || note.includes("[IS_WEEKLY_PUBLISHED:false]") || ex.is_published === false
+      if (isExplicitlyUnpublished) return false
+
       const isWeekly = ex.exam_schedule_type === "weekly"
       if (isWeekly) {
         const isWeeklyPub = ex.is_weekly_published === true || note.includes("[IS_WEEKLY_PUBLISHED:true]")
         const pubDays = Array.isArray(ex.published_days) ? ex.published_days : []
         const isBatchPub = ex.is_published === true || note.includes("[BATCH_PUBLISHED:true]")
-        return isWeeklyPub || pubDays.length > 0 || isBatchPub
+        const hasObtainedMarks = r.obtained_marks != null || r.marks_obtained != null
+        return isWeeklyPub || pubDays.length > 0 || isBatchPub || ex.is_public_result === true || hasObtainedMarks
       } else {
-        return ex.is_published === true || note.includes("[BATCH_PUBLISHED:true]")
+        const hasObtainedMarks = r.obtained_marks != null || r.marks_obtained != null
+        return ex.is_published === true || note.includes("[BATCH_PUBLISHED:true]") || ex.is_public_result === true || hasObtainedMarks
       }
     })
 

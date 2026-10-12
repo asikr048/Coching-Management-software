@@ -430,10 +430,15 @@ export default function OnlineResultPortalPage() {
   // Open Full Merit List
   async function handleOpenMeritList(exam: PublicExam, dayKey: string | null = null) {
     let targetDayKey = dayKey
-    if (!targetDayKey && checkIsWeeklyExam(exam) && !exam.is_weekly_published) {
+    if (!targetDayKey && checkIsWeeklyExam(exam)) {
       const pub = Array.isArray(exam.published_days) ? exam.published_days : []
       if (pub.length > 0) {
         targetDayKey = String(pub[0]).toLowerCase()
+      } else {
+        const days = parseWeeklyDaysForExam(exam)
+        if (days.length > 0) {
+          targetDayKey = days[0].key.toLowerCase()
+        }
       }
     }
     setSelectedExam(exam)
