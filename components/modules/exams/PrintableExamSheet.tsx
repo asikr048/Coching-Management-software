@@ -112,26 +112,26 @@ export default function PrintableExamSheet({
   const activeTotalMarks = isAllWeeksCombined
     ? totalWeeklyMaxMarks
     : isWeeklyAggregate
-    ? totalWeeklyMaxMarks
-    : isWeeklyDay
-    ? activeDayConfig?.total_marks || 50
-    : exam.total_marks || 100
+      ? totalWeeklyMaxMarks
+      : isWeeklyDay
+        ? activeDayConfig?.total_marks || 50
+        : exam.total_marks || 100
 
   const activePassMarks = isAllWeeksCombined
     ? Math.round(totalWeeklyMaxMarks * 0.4)
     : isWeeklyAggregate
-    ? Math.round(totalWeeklyMaxMarks * 0.4)
-    : isWeeklyDay
-    ? activeDayConfig?.pass_marks || 20
-    : exam.pass_marks || 33
+      ? Math.round(totalWeeklyMaxMarks * 0.4)
+      : isWeeklyDay
+        ? activeDayConfig?.pass_marks || 20
+        : exam.pass_marks || 33
 
   const displaySubject = isAllWeeksCombined
     ? "সকল সপ্তাহের সমন্বিত মূল্যায়ন"
     : isWeeklyAggregate
-    ? "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)"
-    : isWeeklyDay
-    ? activeDayConfig?.subject || activeDayConfig?.exam_name || "বিষয়"
-    : exam.subject || "সাধারণ বিষয়"
+      ? "সকল বিষয় (সাপ্তাহিক মূল্যায়ন)"
+      : isWeeklyDay
+        ? activeDayConfig?.subject || activeDayConfig?.exam_name || "বিষয়"
+        : exam.subject || "সাধারণ বিষয়"
 
   const displayBranch =
     instituteBranch ||
@@ -183,17 +183,29 @@ export default function PrintableExamSheet({
         // Sum across weekly days
         for (const d of weeklyDays) {
           const item = getDayMarkItemHelper(studentDays, d.key, d.day_bn, d.day_en)
-          if (item && !isNaN(Number(item.marks))) {
-            sumMarks += Number(item.marks)
+          const mVal = typeof item === "object" && item !== null ? item.marks : item
+          if (mVal !== undefined && mVal !== null && !isNaN(Number(mVal))) {
+            sumMarks += Number(mVal)
             hasAnyDayMark = true
           }
         }
 
-        // Fallback to saved result if no day marks entered
+        // Direct fallback: sum all entries in studentDays if loop missed alternate keys
+        if (!hasAnyDayMark && Object.keys(studentDays).length > 0) {
+          for (const val of Object.values(studentDays)) {
+            const mVal = typeof val === "object" && val !== null ? (val as any).marks : val
+            if (mVal !== undefined && mVal !== null && !isNaN(Number(mVal))) {
+              sumMarks += Number(mVal)
+              hasAnyDayMark = true
+            }
+          }
+        }
+
+        // Fallback to saved result if available
         const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
-        if (!hasAnyDayMark && fbRes?.obtained_marks) {
+        if (fbRes?.obtained_marks !== undefined && fbRes?.obtained_marks !== "") {
           const fbVal = parseFloat(fbRes.obtained_marks)
-          if (!isNaN(fbVal)) {
+          if (!isNaN(fbVal) && (!hasAnyDayMark || fbVal > sumMarks)) {
             sumMarks = fbVal
             hasAnyDayMark = true
           }
@@ -208,11 +220,13 @@ export default function PrintableExamSheet({
         const dayBreakdown: Record<string, { marks: number | null; total: number }> = {}
         for (const d of weeklyDays) {
           const item = getDayMarkItemHelper(studentDays, d.key, d.day_bn, d.day_en)
+          const mVal = typeof item === "object" && item !== null ? item.marks : item
           dayBreakdown[d.key] = {
-            marks: item && !isNaN(Number(item.marks)) ? Number(item.marks) : null,
+            marks: mVal !== undefined && mVal !== null && !isNaN(Number(mVal)) ? Number(mVal) : null,
             total: d.total_marks,
           }
         }
+
 
         return {
           student: s,
@@ -507,10 +521,10 @@ export default function PrintableExamSheet({
               {documentTitle || (isAllWeeksCombined
                 ? "সকল সপ্তাহের সমন্বিত মেধা ও ফলাফল বিবরণী"
                 : isWeeklyAggregate
-                ? "সাপ্তাহিক সামগ্রিক মেধা তালিকা"
-                : isWeeklyDay
-                ? `সাপ্তাহিক পরীক্ষা: ${activeDayConfig?.day_bn || "দিন"}`
-                : "ফলাফল ও মেধা তালিকা বিবরণী")}
+                  ? "সাপ্তাহিক সামগ্রিক মেধা তালিকা"
+                  : isWeeklyDay
+                    ? `সাপ্তাহিক পরীক্ষা: ${activeDayConfig?.day_bn || "দিন"}`
+                    : "ফলাফল ও মেধা তালিকা বিবরণী")}
             </span>
             <p className="text-[10px] text-slate-500 mt-1 font-mono">
               মুদ্রণের সময়: {printTimestamp}
@@ -593,15 +607,15 @@ export default function PrintableExamSheet({
                 tierIndex === 0
                   ? isTie ? `১ম স্থান (যৌথ - ${tierStudents.length} জন)` : "১ম স্থান (1st)"
                   : tierIndex === 1
-                  ? isTie ? `২য় স্থান (যৌথ - ${tierStudents.length} জন)` : "২য় স্থান (2nd)"
-                  : isTie ? `৩য় স্থান (যৌথ - ${tierStudents.length} জন)` : "৩য় স্থান (3rd)"
+                    ? isTie ? `২য় স্থান (যৌথ - ${tierStudents.length} জন)` : "২য় স্থান (2nd)"
+                    : isTie ? `৩য় স্থান (যৌথ - ${tierStudents.length} জন)` : "৩য় স্থান (3rd)"
 
               const badgeBg =
                 tierIndex === 0
                   ? "bg-amber-100 text-amber-900 border-amber-300"
                   : tierIndex === 1
-                  ? "bg-slate-200 text-slate-900 border-slate-400"
-                  : "bg-orange-100 text-orange-900 border-orange-300"
+                    ? "bg-slate-200 text-slate-900 border-slate-400"
+                    : "bg-orange-100 text-orange-900 border-orange-300"
 
               return (
                 <div
@@ -856,10 +870,10 @@ export default function PrintableExamSheet({
                           row.rank === 1
                             ? "bg-amber-100 text-amber-950 font-extrabold border border-amber-400"
                             : row.rank === 2
-                            ? "bg-slate-200 text-slate-950 font-bold border border-slate-400"
-                            : row.rank === 3
-                            ? "bg-orange-100 text-orange-950 font-bold border border-orange-400"
-                            : "text-slate-800"
+                              ? "bg-slate-200 text-slate-950 font-bold border border-slate-400"
+                              : row.rank === 3
+                                ? "bg-orange-100 text-orange-950 font-bold border border-orange-400"
+                                : "text-slate-800"
                         )}
                       >
                         {row.rank}
@@ -960,8 +974,8 @@ export default function PrintableExamSheet({
                           row.grade === "A+" || row.grade === "A"
                             ? "text-emerald-800"
                             : row.grade === "F"
-                            ? "text-rose-700 font-black"
-                            : "text-amber-800"
+                              ? "text-rose-700 font-black"
+                              : "text-amber-800"
                         )}
                       >
                         {row.grade}

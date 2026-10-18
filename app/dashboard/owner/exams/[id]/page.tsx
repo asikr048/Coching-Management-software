@@ -4434,13 +4434,29 @@ export default function ExamResultsPage() {
           <div className="hidden print:block">
             <PrintableExamSheet
               exam={exam}
-              mode={isWeeklyActive ? "weekly_aggregate" : isWeeklyExam ? "weekly_day" : "one_time"}
+              mode={
+                selectedTab === "all_weeks_combined"
+                  ? "all_weeks_combined"
+                  : (isWeeklyActive || selectedTab === "weekly_aggregate")
+                    ? "weekly_aggregate"
+                    : isWeeklyExam
+                      ? "weekly_day"
+                      : "one_time"
+              }
               weeklyDays={parsedWeeklyDays}
               activeDayConfig={activeDayConfig}
-              totalWeeklyMaxMarks={totalWeeklyMaxMarks}
+              totalWeeklyMaxMarks={
+                selectedTab === "all_weeks_combined"
+                  ? combinedSeriesTotal
+                  : (isWeeklyActive || selectedTab === "weekly_aggregate")
+                    ? totalWeeklyMaxMarks
+                    : activeTotalMarks
+              }
               students={students}
               savedResults={effectiveSavedResults}
               dayMarksMap={effectiveDayMarksMap}
+              activeCombinedExams={activeCombinedExams}
+              combinedWeekData={combinedWeekData}
               sortBy="rank"
               markDisplayMode={markInputModes[(activeDayConfig?.key || selectedTab || "main").toLowerCase()] || "total"}
             />
@@ -4714,12 +4730,17 @@ export default function ExamResultsPage() {
             <button
               type="button"
               onClick={() => {
+                if (isWeeklyActive || selectedTab === "weekly_aggregate" || selectedTab === "all_weeks_combined") {
+                  setPrintModalDefaultTemplate("tabulation")
+                }
                 handleOpenPrintModal(
                   selectedTab === "all_weeks_combined"
                     ? "all_weeks_combined"
-                    : isWeeklyExam
-                    ? "weekly_day"
-                    : "one_time"
+                    : (isWeeklyActive || selectedTab === "weekly_aggregate")
+                      ? "weekly_aggregate"
+                      : isWeeklyExam
+                        ? "weekly_day"
+                        : "one_time"
                 )
               }}
               className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs transition-all shadow-xs cursor-pointer border border-slate-800 active:scale-95 whitespace-nowrap"
@@ -7352,7 +7373,13 @@ export default function ExamResultsPage() {
         students={students as any}
         savedResults={effectiveSavedResults}
         dayMarksMap={effectiveDayMarksMap}
-        defaultMode={selectedTab === "all_weeks_combined" ? "all_weeks_combined" : printModalDefaultMode}
+        defaultMode={
+          selectedTab === "all_weeks_combined"
+            ? "all_weeks_combined"
+            : (selectedTab === "weekly_aggregate" || isWeeklyActive)
+              ? "weekly_aggregate"
+              : printModalDefaultMode
+        }
         availableBatches={availableBatches}
         combinedWeekData={combinedWeekData}
         activeCombinedExams={activeCombinedExams}
