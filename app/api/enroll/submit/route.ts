@@ -1,7 +1,51 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000
+const RATE_LIMIT_MAX = 10
+const rateLimitBuckets = new Map<string, number[]>()
+
+function getClientIp(req: NextRequest) {
+  const forwarded = req.headers.get("x-forwarded-for")
+  if (forwarded) return forwarded.split(",")[0]?.trim() || "unknown"
+  return req.headers.get("x-real-ip") || "unknown"
+}
+
+function isRateLimited(key: string) {
+  const now = Date.now()
+  const hits = (rateLimitBuckets.get(key) || []).filter((t) => now - t < RATE_LIMIT_WINDOW_MS)
+
+  if (hits.length >= RATE_LIMIT_MAX) {
+    rateLimitBuckets.set(key, hits)
+    return true
+  }
+
+  hits.push(now)
+  rateLimitBuckets.set(key, hits)
+
+  if (rateLimitBuckets.size > 5000) {
+    for (const [bucketKey, bucketHits] of rateLimitBuckets) {
+      if (!bucketHits.some((t) => now - t < RATE_LIMIT_WINDOW_MS)) {
+        rateLimitBuckets.delete(bucketKey)
+      }
+    }
+  }
+
+  return false
+}
+
+function rateLimitResponse() {
+  return NextResponse.json(
+    { error: "Too many enrollment attempts. Please wait a few minutes and try again." },
+    { status: 429, headers: { "Retry-After": "600" } }
+  )
+}
+
 export async function POST(req: NextRequest) {
+  if (isRateLimited(`ip:${getClientIp(req)}`)) {
+    return rateLimitResponse()
+  }
+
   try {
     const body = await req.json()
     const {
@@ -41,6 +85,11 @@ export async function POST(req: NextRequest) {
     const cleanSenderNumber = String(senderNumber).trim()
     const cleanTrxId = String(transactionId).trim().toUpperCase()
     const cleanMethod = String(paymentMethod).toLowerCase()
+
+    if (isRateLimited(`phone:${cleanPhone}`)) {
+      return rateLimitResponse()
+    }
+
     const actualPaid = Number(paidAmount) || 0
     const totalFee = Number(totalAmount) || 0
     const actualDue = Number(dueAmount) >= 0 ? Number(dueAmount) : Math.max(0, totalFee - actualPaid)

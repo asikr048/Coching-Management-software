@@ -1227,37 +1227,51 @@ export default function StudentsClient({
     }
 
     try {
-      // 1. Delete records from Supabase
-      try {
-        await supabase.from("enrollments").delete().in("student_id", req.student_ids)
-        await supabase.from("fee_dues").delete().in("student_id", req.student_ids)
-        await supabase.from("students").delete().in("id", req.student_ids)
-      } catch (e) {
-        console.warn("Database deletion execution notice:", e)
-      }
+      // 1. Delete records from Supabase. Supabase returns errors instead of
+      // throwing, so every result must be inspected before reporting success.
+      const { error: enrollErr } = await supabase
+        .from("enrollments")
+        .delete()
+        .in("student_id", req.student_ids)
+      if (enrollErr) throw new Error(`Failed to delete enrollments: ${enrollErr.message}`)
 
-      // 2. Remove students from local table view
-      setLocalStudents(prev => prev.filter(s => !req.student_ids.includes(s.id)))
+      const { error: duesErr } = await supabase
+        .from("fee_dues")
+        .delete()
+        .in("student_id", req.student_ids)
+      if (duesErr) throw new Error(`Failed to delete fee dues: ${duesErr.message}`)
 
-      // 3. Mark request as executed
+      const { error: studentErr } = await supabase
+        .from("students")
+        .delete()
+        .in("id", req.student_ids)
+      if (studentErr) throw new Error(`Failed to delete students: ${studentErr.message}`)
+
+      // 2. Mark request as executed
+      const executedAt = new Date().toISOString()
+      const { error: requestErr } = await supabase
+        .from("student_deletion_requests")
+        .update({
+          status: "executed",
+          executed_at: executedAt
+        })
+        .eq("id", reqId)
+      if (requestErr) throw new Error(`Failed to finalize deletion request: ${requestErr.message}`)
+
       const updated = deletionRequests.map(r => {
         if (r.id === reqId) {
           return {
             ...r,
             status: "executed" as const,
-            executed_at: new Date().toISOString()
+            executed_at: executedAt
           }
         }
         return r
       })
       persistRequests(updated)
 
-      try {
-        await supabase.from("student_deletion_requests").update({
-          status: "executed",
-          executed_at: new Date().toISOString()
-        }).eq("id", reqId)
-      } catch {}
+      // 3. Remove students from local table view only after every DB write succeeded
+      setLocalStudents(prev => prev.filter(s => !req.student_ids.includes(s.id)))
 
       toast.success(`✓ Permanently deleted ${req.student_ids.length} student(s) after 24h timelock completion.`)
     } catch (err: any) {

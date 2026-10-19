@@ -14,6 +14,7 @@ import { getUserEnrollments, getCachedUserEnrollments, type UserEnrollmentsState
 import { useBranding } from "@/components/providers/BrandingContext"
 import { useLanguage } from "@/components/providers/LanguageContext"
 import LanguageSelector from "@/components/ui/LanguageSelector"
+import { toast } from "sonner"
 
 const ALL_WEEK_DAYS = [
   { id: "saturday", bn: "শনিবার", en: "Saturday" },
@@ -639,11 +640,16 @@ export default function HomePage() {
       let { error } = await supabase.from("feedback").insert(payload)
       if (error && (error.message?.includes("branch_id") || error.code === "PGRST204" || error.code === "42703")) {
         delete payload.branch_id
-        await supabase.from("feedback").insert(payload)
+        const retry = await supabase.from("feedback").insert(payload)
+        error = retry.error
+      }
+      if (error) {
+        toast.error(error.message || "Could not submit feedback. Please try again.")
+        return
       }
       setFbDone(true)
-    } catch {
-      setFbDone(true)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not submit feedback. Please try again.")
     } finally {
       setFbSubmitting(false)
     }

@@ -303,23 +303,29 @@ export default function StudentProfilePage() {
     if (!editName.trim()) { toast.error("Name is required"); return }
     setSaving(true)
     try {
+      if (!profile?.id && !studentData?.id) {
+        toast.error("Could not update profile: no linked student record found")
+        return
+      }
       if (profile?.id) {
-        await supabase.from("user_profiles").update({
+        const { error } = await supabase.from("user_profiles").update({
           name: editName.trim(),
           phone: editPhone.trim(),
         }).eq("id", profile.id)
+        if (error) throw error
       }
       if (studentData?.id) {
-        await supabase.from("students").update({
+        const { error } = await supabase.from("students").update({
           name: editName.trim(),
           phone: editPhone.trim() || null,
         }).eq("id", studentData.id)
+        if (error) throw error
       }
       setProfile((p: any) => ({ ...p, name: editName.trim(), phone: editPhone.trim() }))
       toast.success("Profile updated successfully!")
       setIsEditingProfile(false)
     } catch (err) {
-      toast.error("Failed to update profile")
+      toast.error(err instanceof Error ? err.message : "Failed to update profile")
     } finally {
       setSaving(false)
     }
