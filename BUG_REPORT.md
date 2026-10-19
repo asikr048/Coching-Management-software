@@ -88,7 +88,7 @@ Anyone on the internet (no login) can read all tables (student PII, guardian pho
 RLS was set to `USING (true)` everywhere to make quick client-side writes work, instead of scoping by role + moving writes to the server.
 
 ### Fix plan (coordinate all steps; do NOT ship steps 1–2 without step 3 or marks entry breaks)
-1. New migration `supabase/migrations/036_restrictive_rls.sql` (number `035` is now taken by `035_nullable_guardian_phone.sql`):
+1. New migration `supabase/migrations/037_restrictive_rls.sql` (numbers `035` = `035_nullable_guardian_phone.sql` and `036` = `036_enrollment_roll_unique_per_batch.sql` are taken):
    - Add a `SECURITY DEFINER` helper, e.g. `is_staff(uid uuid)` (checks `staff` table + optional `site_settings.staff_custom_roles`), and `is_owner(uid)`.
    - `DROP POLICY` all `"Public full access *"` policies.
    - Per-table policies:

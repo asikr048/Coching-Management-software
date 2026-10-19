@@ -1315,27 +1315,19 @@ CREATE TRIGGER increment_course_sales
   EXECUTE FUNCTION public.update_course_sales();
 
 -- 7.7 auto_assign_batch_roll_no
+-- Only fills a MISSING roll with the next serial number. It never rewrites a
+-- supplied roll: duplicates are rejected by enrollments_batch_roll_unique so
+-- callers must resolve conflicts (see migration 036).
 CREATE OR REPLACE FUNCTION public.auto_assign_batch_roll_no()
 RETURNS TRIGGER AS $$
 DECLARE
   next_roll INTEGER;
-  existing_count INTEGER;
 BEGIN
-  IF NEW.roll_no IS NOT NULL AND NEW.roll_no > 0 THEN
-    SELECT COUNT(*) INTO existing_count
-    FROM public.enrollments
-    WHERE batch_id = NEW.batch_id AND roll_no = NEW.roll_no AND id <> COALESCE(NEW.id, '00000000-0000-0000-0000-000000000000'::uuid);
-    
-    IF existing_count > 0 THEN
-      SELECT COALESCE(MAX(roll_no), 0) + 1 INTO next_roll
-      FROM public.enrollments
-      WHERE batch_id = NEW.batch_id;
-      NEW.roll_no := next_roll;
-    END IF;
-  ELSE
+  IF NEW.roll_no IS NULL OR NEW.roll_no <= 0 THEN
     SELECT COALESCE(MAX(roll_no), 0) + 1 INTO next_roll
     FROM public.enrollments
-    WHERE batch_id = NEW.batch_id;
+    WHERE batch_id = NEW.batch_id
+      AND (TG_OP = 'INSERT' OR id <> NEW.id);
     NEW.roll_no := next_roll;
   END IF;
 
@@ -1343,6 +1335,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Roll numbers are unique within a batch (roll is a per-batch sequence).
+CREATE UNIQUE INDEX IF NOT EXISTS enrollments_batch_roll_unique
+  ON public.enrollments (batch_id, roll_no);
+
+DROP TRIGGER IF EXISTS trg_auto_assign_batch_roll_no ON public.enrollments;
 DROP TRIGGER IF EXISTS auto_assign_roll_trigger ON public.enrollments;
 CREATE TRIGGER auto_assign_roll_trigger
   BEFORE INSERT OR UPDATE OF roll_no ON public.enrollments
