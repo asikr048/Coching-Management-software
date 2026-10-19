@@ -161,6 +161,8 @@ Low. The UI page that calls it is already behind the middleware, so legit traffi
 **Status:** FIXED (68a4ff2, b0ec909) — 2026-10-19
 **Impact (after fix):** Offline attendance saved in the desktop shell is persisted to `offline-queue.json` and retried on startup, reconnect and manual sync until the server acknowledges every entry. Queue size is visible in the shell. Payment entries are still not written offline (read-only in the vault) and remain a follow-up.
 
+**Deployment note (2026-10-19):** `VAULT_SYNC_TOKEN` is not set yet, so the sync endpoint returns `503` and queued attendance stays safely on the PC. Enable steps: `docs/PENDING_SETUP.md` §2.
+
 ### Symptom
 Staff record attendance/payments in Offline Mode on the PC (saved to `local-vault.json`). When internet returns, the app just reloads the live website — **nothing flushes the offline data to Supabase**. The offline UI explicitly promises otherwise: `electron/offline/index.html:403` ("will auto-sync when internet is connected") and `:423` ("stays in continuous sync with the cloud server"). Data recorded offline is silently lost.
 
@@ -393,6 +395,8 @@ NOT in any pipeline:
 **Area:** CI/CD (Vercel cron) + billing API
 **Status:** FIXED (3784284) — 2026-10-19
 **Impact (after fix):** The Vercel cron now authenticates with `CRON_SECRET` and generates monthly dues without a staff session; staff can still trigger the same idempotent logic manually.
+
+**Deployment note (2026-10-19):** `CRON_SECRET` is not set on Vercel yet, so the cron returns `503` and automatic billing stays off; the manual generate action still works. Enable steps: `docs/PENDING_SETUP.md` §1.
 
 ### Symptom
 `vercel.json` schedules `GET /api/billing/generate-monthly` at `0 0 1 * *` (1st of every month, 00:00 UTC). The route is guarded by `requireStaffRole(["owner", ...])` — a cron request carries **no user session**, so it gets **401/403 every single month**. Vercel's cron UI shows the invocation as delivered (it delivered a 401), so the failure is invisible. **Monthly `fee_dues` are not auto-created**; an owner must open the app and trigger generation manually.

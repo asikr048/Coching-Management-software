@@ -205,6 +205,10 @@ CRON_SECRET=your-cron-secret
 VAULT_SYNC_TOKEN=your-vault-sync-token
 ```
 
+> **Deployment note:** the cron and desktop-sync secrets are currently **not
+> set**. See [`docs/PENDING_SETUP.md`](docs/PENDING_SETUP.md) for exact steps,
+> current behaviour and the deferred Cloudflare assessment.
+
 ---
 
 ## Database & Migrations
