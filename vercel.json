@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/billing/generate-monthly",
+      "path": "/api/cron/billing",
       "schedule": "0 0 1 * *"
     }
   ]

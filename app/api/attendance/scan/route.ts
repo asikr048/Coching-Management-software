@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
-import { extractQrCodeFromInput, generateStudentQrCode, getCurrentMonth } from "@/lib/utils"
+import { requireStaffRole, isAuthError } from "@/lib/api-auth"
+import { extractQrCodeFromInput, generateStudentQrCode, getCurrentMonth, round2 } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
 
 export async function POST(req: NextRequest) {
+  const auth = await requireStaffRole([
+    "owner",
+    "branch_director",
+    "super_manager",
+    "manager",
+    "receptionist",
+    "teacher",
+    "course_teacher",
+  ])
+  if (isAuthError(auth)) return auth
+
   try {
     const body = await req.json().catch(() => ({}))
     const rawQr = body.qr_code || body.code || body.token || body.student_id
@@ -167,8 +179,8 @@ export async function POST(req: NextRequest) {
     let exceededDays = 0
 
     for (const d of duesList) {
-      const outstanding = Math.max(0, (Number(d.due_amount) || 0) - (Number(d.paid_amount) || 0))
-      totalDueAmount += outstanding
+      const outstanding = round2(Math.max(0, (Number(d.due_amount) || 0) - (Number(d.paid_amount) || 0)))
+      totalDueAmount = round2(totalDueAmount + outstanding)
 
       if (d.due_date) {
         const dueTimestamp = new Date(d.due_date).setHours(0, 0, 0, 0)
