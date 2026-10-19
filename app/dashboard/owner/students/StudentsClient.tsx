@@ -102,9 +102,9 @@ export default function StudentsClient({
   // Compact Inline Student Edit Form state
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null)
   const [savingStudentId, setSavingStudentId] = useState<string | null>(null)
+  const [rollEnrollmentId, setRollEnrollmentId] = useState<string>("")
   const [editFormData, setEditFormData] = useState({
     name: "",
-    roll_no: "",
     phone: "",
     email: "",
     gender: "male",
@@ -115,18 +115,26 @@ export default function StudentsClient({
     guardian_phone: "",
     guardian_relation: "Parent",
     address: "",
+    roll_no: "",
     is_active: true,
   })
+
+  // Real (persisted) enrollments carry a batch_id and a UUID id; synthetic
+  // fallback rows prefixed with "fb-" have no database row to update.
+  const getEditableEnrollments = (student: any) =>
+    (student?.enrollments || []).filter((e: any) => e.batch_id && !String(e.id).startsWith("fb-"))
 
   const toggleInlineEdit = (student: any) => {
     if (editingStudentId === student.id) {
       setEditingStudentId(null)
       return
     }
-    const r = student.roll_no != null ? String(student.roll_no) : (student.batch_roll != null ? String(student.batch_roll) : (student.enrollments?.[0]?.roll_no != null ? String(student.enrollments[0].roll_no) : ""))
+    const editableEnrs = getEditableEnrollments(student)
+    const chosenEnr =
+      editableEnrs.find((e: any) => e.roll_no != null && Number(e.roll_no) > 0) || editableEnrs[0]
+    setRollEnrollmentId(chosenEnr?.id || "")
     setEditFormData({
       name: student.name || "",
-      roll_no: r,
       phone: student.phone || "",
       email: student.email || "",
       gender: student.gender || "male",
@@ -137,9 +145,19 @@ export default function StudentsClient({
       guardian_phone: student.guardian_phone || "",
       guardian_relation: student.guardian_relation || "Parent",
       address: student.address || "",
+      roll_no: chosenEnr?.roll_no != null ? String(chosenEnr.roll_no) : "",
       is_active: student.is_active ?? true,
     })
     setEditingStudentId(student.id)
+  }
+
+  const handleRollBatchChange = (student: any, enrId: string) => {
+    setRollEnrollmentId(enrId)
+    const enr = getEditableEnrollments(student).find((e: any) => e.id === enrId)
+    setEditFormData((prev) => ({
+      ...prev,
+      roll_no: enr?.roll_no != null ? String(enr.roll_no) : "",
+    }))
   }
 
   const handleSaveInlineEdit = async (studentId: string) => {
@@ -150,7 +168,34 @@ export default function StudentsClient({
 
     setSavingStudentId(studentId)
     try {
-      const parsedRoll = editFormData.roll_no?.trim() ? parseInt(editFormData.roll_no.trim(), 10) : null
+      const student = localStudents.find((s: any) => s.id === studentId)
+      const editableEnrs = getEditableEnrollments(student)
+      const targetEnr = editableEnrs.find((e: any) => e.id === rollEnrollmentId)
+
+      // Validate the roll up-front (batch-scoped uniqueness) before writing anything.
+      let newRoll: number | null = null
+      const rawRoll = editFormData.roll_no?.trim() || ""
+      if (targetEnr && rawRoll !== "") {
+        newRoll = Number(rawRoll)
+        if (isNaN(newRoll) || !Number.isInteger(newRoll) || newRoll <= 0) {
+          toast.error("রোল নম্বর একটি ধনাত্মক পূর্ণসংখ্যা হতে হবে (Roll must be a positive whole number)")
+          setSavingStudentId(null)
+          return
+        }
+        const { data: clash } = await supabase
+          .from("enrollments")
+          .select("id")
+          .eq("batch_id", targetEnr.batch_id)
+          .eq("roll_no", newRoll)
+          .neq("id", targetEnr.id)
+          .limit(1)
+        if (clash && clash.length > 0) {
+          toast.error("এই রোল নম্বরটি এই ব্যাচে ইতিমধ্যে অন্য শিক্ষার্থীর আছে (Roll already used in this batch)")
+          setSavingStudentId(null)
+          return
+        }
+      }
+
       const updates: Record<string, any> = {
         name: editFormData.name.trim(),
         phone: editFormData.phone?.trim() || null,
@@ -164,38 +209,44 @@ export default function StudentsClient({
         school_college: editFormData.school_college?.trim() || null,
         class_level: editFormData.class_level?.trim() || null,
         is_active: editFormData.is_active,
-        roll_no: parsedRoll,
-        batch_roll: parsedRoll,
+      }
+
+      // Mirror the roll onto the student row only when editing the primary
+      // (first) enrollment — same rule as the full edit page.
+      if (targetEnr && newRoll != null && editableEnrs[0]?.id === targetEnr.id) {
+        updates.roll_no = newRoll
+        updates.batch_roll = newRoll
       }
 
       const { error } = await supabase.from("students").update(updates).eq("id", studentId)
       if (error) throw error
 
-      if (parsedRoll != null) {
-        try {
-          await supabase.from("enrollments").update({ roll_no: parsedRoll }).eq("student_id", studentId)
-        } catch {}
+      if (targetEnr && newRoll != null) {
+        const { error: rollErr } = await supabase
+          .from("enrollments")
+          .update({ roll_no: newRoll })
+          .eq("id", targetEnr.id)
+        if (rollErr) {
+          if ((rollErr as any).code === "23505") {
+            throw new Error("এই রোল নম্বরটি এই ব্যাচে ইতিমধ্যে ব্যবহৃত (duplicate roll in this batch)")
+          }
+          throw rollErr
+        }
       }
 
       // Update local state reactively
       setLocalStudents((prev) =>
         prev.map((s) => {
           if (s.id !== studentId) return s
-          const updatedEnrollments = s.enrollments?.map((enr, i) => {
-            if (i === 0 && parsedRoll != null) return { ...enr, roll_no: parsedRoll }
-            return enr
-          })
-          return {
-            ...s,
-            ...updates,
-            roll_no: parsedRoll,
-            batch_roll: parsedRoll,
-            enrollments: updatedEnrollments || s.enrollments,
-          }
+          const nextEnrs =
+            targetEnr && newRoll != null
+              ? (s.enrollments || []).map((e: any) => (e.id === targetEnr.id ? { ...e, roll_no: newRoll } : e))
+              : s.enrollments
+          return { ...s, ...updates, enrollments: nextEnrs }
         })
       )
 
-      toast.success("শিক্ষার্থীর তথ্য সফলভাবে সংরক্ষিত হয়েছে! (Student information updated successfully)")
+      toast.success("শিক্ষার্থীর তথ্য সফলভাবে সংরক্ষিত হয়েছে! (Student information updated successfully)")
       setEditingStudentId(null)
     } catch (err: any) {
       console.error("Inline edit save error:", err)
@@ -1730,20 +1781,43 @@ export default function StudentsClient({
                                   />
                                 </div>
 
-                                {/* Batch Roll */}
-                                <div>
-                                  <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
-                                    ব্যাচ রোল নম্বর (Roll No)
-                                  </label>
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    placeholder="1, 2, 3..."
-                                    value={editFormData.roll_no}
-                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, roll_no: e.target.value }))}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
-                                  />
-                                </div>
+                                {/* Batch Roll No (scoped to a single batch) */}
+                                {(() => {
+                                  const editableEnrs = getEditableEnrollments(student)
+                                  if (editableEnrs.length === 0) return null
+                                  const currentEnr = editableEnrs.find((e: any) => e.id === rollEnrollmentId)
+                                  return (
+                                    <div>
+                                      <label className="block text-[11px] font-bold text-slate-700 uppercase mb-1">
+                                        ব্যাচ রোল নম্বর (Batch Roll No)
+                                      </label>
+                                      {editableEnrs.length > 1 && (
+                                        <select
+                                          value={rollEnrollmentId}
+                                          onChange={(e) => handleRollBatchChange(student, e.target.value)}
+                                          className="w-full mb-1.5 px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-2xs"
+                                        >
+                                          {editableEnrs.map((e: any) => (
+                                            <option key={e.id} value={e.id}>
+                                              {e.batch?.name || "Batch"} (রোল #{e.roll_no ?? "-"})
+                                            </option>
+                                          ))}
+                                        </select>
+                                      )}
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        placeholder="যেমন: 12"
+                                        value={editFormData.roll_no}
+                                        onChange={(e) => setEditFormData((prev) => ({ ...prev, roll_no: e.target.value }))}
+                                        className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-900 focus:outline-none focus:bg-white focus:border-amber-500 focus:ring-1 focus:ring-amber-500 shadow-2xs"
+                                      />
+                                      {currentEnr && editableEnrs.length === 1 && (
+                                        <p className="text-[10px] text-slate-400 mt-0.5">ব্যাচ: {currentEnr.batch?.name || "—"}</p>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
 
                                 {/* Student Phone */}
                                 <div>
