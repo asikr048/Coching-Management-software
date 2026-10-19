@@ -35,7 +35,7 @@ export default function StudentExamPage() {
         const { data: studentData, error: sErr } = await supabase
           .from("students")
           .select("id, batch_id, enrollments(batch_id)")
-          .eq("auth_id", user.id)
+          .eq("auth_user_id", user.id)
           .single()
         if (sErr || !studentData) throw new Error("Student profile not found")
         setStudent(studentData)
@@ -98,7 +98,7 @@ export default function StudentExamPage() {
 
       } catch (err: any) {
         toast.error(err.message)
-        router.push("/student/dashboard")
+        router.push("/student/profile")
       } finally {
         setLoading(false)
       }
@@ -179,7 +179,7 @@ export default function StudentExamPage() {
       if (exam.show_results_immediately) {
         router.push(`/student/exam/${examId}/results`)
       } else {
-        router.push("/student/dashboard")
+        router.push("/student/profile")
       }
 
     } catch (err: any) {
