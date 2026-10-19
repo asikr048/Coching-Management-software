@@ -12,6 +12,7 @@ import {
   printAdmissionAndIdCard 
 } from "@/lib/id-card-generator"
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { useBranding } from "@/components/providers/BrandingContext"
 
 interface Props {
   slipData?: AdmissionSlipData | null
@@ -40,6 +41,7 @@ export default function AdmissionSlipTrigger({
   label,
   buttonText,
 }: Props) {
+  const { branding } = useBranding()
   const [isOpen, setIsOpen] = useState(false)
   const [modalTab, setModalTab] = useState<"slip" | "idcard" | "both">("slip")
 
@@ -219,7 +221,7 @@ export default function AdmissionSlipTrigger({
               {modalTab === "slip" && (
                 <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/50 space-y-3">
                   <div className="text-center pb-2 border-b border-slate-200">
-                    <h4 className="font-black text-slate-900 text-base">MedhaShiree Coaching</h4>
+                    <h4 className="font-black text-slate-900 text-base">{branding.name}</h4>
                     <p className="text-xs text-slate-500">Official Admission & Fee Confirmation</p>
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-xs">
@@ -251,7 +253,7 @@ export default function AdmissionSlipTrigger({
                     <span className="text-rose-600 font-black">রোল #{rollStr}</span>
                   </div>
                   <p className="text-xs font-semibold text-slate-600">{finalSlipData.batch_name}</p>
-                  <p className="text-[11px] text-slate-400">MedhaShiree Official Academic Pass</p>
+                  <p className="text-[11px] text-slate-400">{branding.name} Official Academic Pass</p>
                 </div>
               )}
 

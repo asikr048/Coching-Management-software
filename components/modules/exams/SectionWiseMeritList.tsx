@@ -28,7 +28,7 @@ export interface SectionWiseMeritListProps {
 }
 
 export default function SectionWiseMeritList({
-  instituteName = "MIIS ACADEMY",
+  instituteName = "Coaching Center",
   instituteBranch = "Academic Care",
   instituteLogoUrl = "/logo.jpg",
   sectionName,

@@ -138,7 +138,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
       .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #999; border-top: 1px dashed #ccc; padding-top: 10px; }
       @media print { body { margin: 0; } }
     </style></head><body>
-      <div class="header"><h2>MedhaShiree</h2><p>Course Purchase Receipt</p></div>
+      <div class="header"><h2>Coaching</h2><p>Course Purchase Receipt</p></div>
       <div class="row"><span class="label">Receipt #</span><span class="value">${receipt?.receipt_number}</span></div>
       <div class="row"><span class="label">Date</span><span class="value">${receipt?.date}</span></div>
       <div class="row"><span class="label">Student</span><span class="value">${receipt?.student_name}</span></div>
@@ -146,7 +146,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
       <div class="row"><span class="label">Course</span><span class="value">${receipt?.course}</span></div>
       <div class="row"><span class="label">Method</span><span class="value">${receipt?.method?.toUpperCase()}</span></div>
       <div class="total">Total Paid: ৳${receipt?.amount?.toLocaleString("en-BD")}</div>
-      <div class="footer"><p>Thank you for your purchase!</p><p>MedhaShiree Coaching Center</p></div>
+      <div class="footer"><p>Thank you for your purchase!</p><p>Coaching Center</p></div>
     </body></html>`)
     win.document.close()
     win.print()
@@ -331,7 +331,7 @@ export default function MarketplaceClient({ courses, students: initialStudents }
 
                   <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-5 bg-slate-950 space-y-2">
                     <div className="text-center border-b border-dashed border-slate-200 pb-3 mb-3">
-                      <p className="font-black text-amber-400">MedhaShiree</p>
+                      <p className="font-black text-amber-400">Coaching</p>
                       <p className="text-xs text-slate-400">Course Purchase Receipt</p>
                     </div>
                     {[

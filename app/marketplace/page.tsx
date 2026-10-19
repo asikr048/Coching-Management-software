@@ -3,7 +3,7 @@ import PublicNavbar from "@/components/layout/PublicNavbar"
 import MarketplaceBrowseClient from "./MarketplaceBrowseClient"
 
 export const metadata = {
-  title: "Browse Batches & Courses | MedhaShiree",
+  title: "Browse Batches & Courses | Coaching",
   description: "Explore all active coaching classroom batches and online courses with expert faculty.",
 }
 

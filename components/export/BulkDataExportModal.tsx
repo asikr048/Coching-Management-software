@@ -6,6 +6,7 @@ import {
   UserCheck, ShieldCheck, X, RefreshCw, Layers, Check, Sparkles 
 } from "lucide-react"
 import { toast } from "sonner"
+import { getBrandSlug } from "@/lib/branding"
 
 interface BulkDataExportModalProps {
   isOpen: boolean
@@ -52,7 +53,7 @@ export default function BulkDataExportModal({
 
       const blob = await res.blob()
       const todayStr = new Date().toISOString().split("T")[0]
-      const filename = `medhashiree_${type}_${todayStr}.csv`
+      const filename = `${getBrandSlug()}_${type}_${todayStr}.csv`
 
       triggerBrowserDownload(blob, filename)
       toast.success(`${type.toUpperCase()} CSV সফলভাবে ডাউনলোড হয়েছে!`)

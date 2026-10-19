@@ -50,7 +50,7 @@ export interface WeeklyToppersSheetProps {
 }
 
 export default function WeeklyToppersSheet({
-  instituteName = "MIIS ACADEMY",
+  instituteName = "Coaching Center",
   instituteBranch = "Academic Care",
   instituteLogoUrl = "/logo.jpg",
   examTitle,

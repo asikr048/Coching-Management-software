@@ -136,12 +136,12 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
 
   // Reset to default
   async function handleResetBranding() {
-    if (!confirm("Reset institute branding, name, logo, and theme to default MIIS Academy settings?")) return
+    if (!confirm("Reset institute branding, name, logo, and theme to default Coaching Center settings?")) return
     setSavingBranding(true)
     try {
       await resetToDefaults()
       setFormData(DEFAULT_BRANDING)
-      toast.success("Branding reset to default MIIS Academy configuration!")
+      toast.success("Branding reset to default Coaching Center configuration!")
     } catch (err: unknown) {
       toast.error("Failed to reset branding")
     } finally {
@@ -301,7 +301,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                       required
                       value={formData.name}
                       onChange={e => setFormData({ ...formData, name: e.target.value })}
-                      placeholder="e.g. MIIS ACADEMY"
+                      placeholder="e.g. Coaching Center"
                       className={inputClass}
                     />
                   </div>
@@ -314,7 +314,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                       type="text"
                       value={formData.nameBn}
                       onChange={e => setFormData({ ...formData, nameBn: e.target.value })}
-                      placeholder="যেমন: এমআইআইএস একাডেমি"
+                      placeholder="যেমন: কোচিং সেন্টার"
                       className={inputClass}
                     />
                   </div>
@@ -327,7 +327,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                       type="text"
                       value={formData.shortName}
                       onChange={e => setFormData({ ...formData, shortName: e.target.value })}
-                      placeholder="e.g. MIIS"
+                      placeholder="e.g. CC"
                       className={inputClass}
                     />
                   </div>
@@ -654,7 +654,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                         </div>
                         <div className="min-w-0">
                           <span className="font-black text-base text-white tracking-tight leading-none block truncate">
-                            {formData.name || "MIIS ACADEMY"}
+                            {formData.name || "Coaching Center"}
                           </span>
                           <span
                             className="text-[10px] font-bold tracking-wider uppercase mt-1 block truncate"
@@ -676,7 +676,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                               borderColor: selectedPalette.borderHex,
                             }}
                           >
-                            ✨ {formData.name || "MIIS ACADEMY"}
+                            ✨ {formData.name || "Coaching Center"}
                           </span>
                         </div>
                       </div>
@@ -700,7 +700,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                           </div>
                           <div>
                             <h4 className="font-black text-base text-slate-950 uppercase leading-none tracking-tight">
-                              {formData.nameBn || formData.name || "MIIS ACADEMY"}
+                              {formData.nameBn || formData.name || "Coaching Center"}
                             </h4>
                             <p className="text-[10px] font-bold text-slate-700 tracking-wider mt-1 uppercase">
                               {formData.tagline || "Academic & Admission Care"} • {formData.address?.split(",")[0] || "Main Campus"}
@@ -731,7 +731,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                           }}
                         >
                           <p className="text-xs font-black tracking-wide text-amber-300 uppercase">
-                            {formData.nameBn || formData.name || "MIIS ACADEMY"}
+                            {formData.nameBn || formData.name || "Coaching Center"}
                           </p>
                           <p className="text-[9px] text-slate-200 mt-0.5 truncate">
                             {formData.name} &bull; {formData.shortName || "CAMPUS"}
@@ -805,7 +805,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                     className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    <span>Reset to Default MIIS Academy</span>
+                    <span>Reset to Default Coaching Center</span>
                   </button>
                 </div>
               </div>
@@ -891,7 +891,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1.5">Account Name</label>
-                    <input value={accName} onChange={e => setAccName(e.target.value)} className={inputClass} placeholder="e.g. MIIS Academy Official" />
+                    <input value={accName} onChange={e => setAccName(e.target.value)} className={inputClass} placeholder="e.g. Coaching Center Official" />
                   </div>
                   <div className="flex gap-3 pt-2">
                     <button type="button" onClick={() => setShowAddAccount(false)} className="flex-1 py-2.5 border border-slate-200 text-slate-600 rounded-xl font-bold hover:bg-slate-50 transition-colors cursor-pointer">Cancel</button>

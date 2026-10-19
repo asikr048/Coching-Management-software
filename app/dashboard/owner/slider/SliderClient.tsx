@@ -202,7 +202,7 @@ export default function SliderClient({
     slug: "",
     excerpt: "",
     content: "",
-    author_name: "MedhaShiree Editorial Team",
+    author_name: "Editorial Team",
     cover_image: "",
     tags: "পরীক্ষার প্রস্তুতি, মোটিভেশন",
     branch_id: "",
@@ -212,9 +212,9 @@ export default function SliderClient({
   // --- CONTACT & WHITE-LABEL BRANDING STATE ---
   const { branding, theme: activeBrandingTheme, updateBranding, resetToDefaults } = useBranding()
 
-  const [instName, setInstName] = useState(branding.name || "MIIS ACADEMY")
-  const [instNameBn, setInstNameBn] = useState(branding.nameBn || "এমআইআইএস একাডেমি")
-  const [instShortName, setInstShortName] = useState(branding.shortName || "MIIS")
+  const [instName, setInstName] = useState(branding.name || "Coaching Center")
+  const [instNameBn, setInstNameBn] = useState(branding.nameBn || branding.name)
+  const [instShortName, setInstShortName] = useState(branding.shortName || branding.name)
   const [instTagline, setInstTagline] = useState(branding.tagline || "Academic & Admission Care")
   const [instTaglineBn, setInstTaglineBn] = useState(branding.taglineBn || "উন্নত ও নির্ভরযোগ্য শিক্ষা সেবা")
   const isCustomLogo = !!branding.logoUrl && !isPresetLogoUrl(branding.logoUrl)
@@ -881,7 +881,7 @@ export default function SliderClient({
       slug: "",
       excerpt: "",
       content: "",
-      author_name: "MedhaShiree Editorial Team",
+      author_name: "Editorial Team",
       cover_image: "",
       tags: "পড়াশোনা, এইচএসসি, টিপস",
       branch_id: "",
@@ -897,7 +897,7 @@ export default function SliderClient({
       slug: b.slug || "",
       excerpt: b.excerpt || b.summary || "",
       content: b.content || "",
-      author_name: b.author_name || "MedhaShiree Editorial Team",
+      author_name: b.author_name || "Editorial Team",
       cover_image: b.cover_image || b.cover_image_url || "",
       tags: Array.isArray(b.tags) ? b.tags.join(", ") : (b.tags || ""),
       branch_id: b.branch_id || "",
@@ -979,9 +979,9 @@ export default function SliderClient({
     try {
       const updatedBranding: InstituteBranding = {
         ...branding,
-        name: instName.trim() || "MIIS ACADEMY",
+        name: instName.trim() || "Coaching Center",
         nameBn: instNameBn.trim() || instName.trim(),
-        shortName: instShortName.trim() || "MIIS",
+        shortName: instShortName.trim() || branding.shortName || branding.name,
         tagline: instTagline.trim(),
         taglineBn: instTaglineBn.trim(),
         logoUrl: instLogoUrl.trim() || PRESET_LOGOS[0].url,
@@ -2055,7 +2055,7 @@ export default function SliderClient({
               <button
                 type="button"
                 onClick={async () => {
-                  if (confirm("Reset branding to default MIIS Academy settings?")) {
+                  if (confirm("Reset branding to default Coaching Center settings?")) {
                     await resetToDefaults()
                     toast.info("Branding reset to defaults")
                   }
@@ -2101,7 +2101,7 @@ export default function SliderClient({
                       type="text"
                       value={instName}
                       onChange={e => setInstName(e.target.value)}
-                      placeholder="e.g. MIIS ACADEMY / MedhaShiree Coaching"
+                      placeholder="e.g. Coaching Center"
                       className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all font-semibold text-slate-900"
                     />
                   </div>
@@ -2114,20 +2114,20 @@ export default function SliderClient({
                       type="text"
                       value={instNameBn}
                       onChange={e => setInstNameBn(e.target.value)}
-                      placeholder="যেমন: এমআইআইএস একাডেমি"
+                      placeholder="যেমন: কোচিং সেন্টার"
                       className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Short Name / Code (e.g. MIIS, MSC) *
+                      Short Name / Code (e.g. CC, MSC) *
                     </label>
                     <input
                       type="text"
                       value={instShortName}
                       onChange={e => setInstShortName(e.target.value)}
-                      placeholder="e.g. MIIS"
+                      placeholder="e.g. CC"
                       className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all uppercase font-bold text-slate-900"
                     />
                   </div>
@@ -2370,7 +2370,7 @@ export default function SliderClient({
                         className="w-4 h-4 object-contain rounded-xs"
                       />
                       <span className="text-xs font-semibold text-slate-200 truncate max-w-[220px]">
-                        {instName || "MIIS ACADEMY"} | {instTagline || "Coaching Management"}
+                        {instName || "Coaching Center"} | {instTagline || "Coaching Management"}
                       </span>
                       <span className="text-slate-400 text-xs ml-1 hover:text-white cursor-default">✕</span>
                     </div>
@@ -2619,7 +2619,7 @@ export default function SliderClient({
                         />
                         <div className="min-w-0">
                           <h5 className="text-xs font-black text-slate-900 truncate">
-                            {instName || "MIIS ACADEMY"}
+                            {instName || "Coaching Center"}
                           </h5>
                           <p className="text-[10px] text-slate-500 font-medium truncate">
                             {instTagline || "Academic & Admission Care"}
@@ -2649,10 +2649,10 @@ export default function SliderClient({
                         </div>
                         <div className="min-w-0">
                           <span className="text-xs font-black text-white truncate block">
-                            {instName || "MIIS ACADEMY"}
+                            {instName || "Coaching Center"}
                           </span>
                           <span className="text-[9px] text-slate-400 truncate block">
-                            {instNameBn || "এমআইআইএস একাডেমি"}
+                            {instNameBn || "কোচিং সেন্টার"}
                           </span>
                         </div>
                       </div>
@@ -2676,7 +2676,7 @@ export default function SliderClient({
                           className="text-xs font-black tracking-tight"
                           style={{ color: THEME_PALETTES[instThemeColor]?.primaryHex || "#059669" }}
                         >
-                          {instName || "MIIS ACADEMY"}
+                          {instName || "Coaching Center"}
                         </h6>
                       </div>
                       <p className="text-[9px] text-slate-600 font-semibold">

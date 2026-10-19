@@ -27,7 +27,7 @@ export interface StudentIdCardData {
 
 export function getStudentIdCardHtml(card: StudentIdCardData): string {
   const branding = getActiveBranding()
-  const instName = card.institute_name || branding.name || "MIIS ACADEMY"
+  const instName = card.institute_name || branding.name || "Coaching Center"
   const instNameBn = card.institute_name_bn || branding.nameBn || instName
   const instTagline = card.institute_sublogo || branding.tagline || "Academic & Admission Care"
   const rollStr = card.batch_roll != null && String(card.batch_roll).trim() !== "" 
@@ -389,7 +389,7 @@ export function getStudentIdCardHtml(card: StudentIdCardData): string {
 
         <div class="inst-contact">
           <b>${instNameBn} (${instName})</b><br>
-          📞 হটলাইন: ${branding.phone || "+880 1700-000000"} | 🌐 ${branding.website || "www.miisacademy.com"}<br>
+          📞 হটলাইন: ${branding.phone || ""} | 🌐 ${branding.website || ""}<br>
           ${branding.address || card.branch_name || "যেকোনো প্রয়োজনে কোচিং রিসেপশনে যোগাযোগ করুন।"}
         </div>
       </div>
@@ -421,7 +421,7 @@ export function printStudentIdCard(data: StudentIdCardData, autoPrint = true) {
 
 export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardData) {
   const branding = getActiveBranding()
-  const instName = idCardData.institute_name || branding.name || "MIIS ACADEMY"
+  const instName = idCardData.institute_name || branding.name || "Coaching Center"
   const instNameBn = idCardData.institute_name_bn || branding.nameBn || instName
   const instTagline = idCardData.institute_sublogo || branding.tagline || "Academic & Admission Care"
   const rollStr = idCardData.batch_roll != null && String(idCardData.batch_roll).trim() !== "" ? String(idCardData.batch_roll) : "01"
@@ -675,7 +675,7 @@ export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardD
             </div>
             <div class="inst-contact">
               <b>${instNameBn}</b><br>
-              📞 ${branding.phone || "+880 1700-000000"} | 🌐 ${branding.website || "www.miisacademy.com"}
+              📞 ${branding.phone || ""} | 🌐 ${branding.website || ""}
             </div>
           </div>
         </div>
@@ -695,6 +695,7 @@ export function printAdmissionAndIdCard(receipt: any, idCardData: StudentIdCardD
 }
 
 export async function downloadStudentIdCardPDF(data: StudentIdCardData) {
+  const branding = getActiveBranding()
   try {
     const { jsPDF } = await import("jspdf")
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: [54, 85.6] })
@@ -782,7 +783,7 @@ export async function downloadStudentIdCardPDF(data: StudentIdCardData) {
     doc.setTextColor(100, 116, 139)
     doc.text("Valid for Class & Examination Access", 27, 72, { align: "center" })
     doc.setFont("helvetica", "bold")
-    doc.text("MedhaShiree Coaching • medhashiree.com", 27, 75, { align: "center" })
+    doc.text(branding.name, 27, 75, { align: "center" })
 
     doc.save(`StudentID_${data.student_id}_Roll${rollStr}.pdf`)
   } catch (e) {
@@ -816,6 +817,7 @@ export interface AdmissionSlipData {
 }
 
 export function printAdmissionSlip(target: AdmissionSlipData) {
+  const branding = getActiveBranding()
   const rollStr = target.batch_roll != null && String(target.batch_roll).trim() !== "" ? String(target.batch_roll) : "01"
   const effectiveCode = target.qr_code || generateStudentQrCode({
     studentId: target.student_id,
@@ -855,7 +857,7 @@ export function printAdmissionSlip(target: AdmissionSlipData) {
 </head>
 <body>
   <div class="header">
-    <h1>MedhaShiree Coaching</h1>
+    <h1>${branding.name}</h1>
     <p>Enrollment & Fee Confirmation Slip (ভর্তি ও মানি রসিদ)</p>
     <span class="badge">Official Admission Copy</span>
   </div>
@@ -900,7 +902,7 @@ export function printAdmissionSlip(target: AdmissionSlipData) {
 
   <div class="footer">
     <p>Please keep this document safe for institutional records.</p>
-    <p>MedhaShiree Coaching • Empowering Modern Education</p>
+    <p>${branding.name} • Empowering Modern Education</p>
   </div>
 </body>
 </html>`)
@@ -910,6 +912,7 @@ export function printAdmissionSlip(target: AdmissionSlipData) {
 }
 
 export async function downloadAdmissionSlipPDF(target: AdmissionSlipData) {
+  const branding = getActiveBranding()
   try {
     const { jsPDF } = await import("jspdf")
     const doc = new jsPDF({ unit: "mm", format: [105, 148] }) // A6 size receipt
@@ -918,7 +921,7 @@ export async function downloadAdmissionSlipPDF(target: AdmissionSlipData) {
     doc.setFont("helvetica", "bold")
     doc.setFontSize(14)
     doc.setTextColor(67, 56, 202)
-    doc.text("MedhaShiree Coaching", 52.5, 12, { align: "center" })
+    doc.text(branding.name, 52.5, 12, { align: "center" })
 
     doc.setFontSize(8)
     doc.setTextColor(100, 116, 139)
@@ -1042,6 +1045,7 @@ export async function downloadAdmissionSlipPDF(target: AdmissionSlipData) {
  */
 export function printBulkAdmissionSlips(targets: AdmissionSlipData[]) {
   if (!targets || targets.length === 0) return
+  const branding = getActiveBranding()
 
   const win = window.open("", "_blank", "width=850,height=900")
   if (!win) return
@@ -1060,7 +1064,7 @@ export function printBulkAdmissionSlips(targets: AdmissionSlipData[]) {
     <div class="slip-page">
       <div class="slip-container">
         <div class="header">
-          <h1>MedhaShiree Coaching</h1>
+          <h1>${branding.name}</h1>
           <p>Enrollment & Fee Confirmation Slip (ভর্তি ও মানি রসিদ)</p>
           <span class="badge">Official Admission Copy • #${rollStr}</span>
         </div>
@@ -1105,7 +1109,7 @@ export function printBulkAdmissionSlips(targets: AdmissionSlipData[]) {
 
         <div class="footer">
           <p>Please keep this document safe for institutional records.</p>
-          <p>MedhaShiree Coaching • Empowering Modern Education</p>
+          <p>${branding.name} • Empowering Modern Education</p>
         </div>
       </div>
     </div>`
@@ -1350,6 +1354,7 @@ export function printBulkStudentIdCards(cards: StudentIdCardData[]) {
  */
 export async function downloadBulkAdmissionSlipsPDF(targets: AdmissionSlipData[]) {
   if (!targets || targets.length === 0) return
+  const branding = getActiveBranding()
   try {
     const { jsPDF } = await import("jspdf")
     const doc = new jsPDF({ unit: "mm", format: [105, 148] }) // A6 size receipt per page
@@ -1364,7 +1369,7 @@ export async function downloadBulkAdmissionSlipsPDF(targets: AdmissionSlipData[]
       doc.setFont("helvetica", "bold")
       doc.setFontSize(14)
       doc.setTextColor(67, 56, 202)
-      doc.text("MedhaShiree Coaching", 52.5, 12, { align: "center" })
+      doc.text(branding.name, 52.5, 12, { align: "center" })
 
       doc.setFontSize(8)
       doc.setTextColor(100, 116, 139)

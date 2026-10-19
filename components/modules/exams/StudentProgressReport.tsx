@@ -89,7 +89,7 @@ export function calculateCoachingGrade(marks: number, fullMarks: number): { grad
 }
 
 export default function StudentProgressReport({
-  instituteName = "MIIS ACADEMY",
+  instituteName = "Coaching Center",
   instituteBranch = "Academic Care",
   instituteLogoUrl = "/logo.jpg",
   examTitle,

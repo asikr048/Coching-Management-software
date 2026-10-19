@@ -274,7 +274,7 @@ export default async function AccountantDeskPage() {
   const currentStaff = staff || {
     id: user?.id || "accountant",
     name: user?.user_metadata?.name || "Accountant",
-    email: user?.email || "accountant@medhashiree.com",
+    email: user?.email || "accountant@coaching.local",
     role: "accountant" as const,
   }
 

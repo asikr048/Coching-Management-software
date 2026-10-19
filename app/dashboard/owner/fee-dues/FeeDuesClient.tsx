@@ -515,7 +515,7 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
                             ) : (
                               <span className="text-xs text-slate-500 flex items-center gap-1"><ShieldAlert className="w-3.5 h-3.5 text-rose-400" /> Locked</span>
                             )}
-                            <button onClick={() => { setSmsModal(d); setSmsMessage(`Dear Parent, fee of ${formatCurrency(outstanding)} for ${d.student?.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`) }} title="Send SMS reminder"
+                            <button onClick={() => { setSmsModal(d); setSmsMessage(`Dear Parent, fee of ${formatCurrency(outstanding)} for ${d.student?.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - Coaching`) }} title="Send SMS reminder"
                               className="p-2 hover:bg-purple-50 rounded-lg text-purple-600 transition-colors cursor-pointer"><MessageSquare className="w-4 h-4" /></button>
                           </div>
                         )}

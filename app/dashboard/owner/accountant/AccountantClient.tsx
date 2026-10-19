@@ -199,7 +199,7 @@ export default function AccountantClient({
   // Bulk Due SMS Modal
   const [bulkSmsOpen, setBulkSmsOpen] = useState(false)
   const [bulkSmsTemplate, setBulkSmsTemplate] = useState<string>(
-    "সম্মানিত অভিভাবক, মেধাশিরী কোচিং: {name}-এর {batch} ব্যাচের বকেয়া ৳{due} ({month})। বকেয়া পরিশোধ করার জন্য বিনীত অনুরোধ করা হচ্ছে। ধন্যবাদ।"
+    "সম্মানিত অভিভাবক,  {name}-এর {batch} ব্যাচের বকেয়া ৳{due} ({month})। বকেয়া পরিশোধ করার জন্য বিনীত অনুরোধ করা হচ্ছে। ধন্যবাদ।"
   )
 
   // Batches Tab Filter Pill
@@ -1187,7 +1187,7 @@ export default function AccountantClient({
     const phone = item.student.guardian_phone || item.student.phone || ""
     setSingleSmsPhoneTarget(item.student.guardian_phone ? "guardian" : "student")
 
-    const msg = `সম্মানিত অভিভাবক, মেধাশিরী কোচিং থেকে অবগতির জন্য জানানো যাচ্ছে যে, ${item.student.name}-এর ${item.batch.name} ব্যাচের বকেয়া ৳${item.dueAmount} (${item.isMonthly ? selectedMonth : "কোর্স ফি"})। অনুগ্রহ করে দ্রুত পরিশোধ করুন। ধন্যবাদ।`
+    const msg = `সম্মানিত অভিভাবক, প্রতিষ্ঠান থেকে অবগতির জন্য জানানো যাচ্ছে যে, ${item.student.name}-এর ${item.batch.name} ব্যাচের বকেয়া ৳${item.dueAmount} (${item.isMonthly ? selectedMonth : "কোর্স ফি"})। অনুগ্রহ করে দ্রুত পরিশোধ করুন। ধন্যবাদ।`
     setSingleSmsMessage(msg)
   }
 
@@ -2971,7 +2971,7 @@ export default function AccountantClient({
                 type="button"
                 onClick={() => {
                   setSingleSmsMessage(
-                    `সম্মানিত অভিভাবক, মেধাশিরী কোচিং থেকে অবগতির জন্য জানানো যাচ্ছে যে, ${singleSmsItem.student.name}-এর ${singleSmsItem.batch.name} ব্যাচের বকেয়া ৳${singleSmsItem.dueAmount} (${singleSmsItem.isMonthly ? selectedMonth : "কোর্স ফি"})। অনুগ্রহ করে দ্রুত পরিশোধ করুন। ধন্যবাদ।`
+                    `সম্মানিত অভিভাবক, প্রতিষ্ঠান থেকে অবগতির জন্য জানানো যাচ্ছে যে, ${singleSmsItem.student.name}-এর ${singleSmsItem.batch.name} ব্যাচের বকেয়া ৳${singleSmsItem.dueAmount} (${singleSmsItem.isMonthly ? selectedMonth : "কোর্স ফি"})। অনুগ্রহ করে দ্রুত পরিশোধ করুন। ধন্যবাদ।`
                   )
                 }}
                 className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[11px] font-semibold text-slate-700 cursor-pointer"
@@ -2982,7 +2982,7 @@ export default function AccountantClient({
                 type="button"
                 onClick={() => {
                   setSingleSmsMessage(
-                    `Dear Parent, MedhaShiree Coaching reminder: ${singleSmsItem.student.name} (${singleSmsItem.student.student_id}) has an outstanding due of ৳${singleSmsItem.dueAmount} for ${singleSmsItem.batch.name}. Please clear the due payment. Thank you.`
+                    `Dear Parent, Coaching Center reminder: ${singleSmsItem.student.name} (${singleSmsItem.student.student_id}) has an outstanding due of ৳${singleSmsItem.dueAmount} for ${singleSmsItem.batch.name}. Please clear the due payment. Thank you.`
                   )
                 }}
                 className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[11px] font-semibold text-slate-700 cursor-pointer"
@@ -3062,7 +3062,7 @@ export default function AccountantClient({
                     type="button"
                     onClick={() =>
                       setBulkSmsTemplate(
-                        "সম্মানিত অভিভাবক, মেধাশিরী কোচিং: {name}-এর {batch} ব্যাচের বকেয়া ৳{due} ({month})। বকেয়া পরিশোধ করার জন্য বিনীত অনুরোধ করা হচ্ছে। ধন্যবাদ।"
+                        "সম্মানিত অভিভাবক,  {name}-এর {batch} ব্যাচের বকেয়া ৳{due} ({month})। বকেয়া পরিশোধ করার জন্য বিনীত অনুরোধ করা হচ্ছে। ধন্যবাদ।"
                       )
                     }
                     className="text-[10px] text-indigo-600 font-bold hover:underline cursor-pointer"
@@ -3074,7 +3074,7 @@ export default function AccountantClient({
                     type="button"
                     onClick={() =>
                       setBulkSmsTemplate(
-                        "Dear Parent, MedhaShiree Coaching reminder: {name} has an outstanding due of ৳{due} for {batch}. Please clear the payment. Thank you."
+                        "Dear Parent, Coaching Center reminder: {name} has an outstanding due of ৳{due} for {batch}. Please clear the payment. Thank you."
                       )
                     }
                     className="text-[10px] text-indigo-600 font-bold hover:underline cursor-pointer"
@@ -3188,7 +3188,7 @@ export default function AccountantClient({
               className="bg-slate-50 p-4 rounded-2xl border border-dashed border-slate-300 space-y-3 text-xs"
             >
               <div className="text-center border-b border-slate-200 pb-2">
-                <h4 className="font-extrabold text-slate-900 text-base">MedhaShiree Coaching</h4>
+                <h4 className="font-extrabold text-slate-900 text-base">Coaching Center</h4>
                 <p className="text-[10px] text-slate-500">Official Fee Payment Voucher</p>
                 <p className="font-mono text-[10px] text-indigo-700 font-bold mt-0.5">
                   Receipt: {receiptData.receiptNumber}

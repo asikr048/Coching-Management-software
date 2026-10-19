@@ -410,7 +410,8 @@ export function generateStudentQrCode(params: {
  * Returns the public verification URL containing the unique QR code
  */
 export function getStudentVerificationUrl(qrCode: string): string {
-  return `https://medhashiree.vercel.app/verify/student?code=${encodeURIComponent(qrCode)}`
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "")
+  return `${baseUrl}/verify/student?code=${encodeURIComponent(qrCode)}`
 }
 
 /**

@@ -1323,7 +1323,7 @@ function EnrollContent() {
         </main>
 
         <footer className="border-t border-[#121c2e] py-4 text-center text-xs text-gray-500">
-          MedhaShiree • Direct Online Payment Gateway
+          Coaching • Direct Online Payment Gateway
         </footer>
       </div>
     )

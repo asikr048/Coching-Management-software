@@ -616,7 +616,7 @@ export default function SmsPage() {
           // Auto-write default exam result SMS message if currently blank or generic
           setMessage((prev) => {
             if (!prev.trim() || prev.includes("pending fee due") || prev.includes("classes for") || prev.includes("Type your SMS")) {
-              return "Dear Guardian, {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks in {{exam_title}} (Batch: {{batch}}). Grade: {{grade}}, Merit Rank: {{rank}}. - MedhaShiree"
+              return "Dear Guardian, {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks in {{exam_title}} (Batch: {{batch}}). Grade: {{grade}}, Merit Rank: {{rank}}. - Coaching"
             }
             return prev
           })
@@ -896,7 +896,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
     try {
       const payload: any = {
         recipients: [testPhone.trim()],
-        message: "MedhaShiree: Test SMS gateway configuration verified successfully!",
+        message: "Coaching: Test SMS gateway configuration verified successfully!",
       }
 
       if (testBranchId === "custom") {
@@ -1231,31 +1231,31 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
   const templates = [
     {
       label: "Exam Result (Full)",
-      text: "Dear Guardian, {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks in {{exam_title}} (Batch: {{batch}}). Grade: {{grade}}, Merit Rank: {{rank}}. - MedhaShiree",
+      text: "Dear Guardian, {{name}} (ID: {{student_id}}) has obtained {{number}}/{{total_marks}} marks in {{exam_title}} (Batch: {{batch}}). Grade: {{grade}}, Merit Rank: {{rank}}. - Coaching",
     },
     {
       label: "পরীক্ষার ফলাফল (বাংলা)",
-      text: "অভিভাবক মহোদয়, আপনার সন্তান {{name}} (আইডি: {{student_id}}) {{exam_title}} পরীক্ষায় {{number}}/{{total_marks}} নম্বর পেয়েছে। মেধা স্থান: {{rank}}। - মেধাশিরী",
+      text: "অভিভাবক মহোদয়, আপনার সন্তান {{name}} (আইডি: {{student_id}}) {{exam_title}} পরীক্ষায় {{number}}/{{total_marks}} নম্বর পেয়েছে। মেধা স্থান: {{rank}}। ",
     },
     {
       label: "Exam Result (Short)",
-      text: "Dear Guardian, {{name}} got {{number}}/{{total_marks}} in {{exam_title}}. Grade: {{grade}}. - MedhaShiree",
+      text: "Dear Guardian, {{name}} got {{number}}/{{total_marks}} in {{exam_title}}. Grade: {{grade}}. - Coaching",
     },
     {
       label: "Fee Due Reminder",
-      text: "Dear Parent, your child {{name}} (ID: {{student_id}}) has a pending fee due of {{due_amount}}. Please complete payment at the earliest. - MedhaShiree",
+      text: "Dear Parent, your child {{name}} (ID: {{student_id}}) has a pending fee due of {{due_amount}}. Please complete payment at the earliest. - Coaching",
     },
     {
       label: "Exam Schedule",
-      text: "Dear Parent, the upcoming exam for {{name}} in {{batch}} is scheduled for next week. Please ensure regular attendance and preparation. - MedhaShiree",
+      text: "Dear Parent, the upcoming exam for {{name}} in {{batch}} is scheduled for next week. Please ensure regular attendance and preparation. - Coaching",
     },
     {
       label: "Class Notice",
-      text: "Dear Parent, please note that classes for {{batch}} will follow a special routine this week. Thank you. - MedhaShiree",
+      text: "Dear Parent, please note that classes for {{batch}} will follow a special routine this week. Thank you. - Coaching",
     },
     {
       label: "General Notice",
-      text: "Notice: Academic activities will remain closed on the upcoming public holiday. Regular classes will resume on Sunday. - MedhaShiree",
+      text: "Notice: Academic activities will remain closed on the upcoming public holiday. Regular classes will resume on Sunday. - Coaching",
     },
   ]
 
@@ -2060,7 +2060,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     <Smartphone className="w-3.5 h-3.5 text-amber-400" />
                     Recipient Mobile View Simulation
                   </span>
-                  <span className="text-amber-400/80 font-semibold">MedhaShiree</span>
+                  <span className="text-amber-400/80 font-semibold">Coaching</span>
                 </div>
                 {resolvedRecipients.length > 1 && (
                   <div className="flex items-center justify-between gap-2 pt-1">

@@ -1208,7 +1208,7 @@ export default function OnlineResultPortalPage() {
           <div className="max-w-3xl space-y-3">
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/30 text-xs font-black uppercase tracking-wider">
               <Sparkles className="w-3.5 h-3.5" />
-              মেধাশিরী পরীক্ষার কেন্দ্রীয় ফলাফল পোর্টাল
+              কেন্দ্রীয় ফলাফল পোর্টাল
             </div>
             <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-tight">
               দৈনিক ও সাপ্তাহিক পরীক্ষার রেজাল্ট এবং মেরিট লিস্ট

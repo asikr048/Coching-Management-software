@@ -97,7 +97,7 @@ export default function PrintableExamSheet({
   showPodium = true,
   showSubjectToppers = true,
   showSignatures = true,
-  instituteName = "MIIS ACADEMY",
+  instituteName = "Coaching Center",
   instituteBranch,
   instituteLogoUrl,
   tagline,

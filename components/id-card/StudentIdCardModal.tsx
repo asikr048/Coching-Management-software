@@ -4,6 +4,7 @@ import { useState } from "react"
 import { X, Printer, Download, QrCode, ShieldCheck, User, Phone, BookOpen, Layers, Check, Copy, ExternalLink } from "lucide-react"
 import { StudentIdCardData, printStudentIdCard, downloadStudentIdCardPDF } from "@/lib/id-card-generator"
 import { generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
+import { useBranding } from "@/components/providers/BrandingContext"
 import { toast } from "sonner"
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function StudentIdCardModal({ isOpen, onClose, cardData, student, batchName, rollNo }: Props) {
+  const { branding } = useBranding()
   const [downloading, setDownloading] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -103,8 +105,8 @@ export default function StudentIdCardModal({ isOpen, onClose, cardData, student,
           <div className="w-[310px] bg-white rounded-2xl overflow-hidden shadow-xl border border-slate-200/90 flex flex-col transition-transform hover:scale-[1.01] duration-300">
             {/* ID Card Header */}
             <div className="bg-gradient-to-br from-indigo-950 via-indigo-900 to-indigo-800 text-white p-4 text-center relative">
-              <div className="text-amber-400 font-black text-sm tracking-wider uppercase">মেধা সিঁড়ি কোচিং</div>
-              <div className="text-indigo-200 text-[10px] font-medium tracking-wide">MedhaShiree Academic Care</div>
+              <div className="text-amber-400 font-black text-sm tracking-wider uppercase">{branding.nameBn || branding.name}</div>
+              <div className="text-indigo-200 text-[10px] font-medium tracking-wide">{branding.tagline || "Academic Care"}</div>
               <div className="inline-block bg-white/15 border border-white/25 text-[9px] font-bold text-white px-2 py-0.5 rounded-full mt-1 uppercase tracking-wider">
                 STUDENT IDENTIFICATION CARD
               </div>
@@ -177,7 +179,7 @@ export default function StudentIdCardModal({ isOpen, onClose, cardData, student,
               <div className="text-[9px] text-slate-500 leading-tight">
                 <b className="text-slate-700">Official Student Pass</b><br />
                 <span className="font-mono text-[8px] text-slate-600 block mt-0.5">{effectiveCode}</span>
-                <span className="text-[8px] text-indigo-600">medhashiree.vercel.app</span>
+                <span className="text-[8px] text-indigo-600">{(process.env.NEXT_PUBLIC_APP_URL || "").replace(/^https?:\/\//, "") || "coaching.local"}</span>
               </div>
               <img src={qrUrl} alt="QR Code" className="w-11 h-11 rounded border border-slate-200 bg-white p-0.5 shadow-2xs" />
             </div>

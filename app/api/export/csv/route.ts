@@ -51,6 +51,11 @@ export async function GET(req: NextRequest) {
 
     const admin = createAdminClient()
     const todayStr = new Date().toISOString().split("T")[0]
+    const brandSlug =
+      (process.env.NEXT_PUBLIC_APP_NAME?.trim() || "coaching")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "coaching"
 
     // -------------------------------------------------------------
     // BUILD STUDENTS & ENROLLMENTS CSV
@@ -444,20 +449,20 @@ export async function GET(req: NextRequest) {
         exported_at: new Date().toISOString(),
         files: {
           students: {
-            filename: `medhashiree_students_${todayStr}.csv`,
+            filename: `${brandSlug}_students_${todayStr}.csv`,
             content: studentsCsv
           },
           batches: {
-            filename: `medhashiree_batches_${todayStr}.csv`,
+            filename: `${brandSlug}_batches_${todayStr}.csv`,
             content: batchesCsv
           },
           branches: {
-            filename: `medhashiree_branches_${todayStr}.csv`,
+            filename: `${brandSlug}_branches_${todayStr}.csv`,
             content: branchesCsv
           },
           ...(staffCsv ? {
             staff: {
-              filename: `medhashiree_staff_${todayStr}.csv`,
+              filename: `${brandSlug}_staff_${todayStr}.csv`,
               content: staffCsv
             }
           } : {})
@@ -466,21 +471,21 @@ export async function GET(req: NextRequest) {
     }
 
     let csvContent = ""
-    let filename = `medhashiree_export_${todayStr}.csv`
+    let filename = `${brandSlug}_export_${todayStr}.csv`
 
     if (type === "batches") {
       csvContent = await generateBatchesCsv()
-      filename = `medhashiree_batches_${todayStr}.csv`
+      filename = `${brandSlug}_batches_${todayStr}.csv`
     } else if (type === "branches") {
       csvContent = await generateBranchesCsv()
-      filename = `medhashiree_branches_${todayStr}.csv`
+      filename = `${brandSlug}_branches_${todayStr}.csv`
     } else if (type === "staff") {
       csvContent = await generateStaffCsv()
-      filename = `medhashiree_staff_${todayStr}.csv`
+      filename = `${brandSlug}_staff_${todayStr}.csv`
     } else {
       // Default to students
       csvContent = await generateStudentsCsv()
-      filename = `medhashiree_students_${todayStr}.csv`
+      filename = `${brandSlug}_students_${todayStr}.csv`
     }
 
     return new NextResponse(csvContent, {

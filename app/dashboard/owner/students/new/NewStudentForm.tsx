@@ -1551,7 +1551,7 @@ export default function NewStudentForm({
       @media print { body { padding: 10px; } }
     </style></head><body>
       <div class="header">
-        <h1>MedhaShiree Coaching</h1>
+        <h1>Coaching Center</h1>
         <p>Enrollment & Fee Confirmation Slip</p>
         <span class="badge">Official Admission Copy</span>
       </div>
@@ -1602,7 +1602,7 @@ export default function NewStudentForm({
 
       <div class="footer">
         <p>Please keep this document safe for institutional records.</p>
-        <p>MedhaShiree — Empowering Modern Education</p>
+        <p>Coaching — Empowering Modern Education</p>
       </div>
     </body></html>`)
     win.document.close()
@@ -1621,7 +1621,7 @@ export default function NewStudentForm({
       doc.setFont("helvetica", "bold")
       doc.setFontSize(14)
       doc.setTextColor(67, 56, 202)
-      doc.text("MedhaShiree Coaching", 52.5, 12, { align: "center" })
+      doc.text("Coaching Center", 52.5, 12, { align: "center" })
 
       doc.setFont("helvetica", "normal")
       doc.setFontSize(8)
@@ -3196,7 +3196,7 @@ export default function NewStudentForm({
                 /* Printable preview slip */
                 <div ref={receiptRef} className="border border-slate-200 rounded-2xl p-4 sm:p-5 bg-white space-y-3 shadow-xs">
                   <div className="text-center border-b border-dashed border-slate-300 pb-3">
-                    <h4 className="font-black text-indigo-950 text-base">MedhaShiree Coaching</h4>
+                    <h4 className="font-black text-indigo-950 text-base">Coaching Center</h4>
                     <p className="text-[11px] text-slate-500">Official Enrollment & Clearance Receipt</p>
                     <div className="flex items-center justify-center gap-2 mt-1">
                       <span className="inline-block bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full font-mono">
@@ -3323,7 +3323,7 @@ export default function NewStudentForm({
 
                       <div className="space-y-1 text-[9px] text-slate-600 py-1">
                         <p>1. Carry this card during all classes and exams.</p>
-                        <p>2. Non-transferable & property of MedhaShiree.</p>
+                        <p>2. Non-transferable & property of Coaching.</p>
                         <p>3. If found, please return to coaching office.</p>
                       </div>
 

@@ -6,23 +6,27 @@ import ConnectivityBanner from "@/components/desktop/ConnectivityBanner"
 import { BrandingProvider } from "@/components/providers/BrandingContext"
 import { LanguageProvider } from "@/components/providers/LanguageContext"
 import LanguageSelector from "@/components/ui/LanguageSelector"
+import { getServerBranding } from "@/lib/branding-server"
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] })
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] })
 
-export const metadata: Metadata = {
-  title: "MIIS ACADEMY - Coaching Management System",
-  description: "Complete coaching center management solution with biometric attendance, fee management, course marketplace and more.",
-  icons: {
-    icon: [
-      { url: "/icon.png", type: "image/png" },
-      { url: "/favicon.ico" },
-    ],
-    apple: [
-      { url: "/icon.png" },
-    ],
-    shortcut: "/favicon.ico",
-  },
+export async function generateMetadata(): Promise<Metadata> {
+  const branding = await getServerBranding()
+  const iconUrl = branding.faviconUrl || branding.logoUrl || "/icon.png"
+  const description =
+    branding.tagline ||
+    "Complete coaching center management solution with biometric attendance, fee management, course marketplace and more."
+
+  return {
+    title: `${branding.name} - Coaching Management System`,
+    description,
+    icons: {
+      icon: [{ url: iconUrl }],
+      apple: [{ url: iconUrl }],
+      shortcut: iconUrl,
+    },
+  }
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

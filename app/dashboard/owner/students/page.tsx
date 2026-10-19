@@ -290,7 +290,7 @@ export default async function StudentsPage() {
   const currentStaff = staff || {
     id: user?.id || "admin-owner",
     name: user?.user_metadata?.name || "Admin Owner",
-    email: user?.email || "admin@medhashiree.com",
+    email: user?.email || "admin@coaching.local",
     role: "owner" as const,
   }
 

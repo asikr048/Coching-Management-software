@@ -158,13 +158,15 @@ export async function sendSms(to: string, message: string, dynamicConfig?: { api
   return getSmsProvider(dynamicConfig).send(to, message)
 }
 
+export const SMS_SENDER = process.env.NEXT_PUBLIC_APP_NAME?.trim() || "Coaching Center"
+
 export const SMS_TEMPLATES = {
   absent: (studentName: string, date: string, batchName: string) =>
-    `MedhaShiree: Dear Parent, ${studentName} was ABSENT from ${batchName} class on ${date}. Please contact us.`,
+    `${SMS_SENDER}: Dear Parent, ${studentName} was ABSENT from ${batchName} class on ${date}. Please contact us.`,
   feeReminder: (studentName: string, amount: number, dueDate: string) =>
-    `MedhaShiree: Dear Parent, Fee of BDT ${amount} for ${studentName} is due on ${dueDate}. Please pay to avoid late charges.`,
+    `${SMS_SENDER}: Dear Parent, Fee of BDT ${amount} for ${studentName} is due on ${dueDate}. Please pay to avoid late charges.`,
   paymentConfirmed: (studentName: string, amount: number, receiptNo: string) =>
-    `MedhaShiree: Payment of BDT ${amount} for ${studentName} received. Receipt: ${receiptNo}. Thank you!`,
+    `${SMS_SENDER}: Payment of BDT ${amount} for ${studentName} received. Receipt: ${receiptNo}. Thank you!`,
   feeAlert: (studentName: string, amount: number) =>
-    `MedhaShiree: URGENT - ${studentName} has overdue fee of BDT ${amount}. Please clear immediately.`,
+    `${SMS_SENDER}: URGENT - ${studentName} has overdue fee of BDT ${amount}. Please clear immediately.`,
 }

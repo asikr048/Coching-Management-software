@@ -1348,7 +1348,7 @@ export default function BranchesClient({
                     </label>
                     <input
                       type="email"
-                      placeholder="branch@medhashiree.edu.bd"
+                      placeholder="branch@coaching.local"
                       value={formData.email}
                       onChange={e => setFormData({ ...formData, email: e.target.value })}
                       className="w-full px-3.5 py-2 text-xs sm:text-sm bg-white border border-emerald-200/90 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 shadow-2xs transition-all"
@@ -1398,7 +1398,7 @@ export default function BranchesClient({
                     </label>
                     <input
                       type="text"
-                      placeholder="e.g. MedhaShiree or 88096..."
+                      placeholder="e.g. Coaching or 88096..."
                       value={formData.sms_sender_id}
                       onChange={e => setFormData({ ...formData, sms_sender_id: e.target.value })}
                       className="w-full px-3.5 py-2 text-xs sm:text-sm bg-white border border-indigo-200/90 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition-all"

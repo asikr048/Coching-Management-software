@@ -559,7 +559,7 @@ export default function StudentProfilePage() {
               buttonText="🧾 ভর্তি ও মানি রসিদ"
             />
             <div className="hidden sm:block bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/15 text-center">
-              <p className="text-xs text-indigo-300">MedhaShiree ID</p>
+              <p className="text-xs text-indigo-300">Student ID</p>
               <p className="text-lg font-mono font-bold text-white">{profile?.user_id}</p>
             </div>
           </div>

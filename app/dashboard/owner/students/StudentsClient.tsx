@@ -87,7 +87,7 @@ export default function StudentsClient({
   batches, 
   dueData = [], 
   examData = [],
-  currentStaff = { id: "owner-admin", name: "Admin", email: "admin@medhashiree.com", role: "owner" },
+  currentStaff = { id: "owner-admin", name: "Admin", email: "admin@coaching.local", role: "owner" },
   initialDeletionRequests = []
 }: Props) {
   const router = useRouter()
@@ -2739,7 +2739,7 @@ export default function StudentsClient({
                                             onClick={() => {
                                               setSmsDueItem(d)
                                               setSmsDueMessage(
-                                                `Dear Parent, fee of ${formatCurrency(outstanding)} for ${dueManageStudent.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - MedhaShiree`
+                                                `Dear Parent, fee of ${formatCurrency(outstanding)} for ${dueManageStudent.name} is due on ${formatDate(d.due_date)}. Please pay to avoid late charges. - Coaching`
                                               )
                                             }}
                                             title="Send SMS reminder"

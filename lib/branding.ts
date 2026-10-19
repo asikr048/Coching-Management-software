@@ -40,7 +40,7 @@ export interface ThemePalette {
 export const THEME_PALETTES: Record<ThemeColor, ThemePalette> = {
   emerald: {
     id: "emerald",
-    name: "MIIS Emerald (সবুজ)",
+    name: "Emerald (সবুজ)",
     primaryHex: "#059669",
     secondaryHex: "#10b981",
     bgLightHex: "#ecfdf5",
@@ -246,23 +246,25 @@ export function isPresetLogoUrl(url?: string | null): boolean {
   return PRESET_LOGOS.some(p => p.url === url)
 }
 
+const DEFAULT_APP_NAME = process.env.NEXT_PUBLIC_APP_NAME?.trim() || "Coaching Center"
+
 export const DEFAULT_BRANDING: InstituteBranding = {
-  name: "MIIS ACADEMY",
-  nameBn: "এমআইআইএস একাডেমি",
-  shortName: "MIIS",
+  name: DEFAULT_APP_NAME,
+  nameBn: DEFAULT_APP_NAME,
+  shortName: DEFAULT_APP_NAME.split(/\s+/)[0] || "CC",
   tagline: "Academic & Admission Care",
   taglineBn: "উন্নত ও নির্ভরযোগ্য শিক্ষা সেবা",
   logoUrl: PRESET_LOGOS[0].url,
   faviconUrl: PRESET_LOGOS[0].url,
   logoShape: "circle",
   themeColor: "emerald",
-  phone: "+880 1700-000000",
-  email: "contact@miisacademy.com",
-  website: "www.miisacademy.com",
-  address: "Rangpur / Dhaka, Bangladesh",
+  phone: "",
+  email: "",
+  website: "",
+  address: "",
   establishedYear: "2024",
   receiptFooterNote: "Thank you for your payment! Please preserve this receipt for all future verification.",
-  whatsappLink: "https://wa.me/8801700000000",
+  whatsappLink: "",
   footerAbout: "Premier academic coaching and admission care providing excellence in education, student mentorship, and proven results across Bangladesh.",
 }
 
@@ -305,6 +307,16 @@ export function saveActiveBranding(branding: InstituteBranding): void {
 export function getThemeConfig(themeColor?: ThemeColor): ThemePalette {
   const key = themeColor && THEME_PALETTES[themeColor] ? themeColor : "emerald"
   return THEME_PALETTES[key]
+}
+
+export function getBrandSlug(fallback = "coaching"): string {
+  const name = process.env.NEXT_PUBLIC_APP_NAME?.trim() || fallback
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || fallback
+  )
 }
 
 export function hexToRgb(hex: string): string {

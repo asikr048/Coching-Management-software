@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { formatDate } from "@/lib/utils"
+import { getServerBranding } from "@/lib/branding-server"
 import { CheckCircle2, XCircle, GraduationCap, Building2, Calendar, Phone, ShieldCheck, User, Award } from "lucide-react"
 import Link from "next/link"
 
@@ -13,6 +14,8 @@ interface PageProps {
 
 export default async function StudentVerifyPage({ searchParams }: PageProps) {
   const params = await searchParams
+  const branding = await getServerBranding()
+  const verifyHost = (process.env.NEXT_PUBLIC_APP_URL || "").replace(/^https?:\/\//, "").replace(/\/+$/, "") || "this portal"
   const rawCode = typeof params.code === "string" ? params.code.trim() : ""
 
   const admin = createAdminClient()
@@ -74,7 +77,7 @@ export default async function StudentVerifyPage({ searchParams }: PageProps) {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md mb-2 shadow-inner">
             <GraduationCap className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-xl font-black tracking-tight">MedhaShiree Coaching</h1>
+          <h1 className="text-xl font-black tracking-tight">{branding.name}</h1>
           <p className="text-emerald-100 text-xs font-medium mt-0.5">Official Student Verification System</p>
           <div className="mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-white/20 text-white backdrop-blur-md border border-white/20">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-300" />
@@ -94,7 +97,7 @@ export default async function StudentVerifyPage({ searchParams }: PageProps) {
                     Verified Active Student
                   </div>
                   <div className="text-[11px] text-emerald-700 font-medium">
-                    This Student ID Card is authentic & verified on medhashiree.vercel.app
+                    This Student ID Card is authentic &amp; verified on {verifyHost}
                   </div>
                 </div>
               </div>
@@ -184,7 +187,7 @@ export default async function StudentVerifyPage({ searchParams }: PageProps) {
               href="/"
               className="inline-flex items-center justify-center w-full py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 transition-colors shadow-sm"
             >
-              Go to MedhaShiree Portal
+              Go to Portal
             </Link>
           </div>
         </div>

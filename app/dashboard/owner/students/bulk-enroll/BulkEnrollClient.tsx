@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner"
 import { formatCurrency, formatDate, parseRollQuery, isRollMatch, generateStudentQrCode, getStudentVerificationUrl, normalizeDigits, parseRollNumber } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
+import { getBrandSlug } from "@/lib/branding"
 import { useBranch } from "@/components/providers/BranchContext"
 import { 
   AdmissionSlipData, 
@@ -682,7 +683,7 @@ export default function BulkEnrollClient({
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.setAttribute("download", `medhashiree_student_enrollment_template.csv`)
+    link.setAttribute("download", `${getBrandSlug()}_student_enrollment_template.csv`)
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
