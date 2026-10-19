@@ -227,16 +227,16 @@ export default function SliderClient({
     !branding.faviconUrl || branding.faviconUrl === branding.logoUrl || (isCustomLogo && isDefaultFavicon)
   )
   const [instThemeColor, setInstThemeColor] = useState<ThemeColor>(branding.themeColor || "emerald")
-  const [instWebsite, setInstWebsite] = useState(branding.website || "www.miisacademy.com")
+  const [instWebsite, setInstWebsite] = useState(branding.website || "")
   const [instEstablishedYear, setInstEstablishedYear] = useState(branding.establishedYear || "2024")
   const [instReceiptFooterNote, setInstReceiptFooterNote] = useState(
     branding.receiptFooterNote || "Thank you for your payment! Please preserve this receipt for all future verification."
   )
 
-  const [contactPhone, setContactPhone] = useState(branding.phone || initialSettings['contact_phone'] || '+880 1700-000000')
-  const [contactEmail, setContactEmail] = useState(branding.email || initialSettings['contact_email'] || 'contact@miisacademy.com')
-  const [contactAddress, setContactAddress] = useState(branding.address || initialSettings['contact_address'] || 'Rangpur / Dhaka, Bangladesh')
-  const [contactLink, setContactLink] = useState(branding.whatsappLink || initialSettings['contact_link'] || 'https://wa.me/8801700000000')
+  const [contactPhone, setContactPhone] = useState(branding.phone || initialSettings['contact_phone'] || '')
+  const [contactEmail, setContactEmail] = useState(branding.email || initialSettings['contact_email'] || '')
+  const [contactAddress, setContactAddress] = useState(branding.address || initialSettings['contact_address'] || '')
+  const [contactLink, setContactLink] = useState(branding.whatsappLink || initialSettings['contact_link'] || '')
   const [contactLabel, setContactLabel] = useState(initialSettings['contact_label'] || 'WhatsApp Us')
   const [footerAbout, setFooterAbout] = useState(
     branding.footerAbout ||
@@ -2179,7 +2179,7 @@ export default function SliderClient({
                       type="text"
                       value={instWebsite}
                       onChange={e => setInstWebsite(e.target.value)}
-                      placeholder="www.miisacademy.com"
+                      placeholder="www.example.com"
                       className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
                     />
                   </div>
@@ -2477,7 +2477,7 @@ export default function SliderClient({
                       type="text"
                       value={contactPhone}
                       onChange={e => setContactPhone(e.target.value)}
-                      placeholder="+880 1700-000000"
+                      placeholder="+880 1XXXXXXXXX"
                       className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
                     />
                   </div>
@@ -2490,7 +2490,7 @@ export default function SliderClient({
                       type="email"
                       value={contactEmail}
                       onChange={e => setContactEmail(e.target.value)}
-                      placeholder="contact@miisacademy.com"
+                      placeholder="contact@example.com"
                       className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
                     />
                   </div>
@@ -2516,7 +2516,7 @@ export default function SliderClient({
                       type="text"
                       value={contactLink}
                       onChange={e => setContactLink(e.target.value)}
-                      placeholder="https://wa.me/8801700000000"
+                      placeholder="https://wa.me/8801XXXXXXXXX"
                       className="w-full px-3.5 py-2.5 text-sm bg-slate-50 hover:bg-white focus:bg-white border border-slate-200 rounded-xl focus:border-indigo-600 focus:outline-none transition-all text-slate-900"
                     />
                   </div>
@@ -2683,8 +2683,8 @@ export default function SliderClient({
                         {instTagline || "Academic Excellence & Admission Care"}
                       </p>
                       <div className="text-[8px] text-slate-400 flex items-center justify-center gap-2 border-t border-slate-100 pt-1">
-                        <span>📞 {contactPhone || "+880 1700-000000"}</span>
-                        <span>🌐 {instWebsite || "www.miisacademy.com"}</span>
+                        <span>📞 {contactPhone}</span>
+                        <span>🌐 {instWebsite}</span>
                       </div>
                     </div>
                   </div>

@@ -533,7 +533,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                       type="text"
                       value={formData.phone}
                       onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="+880 1700-000000"
+                      placeholder="+880 1XXXXXXXXX"
                       className={inputClass}
                     />
                   </div>
@@ -546,7 +546,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                       type="email"
                       value={formData.email}
                       onChange={e => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="contact@miisacademy.com"
+                      placeholder="contact@example.com"
                       className={inputClass}
                     />
                   </div>
@@ -559,7 +559,7 @@ export default function SettingsClient({ myRole }: { myRole: string }) {
                       type="text"
                       value={formData.address}
                       onChange={e => setFormData({ ...formData, address: e.target.value })}
-                      placeholder="e.g. Main Campus, Rangpur / Dhaka, Bangladesh"
+                      placeholder="e.g. Main Campus, City, Country"
                       className={inputClass}
                     />
                   </div>
