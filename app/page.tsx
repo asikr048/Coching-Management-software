@@ -126,11 +126,11 @@ export default function HomePage() {
   const { branding, theme: activeBrandingTheme } = useBranding()
   const { t, language } = useLanguage()
 
-  const [contactLink, setContactLink] = useState(branding.whatsappLink || "https://wa.me/8801700000000")
+  const [contactLink, setContactLink] = useState(branding.whatsappLink || "")
   const [contactLabel, setContactLabel] = useState("WhatsApp Us")
-  const [contactPhone, setContactPhone] = useState(branding.phone || "+880 1700-000000")
-  const [contactEmail, setContactEmail] = useState(branding.email || "contact@miisacademy.com")
-  const [contactAddress, setContactAddress] = useState(branding.address || "Rangpur / Dhaka, Bangladesh")
+  const [contactPhone, setContactPhone] = useState(branding.phone || "")
+  const [contactEmail, setContactEmail] = useState(branding.email || "")
+  const [contactAddress, setContactAddress] = useState(branding.address || "")
   const [footerAbout, setFooterAbout] = useState(
     branding.footerAbout ||
     "মানসম্মত পাঠদান ও অভিজ্ঞ শিক্ষকমণ্ডলীর নির্দেশনায় প্রতিটি শিক্ষার্থীর সাফল্য নিশ্চিত করাই আমাদের লক্ষ্য।"
@@ -256,13 +256,19 @@ export default function HomePage() {
 
       const fetchBatches = async () => {
         try {
-          const { data: b } = await supabase
+          const { data: b, error } = await supabase
             .from("batches")
-            .select("*, teacher:staff(name), branch:branches(name)")
+            .select("*, teacher:staff!batches_teacher_id_fkey(name), branch:branches!batches_branch_id_fkey(name)")
             .eq("is_active", true)
             .order("created_at", { ascending: false })
+          if (error) {
+            console.error("Failed to load homepage batches:", error.message)
+            return
+          }
           if (b) setBatches(b)
-        } catch {}
+        } catch (err) {
+          console.error("Failed to load homepage batches:", err)
+        }
       }
 
       const fetchCourses = async () => {
@@ -293,7 +299,7 @@ export default function HomePage() {
             setSlides([
               {
                 id: "def1",
-                title: "মেধাশিরী কোচিং সেন্টার",
+                title: branding.name,
                 subtitle: "এইচএসসি ও এসএসসি স্পেশাল মডেল টেস্ট ব্যাচে ভর্তি চলছে",
                 image_url: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1200&auto=format&fit=crop",
               },
@@ -319,7 +325,7 @@ export default function HomePage() {
                 id: "a1",
                 student_name: "তানভীর আহমেদ",
                 title: "রাজশাহী মেডিকেল কলেজ (চান্স প্রাপ্ত)",
-                description: "মেধাশিরী কোচিংয়ের নিয়মিত ক্লাস ও বিশেষ মডেল টেস্ট আমার মেডিকেল প্রস্তুতিতে সর্বোচ্চ ভূমিকা রেখেছে।",
+                description: "নিয়মিত ক্লাস ও বিশেষ মডেল টেস্ট আমার মেডিকেল প্রস্তুতিতে সর্বোচ্চ ভূমিকা রেখেছে।",
                 exam_year: "২০২৫",
               },
               {
@@ -353,7 +359,7 @@ export default function HomePage() {
                 title: "এইচএসসি পদার্থবিজ্ঞান পরীক্ষায় এ+ পাওয়ার সহজ কৌশল",
                 excerpt: "পদার্থবিজ্ঞানে গাণিতিক সমস্যা সমাধান এবং সৃজনশীল অংশে সম্পূর্ণ নম্বর অর্জনের কার্যকর ফর্মুলা ও সময় বণ্টন গাইড।",
                 content: "পদার্থবিজ্ঞানে ভালো করতে হলে মুখস্থ করার চেয়ে কনসেপ্ট ক্লিয়ার থাকা সবচেয়ে জরুরি। নিয়মিত গাণিতিক সূত্রাবলি অনুশীলন এবং বোর্ড প্রশ্নের ধরন বিশ্লেষণ শিক্ষার্থীদের পরীক্ষার জন্য আত্মবিশ্বাসী করে তোলে...",
-                author_name: "মেধাশিরী একাডেমিক টিম",
+                author_name: "একাডেমিক টিম",
                 created_at: new Date().toISOString(),
                 tags: ["এইচএসসি", "পদার্থবিজ্ঞান", "টিপস"],
               },
@@ -746,7 +752,7 @@ export default function HomePage() {
               <h1
                 className="text-lg sm:text-3xl font-extrabold text-[#1e1b4b] tracking-tight leading-tight transition-colors truncate"
               >
-                {branding.name || "MIIS ACADEMY"}
+                {branding.name || "Coaching Center"}
               </h1>
               <p className="text-[11px] sm:text-sm font-semibold text-gray-600 mt-0.5 truncate">
                 {branding.taglineBn || branding.tagline || (currentBranch ? currentBranch.name : "প্রধান ক্যাম্পাস ও সকল শাখা")} {displayAddress ? `• ${displayAddress}` : ""}
@@ -954,7 +960,7 @@ export default function HomePage() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={slide.image_url}
-                    alt={slide.title || "MedhaShiree Campus"}
+                    alt={slide.title || `${branding.name} Campus`}
                     className="w-full h-full object-cover"
                   />
                   {/* Gradient Overlay & Captions */}
@@ -1462,7 +1468,7 @@ export default function HomePage() {
             কৃতি শিক্ষার্থীদের সাফল্য (Achievements)
           </h2>
           <p className="text-xs sm:text-sm text-gray-500 mt-1">
-            মেধাশিরী পরিবারের অদম্য মেধাবীদের মেডিকেল, ইঞ্জিনিয়ারিং ও পাবলিক বিশ্ববিদ্যালয়ে অভাবনীয় সাফল্য
+            আমাদের পরিবারের অদম্য মেধাবীদের মেডিকেল, ইঞ্জিনিয়ারিং ও পাবলিক বিশ্ববিদ্যালয়ে অভাবনীয় সাফল্য
           </p>
         </div>
 
@@ -1542,7 +1548,7 @@ export default function HomePage() {
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full">
-                      {blog.author_name || "মেধাশিরী টিম"}
+                      {blog.author_name || "টিম"}
                     </span>
                     <span className="text-[11px] text-gray-400">
                       {blog.created_at ? new Date(blog.created_at).toLocaleDateString("en-GB") : ""}
@@ -1601,7 +1607,7 @@ export default function HomePage() {
               <CheckCircle className="w-12 h-12 text-emerald-600 mx-auto mb-2" />
               <h4 className="font-bold text-emerald-900 text-base">আপনার মতামতের জন্য ধন্যবাদ!</h4>
               <p className="text-xs text-emerald-700 mt-1">
-                মেধাশিরী কর্তৃপক্ষ আপনার বার্তা গুরুত্ব সহকারে বিবেচনা করবে।
+                কর্তৃপক্ষ আপনার বার্তা গুরুত্ব সহকারে বিবেচনা করবে।
               </p>
             </div>
           ) : (
@@ -1695,7 +1701,7 @@ export default function HomePage() {
                   }}
                 />
               </div>
-              <h3 className="font-bold text-white text-base">{branding.name || "MIIS ACADEMY"}</h3>
+              <h3 className="font-bold text-white text-base">{branding.name || "Coaching Center"}</h3>
             </div>
             <p className="text-gray-400 leading-relaxed text-[11px] mb-3">
               {footerAbout || branding.footerAbout || "মানসম্মত পাঠদান ও অভিজ্ঞ শিক্ষকমণ্ডলীর নির্দেশনায় প্রতিটি শিক্ষার্থীর সাফল্য নিশ্চিত করাই আমাদের লক্ষ্য।"}
@@ -1782,7 +1788,7 @@ export default function HomePage() {
         </div>
 
         <div className="max-w-7xl mx-auto px-4 sm:px-8 pt-6 flex flex-col sm:flex-row items-center justify-between text-[11px] text-gray-500 gap-2">
-          <p>© {new Date().getFullYear()} {branding.name || "MIIS ACADEMY"}. সর্বস্বত্ব সংরক্ষিত।</p>
+          <p>© {new Date().getFullYear()} {branding.name || "Coaching Center"}. সর্বস্বত্ব সংরক্ষিত।</p>
           <p>Designed with excellence for Bangladesh Academic Coaching.</p>
         </div>
       </footer>
@@ -1834,7 +1840,7 @@ export default function HomePage() {
             <div className="flex items-start justify-between gap-3 pb-3 mb-4 border-b border-gray-100">
               <div>
                 <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full">
-                  {activeBlogModal.author_name || "মেধাশিরী সম্পাদকীয়"}
+                  {activeBlogModal.author_name || "সম্পাদকীয়"}
                 </span>
                 <h3 className="text-lg sm:text-xl font-extrabold text-gray-900 mt-2">
                   {activeBlogModal.title}
