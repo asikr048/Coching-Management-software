@@ -12,7 +12,7 @@ import {
   History, UserPlus, Search, ExternalLink, ChevronRight, X
 } from "lucide-react"
 import { toast } from "sonner"
-import { formatCurrency, formatDate, parseRollQuery, isRollMatch, generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
+import { formatCurrency, formatDate, parseRollQuery, isRollMatch, generateStudentQrCode, getStudentVerificationUrl, normalizeDigits, parseRollNumber } from "@/lib/utils"
 import { checkFinancialAccess } from "@/lib/financial-access"
 import { useBranch } from "@/components/providers/BranchContext"
 import { 
@@ -80,42 +80,8 @@ export function normalizeBDPhone(raw: string): string {
   // 1. Strip quotes, Excel formula markers like ="..." or ' or whitespace
   str = str.replace(/^="?|"?$/g, "").replace(/^'/, "").trim()
 
-  // 2. Excel scientific notation corruption recovery (maps known register numbers corrupted by Excel rounding)
-  if (/^8\.?80132(\d*)[eE]\+?12$/i.test(str) || str === "880132+12" || str === "8801320000000") return "+8801323077148"
-  if (/^8\.?80131(\d*)[eE]\+?12$/i.test(str) || str === "880131+12" || str === "8801310000000") return "+8801314262623"
-  if (/^8\.?80130(\d*)[eE]\+?12$/i.test(str) || str === "880130+12" || str === "8801300000000") return "+8801302201431"
-  if (/^8\.?80175(\d*)[eE]\+?12$/i.test(str) || str === "880175+12" || str === "8801750000000") return "+8801751980692"
-  if (/^8\.?80179(\d*)[eE]\+?12$/i.test(str) || str === "880179+12" || str === "8801790000000") return "+8801786853629" // মাওয়া
-  if (/^8\.?80172(\d*)[eE]\+?12$/i.test(str) || str === "880172+12" || str === "8801720000000") return "+8801717643645" // সুনন্দিতা
-  if (/^8\.?80195(\d*)[eE]\+?12$/i.test(str) || str === "880195+12" || str === "8801950000000") return "+8801945732827" // মেধা
-  if (/^8\.?80184(\d*)[eE]\+?12$/i.test(str) || /^8\.?80183(\d*)[eE]\+?12$/i.test(str) || str === "880184+12" || str === "8801840000000") return "+8801835637104" // রুবা
-  if (/^8\.?80191(\d*)[eE]\+?12$/i.test(str) || str === "880191+12" || str === "8801910000000") return "+8801910868210" // রাত্রী
-  if (/^8\.?80174(\d*)[eE]\+?12$/i.test(str) || str === "880174+12" || str === "8801740000000") return "+8801736154536" // নাঈমা
-  if (/^8\.?80178(\d*)[eE]\+?12$/i.test(str) || str === "880178+12" || str === "8801780000000") return "+8801782819646" // সুবহা
-  if (/^8\.?80171(\d*)[eE]\+?12$/i.test(str) || str === "880171+12" || str === "8801710000000") return "+8801707474355" // লাজিন
-
-  // 3. Handle standard scientific notation, e.g. "8.801323077148E+12", "1.302201431e+09", "1.751380602E+09"
-  if (/[eE][+-]?\d+/.test(str)) {
-    const num = Number(str)
-    if (!isNaN(num) && num > 0) {
-      str = BigInt(Math.round(num)).toString()
-    }
-  }
-
-  // 4. Handle stripped 'E' cases like "8801323077148+12" or "1.302201431+09"
-  if (/^([0-9.]+)\+(\d+)$/.test(str)) {
-    const match = str.match(/^([0-9.]+)\+(\d+)$/)
-    if (match) {
-      const base = parseFloat(match[1])
-      const exp = parseInt(match[2], 10)
-      if (!isNaN(base) && !isNaN(exp)) {
-        str = BigInt(Math.round(base * Math.pow(10, exp))).toString()
-      }
-    }
-  }
-
-  // 5. Clean to only digits and '+'
-  let clean = str.replace(/[^0-9+]/g, "").trim()
+  // 2. Clean to only digits and '+'
+  const clean = str.replace(/[^0-9+]/g, "").trim()
   if (!clean) return ""
 
   // Case 1: Excel stripped leading 0, e.g. "1302201431" or "1751380602" (10 digits starting with 13-19)
@@ -691,12 +657,12 @@ export default function BulkEnrollClient({
 
   // Download Sample CSV with "Due" column
   const handleDownloadSampleCSV = () => {
-    const headers = ["Name", "Guardian Phone", "Due", "Guardian Name", "Phone", "Address", "School / College", "Gender", "Class"]
+    const headers = ["Roll", "Name", "Guardian Name", "Guardian Phone", "Phone", "Gender", "Class", "School / College", "Address", "Due"]
     const sampleRows = [
-      ["আবাব হোসেন", "01302201431", "1500", "শাকিলা খাতুন", "01751380602", "কামারপাড়া, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Male", selectedBatch?.class_level || "Class 10"],
-      ["তাযমীন", "01323077148", "1000", "বকুল মিয়া", "", "পার্ক মোড়, রংপুর", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "Female", selectedBatch?.class_level || "Class 10"],
-      ["জান্নাতুল", "01314262623", "0", "জিয়াদুল ইসলাম", "", "কামারপাড়া, রংপুর", "মুলাটোল মাদ্রাসা", "Female", selectedBatch?.class_level || "Class 10"],
-      ["ফারহান আহমেদ", "01712345678", "2000", "রফিকুল ইসলাম", "01987654321", "ধানমন্ডি, ঢাকা", "ঢাকা রেসিডেনসিয়াল মডেল কলেজ", "Male", selectedBatch?.class_level || "Class 10"]
+      ["1", "আবাব হোসেন", "শাকিলা খাতুন", "01302201431", "01751380602", "Male", selectedBatch?.class_level || "Class 10", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "কামারপাড়া, রংপুর", "1500"],
+      ["2", "তাযমীন", "বকুল মিয়া", "01323077148", "", "Female", selectedBatch?.class_level || "Class 10", "পুলিশ লাইন্স স্কুল এন্ড কলেজ", "পার্ক মোড়, রংপুর", "1000"],
+      ["3", "জান্নাতুল", "জিয়াদুল ইসলাম", "01314262623", "", "Female", selectedBatch?.class_level || "Class 10", "মুলাটোল মাদ্রাসা", "কামারপাড়া, রংপুর", "0"],
+      ["4", "ফারহান আহমেদ", "রফিকুল ইসলাম", "01712345678", "01987654321", "Male", selectedBatch?.class_level || "Class 10", "ঢাকা রেসিডেনসিয়াল মডেল কলেজ", "ধানমন্ডি, ঢাকা", "2000"]
     ]
 
     const csvContent = [
@@ -721,15 +687,22 @@ export default function BulkEnrollClient({
     link.click()
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
-    toast.success("নমুনা CSV ফাইল ডাউনলোড সম্পন্ন হয়েছে! (Sample CSV downloaded with Due column)")
+    toast.success("নমুনা CSV ফাইল ডাউনলোড সম্পন্ন হয়েছে! (Sample CSV downloaded with all standard columns)")
   }
 
-  // Robust CSV parser supporting quotes, commas in quotes, Bengali headers & Due column
+  // Strict CSV parser: exact English headers, quotes/commas supported, blank rows ignored
   const parseCSVText = (text: string) => {
+    setParsedStudents([])
     const cleanText = text.replace(/^\uFEFF/, "")
-    const lines = cleanText.split(/\r\n|\n|\r/).filter(l => l.trim() !== "")
+    const allLines = cleanText.split(/\r\n|\n|\r/)
+    const firstContentLine = allLines.findIndex(l => l.trim() !== "")
+    if (firstContentLine === -1) {
+      toast.error("CSV ফাইলটি খালি (The CSV file is empty).")
+      return
+    }
+    const lines = allLines.slice(firstContentLine)
     if (lines.length < 2) {
-      toast.error("CSV ফাইলে পর্যাপ্ত তথ্য পাওয়া যায়নি (At least header and 1 data row required)")
+      toast.error("CSV ফাইলে ডেটা সারি পাওয়া যায়নি (At least a header and 1 non-blank data row are required). ফাঁকা সারি বাদ দেওয়া হয়েছে।")
       return
     }
 
@@ -764,232 +737,123 @@ export default function BulkEnrollClient({
       return result
     }
 
-    const cleanHeader = (headerStr: string) => 
-      headerStr.toLowerCase().replace(/[^a-z0-9\u0980-\u09FF]/g, "")
+    const canonicalHeaders = {
+      roll_no: "Roll",
+      name: "Name",
+      guardian_name: "Guardian Name",
+      guardian_phone: "Guardian Phone",
+      phone: "Phone",
+      gender: "Gender",
+      class_level: "Class",
+      school_college: "School / College",
+      address: "Address",
+      due: "Due",
+    } as const
+
+    type HeaderKey = keyof typeof canonicalHeaders
+
+    const normalizeHeader = (header: string) =>
+      header.trim().toLowerCase().replace(/\s+/g, " ").replace(/\s*\/\s*/g, "/")
+
+    const headerKeyByNormalized = new Map<string, HeaderKey>(
+      (Object.entries(canonicalHeaders) as Array<[HeaderKey, string]>).map(([key, label]) => [
+        normalizeHeader(label),
+        key,
+      ])
+    )
 
     const rawHeaders = parseLine(lines[0])
+    const colIndex: Partial<Record<HeaderKey, number>> = {}
+    const unknownHeaders: string[] = []
+    const duplicateHeaders: string[] = []
 
-    const colIndex = {
-      name: -1,
-      guardian_phone: -1,
-      due: -1,
-      guardian_name: -1,
-      phone: -1,
-      address: -1,
-      school_college: -1,
-      gender: -1,
-      class_level: -1,
-      email: -1,
-      student_id: -1,
-      roll_no: -1,
-      batch_name: -1,
-      branch_name: -1,
-      qr_code: -1,
-      date_of_birth: -1,
-      guardian_relation: -1,
-    }
-
-    rawHeaders.forEach((h, idx) => {
-      const ch = cleanHeader(h)
-      if (/^(name|studentname|fullname|নাম|শিক্ষার্থীরনাম)$/.test(ch)) {
-        if (colIndex.name === -1) colIndex.name = idx
+    rawHeaders.forEach((header, idx) => {
+      const trimmed = header.trim()
+      if (!trimmed) return
+      const key = headerKeyByNormalized.get(normalizeHeader(trimmed))
+      if (!key) {
+        unknownHeaders.push(trimmed)
+        return
       }
-      else if (/^(due|dueamount|monthlydue|fee|বকেয়া|বকেযাটাকা|ফি|মাসিকবকেয়া)$/.test(ch)) {
-        if (colIndex.due === -1) colIndex.due = idx
+      if (colIndex[key] != null) {
+        duplicateHeaders.push(trimmed)
+        return
       }
-      else if (/^(guardianphone|parentphone|guardianmobile|parentmobile|অভিভাবকেরমোবাইল|অভিভাবকেরফোন|পিতামাতামোবাইল|পিতারমোবাইল)$/.test(ch)) {
-        if (colIndex.guardian_phone === -1) colIndex.guardian_phone = idx
-      }
-      else if (/^(guardianname|parentname|fathername|parentsname|mothersname|পিতামাতানাম|অভিভাবকেরনাম|পিতারনাম|পিতামাতারনাম|মাতারনাম)$/.test(ch)) {
-        if (colIndex.guardian_name === -1) colIndex.guardian_name = idx
-      }
-      else if (/^(phone|studentphone|mobile|studentmobile|মোবাইল|ফোন|শিক্ষার্থীরমোবাইল|শিক্ষার্থীরফোন)$/.test(ch)) {
-        if (colIndex.phone === -1) colIndex.phone = idx
-      }
-      else if (/^(address|presentaddress|permanentaddress|ঠিকানা|বাসা|বর্তমানঠিকানা|স্থায়ীঠিকানা)$/.test(ch)) {
-        if (colIndex.address === -1) colIndex.address = idx
-      }
-      else if (/^(school|college|schoolcollege|collegeschool|institution|স্কুল|কলেজ|স্কুলকলেজ|স্কুলেরনাম|শিক্ষাপ্রতিষ্ঠান|প্রতিষ্ঠানেরনাম)$/.test(ch)) {
-        if (colIndex.school_college === -1) colIndex.school_college = idx
-      }
-      else if (/^(gender|sex|লিঙ্গ)$/.test(ch)) {
-        if (colIndex.gender === -1) colIndex.gender = idx
-      }
-      else if (/^(class|classlevel|grade|শ্রেণী|ক্লাস)$/.test(ch)) {
-        if (colIndex.class_level === -1) colIndex.class_level = idx
-      }
-      else if (/^(email|studentemail|ইমেইল)$/.test(ch)) {
-        if (colIndex.email === -1) colIndex.email = idx
-      }
-      else if (/^(studentid|id|আইডি|স্টুডেন্টআইডি)$/.test(ch)) {
-        if (colIndex.student_id === -1) colIndex.student_id = idx
-      }
-      else if (/^(roll|rollno|batchroll|রোল|রোলনম্বর)$/.test(ch)) {
-        if (colIndex.roll_no === -1) colIndex.roll_no = idx
-      }
-      else if (/^(batch|batchname|ব্যাচ|ব্যাচেরনাম)$/.test(ch)) {
-        if (colIndex.batch_name === -1) colIndex.batch_name = idx
-      }
-      else if (/^(branch|branchname|শাখা|শাখারনাম)$/.test(ch)) {
-        if (colIndex.branch_name === -1) colIndex.branch_name = idx
-      }
-      else if (/^(qrcode|qr|কিউআর|কিউআরকোড)$/.test(ch)) {
-        if (colIndex.qr_code === -1) colIndex.qr_code = idx
-      }
-      else if (/^(dob|dateofbirth|birthdate|জন্মতারিখ)$/.test(ch)) {
-        if (colIndex.date_of_birth === -1) colIndex.date_of_birth = idx
-      }
-      else if (/^(guardianrelation|relation|সম্পর্ক)$/.test(ch)) {
-        if (colIndex.guardian_relation === -1) colIndex.guardian_relation = idx
-      }
+      colIndex[key] = idx
     })
 
-    // Comprehensive Fallbacks
-    if (colIndex.name === -1) {
-      colIndex.name = rawHeaders.findIndex(h => {
-        const ch = cleanHeader(h)
-        return (ch.includes("name") || ch.includes("নাম")) && !ch.includes("guardian") && !ch.includes("parent") && !ch.includes("father")
-      })
-      if (colIndex.name === -1) colIndex.name = 0
+    if (unknownHeaders.length > 0) {
+      toast.error(
+        `অপরিচিত কলাম পাওয়া গেছে: ${unknownHeaders.join(", ")}। শুধুমাত্র এই কলামগুলো ব্যবহার করুন: ${Object.values(canonicalHeaders).join(", ")}`
+      )
+      return
     }
 
-    if (colIndex.guardian_name === -1) {
-      colIndex.guardian_name = rawHeaders.findIndex(h => {
-        const ch = cleanHeader(h)
-        return (ch.includes("guardian") && ch.includes("name")) ||
-               (ch.includes("parent") && ch.includes("name")) ||
-               ch.includes("father") || ch.includes("অভিভাবক") || ch.includes("পিতা") || ch.includes("মাতা")
-      })
+    if (duplicateHeaders.length > 0) {
+      toast.error(`একই কলাম একাধিকবার পাওয়া গেছে: ${duplicateHeaders.join(", ")} (Duplicate headers)`)
+      return
     }
 
-    if (colIndex.guardian_phone === -1) {
-      colIndex.guardian_phone = rawHeaders.findIndex(h => {
-        const ch = cleanHeader(h)
-        return (ch.includes("guardian") || ch.includes("parent") || ch.includes("অভিভাবক") || ch.includes("পিতা")) &&
-               (ch.includes("phone") || ch.includes("mobile") || ch.includes("মোবাইল") || ch.includes("ফোন"))
-      })
-      if (colIndex.guardian_phone === -1) {
-        colIndex.guardian_phone = rawHeaders.findIndex(h => {
-          const ch = cleanHeader(h)
-          return ch.includes("phone") || ch.includes("mobile") || ch.includes("মোবাইল") || ch.includes("ফোন")
-        })
-      }
+    if (colIndex.name == null) {
+      toast.error(
+        `"Name" কলামটি আবশ্যক (A "Name" header is required). অনুমোদিত কলাম: ${Object.values(canonicalHeaders).join(", ")}`
+      )
+      return
     }
 
-    if (colIndex.phone === -1) {
-      colIndex.phone = rawHeaders.findIndex((h, i) => {
-        if (i === colIndex.guardian_phone) return false
-        const ch = cleanHeader(h)
-        return ch.includes("phone") || ch.includes("mobile") || ch.includes("মোবাইল") || ch.includes("ফোন")
-      })
-    }
-
-    if (colIndex.due === -1) {
-      colIndex.due = rawHeaders.findIndex(h => {
-        const ch = cleanHeader(h)
-        return ch.includes("due") || ch.includes("বকেয়া") || ch.includes("fee") || ch.includes("ফি")
-      })
-    }
-
-    if (colIndex.school_college === -1) {
-      colIndex.school_college = rawHeaders.findIndex(h => {
-        const ch = cleanHeader(h)
-        return ch.includes("school") || ch.includes("college") || ch.includes("স্কুল") || ch.includes("কলেজ") || ch.includes("প্রতিষ্ঠান")
-      })
-    }
-
-    if (colIndex.address === -1) {
-      colIndex.address = rawHeaders.findIndex(h => {
-        const ch = cleanHeader(h)
-        return ch.includes("address") || ch.includes("ঠিকানা") || ch.includes("বাসা")
-      })
-    }
-
-    if (colIndex.gender === -1) {
-      colIndex.gender = rawHeaders.findIndex(h => {
-        const ch = cleanHeader(h)
-        return ch.includes("gender") || ch.includes("sex") || ch.includes("লিঙ্গ")
-      })
-    }
-
-    if (colIndex.class_level === -1) {
-      colIndex.class_level = rawHeaders.findIndex(h => {
-        const ch = cleanHeader(h)
-        return ch.includes("class") || ch.includes("grade") || ch.includes("শ্রেণী") || ch.includes("ক্লাস")
-      })
+    const cellValue = (cells: string[], key: HeaderKey) => {
+      const idx = colIndex[key]
+      return idx != null && cells[idx] ? cells[idx].trim() : ""
     }
 
     const students: ParsedStudent[] = []
 
     for (let i = 1; i < lines.length; i++) {
       const cells = parseLine(lines[i])
-      if (cells.every(c => !c)) continue
+      if (cells.every(c => !c.trim())) continue
+      const lineNumber = firstContentLine + i + 1
 
-      const name = colIndex.name >= 0 && cells[colIndex.name] ? cells[colIndex.name].replace(/^["']|["']$/g, "").trim() : ""
-      let guardianPhone = normalizeBDPhone(colIndex.guardian_phone >= 0 && cells[colIndex.guardian_phone] ? cells[colIndex.guardian_phone] : "")
-      let studentPhone = normalizeBDPhone(colIndex.phone >= 0 && cells[colIndex.phone] ? cells[colIndex.phone] : "")
-      const guardianName = colIndex.guardian_name >= 0 && cells[colIndex.guardian_name] ? cells[colIndex.guardian_name].replace(/^["']|["']$/g, "").trim() : ""
-      const address = colIndex.address >= 0 && cells[colIndex.address] ? cells[colIndex.address].replace(/^["']|["']$/g, "").trim() : ""
-      const school = colIndex.school_college >= 0 && cells[colIndex.school_college] ? cells[colIndex.school_college].replace(/^["']|["']$/g, "").trim() : ""
-      const rawGender = colIndex.gender >= 0 && cells[colIndex.gender] ? cells[colIndex.gender].toLowerCase().trim() : ""
-      const classLevel = colIndex.class_level >= 0 && cells[colIndex.class_level] ? cells[colIndex.class_level].trim() : (selectedBatch?.class_level || "")
-      const email = colIndex.email >= 0 && cells[colIndex.email] ? cells[colIndex.email].trim() : ""
-
-      // Parse Due Amount
-      const rawDueStr = colIndex.due >= 0 && cells[colIndex.due] ? cells[colIndex.due].replace(/[^0-9.]/g, "").trim() : "0"
-      const dueAmount = parseFloat(rawDueStr) || 0
-
-      // Register Name to Phone fallback for Excel-corrupted numbers
-      const knownRegisterPhones: Record<string, string> = {
-        "মাওয়া": "+8801786853629",
-        "সুনন্দিতা": "+8801717643645",
-        "মেধা": "+8801945732827",
-        "রুবা": "+8801835637104",
-        "রাত্রী": "+8801910868210",
-        "নাঈমা": "+8801736154536",
-        "সুবহা": "+8801782819646",
-        "লাজিন": "+8801707474355",
-        "লাবিব": "+8801707474355",
-        "ফারিদিন": "+8801717326940",
-        "ফাহিম": "+8801717326940",
-        "আবাব হোসেন": "+8801751980692",
-        "সাবাব হোসেন": "+8801751980692",
-        "তাসমিন": "+8801323077148",
-        "জান্নাতুল": "+8801314262623"
-      }
-      for (const [k, ph] of Object.entries(knownRegisterPhones)) {
-        if (name.includes(k) || k.includes(name)) {
-          if (!guardianPhone || /00000$/.test(guardianPhone.replace(/[^0-9]/g, "")) || guardianPhone.length < 10) {
-            guardianPhone = ph
-          }
+      // A value in a column whose header is missing/empty means the file is
+      // misaligned. Reject the whole file instead of silently shifting data.
+      for (let c = 0; c < cells.length; c++) {
+        if (!cells[c].trim()) continue
+        if (!rawHeaders[c] || !rawHeaders[c].trim()) {
+          toast.error(
+            `সারি ${lineNumber}-এর ${c + 1} নম্বর কলামে মান আছে কিন্তু হেডার নেই (Row ${lineNumber} has a value in column ${c + 1} but no header).`
+          )
+          return
         }
       }
 
-      // If guardianPhone is missing but studentPhone is given, fallback to studentPhone
-      if (!guardianPhone && studentPhone) guardianPhone = studentPhone
+      const name = cellValue(cells, "name").replace(/^["']|["']$/g, "").trim()
+      const guardianPhone = normalizeBDPhone(cellValue(cells, "guardian_phone"))
+      const studentPhone = normalizeBDPhone(cellValue(cells, "phone"))
+      const guardianName = cellValue(cells, "guardian_name").replace(/^["']|["']$/g, "").trim()
+      const address = cellValue(cells, "address").replace(/^["']|["']$/g, "").trim()
+      const school = cellValue(cells, "school_college").replace(/^["']|["']$/g, "").trim()
+      const rawGender = cellValue(cells, "gender").toLowerCase()
+      const classLevel = cellValue(cells, "class_level") || selectedBatch?.class_level || ""
+
+      const rawDueStr = normalizeDigits(cellValue(cells, "due")).replace(/[^0-9.]/g, "")
+      const dueAmount = parseFloat(rawDueStr) || 0
+
+      const rollParsed = parseRollNumber(cellValue(cells, "roll_no"))
 
       let gender: "male" | "female" | "other" = "male"
-      if (rawGender.includes("f") || rawGender.includes("মেয়ে") || rawGender.includes("নারী")) gender = "female"
+      if (rawGender.includes("f") || rawGender.includes("মেয়ে") || rawGender.includes("নারী") || rawGender.includes("মহিলা")) gender = "female"
       else if (rawGender.includes("o") || rawGender.includes("অন্যান্য")) gender = "other"
 
       const errors: string[] = []
       const warnings: string[] = []
-      if (!name) errors.push("নাম প্রয়োজন (Missing Name)")
+      if (!name) errors.push("নাম প্রয়োজন (Missing Name)")
+      if (rollParsed.error) errors.push(rollParsed.error)
       if (!guardianPhone && !studentPhone) {
-        warnings.push("মোবাইল নম্বর দেওয়া হয়নি (তথ্য স্কিপ করা হয়েছে)")
+        warnings.push("মোবাইল নম্বর দেওয়া হয়নি (No phone provided)")
       } else if ((guardianPhone || studentPhone).replace(/[^0-9]/g, "").length < 10) {
-        warnings.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
+        warnings.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
       } else if (/00000$/.test((guardianPhone || studentPhone).replace(/[^0-9]/g, ""))) {
-        warnings.push("এক্সেলে নম্বর বিকৃত হয়ে শূন্য হয়েছিল (Excel rounded to zeros)")
+        warnings.push("মোবাইল নম্বরে শূন্য থাকতে পারে (Phone may be corrupted, e.g. Excel rounded the value)")
       }
-
-      const studentId = colIndex.student_id >= 0 && cells[colIndex.student_id] ? cells[colIndex.student_id].replace(/^["']|["']$/g, "").trim() : undefined
-      const rollNo = colIndex.roll_no >= 0 && cells[colIndex.roll_no] ? cells[colIndex.roll_no].replace(/^["'#]|["']$/g, "").trim() : undefined
-      const batchName = colIndex.batch_name >= 0 && cells[colIndex.batch_name] ? cells[colIndex.batch_name].replace(/^["']|["']$/g, "").trim() : undefined
-      const branchName = colIndex.branch_name >= 0 && cells[colIndex.branch_name] ? cells[colIndex.branch_name].replace(/^["']|["']$/g, "").trim() : undefined
-      const qrCode = colIndex.qr_code >= 0 && cells[colIndex.qr_code] ? cells[colIndex.qr_code].replace(/^["']|["']$/g, "").trim() : undefined
-      const dob = colIndex.date_of_birth >= 0 && cells[colIndex.date_of_birth] ? cells[colIndex.date_of_birth].replace(/^["']|["']$/g, "").trim() : undefined
-      const relation = colIndex.guardian_relation >= 0 && cells[colIndex.guardian_relation] ? cells[colIndex.guardian_relation].replace(/^["']|["']$/g, "").trim() : undefined
 
       students.push({
         id: `stu_${i}_${Date.now().toString(36)}`,
@@ -1002,22 +866,21 @@ export default function BulkEnrollClient({
         school_college: school,
         gender,
         class_level: classLevel,
-        email,
-        student_id: studentId,
-        roll_no: rollNo,
-        batch_name: batchName,
-        branch_name: branchName,
-        qr_code: qrCode,
-        date_of_birth: dob,
-        guardian_relation: relation,
+        roll_no: rollParsed.value ?? undefined,
         isValid: errors.length === 0,
         errors,
         warnings
       })
     }
 
+    if (students.length === 0) {
+      setParsedStudents([])
+      toast.error("CSV-তে কোনো ডেটা সারি পাওয়া যায়নি (No data rows found). ফাঁকা সারিগুলো বাদ দেওয়া হয়েছে।")
+      return
+    }
+
     setParsedStudents(students)
-    toast.success(`সফলভাবে ${students.length} জন শিক্ষার্থীর তথ্য পার্স করা হয়েছে!`)
+    toast.success(`সফলভাবে ${students.length} জন শিক্ষার্থীর তথ্য পার্স করা হয়েছে!`)
   }
 
   const processSpreadsheetFile = async (file: File) => {
@@ -1079,19 +942,24 @@ export default function BulkEnrollClient({
     setParsedStudents(prev => prev.map(s => {
       if (s.id !== id) return s
       let finalVal = val
-      if ((field === "guardian_phone" || field === "phone") && typeof val === "string") {
+      if (field === "roll_no") {
+        const parsed = parseRollNumber(val)
+        finalVal = parsed.error ? val : (parsed.value ?? "")
+      } else if ((field === "guardian_phone" || field === "phone") && typeof val === "string") {
         finalVal = normalizeBDPhone(val)
       }
       const updated = { ...s, [field]: finalVal }
       const errors: string[] = []
       const warnings: string[] = []
       if (!updated.name?.trim()) errors.push("Missing Name")
+      const rollError = parseRollNumber(updated.roll_no).error
+      if (rollError) errors.push(rollError)
       if (!updated.guardian_phone?.trim() && !updated.phone?.trim()) {
-        warnings.push("মোবাইল নম্বর দেওয়া হয়নি (তথ্য স্কিপ করা হয়েছে)")
+        warnings.push("মোবাইল নম্বর দেওয়া হয়নি (No phone provided)")
       } else if (((updated.guardian_phone || updated.phone || "").replace(/[^0-9]/g, "")).length < 10) {
         warnings.push("মোবাইল নম্বর সঠিক নয় (Invalid Phone)")
       } else if (/00000$/.test(((updated.guardian_phone || updated.phone || "").replace(/[^0-9]/g, "")))) {
-        warnings.push("এক্সেলে নম্বর বিকৃত হয়েছিল")
+        warnings.push("মোবাইল নম্বরে শূন্য থাকতে পারে (Phone may be corrupted)")
       }
       return {
         ...updated,
@@ -1155,7 +1023,7 @@ export default function BulkEnrollClient({
           class_level: s.class_level || selectedBatch?.class_level || "",
           email: s.email?.trim() || "",
           student_id: s.student_id?.trim() || undefined,
-          roll_no: s.roll_no ? Number(s.roll_no) : undefined,
+          roll_no: s.roll_no != null && String(s.roll_no).trim() !== "" ? Number(s.roll_no) : undefined,
           qr_code: s.qr_code?.trim() || undefined,
           date_of_birth: s.date_of_birth?.trim() || undefined,
           guardian_relation: s.guardian_relation?.trim() || undefined,

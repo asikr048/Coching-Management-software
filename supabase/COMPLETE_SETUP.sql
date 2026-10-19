@@ -1642,6 +1642,46 @@ BEGIN
 END $$;
 
 -- ==============================================================================
+-- 10b. GUARDIAN PHONE: NEVER STORE BLANK OR THE LEGACY SENTINEL
+-- ==============================================================================
+UPDATE public.students
+   SET guardian_phone = NULL
+ WHERE guardian_phone IS NOT NULL
+   AND (btrim(guardian_phone) = '' OR btrim(guardian_phone) = '+8801700000000');
+
+CREATE OR REPLACE FUNCTION public.normalize_guardian_phone()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.guardian_phone IS NOT NULL THEN
+    NEW.guardian_phone := btrim(NEW.guardian_phone);
+    IF NEW.guardian_phone = '' OR NEW.guardian_phone = '+8801700000000' THEN
+      NEW.guardian_phone := NULL;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_normalize_guardian_phone ON public.students;
+
+CREATE TRIGGER trg_normalize_guardian_phone
+BEFORE INSERT OR UPDATE OF guardian_phone ON public.students
+FOR EACH ROW
+EXECUTE FUNCTION public.normalize_guardian_phone();
+
+ALTER TABLE public.students
+  DROP CONSTRAINT IF EXISTS students_guardian_phone_no_placeholder;
+
+ALTER TABLE public.students
+  ADD CONSTRAINT students_guardian_phone_no_placeholder
+  CHECK (
+    guardian_phone IS NULL
+    OR (btrim(guardian_phone) <> '' AND btrim(guardian_phone) <> '+8801700000000')
+  );
+
+-- ==============================================================================
 -- 11. RELOAD POSTGREST SCHEMA CACHE
 -- ==============================================================================
 NOTIFY pgrst, 'reload schema';

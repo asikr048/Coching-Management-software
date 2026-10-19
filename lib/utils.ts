@@ -267,6 +267,36 @@ export function normalizeDigits(str: string): string {
   return str.replace(/[০-৯]/g, (d) => BN_TO_EN_DIGITS[d] || d)
 }
 
+export function parseRollNumber(raw: unknown): {
+  value: number | null
+  provided: boolean
+  error: string | null
+} {
+  if (raw == null) return { value: null, provided: false, error: null }
+  const rawStr = String(raw).trim()
+  if (!rawStr) return { value: null, provided: false, error: null }
+
+  const str = normalizeDigits(rawStr)
+  if (!/^\d+$/.test(str)) {
+    return {
+      value: null,
+      provided: true,
+      error: "রোল শুধু সংখ্যা হতে হবে (Roll must contain digits only — Bangla or English).",
+    }
+  }
+
+  const value = Number(str)
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    return {
+      value: null,
+      provided: true,
+      error: "রোল ধনাত্মক পূর্ণসংখ্যা হতে হবে (Roll must be a positive whole number).",
+    }
+  }
+
+  return { value, provided: true, error: null }
+}
+
 export function parseRollQuery(query: string) {
   const q = (query || "").toLowerCase().trim()
   const qNormalized = normalizeDigits(q)

@@ -35,3 +35,4 @@ Sort order is plain lexicographic, which matches the table above.
 | `035_nullable_guardian_phone.sql` | Applied to production (2026-10-19) |
 | `036_enrollment_roll_unique_per_batch.sql` | Applied to production (2026-10-19) |
 | `037_restrictive_rls.sql` | Reserved for the RLS hardening work (B-01), not yet written |
+| `038_guardian_phone_no_placeholder.sql` | Needs to be applied (2026-10-19) |

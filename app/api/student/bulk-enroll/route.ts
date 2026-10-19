@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { AdmissionSlipData, StudentIdCardData } from "@/lib/id-card-generator"
 import { requireStaffRole, isAuthError } from "@/lib/api-auth";
-import { generateStudentQrCode, getStudentVerificationUrl } from "@/lib/utils"
+import { generateStudentQrCode, getStudentVerificationUrl, parseRollNumber } from "@/lib/utils"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 0
@@ -32,42 +32,8 @@ function normalizeBDPhone(raw: string): string {
   // 1. Strip quotes, Excel formula markers like ="..." or ' or whitespace
   str = str.replace(/^="?|"?$/g, "").replace(/^'/, "").trim()
 
-  // 2. Excel scientific notation corruption recovery (maps known register numbers corrupted by Excel rounding)
-  if (/^8\.?80132(\d*)[eE]\+?12$/i.test(str) || str === "880132+12" || str === "8801320000000") return "+8801323077148"
-  if (/^8\.?80131(\d*)[eE]\+?12$/i.test(str) || str === "880131+12" || str === "8801310000000") return "+8801314262623"
-  if (/^8\.?80130(\d*)[eE]\+?12$/i.test(str) || str === "880130+12" || str === "8801300000000") return "+8801302201431"
-  if (/^8\.?80175(\d*)[eE]\+?12$/i.test(str) || str === "880175+12" || str === "8801750000000") return "+8801751980692"
-  if (/^8\.?80179(\d*)[eE]\+?12$/i.test(str) || str === "880179+12" || str === "8801790000000") return "+8801786853629" // মাওয়া
-  if (/^8\.?80172(\d*)[eE]\+?12$/i.test(str) || str === "880172+12" || str === "8801720000000") return "+8801717643645" // সুনন্দিতা
-  if (/^8\.?80195(\d*)[eE]\+?12$/i.test(str) || str === "880195+12" || str === "8801950000000") return "+8801945732827" // মেধা
-  if (/^8\.?80184(\d*)[eE]\+?12$/i.test(str) || /^8\.?80183(\d*)[eE]\+?12$/i.test(str) || str === "880184+12" || str === "8801840000000") return "+8801835637104" // রুবা
-  if (/^8\.?80191(\d*)[eE]\+?12$/i.test(str) || str === "880191+12" || str === "8801910000000") return "+8801910868210" // রাত্রী
-  if (/^8\.?80174(\d*)[eE]\+?12$/i.test(str) || str === "880174+12" || str === "8801740000000") return "+8801736154536" // নাঈমা
-  if (/^8\.?80178(\d*)[eE]\+?12$/i.test(str) || str === "880178+12" || str === "8801780000000") return "+8801782819646" // সুবহা
-  if (/^8\.?80171(\d*)[eE]\+?12$/i.test(str) || str === "880171+12" || str === "8801710000000") return "+8801707474355" // লাজিন
-
-  // 3. Handle standard scientific notation, e.g. "8.801323077148E+12", "1.302201431e+09", "1.751380602E+09"
-  if (/[eE][+-]?\d+/.test(str)) {
-    const num = Number(str)
-    if (!isNaN(num) && num > 0) {
-      str = BigInt(Math.round(num)).toString()
-    }
-  }
-
-  // 4. Handle stripped 'E' cases like "8801323077148+12" or "1.302201431+09"
-  if (/^([0-9.]+)\+(\d+)$/.test(str)) {
-    const match = str.match(/^([0-9.]+)\+(\d+)$/)
-    if (match) {
-      const base = parseFloat(match[1])
-      const exp = parseInt(match[2], 10)
-      if (!isNaN(base) && !isNaN(exp)) {
-        str = BigInt(Math.round(base * Math.pow(10, exp))).toString()
-      }
-    }
-  }
-
-  // 5. Clean to only digits and '+'
-  let clean = str.replace(/[^0-9+]/g, "").trim()
+  // 2. Clean to only digits and '+'
+  const clean = str.replace(/[^0-9+]/g, "").trim()
   if (!clean) return ""
 
   // Case 1: Excel stripped leading 0, e.g. "1302201431" or "1751380602" (10 digits starting with 13-19)
@@ -263,10 +229,30 @@ export async function POST(req: NextRequest) {
     // the uploader can resolve them manually. Blank rolls are assigned serially
     // further down and never collide with the numbers below.
     type RollConflict = { roll: number; reason: "duplicate_in_file" | "already_in_batch"; names: string[]; existingName?: string }
+    // Validate every row before any write so a bad row cannot leave a
+    // half-finished enrollment behind. Only Name is mandatory; a missing Roll
+    // is auto-assigned later.
+    for (let i = 0; i < students.length; i++) {
+      const row = students[i]
+      const name = String(row.name || "").trim()
+      if (!name) {
+        return NextResponse.json({
+          error: `সারি ${i + 1}: নাম আবশ্যক (Row ${i + 1}: Name is required).`
+        }, { status: 400 })
+      }
+      const parsedRoll = parseRollNumber(row.roll_no)
+      if (parsedRoll.error) {
+        return NextResponse.json({
+          error: `সারি ${i + 1} (${name}): ${parsedRoll.error}`
+        }, { status: 400 })
+      }
+    }
+
     const csvRollGroups = new Map<number, { names: string[]; studentIds: string[] }>()
     students.forEach((row, idx) => {
-      const r = Number(row.roll_no)
-      if (row.roll_no != null && String(row.roll_no).trim() !== "" && !isNaN(r) && r > 0) {
+      const parsedRoll = parseRollNumber(row.roll_no)
+      const r = parsedRoll.value
+      if (r != null) {
         const entry = csvRollGroups.get(r) || { names: [], studentIds: [] }
         entry.names.push((row.name || `Row ${idx + 1}`).trim() || `Row ${idx + 1}`)
         if (row.student_id) entry.studentIds.push(String(row.student_id).trim())
@@ -369,37 +355,14 @@ export async function POST(req: NextRequest) {
     // Process students sequentially to ensure deterministic ID and roll numbers
     for (let i = 0; i < students.length; i++) {
       const row: StudentImportPayload = students[i]
-      const trimmedName = (row.name || `Student ${i + 1}`).trim()
-      let guardianPhone = normalizeBDPhone(row.guardian_phone || row.phone || "")
-      let studentPhone = normalizeBDPhone(row.phone || "")
-
-      const knownRegisterPhones: Record<string, string> = {
-        "মাওয়া": "+8801786853629",
-        "সুনন্দিতা": "+8801717643645",
-        "মেধা": "+8801945732827",
-        "রুবা": "+8801835637104",
-        "রাত্রী": "+8801910868210",
-        "নাঈমা": "+8801736154536",
-        "সুবহা": "+8801782819646",
-        "লাজিন": "+8801707474355",
-        "লাবিব": "+8801707474355",
-        "ফারিদিন": "+8801717326940",
-        "ফাহিম": "+8801717326940",
-        "আবাব হোসেন": "+8801751980692",
-        "সাবাব হোসেন": "+8801751980692",
-        "তাসমিন": "+8801323077148",
-        "জান্নাতুল": "+8801314262623"
-      }
-      for (const [k, ph] of Object.entries(knownRegisterPhones)) {
-        if (trimmedName.includes(k) || k.includes(trimmedName)) {
-          if (!guardianPhone || /00000$/.test(guardianPhone.replace(/[^0-9]/g, "")) || guardianPhone.length < 10) {
-            guardianPhone = ph
-          }
-        }
-      }
+      const trimmedName = (row.name || "").trim()
+      const guardianPhone = normalizeBDPhone(row.guardian_phone || "")
+      const studentPhone = normalizeBDPhone(row.phone || "")
 
       const effectiveStudentPhone = studentPhone || guardianPhone
-      const effectiveGuardianPhone = guardianPhone || studentPhone || null
+      // Guardian phone is never inferred from the student's phone or a name.
+      // A blank guardian phone stays NULL.
+      const effectiveGuardianPhone = guardianPhone || null
       const guardianName = (row.guardian_name || "").trim()
       const address = (row.address || "").trim()
       const school = (row.school_college || "").trim()
@@ -415,11 +378,10 @@ export async function POST(req: NextRequest) {
 
       // Roll: keep the validated CSV value, otherwise assign the next serial
       // number after the highest roll already in use in this batch.
-      const csvRollValue = Number(row.roll_no)
-      const hasCsvRoll = row.roll_no != null && String(row.roll_no).trim() !== "" && !isNaN(csvRollValue) && csvRollValue > 0
+      const csvRoll = parseRollNumber(row.roll_no)
       let assignedRoll: number
-      if (hasCsvRoll) {
-        assignedRoll = csvRollValue
+      if (csvRoll.value != null) {
+        assignedRoll = csvRoll.value
       } else {
         do { serialCursor++ } while (usedRolls.has(serialCursor))
         assignedRoll = serialCursor
@@ -550,16 +512,6 @@ export async function POST(req: NextRequest) {
           const retryS = await db.from("students").insert(studentPayload).select().single()
           createdStudent = retryS.data
           sErr = retryS.error
-        }
-
-        // Fallback for databases that still enforce the legacy NOT NULL on
-        // guardian_phone (migration 035 not yet applied): store an empty string
-        // instead of failing the row. Stores NULL once the column is nullable.
-        if (sErr && sErr.message?.includes("guardian_phone")) {
-          studentPayload.guardian_phone = ""
-          const retryG = await db.from("students").insert(studentPayload).select().single()
-          createdStudent = retryG.data
-          sErr = retryG.error
         }
 
         if (sErr || !createdStudent) {
