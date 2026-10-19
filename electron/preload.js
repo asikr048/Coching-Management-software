@@ -19,6 +19,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   saveLocalVault: (data) => ipcRenderer.invoke("vault:save", data),
   getVaultInfo: () => ipcRenderer.invoke("vault:get-info"),
 
+  // Offline action queue
+  getQueue: () => ipcRenderer.invoke("queue:get"),
+  appendQueue: (entries) => ipcRenderer.invoke("queue:append", entries),
+  clearQueue: () => ipcRenderer.invoke("queue:clear"),
+  syncQueue: () => ipcRenderer.invoke("queue:sync"),
+  onQueueSynced: (callback) => {
+    const handler = (event, data) => callback(data)
+    ipcRenderer.on("queue:synced", handler)
+    return () => ipcRenderer.removeListener("queue:synced", handler)
+  },
+
   // Navigation
   loadServer: () => ipcRenderer.invoke("app:load-server"),
   loadOffline: () => ipcRenderer.invoke("app:load-offline"),

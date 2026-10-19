@@ -70,6 +70,136 @@ function writeLocalVault(data) {
   }
 }
 
+// Offline action queue (attendance recorded without internet)
+function readQueue() {
+  try {
+    const p = getQueuePath()
+    if (fs.existsSync(p)) {
+      const parsed = JSON.parse(fs.readFileSync(p, "utf8"))
+      return Array.isArray(parsed) ? parsed : []
+    }
+  } catch (err) {
+    console.error("Error reading offline queue:", err)
+  }
+  return []
+}
+
+function writeQueue(entries) {
+  try {
+    const p = getQueuePath()
+    const tmp = p + ".tmp"
+    fs.writeFileSync(tmp, JSON.stringify(entries, null, 2), "utf8")
+    fs.renameSync(tmp, p)
+    return true
+  } catch (err) {
+    console.error("Error saving offline queue:", err)
+    return false
+  }
+}
+
+function appendQueue(entries) {
+  const incoming = Array.isArray(entries) ? entries : []
+  const queue = readQueue()
+  const indexById = new Map()
+
+  queue.forEach((entry, index) => {
+    if (entry && entry.client_id) indexById.set(entry.client_id, index)
+  })
+
+  for (const entry of incoming) {
+    if (!entry || !entry.client_id) continue
+    if (indexById.has(entry.client_id)) {
+      // Same local action recorded again (e.g. corrected status) — replace it.
+      queue[indexById.get(entry.client_id)] = entry
+    } else {
+      indexById.set(entry.client_id, queue.length)
+      queue.push(entry)
+    }
+  }
+
+  const ok = writeQueue(queue)
+  return { success: ok, count: queue.length }
+}
+
+// Push queued offline actions to the server. Only entries the server
+// acknowledges are removed from the queue so nothing is lost on failure.
+async function syncQueue() {
+  const entries = readQueue()
+  if (entries.length === 0) {
+    return { success: true, processed: 0, failed: 0, remaining: 0, message: "Nothing to sync" }
+  }
+
+  if (!isOnlineState) {
+    return { success: false, processed: 0, failed: entries.length, remaining: entries.length, message: "Offline" }
+  }
+
+  const token = process.env.VAULT_SYNC_TOKEN || ""
+  if (!token) {
+    return {
+      success: false,
+      processed: 0,
+      failed: entries.length,
+      remaining: entries.length,
+      message: "VAULT_SYNC_TOKEN is not configured on this PC",
+    }
+  }
+
+  try {
+    const response = await fetch(`${DEFAULT_SERVER_URL}/api/vault/sync`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ entries }),
+    })
+
+    const data = await response.json().catch(() => ({}))
+
+    if (!response.ok) {
+      return {
+        success: false,
+        processed: 0,
+        failed: entries.length,
+        remaining: entries.length,
+        message: data.error || `Server responded with HTTP ${response.status}`,
+      }
+    }
+
+    const acknowledgedIds = new Set(
+      (data.results || []).filter((r) => r && r.ok).map((r) => r.client_id)
+    )
+    const remaining = entries.filter((e) => !acknowledgedIds.has(e.client_id))
+    writeQueue(remaining)
+
+    const summary = {
+      success: true,
+      processed: acknowledgedIds.size,
+      failed: remaining.length,
+      remaining: remaining.length,
+      message: data.message || `Synced ${acknowledgedIds.size} of ${entries.length} queued action(s)`,
+    }
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send("queue:synced", summary)
+    }
+    if (acknowledgedIds.size > 0) {
+      showDesktopNotification("☁️ Offline Data Synced", summary.message)
+    }
+
+    return summary
+  } catch (err) {
+    console.error("Queue sync failed:", err)
+    return {
+      success: false,
+      processed: 0,
+      failed: entries.length,
+      remaining: entries.length,
+      message: err?.message || "Could not reach the server",
+    }
+  }
+}
+
 // Show native Windows notification
 function showDesktopNotification(title, body, isSilent = false) {
   if (Notification.isSupported()) {
@@ -147,6 +277,8 @@ async function updateConnectivityState(newOnlineStatus) {
           lastSyncedAt: readLocalVault().lastSyncedAt,
         })
       }
+      // Flush any actions recorded while offline.
+      syncQueue().catch((err) => console.error("Reconnect queue flush error:", err))
     }
   }
 }
@@ -309,8 +441,21 @@ function setupIpcHandlers() {
         dues: v.dues?.length || 0,
         payments: v.payments?.length || 0,
       },
+      queueCount: readQueue().length,
     }
   })
+
+  // Offline action queue
+  ipcMain.handle("queue:get", () => readQueue())
+
+  ipcMain.handle("queue:append", (event, entries) => appendQueue(entries))
+
+  ipcMain.handle("queue:clear", () => {
+    const ok = writeQueue([])
+    return { success: ok, count: 0 }
+  })
+
+  ipcMain.handle("queue:sync", () => syncQueue())
 
   // Trigger manual connectivity check
   ipcMain.handle("network:check", async () => {
@@ -346,6 +491,11 @@ app.whenReady().then(async () => {
   // Initial connectivity check
   const online = await checkConnectivity()
   updateConnectivityState(online)
+
+  // Flush actions queued during the previous (offline) session.
+  if (online) {
+    syncQueue().catch((err) => console.error("Startup queue flush error:", err))
+  }
 
   // Periodic heartbeat monitoring every 8 seconds
   heartbeatInterval = setInterval(async () => {

@@ -425,8 +425,10 @@
         <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 18px; font-family: monospace; font-size: 12px; line-height: 1.8; margin-bottom: 20px;" id="vault-debug-info">
           Loading vault storage path...
         </div>
-        <div style="display: flex; gap: 12px;">
+        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
           <button class="btn btn-outline" id="btn-export-vault">📥 Export Local Vault Backup (.json)</button>
+          <button class="btn btn-primary" id="btn-sync-queue">☁️ Sync Queued Actions Now</button>
+          <span id="queue-status-text" style="font-size: 12px; color: var(--text-muted);"></span>
         </div>
       </div>
     </div>
@@ -436,6 +438,7 @@
     let vaultData = {
       students: [],
       batches: [],
+      enrollments: [],
       dues: [],
       attendance: [],
       lastSyncedAt: null
@@ -454,6 +457,7 @@
         }
       }
       renderAll();
+      refreshQueueCount();
     }
 
     function renderVaultInfo(info) {
@@ -464,11 +468,13 @@
         <strong>Vault File:</strong> ${info.vaultPath}<br>
         <strong>Last Cloud Sync:</strong> ${info.lastSyncedAt ? new Date(info.lastSyncedAt).toLocaleString() : "Not synced yet"}<br>
         <strong>Network Status:</strong> ${info.isOnline ? "🟢 Connected to Cloud" : "📡 Offline (Local PC Mode)"}<br>
-        <strong>Stored Records:</strong> ${info.counts.students} Students, ${info.counts.batches} Batches, ${info.counts.dues} Fee Dues
+        <strong>Stored Records:</strong> ${info.counts.students} Students, ${info.counts.batches} Batches, ${info.counts.dues} Fee Dues<br>
+        <strong>Queued Actions:</strong> ${info.queueCount ?? 0} waiting to sync
       `;
       document.getElementById("last-sync-time").textContent = info.lastSyncedAt
         ? "Last synced: " + new Date(info.lastSyncedAt).toLocaleString()
         : "Local vault active";
+      updateQueueCount(info.queueCount ?? 0);
     }
 
     function renderAll() {
@@ -488,6 +494,7 @@
       renderBatchesTable(batches);
       renderDuesTable(dues);
       populateBatchSelect(batches);
+      renderAttendanceStudents();
     }
 
     function renderStudentsTable(list) {
@@ -554,7 +561,188 @@
 
     function populateBatchSelect(batches) {
       const sel = document.getElementById("attendance-batch-select");
-      sel.innerHTML = '<option value="">-- Select Batch --</option>' + batches.map(b => `<option value="${b.id}">${b.name}</option>`).join("");
+      const current = sel.value;
+      sel.innerHTML = '<option value="">-- Select Batch --</option>' + batches.map(b => `<option value="${b.id}">${escapeHtml(b.name)}</option>`).join("");
+      if (current && batches.some(b => b.id === current)) {
+        sel.value = current;
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[c]));
+    }
+
+    function updateQueueCount(count) {
+      const el = document.getElementById("stat-queue");
+      if (el) el.textContent = count ?? 0;
+      const status = document.getElementById("queue-status-text");
+      if (status) {
+        status.textContent = count
+          ? `${count} action(s) waiting to sync`
+          : "Queue is empty — everything is synced";
+      }
+    }
+
+    async function refreshQueueCount() {
+      if (!window.electronAPI) return;
+      try {
+        const queue = await window.electronAPI.getQueue();
+        updateQueueCount(Array.isArray(queue) ? queue.length : 0);
+      } catch (e) {
+        console.error("Queue read error:", e);
+      }
+    }
+
+    function getBatchStudents(batchId) {
+      const students = vaultData.students || [];
+      const enrollments = Array.isArray(vaultData.enrollments) ? vaultData.enrollments : [];
+      if (!batchId || enrollments.length === 0) return students;
+      const ids = new Set(
+        enrollments
+          .filter((e) => e.batch_id === batchId && (!e.status || e.status === "active"))
+          .map((e) => e.student_id)
+      );
+      const filtered = students.filter((s) => ids.has(s.id));
+      return filtered.length > 0 ? filtered : students;
+    }
+
+    function renderAttendanceStudents() {
+      const listDiv = document.getElementById("attendance-student-list");
+      const batchSelect = document.getElementById("attendance-batch-select");
+      const batchId = batchSelect ? batchSelect.value : "";
+
+      if (!batchId) {
+        listDiv.innerHTML = '<p style="color: var(--text-muted); font-size: 13px;">Please select a batch above to display students.</p>';
+        return;
+      }
+
+      const students = getBatchStudents(batchId);
+      if (students.length === 0) {
+        listDiv.innerHTML = '<p style="color: var(--text-muted); font-size: 13px;">No students cached locally yet. Connect to the server once to mirror student records to this PC.</p>';
+        return;
+      }
+
+      listDiv.innerHTML = `
+        <div style="border: 1px solid var(--border); border-radius: 12px; overflow: hidden;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+            <thead>
+              <tr style="background: #f8fafc; text-align: left;">
+                <th style="padding: 10px 12px;">Mark</th>
+                <th style="padding: 10px 12px;">Student ID</th>
+                <th style="padding: 10px 12px;">Name</th>
+                <th style="padding: 10px 12px;">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${students.map((s) => `
+                <tr class="attendance-row" data-student-id="${escapeHtml(s.id)}" style="border-top: 1px solid var(--border);">
+                  <td style="padding: 8px 12px;"><input type="checkbox" class="attendance-present" checked></td>
+                  <td style="padding: 8px 12px; font-family: monospace;">${escapeHtml(s.student_id || "—")}</td>
+                  <td style="padding: 8px 12px;"><strong>${escapeHtml(s.name || "Student")}</strong></td>
+                  <td style="padding: 8px 12px;">
+                    <select class="attendance-status" style="padding: 4px 6px; border: 1px solid var(--border); border-radius: 6px; background: #fff;">
+                      <option value="present">Present</option>
+                      <option value="absent">Absent</option>
+                      <option value="late">Late</option>
+                      <option value="excused">Excused</option>
+                    </select>
+                  </td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    async function handleSaveAttendance() {
+      if (!window.electronAPI) {
+        alert("Local storage is only available in the PC app.");
+        return;
+      }
+
+      const batchId = document.getElementById("attendance-batch-select").value;
+      const date = document.getElementById("attendance-date").value;
+      if (!batchId) {
+        alert("Please select a batch first.");
+        return;
+      }
+      if (!date) {
+        alert("Please choose a date.");
+        return;
+      }
+
+      const rows = Array.from(document.querySelectorAll(".attendance-row"));
+      if (rows.length === 0) {
+        alert("No students are available to mark.");
+        return;
+      }
+
+      const entries = [];
+      rows.forEach((row) => {
+        if (!row.querySelector(".attendance-present").checked) return;
+        const studentId = row.getAttribute("data-student-id");
+        if (!studentId) return;
+        const status = row.querySelector(".attendance-status").value;
+        entries.push({
+          client_id: `attendance:${batchId}:${studentId}:${date}`,
+          type: "attendance",
+          payload: {
+            student_uuid: studentId,
+            batch_id: batchId,
+            date,
+            status,
+            entry_method: "offline",
+            checked_in_at: new Date().toISOString()
+          },
+          queued_at: new Date().toISOString()
+        });
+      });
+
+      if (entries.length === 0) {
+        alert("Select at least one student to save attendance.");
+        return;
+      }
+
+      const res = await window.electronAPI.appendQueue(entries);
+
+      const existing = Array.isArray(vaultData.attendance) ? vaultData.attendance : [];
+      const byKey = new Map(
+        existing.map((a) => [`${a.batch_id}:${a.student_id || a.student_uuid}:${a.date}`, a])
+      );
+      entries.forEach((e) => {
+        byKey.set(
+          `${e.payload.batch_id}:${e.payload.student_uuid}:${e.payload.date}`,
+          e.payload
+        );
+      });
+      vaultData.attendance = Array.from(byKey.values());
+      await window.electronAPI.saveLocalVault(vaultData);
+
+      updateQueueCount(res.count);
+      alert(`Saved ${entries.length} attendance record(s) locally. They will sync automatically when the internet is available.`);
+    }
+
+    async function handleSyncQueue() {
+      if (!window.electronAPI) return;
+      const btn = document.getElementById("btn-sync-queue");
+      const original = btn.textContent;
+      btn.textContent = "Syncing...";
+      btn.disabled = true;
+      try {
+        const res = await window.electronAPI.syncQueue();
+        await refreshQueueCount();
+        alert(res.message || (res.success ? "Sync complete" : "Sync failed"));
+      } finally {
+        btn.textContent = original;
+        btn.disabled = false;
+      }
     }
 
     // Tabs logic
@@ -598,12 +786,30 @@
       renderDuesTable(filtered);
     });
 
+    // Attendance (offline) listeners
+    document.getElementById("attendance-batch-select").addEventListener("change", renderAttendanceStudents);
+    document.getElementById("btn-save-attendance").addEventListener("click", handleSaveAttendance);
+    document.getElementById("btn-sync-queue").addEventListener("click", handleSyncQueue);
+
+    // Vault backup export
+    document.getElementById("btn-export-vault").addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(vaultData, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `medhashiree-vault-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+    });
+
     // Reconnect Button
     document.getElementById("btn-reconnect").addEventListener("click", async () => {
       if (window.electronAPI) {
         document.getElementById("btn-reconnect").textContent = "Connecting...";
         const res = await window.electronAPI.checkConnection();
         if (res.isOnline) {
+          // Flush queued offline actions before leaving the offline shell.
+          await window.electronAPI.syncQueue().catch(() => null);
           window.electronAPI.loadServer();
         } else {
           alert("Server is not reachable yet. Please check your internet connection or Wi-Fi.");
@@ -614,12 +820,18 @@
 
     // Listen for network transitions
     if (window.electronAPI) {
-      window.electronAPI.onNetworkStatusChanged((data) => {
+      window.electronAPI.onNetworkStatusChanged(async (data) => {
         if (data.isOnline) {
           if (confirm("🟢 Internet connection restored! Would you like to switch to the live cloud server now?")) {
+            await window.electronAPI.syncQueue().catch(() => null);
             window.electronAPI.loadServer();
           }
         }
+      });
+
+      // Keep the queue badge accurate after an automatic background sync.
+      window.electronAPI.onQueueSynced(() => {
+        refreshQueueCount();
       });
     }
 
