@@ -143,9 +143,12 @@ export default function ExamPrintModal({
   // 1. Template Type: Merit List (Pic 2), Progress Report (Pic 1), Tabulation, or Toppers Sheet
   const [template, setTemplate] = useState<PrintTemplateType>(defaultTemplate)
 
-  // 2. Exam Mode / Scope
+  // 2. Exam Mode / Scope: ALWAYS default weekly exams to daily entry (weekly_day)
+  const resolvedDefaultMode = isWeeklyExam
+    ? (defaultMode === "one_time" || !defaultMode ? "weekly_day" : defaultMode)
+    : "one_time"
   const [selectedMode, setSelectedMode] = useState<"one_time" | "weekly_aggregate" | "weekly_day" | "all_weeks_combined">(
-    isWeeklyExam ? defaultMode : "one_time"
+    resolvedDefaultMode
   )
   const [selectedDayKey, setSelectedDayKey] = useState<string>(
     activeDayConfig?.key || weeklyDays[0]?.key || "saturday"
@@ -210,11 +213,19 @@ export default function ExamPrintModal({
   // Sync mode and orientation when defaultMode changes
   useEffect(() => {
     if (isWeeklyExam) {
-      setSelectedMode(defaultMode)
+      setSelectedMode(defaultMode === "one_time" ? "weekly_aggregate" : defaultMode)
     } else {
       setSelectedMode("one_time")
     }
   }, [defaultMode, isWeeklyExam, isOpen])
+
+  // Sync template when defaultTemplate changes or modal opens
+  useEffect(() => {
+    if (defaultTemplate) {
+      setTemplate(defaultTemplate)
+    }
+  }, [defaultTemplate, isOpen])
+
 
   // Adapt orientation to template
   useEffect(() => {
@@ -252,7 +263,7 @@ export default function ExamPrintModal({
             targetBatchIds = parsed
           }
         }
-      } catch {}
+      } catch { }
     }
 
     if (targetBatchIds.length === 0 && exam.batch_id) {
@@ -320,10 +331,10 @@ export default function ExamPrintModal({
   const activeTotalMarks = isCombinedWeeks
     ? combinedTotalMaxMarks
     : isWeeklyAggregate
-    ? totalWeeklyMaxMarks
-    : isWeeklyDay
-    ? currentDayConfig?.total_marks || activeDayConfig?.total_marks || 50
-    : exam.total_marks || 100
+      ? totalWeeklyMaxMarks
+      : isWeeklyDay
+        ? currentDayConfig?.total_marks || activeDayConfig?.total_marks || 50
+        : exam.total_marks || 100
 
   // Build merit ranking for filtered students
   const studentEvaluations = useMemo(() => {
@@ -353,17 +364,32 @@ export default function ExamPrintModal({
 
         for (const d of weeklyDays) {
           const item = getDayMarkItemHelper(studentDays, d.key, d.day_bn, d.day_en)
-          if (item && !isNaN(Number(item.marks))) {
-            sumMarks += Number(item.marks)
+          const mVal = typeof item === "object" && item !== null ? item.marks : item
+          if (mVal !== undefined && mVal !== null && !isNaN(Number(mVal))) {
+            const rawScore = Number(mVal)
+            // Clamp score to this day's maximum marks to prevent contaminated/cumulative leaks
+            const dayScore = Math.min(Math.max(0, rawScore), d.total_marks || 50)
+            sumMarks += dayScore
             hasAnyDayMark = true
           }
         }
 
+        // Direct fallback: sum all entries in studentDays if loop missed alternate keys
+        if (!hasAnyDayMark && Object.keys(studentDays).length > 0) {
+          for (const val of Object.values(studentDays)) {
+            const mVal = typeof val === "object" && val !== null ? (val as any).marks : val
+            if (mVal !== undefined && mVal !== null && !isNaN(Number(mVal))) {
+              sumMarks += Number(mVal)
+              hasAnyDayMark = true
+            }
+          }
+        }
+
         const fbRes = savedResults[s.id] || (s.student_id ? savedResults[s.student_id] : undefined)
-        if (!hasAnyDayMark && fbRes?.obtained_marks) {
+        if (fbRes?.obtained_marks !== undefined && fbRes?.obtained_marks !== "") {
           const fbVal = parseFloat(fbRes.obtained_marks)
-          if (!isNaN(fbVal)) {
-            sumMarks = fbVal
+          if (!isNaN(fbVal) && (!hasAnyDayMark || fbVal > sumMarks)) {
+            sumMarks = Math.min(Math.max(0, fbVal), activeTotalMarks)
             hasAnyDayMark = true
           }
         }
@@ -379,7 +405,9 @@ export default function ExamPrintModal({
           gpa: hasAnyDayMark ? gradeInfo.gp : 0,
           hasEvaluated: hasAnyDayMark,
         }
-      } else if (isWeeklyDay && currentDayConfig) {
+      }
+
+      else if (isWeeklyDay && currentDayConfig) {
         const studentDays = dayMarksMap[s.id] || (s.student_id ? dayMarksMap[s.student_id] : undefined) || {}
         const item = getDayMarkItemHelper(studentDays, currentDayConfig.key, currentDayConfig.day_bn, (currentDayConfig as any).day_en)
         const dMax = currentDayConfig.total_marks || 50
@@ -562,7 +590,7 @@ export default function ExamPrintModal({
                 }))
               }
             }
-          } catch {}
+          } catch { }
         }
         if (examDays.length === 0 && weeklyDays.length > 0) {
           examDays = weeklyDays
@@ -590,14 +618,14 @@ export default function ExamPrintModal({
 
           const winners = topScore >= 0
             ? filteredStudents
-                .filter((s) => candidateMap[s.id] === topScore)
-                .map((s) => ({
-                  id: s.id,
-                  name: s.name,
-                  roll_no: s.roll_no,
-                  batch_roll: s.batch_roll,
-                  student_id: s.student_id,
-                }))
+              .filter((s) => candidateMap[s.id] === topScore)
+              .map((s) => ({
+                id: s.id,
+                name: s.name,
+                roll_no: s.roll_no,
+                batch_roll: s.batch_roll,
+                student_id: s.student_id,
+              }))
             : []
 
           allSubjectItems.push({
@@ -630,14 +658,14 @@ export default function ExamPrintModal({
 
         const winners = topScore >= 0
           ? filteredStudents
-              .filter((s) => candidateMap[s.id] === topScore)
-              .map((s) => ({
-                id: s.id,
-                name: s.name,
-                roll_no: s.roll_no,
-                batch_roll: s.batch_roll,
-                student_id: s.student_id,
-              }))
+            .filter((s) => candidateMap[s.id] === topScore)
+            .map((s) => ({
+              id: s.id,
+              name: s.name,
+              roll_no: s.roll_no,
+              batch_roll: s.batch_roll,
+              student_id: s.student_id,
+            }))
           : []
 
         return {
@@ -713,7 +741,7 @@ export default function ExamPrintModal({
                 }))
               }
             }
-          } catch {}
+          } catch { }
         }
 
         if (examDays.length === 0 && weeklyDays.length > 0) {
@@ -898,14 +926,14 @@ export default function ExamPrintModal({
     const itemWr = mainItem?.written !== undefined
       ? Number(mainItem.written)
       : resItem?.written !== undefined
-      ? Number(resItem.written)
-      : (mainItem?.mode === "written" ? score : 0)
+        ? Number(resItem.written)
+        : (mainItem?.mode === "written" ? score : 0)
 
     const itemMcq = mainItem?.mcq !== undefined
       ? Number(mainItem.mcq)
       : resItem?.mcq !== undefined
-      ? Number(resItem.mcq)
-      : (mainItem?.mode === "mcq" ? score : (mainItem?.written !== undefined || resItem?.written !== undefined ? 0 : score))
+        ? Number(resItem.mcq)
+        : (mainItem?.mode === "mcq" ? score : (mainItem?.written !== undefined || resItem?.written !== undefined ? 0 : score))
 
     const gradeInfo = calculateCoachingGrade(score, exam.total_marks || 100)
     return [
@@ -1502,12 +1530,30 @@ export default function ExamPrintModal({
                 examTitle={
                   isCombinedWeeks && activeCombinedExams.length > 0
                     ? `${pdfTitle || displayTitle} (${activeCombinedExams.map((e, idx) => `Week ${(e.result_note ? extractSeriesWeek(e.result_note, e.title) : 0) || (idx + 1)}`).join(", ")})`
+                    : isWeeklyDay && currentDayConfig
+                    ? `${pdfTitle || displayTitle} (${currentDayConfig.day_bn} - ${currentDayConfig.subject || currentDayConfig.exam_name || "পরীক্ষা"})`
                     : (pdfTitle || displayTitle)
                 }
                 academicYear={customAcademicYear}
                 rows={meritListRows}
                 documentTitle={effectiveDocTitle}
-                documentSubtitle={effectiveDocSubtitle}
+                documentSubtitle={
+                  effectiveDocSubtitle ||
+                  (isWeeklyDay && currentDayConfig
+                    ? `দৈনিক বিষয়ভিত্তিক মূল্যায়ন • ${currentDayConfig.day_bn}`
+                    : isWeeklyAggregate
+                    ? `সাপ্তাহিক সামগ্রিক মূল্যায়ন (${weeklyDays.length} দিনের সমন্বিত মোট)`
+                    : undefined)
+                }
+                marksColumnHeader={
+                  isWeeklyDay
+                    ? `নম্বর (/${activeTotalMarks})`
+                    : isWeeklyAggregate
+                    ? `সাপ্তাহিক মোট (/${activeTotalMarks})`
+                    : isCombinedWeeks
+                    ? `সম্মিলিত মোট (/${activeTotalMarks})`
+                    : `মোট নম্বর (/${activeTotalMarks})`
+                }
               />
             )}
 

@@ -59,7 +59,6 @@ export default function StudentExamResultsPage() {
           (Array.isArray(examData.recurring_days) && examData.recurring_days.length > 0)
         if (
           isWeeklyCheck &&
-          !examData.is_weekly_published &&
           Array.isArray(examData.published_days) &&
           examData.published_days.length > 0
         ) {
@@ -168,12 +167,14 @@ export default function StudentExamResultsPage() {
   const isWeeklyPub = exam.is_weekly_published === true
 
   // If selectedDayKey is explicitly set, use it.
-  // Otherwise, if weekly total is NOT published and we have published days, default to the first published day.
+  // Otherwise, default to the first published or configured day for weekly exams.
   const effectiveDayKey =
     selectedDayKey !== null
       ? selectedDayKey
-      : (!isWeeklyPub && publishedDays.length > 0)
+      : publishedDays.length > 0
       ? publishedDays[0]
+      : recurringDays.length > 0
+      ? (typeof recurringDays[0] === "object" ? recurringDays[0].day : recurringDays[0])
       : null
 
   const activeDayConf = effectiveDayKey
