@@ -212,16 +212,20 @@ export async function POST(req: NextRequest) {
       } catch {}
     }
 
-    // 4. Calculate starting roll number for this batch
-    let highestRoll = 0
+    // 4. Collect existing rolls for this batch (source of truth for serial
+    // numbering and for detecting conflicts with CSV-supplied rolls). The
+    // student identity is kept so that re-importing the same student's row
+    // (same student_id) is not treated as a conflict.
+    const existingRolls: number[] = []
+    const existingRollOwner = new Map<number, { studentId?: string; name?: string }>()
     try {
       let bEnrs: any[] | null = null
-      const { data: enrData } = await db
+      const { data: enrData, error: enrJoinErr } = await db
         .from("enrollments")
-        .select("roll_no")
+        .select("roll_no, student:students(student_id, name)")
         .eq("batch_id", cleanBatchId)
 
-      if (enrData) {
+      if (enrData && !enrJoinErr) {
         bEnrs = enrData
       } else {
         const { data: uEnrs } = await auth.supabase
@@ -234,14 +238,69 @@ export async function POST(req: NextRequest) {
       if (bEnrs && bEnrs.length > 0) {
         bEnrs.forEach((e: any) => {
           const r = Number(e.roll_no)
-          if (!isNaN(r) && r > highestRoll) highestRoll = r
+          if (!isNaN(r) && r > 0) {
+            existingRolls.push(r)
+            if (!existingRollOwner.has(r)) {
+              existingRollOwner.set(r, {
+                studentId: e.student?.student_id || undefined,
+                name: e.student?.name || undefined,
+              })
+            }
+          }
         })
       }
     } catch {}
 
+    const existingRollSet = new Set<number>(existingRolls)
+    let highestRoll = existingRolls.length > 0 ? Math.max(...existingRolls) : 0
+
     if (highestRoll === 0) {
       highestRoll = currentOccupied || 0
     }
+
+    // 4b. Validate CSV-supplied rolls BEFORE any write. Reject duplicates within
+    // the file and collisions with students already in the batch with a 409 so
+    // the uploader can resolve them manually. Blank rolls are assigned serially
+    // further down and never collide with the numbers below.
+    type RollConflict = { roll: number; reason: "duplicate_in_file" | "already_in_batch"; names: string[]; existingName?: string }
+    const csvRollGroups = new Map<number, { names: string[]; studentIds: string[] }>()
+    students.forEach((row, idx) => {
+      const r = Number(row.roll_no)
+      if (row.roll_no != null && String(row.roll_no).trim() !== "" && !isNaN(r) && r > 0) {
+        const entry = csvRollGroups.get(r) || { names: [], studentIds: [] }
+        entry.names.push((row.name || `Row ${idx + 1}`).trim() || `Row ${idx + 1}`)
+        if (row.student_id) entry.studentIds.push(String(row.student_id).trim())
+        csvRollGroups.set(r, entry)
+      }
+    })
+
+    const rollConflicts: RollConflict[] = []
+    csvRollGroups.forEach((entry, roll) => {
+      if (entry.names.length > 1) {
+        rollConflicts.push({ roll, reason: "duplicate_in_file", names: entry.names })
+      }
+      if (existingRollSet.has(roll)) {
+        const owner = existingRollOwner.get(roll)
+        const sameStudent = !!owner?.studentId && entry.studentIds.includes(owner.studentId)
+        if (!sameStudent) {
+          rollConflicts.push({ roll, reason: "already_in_batch", names: entry.names, existingName: owner?.name })
+        }
+      }
+    })
+
+    if (rollConflicts.length > 0) {
+      return NextResponse.json({
+        success: false,
+        error: "রোল নম্বর সংঘর্ষ পাওয়া গেছে — অনুগ্রহ করে সংঘর্ষগুলো নিজে সমাধান করুন (Roll number conflicts detected. Please resolve them manually.)",
+        conflicts: rollConflicts,
+      }, { status: 409 })
+    }
+
+    // Serial cursor: continue after the highest roll already in use (existing
+    // students + rolls explicitly supplied by the file). Gaps are not filled.
+    const usedRolls = new Set<number>(existingRollSet)
+    csvRollGroups.forEach((_entry, roll) => usedRolls.add(roll))
+    let serialCursor = usedRolls.size > 0 ? Math.max(...usedRolls) : (currentOccupied || 0)
 
     // 5. Calculate starting Student ID sequence (MS-XXXXX)
     let maxSeq = 0
@@ -304,7 +363,7 @@ export async function POST(req: NextRequest) {
       id_card_data: StudentIdCardData
     }> = []
 
-    let nextRollSeq = highestRoll
+    let maxAssignedRoll = highestRoll
     let nextStudentSeq = maxSeq
 
     // Process students sequentially to ensure deterministic ID and roll numbers
@@ -349,12 +408,24 @@ export async function POST(req: NextRequest) {
       const studentDue = typeof row.due_amount === "number" ? Math.max(0, row.due_amount) : 0
 
       nextStudentSeq++
-      nextRollSeq++
 
       // Support re-import of exported CSV or auto-generate
       const studentIdStr = (row.student_id && String(row.student_id).trim()) || `MS-${String(nextStudentSeq).padStart(5, "0")}`
       const studentEmail = (row.email || "").trim() || `${studentIdStr.toLowerCase()}@medhashiree.local`
-      const assignedRoll = (row.roll_no && Number(row.roll_no) > 0) ? Number(row.roll_no) : nextRollSeq
+
+      // Roll: keep the validated CSV value, otherwise assign the next serial
+      // number after the highest roll already in use in this batch.
+      const csvRollValue = Number(row.roll_no)
+      const hasCsvRoll = row.roll_no != null && String(row.roll_no).trim() !== "" && !isNaN(csvRollValue) && csvRollValue > 0
+      let assignedRoll: number
+      if (hasCsvRoll) {
+        assignedRoll = csvRollValue
+      } else {
+        do { serialCursor++ } while (usedRolls.has(serialCursor))
+        assignedRoll = serialCursor
+        usedRolls.add(assignedRoll)
+      }
+      if (assignedRoll > maxAssignedRoll) maxAssignedRoll = assignedRoll
 
       // A. Create or update auth user via Supabase Admin Auth (if service key available)
       let authUserId: string | null = null
@@ -621,6 +692,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
+      // Unique-constraint guard: never silently drop a roll. This only triggers
+      // if a roll collision slipped past validation (e.g. a concurrent upload).
+      if (enrErr && (enrErr as any).code === "23505") {
+        throw new Error(`রোল নম্বর ${assignedRoll} এই ব্যাচে ইতিমধ্যে ব্যবহৃত (Roll ${assignedRoll} is already taken in this batch).`)
+      }
+
       // E. Fee Dues insertion if student has due amount for the month
       const receiptNo = `RCP-${today.getFullYear()}-${Date.now().toString().slice(-6)}-${String(i + 1).padStart(2, "0")}`
 
@@ -730,7 +807,7 @@ export async function POST(req: NextRequest) {
       },
       roll_range: {
         start: highestRoll + 1,
-        end: nextRollSeq
+        end: maxAssignedRoll
       },
       results
     })
