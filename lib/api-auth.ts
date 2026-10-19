@@ -37,6 +37,20 @@ export async function requireAuth(): Promise<AuthResult | NextResponse> {
 }
 
 /**
+ * Canonical role aliases. Historical call sites used "reception" while the DB
+ * CHECK constraint stores "receptionist"; treat both as equivalent so a role
+ * gate never depends on which spelling a given route happens to use.
+ */
+const ROLE_ALIASES: Record<string, string> = {
+  reception: "receptionist",
+}
+
+function normalizeRole(role: string | null | undefined): string {
+  if (!role) return ""
+  return ROLE_ALIASES[role] ?? role
+}
+
+/**
  * Require a valid authenticated staff member with one of the specified roles.
  * Returns { user, staff, supabase } or a NextResponse with 401/403 status.
  */
@@ -76,7 +90,7 @@ export async function requireStaffRole(
       )
     }
 
-    if (!roles.includes(staffData.role)) {
+    if (!roles.map(normalizeRole).includes(normalizeRole(staffData.role))) {
       return NextResponse.json(
         { error: `Forbidden — requires one of: ${roles.join(", ")} (অনুমতি নেই)` },
         { status: 403 }

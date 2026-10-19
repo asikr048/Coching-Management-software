@@ -103,7 +103,7 @@ function parseGatewayResponse(resOk: boolean, status: number, text: string): { s
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {

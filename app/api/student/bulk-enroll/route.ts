@@ -104,7 +104,7 @@ function normalizeBDPhone(raw: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {

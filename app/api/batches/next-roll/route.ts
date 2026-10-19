@@ -115,7 +115,7 @@ async function fetchStudentMap(admin: any, rawIds: (string | null | undefined)[]
 
 // GET: Calculate next available batch roll (strictly previous_maximum + 1) and auto-resequence duplicates
 export async function GET(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {
@@ -294,7 +294,7 @@ export async function GET(req: NextRequest) {
 
 // POST: Resequence duplicate rolls across one or all batches
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"]);
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {

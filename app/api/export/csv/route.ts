@@ -38,7 +38,7 @@ function buildCsvString(headers: string[], rows: any[][]): string {
 
 export async function GET(req: NextRequest) {
   // 1. Verify Role Authorization: Only authorized administrative roles can export data
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "reception"])
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "receptionist"])
   if (isAuthError(auth)) return auth
 
   const userRole = (auth as any)?.user?.role || "owner"

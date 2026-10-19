@@ -17,7 +17,7 @@ const isUUID = (val: any): boolean => {
  * Returns highest roll and next roll (highest + 1) for a batch
  */
 export async function GET(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
  * 2. action: "add_enrollment" - enrolls student into an additional batch
  */
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {
@@ -413,7 +413,7 @@ export async function POST(req: NextRequest) {
  * - If student has no other active batches, primary roll is cleared to null.
  */
 export async function DELETE(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist", "reception"]);
+  const auth = await requireStaffRole(["owner", "branch_director", "super_manager", "manager", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {

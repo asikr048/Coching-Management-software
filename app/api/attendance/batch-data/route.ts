@@ -8,7 +8,7 @@ export const revalidate = 0
 
 // GET: Fetch enrolled students and attendance records for a batch
 export async function GET(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "teacher", "reception"]);
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "teacher", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {
@@ -153,7 +153,7 @@ export async function GET(req: NextRequest) {
 
 // POST: Save or Upsert Attendance records securely via admin client
 export async function POST(req: NextRequest) {
-  const auth = await requireStaffRole(["owner", "super_manager", "manager", "teacher", "reception"]);
+  const auth = await requireStaffRole(["owner", "super_manager", "manager", "teacher", "receptionist"]);
   if (isAuthError(auth)) return auth;
 
   try {
