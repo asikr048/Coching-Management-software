@@ -130,41 +130,17 @@ export default function StudentExamResultsPage() {
     }
   }, [examId])
 
-  if (loading) {
-    return (
-      <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-        <p className="text-sm font-semibold text-slate-500">ফলাফল লোড হচ্ছে...</p>
-      </div>
-    )
-  }
-
-  if (!exam) {
-    return (
-      <div className="max-w-2xl mx-auto py-16 px-4 text-center">
-        <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-sm space-y-3">
-          <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
-          <h2 className="text-xl font-bold text-gray-900">ফলাফল পাওয়া যায়নি</h2>
-          <p className="text-sm text-gray-500">পরীক্ষার তথ্য অথবা ফলাফল বর্তমানে অনুপলব্ধ।</p>
-          <Link
-            href="/student/profile"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors mt-2"
-          >
-            <ArrowLeft className="w-4 h-4" /> প্রোফাইলে ফিরে যান
-          </Link>
-        </div>
-      </div>
-    )
-  }
-
+  // Derived exam/day info + memos must run before any early return so the
+  // hook order stays identical between renders (Rules of Hooks).
   const isWeekly =
-    exam.exam_schedule_type === "weekly" ||
-    (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
-    exam.is_weekly_published === true
+    !!exam &&
+    (exam.exam_schedule_type === "weekly" ||
+      (Array.isArray(exam.recurring_days) && exam.recurring_days.length > 0) ||
+      exam.is_weekly_published === true)
 
-  const recurringDays = Array.isArray(exam.recurring_days) ? exam.recurring_days : []
-  const publishedDays = Array.isArray(exam.published_days) ? exam.published_days : []
-  const isWeeklyPub = exam.is_weekly_published === true
+  const recurringDays = Array.isArray(exam?.recurring_days) ? exam.recurring_days : []
+  const publishedDays = Array.isArray(exam?.published_days) ? exam.published_days : []
+  const isWeeklyPub = exam?.is_weekly_published === true
 
   // If selectedDayKey is explicitly set, use it.
   // Otherwise, default to the first published or configured day for weekly exams.
@@ -185,39 +161,7 @@ export default function StudentExamResultsPage() {
     ? (Number(activeDayConf.total_marks) || 50)
     : isWeekly && recurringDays.length > 0
     ? recurringDays.reduce((acc: number, d: any) => acc + (Number(d?.total_marks) || 50), 0)
-    : (Number(exam.total_marks) || 100)
-
-  const passMarks = effectiveDayKey && activeDayConf
-    ? (Number(activeDayConf.pass_marks) || 20)
-    : isWeekly && recurringDays.length > 0
-    ? recurringDays.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
-    : (Number(exam.pass_marks) || 33)
-
-  // Student's day score if viewing a specific day
-  let studentDayMark: number | null = null
-  if (effectiveDayKey && myResult?.day_marks) {
-    const raw = myResult.day_marks[effectiveDayKey] || myResult.day_marks[effectiveDayKey.toLowerCase()]
-    if (raw !== undefined && raw !== null) {
-      studentDayMark = typeof raw === "object" ? Number(raw.marks ?? 0) : Number(raw)
-      if (activeDayConf?.total_marks && studentDayMark > Number(activeDayConf.total_marks)) {
-        studentDayMark = Math.min(studentDayMark, Number(activeDayConf.total_marks))
-      }
-    }
-  }
-
-  // Score determination: preference to day mark if viewing a day, else myResult weekly, then submission
-  const obtainedMarks = effectiveDayKey
-    ? (studentDayMark ?? 0)
-    : myResult
-    ? Number(myResult.obtained_marks ?? myResult.marks_obtained ?? 0)
-    : submission
-    ? Number(submission.total_obtained ?? 0)
-    : 0
-
-  const hasScore = effectiveDayKey ? studentDayMark !== null : (!!myResult || !!submission)
-  const isPass = obtainedMarks >= passMarks
-  const grade = myResult?.grade || getGrade(obtainedMarks, totalMarks)
-  const dayMarks = myResult?.day_marks || {}
+    : (Number(exam?.total_marks) || 100)
 
   // Leaderboard dynamically evaluated for the active day or weekly total
   const displayedLeaderboard = useMemo(() => {
@@ -251,6 +195,65 @@ export default function StudentExamResultsPage() {
     const found = displayedLeaderboard.find((r: any) => r.is_current_student || r.student_id === myResult.student_id)
     return found?.rank || null
   }, [effectiveDayKey, myResult, displayedLeaderboard])
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] flex-col items-center justify-center gap-3">
+        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+        <p className="text-sm font-semibold text-slate-500">ফলাফল লোড হচ্ছে...</p>
+      </div>
+    )
+  }
+
+  if (!exam) {
+    return (
+      <div className="max-w-2xl mx-auto py-16 px-4 text-center">
+        <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-sm space-y-3">
+          <AlertCircle className="w-12 h-12 text-rose-500 mx-auto" />
+          <h2 className="text-xl font-bold text-gray-900">ফলাফল পাওয়া যায়নি</h2>
+          <p className="text-sm text-gray-500">পরীক্ষার তথ্য অথবা ফলাফল বর্তমানে অনুপলব্ধ।</p>
+          <Link
+            href="/student/profile"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors mt-2"
+          >
+            <ArrowLeft className="w-4 h-4" /> প্রোফাইলে ফিরে যান
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const passMarks = effectiveDayKey && activeDayConf
+    ? (Number(activeDayConf.pass_marks) || 20)
+    : isWeekly && recurringDays.length > 0
+    ? recurringDays.reduce((acc: number, d: any) => acc + (Number(d?.pass_marks) || 20), 0)
+    : (Number(exam.pass_marks) || 33)
+
+  // Student's day score if viewing a specific day
+  let studentDayMark: number | null = null
+  if (effectiveDayKey && myResult?.day_marks) {
+    const raw = myResult.day_marks[effectiveDayKey] || myResult.day_marks[effectiveDayKey.toLowerCase()]
+    if (raw !== undefined && raw !== null) {
+      studentDayMark = typeof raw === "object" ? Number(raw.marks ?? 0) : Number(raw)
+      if (activeDayConf?.total_marks && studentDayMark > Number(activeDayConf.total_marks)) {
+        studentDayMark = Math.min(studentDayMark, Number(activeDayConf.total_marks))
+      }
+    }
+  }
+
+  // Score determination: preference to day mark if viewing a day, else myResult weekly, then submission
+  const obtainedMarks = effectiveDayKey
+    ? (studentDayMark ?? 0)
+    : myResult
+    ? Number(myResult.obtained_marks ?? myResult.marks_obtained ?? 0)
+    : submission
+    ? Number(submission.total_obtained ?? 0)
+    : 0
+
+  const hasScore = effectiveDayKey ? studentDayMark !== null : (!!myResult || !!submission)
+  const isPass = obtainedMarks >= passMarks
+  const grade = myResult?.grade || getGrade(obtainedMarks, totalMarks)
+  const dayMarks = myResult?.day_marks || {}
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 space-y-8">
