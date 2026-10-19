@@ -1923,7 +1923,7 @@ export default function ExamResultsPage() {
   useEffect(() => {
     if (parsedWeeklyDays.length > 0) {
       if (!selectedTab || (selectedTab !== "weekly_aggregate" && selectedTab !== "all_weeks_combined" && !parsedWeeklyDays.some((d) => d.key === selectedTab))) {
-        setSelectedTab("weekly_aggregate")
+        setSelectedTab(parsedWeeklyDays[0]?.key || "saturday")
       }
     }
   }, [parsedWeeklyDays, selectedTab])
