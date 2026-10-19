@@ -196,7 +196,7 @@ export default function DashboardHeader({ user, onMenuToggle }: Props) {
           </div>
         )}
 
-        <NotificationDropdown />
+        <NotificationDropdown role={user.role} />
 
         <div className="relative">
           <button

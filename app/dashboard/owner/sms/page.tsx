@@ -1204,7 +1204,8 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
 
     let parts = 1
     if (len > charLimit) {
-      parts = Math.ceil(len / multiLimit)
+      // First part holds `charLimit` characters, every concatenated part holds `multiLimit`.
+      parts = 1 + Math.ceil((len - charLimit) / multiLimit)
     }
     return { len, parts, isUnicode, charLimit }
   }, [message])

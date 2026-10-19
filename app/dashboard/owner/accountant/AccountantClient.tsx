@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { formatCurrency, formatDate, parseRollQuery, isRollMatch } from "@/lib/utils"
+import { formatCurrency, formatDate, parseRollQuery, isRollMatch, round2 } from "@/lib/utils"
 import {
   Calculator, Search, Filter, DollarSign, CreditCard, Users,
   BookOpen, CheckCircle, AlertCircle, Clock, ArrowRight,
@@ -865,7 +865,7 @@ export default function AccountantClient({
       prevPaid = examPayments.reduce((acc, p) => acc + (Number(p.total_paid ?? p.amount) || 0), 0)
     }
 
-    const remaining = Math.max(0, targetFee - prevPaid)
+    const remaining = round2(Math.max(0, targetFee - prevPaid))
     setPayTargetFee(String(targetFee > 0 ? targetFee : ""))
     setPayPreviouslyPaid(prevPaid)
     setPayAmount(String(remaining > 0 ? remaining : targetFee > 0 ? targetFee : ""))
@@ -950,7 +950,7 @@ export default function AccountantClient({
       setPayNotes(`Fee payment - ${batch.name}`)
     }
 
-    const remaining = Math.max(0, targetFee - prevPaid)
+    const remaining = round2(Math.max(0, targetFee - prevPaid))
     setPayTargetFee(String(targetFee > 0 ? targetFee : ""))
     setPayPreviouslyPaid(prevPaid)
     setPayAmount(String(remaining > 0 ? remaining : targetFee > 0 ? targetFee : ""))
@@ -986,10 +986,10 @@ export default function AccountantClient({
 
     setPaySubmitting(true)
     try {
-      const netPaidNow = Math.max(0, amountNum - discountNum)
-      const targetFeeNum = parseFloat(payTargetFee) || (payPreviouslyPaid + netPaidNow)
-      const totalPaidSoFar = payPreviouslyPaid + netPaidNow
-      const remainingDue = Math.max(0, targetFeeNum - totalPaidSoFar)
+      const netPaidNow = round2(Math.max(0, amountNum - discountNum))
+      const targetFeeNum = parseFloat(payTargetFee) || round2(payPreviouslyPaid + netPaidNow)
+      const totalPaidSoFar = round2(payPreviouslyPaid + netPaidNow)
+      const remainingDue = round2(Math.max(0, targetFeeNum - totalPaidSoFar))
 
       const defaultNextDue = (() => {
         const d = new Date()
@@ -2673,9 +2673,9 @@ export default function AccountantClient({
                   const targetNum = parseFloat(payTargetFee) || 0
                   const payNum = parseFloat(payAmount) || 0
                   const discNum = parseFloat(payDiscount) || 0
-                  const netPay = Math.max(0, payNum - discNum)
-                  const totalPaidAfter = payPreviouslyPaid + netPay
-                  const remDue = targetNum > 0 ? Math.max(0, targetNum - totalPaidAfter) : 0
+                  const netPay = round2(Math.max(0, payNum - discNum))
+                  const totalPaidAfter = round2(payPreviouslyPaid + netPay)
+                  const remDue = targetNum > 0 ? round2(Math.max(0, targetNum - totalPaidAfter)) : 0
 
                   if (targetNum > 0 && remDue > 0) {
                     return (
@@ -2757,7 +2757,7 @@ export default function AccountantClient({
               <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200 flex justify-between items-center text-xs">
                 <span className="font-bold text-emerald-800">Net Paid Amount:</span>
                 <span className="font-black text-base text-emerald-600">
-                  ৳{Math.max(0, (parseFloat(payAmount) || 0) - (parseFloat(payDiscount) || 0))}
+                  ৳{round2(Math.max(0, (parseFloat(payAmount) || 0) - (parseFloat(payDiscount) || 0)))}
                 </span>
               </div>
 
@@ -2802,7 +2802,7 @@ export default function AccountantClient({
                       Referral Payment Details (রেফারেল তথ্য)
                     </span>
                     <span className="bg-purple-200/90 text-purple-900 px-2 py-0.5 rounded-md font-black text-[11px]">
-                      Referral Amount: ৳{Math.max(0, (parseFloat(payAmount) || 0) - (parseFloat(payDiscount) || 0))}
+                      Referral Amount: ৳{round2(Math.max(0, (parseFloat(payAmount) || 0) - (parseFloat(payDiscount) || 0)))}
                     </span>
                   </div>
 
@@ -2837,7 +2837,7 @@ export default function AccountantClient({
                   </div>
 
                   <p className="text-[10px] text-purple-700 font-medium leading-relaxed">
-                    ✨ This referral credit amount (৳{Math.max(0, (parseFloat(payAmount) || 0) - (parseFloat(payDiscount) || 0))}) will be automatically tracked in the accounting ledger, under the Total Referral KPI, and on student records.
+                    ✨ This referral credit amount (৳{round2(Math.max(0, (parseFloat(payAmount) || 0) - (parseFloat(payDiscount) || 0)))}) will be automatically tracked in the accounting ledger, under the Total Referral KPI, and on student records.
                   </p>
                 </div>
               )}

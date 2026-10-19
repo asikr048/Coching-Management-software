@@ -5,6 +5,10 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function round2(value: number): number {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100
+}
+
 export function formatCurrency(amount: number | null | undefined): string {
   if (amount == null) return "৳0"
   return `৳${amount.toLocaleString("en-BD")}`

@@ -30,6 +30,20 @@ export async function GET(req: NextRequest) {
 
     const admin = createAdminClient()
 
+    const role = authResult.staff.role
+    const isAdminRole = ["owner", "super_manager", "manager", "branch_director"].includes(role)
+    const roleHome =
+      role === "receptionist"
+        ? "/dashboard/reception"
+        : role === "accountant"
+          ? "/dashboard/accountant"
+          : role === "teacher" || role === "course_teacher"
+            ? "/dashboard/teacher"
+            : "/dashboard/owner"
+    const noticesHref = isAdminRole ? "/dashboard/owner/notices" : roleHome
+    const examsHref =
+      role === "teacher" || role === "course_teacher" ? "/dashboard/teacher/exams" : roleHome
+
     // 1. Fetch persistent notice audience settings
     let noticeAudiencesMap: Record<string, string> = {}
     try {
@@ -55,29 +69,33 @@ export async function GET(req: NextRequest) {
       if (nData) noticesList = nData
     } catch {}
 
-    // 3. Fetch pending payment submissions (Admin Notification)
+    // 3. Fetch pending payment submissions (Admin Notification only)
     let pendingPayments: any[] = []
-    try {
-      const { data: pData } = await admin
-        .from("payment_submissions")
-        .select("id, amount, payment_method, student_id, created_at, student:students(name, student_id)")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(10)
-      if (pData) pendingPayments = pData
-    } catch {}
+    if (isAdminRole) {
+      try {
+        const { data: pData } = await admin
+          .from("payment_submissions")
+          .select("id, amount, payment_method, student_id, created_at, student:students(name, student_id)")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(10)
+        if (pData) pendingPayments = pData
+      } catch {}
+    }
 
-    // 4. Fetch pending student deletion requests (Admin Notification)
+    // 4. Fetch pending student deletion requests (Admin Notification only)
     let pendingDeletions: any[] = []
-    try {
-      const { data: dData } = await admin
-        .from("student_deletion_requests")
-        .select("id, student_id, reason, created_at, student:students(name, student_id)")
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(5)
-      if (dData) pendingDeletions = dData
-    } catch {}
+    if (isAdminRole) {
+      try {
+        const { data: dData } = await admin
+          .from("student_deletion_requests")
+          .select("id, student_id, reason, created_at, student:students(name, student_id)")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+          .limit(5)
+        if (dData) pendingDeletions = dData
+      } catch {}
+    }
 
     // 5. Fetch recent exams created in the last 14 days (Student Notification)
     let recentExams: any[] = []
@@ -103,7 +121,7 @@ export async function GET(req: NextRequest) {
         category: audience === "admin" ? "admin" : audience === "student" ? "student" : "student",
         type: "notice",
         created_at: n.created_at || new Date().toISOString(),
-        href: "/dashboard/owner/notices",
+        href: noticesHref,
         priority: n.priority || "normal",
         badge: audience === "admin" ? "অ্যাডমিন নোটিশ" : audience === "student" ? "শিক্ষার্থী নোটিশ" : "সাধারণ নোটিশ",
       }
@@ -163,7 +181,7 @@ export async function GET(req: NextRequest) {
         category: "student",
         type: "exam",
         created_at: e.created_at || new Date().toISOString(),
-        href: "/dashboard/owner/exams",
+        href: examsHref,
         priority: "normal",
         badge: "পরীক্ষা সূচি",
       })
@@ -187,6 +205,7 @@ export async function GET(req: NextRequest) {
       adminNotifications: adminItems,
       studentNotifications: studentItems,
       unreadCount: allItems.length,
+      role,
     })
   } catch (err: any) {
     console.error("Notifications feed error:", err)

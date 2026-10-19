@@ -1191,7 +1191,7 @@ export default function OnlineResultPortalPage() {
               </div>
             ) : (
               <Link
-                href="/login?returnUrl=/online-result"
+                href="/login?redirect=/online-result"
                 className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5"
               >
                 <User className="w-3.5 h-3.5" />

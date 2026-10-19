@@ -52,8 +52,9 @@ function formatRelativeTime(dateStr: string): string {
   }
 }
 
-export default function NotificationDropdown() {
+export default function NotificationDropdown({ role }: { role?: string }) {
   const router = useRouter()
+  const isAdminRole = ["owner", "super_manager", "manager", "branch_director"].includes(role || "")
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"all" | "admin" | "student">("all")
   const [loading, setLoading] = useState(false)
@@ -207,6 +208,7 @@ export default function NotificationDropdown() {
                 {allItems.length}
               </span>
             </button>
+            {isAdminRole && (
             <button
               onClick={() => setActiveTab("admin")}
               className={cn(
@@ -221,6 +223,7 @@ export default function NotificationDropdown() {
                 {adminItems.length}
               </span>
             </button>
+            )}
             <button
               onClick={() => setActiveTab("student")}
               className={cn(
@@ -333,29 +336,31 @@ export default function NotificationDropdown() {
             )}
           </div>
 
-          {/* Footer Actions */}
-          <div className="p-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
-            <button
-              onClick={() => {
-                setIsOpen(false)
-                router.push("/dashboard/owner/notices")
-              }}
-              className="text-xs font-bold text-slate-700 hover:text-indigo-600 transition-colors flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-200/60"
-            >
-              <span>সকল নোটিশ পরিচালনা</span>
-              <ExternalLink className="w-3 h-3" />
-            </button>
-            <button
-              onClick={() => {
-                setIsOpen(false)
-                router.push("/dashboard/owner/notices?action=new")
-              }}
-              className="text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
-            >
-              <PlusCircle className="w-3.5 h-3.5" />
-              <span>নোটিশ পাঠান</span>
-            </button>
-          </div>
+          {/* Footer Actions (admin-only) */}
+          {isAdminRole && (
+            <div className="p-2.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+              <button
+                onClick={() => {
+                  setIsOpen(false)
+                  router.push("/dashboard/owner/notices")
+                }}
+                className="text-xs font-bold text-slate-700 hover:text-indigo-600 transition-colors flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-200/60"
+              >
+                <span>সকল নোটিশ পরিচালনা</span>
+                <ExternalLink className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => {
+                  setIsOpen(false)
+                  router.push("/dashboard/owner/notices?action=new")
+                }}
+                className="text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                <span>নোটিশ পাঠান</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
