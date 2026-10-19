@@ -275,6 +275,9 @@ export default function BulkEnrollClient({
 
   // Selected batch ID
   const [selectedBatchId, setSelectedBatchId] = useState<string>("")
+  // Existing rolls in the selected batch + manual conflict-resolution inputs
+  const [existingRollsForBatch, setExistingRollsForBatch] = useState<{ roll: number; name?: string; studentId?: string }[]>([])
+  const [conflictRollInputs, setConflictRollInputs] = useState<Record<string, string>>({})
   const selectedBatch = useMemo(() => {
     return allBatches.find(b => b.id === selectedBatchId)
   }, [allBatches, selectedBatchId])
@@ -290,6 +293,36 @@ export default function BulkEnrollClient({
       }
     }
   }, [filteredBatches, selectedBatchId])
+
+  // Existing rolls in the currently selected batch. Student identity is kept so
+  // re-importing the same student's row is not flagged as a roll conflict.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      if (!selectedBatchId) {
+        if (!cancelled) setExistingRollsForBatch([])
+        return
+      }
+      try {
+        const { data } = await supabase
+          .from("enrollments")
+          .select("roll_no, student:students(student_id, name)")
+          .eq("batch_id", selectedBatchId)
+        if (cancelled) return
+        const rows = (data || [])
+          .map((e: any) => ({
+            roll: Number(e.roll_no),
+            name: e.student?.name as string | undefined,
+            studentId: e.student?.student_id as string | undefined,
+          }))
+          .filter((e: any) => !isNaN(e.roll) && e.roll > 0)
+        setExistingRollsForBatch(rows)
+      } catch {
+        if (!cancelled) setExistingRollsForBatch([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [selectedBatchId, supabase])
 
   // Password & confirm password state
   const [password, setPassword] = useState<string>("student123")
@@ -592,6 +625,69 @@ export default function BulkEnrollClient({
       /00000$/.test((s.phone || "").replace(/[^0-9]/g, ""))
     )
   }, [parsedStudents])
+
+  const existingRollMap = useMemo(() => {
+    const m = new Map<number, { name?: string; studentId?: string }>()
+    existingRollsForBatch.forEach(e => { if (!m.has(e.roll)) m.set(e.roll, { name: e.name, studentId: e.studentId }) })
+    return m
+  }, [existingRollsForBatch])
+
+  // Roll conflicts in the parsed file: the same roll used twice inside the CSV,
+  // or a roll that already belongs to a student in the selected batch.
+  // Non-empty => bulk submit is hard-blocked until every clash is resolved.
+  const rollConflicts = useMemo(() => {
+    const conflicts: Array<{ studentId: string; rowNumber: number; name: string; roll: number; reasons: string[] }> = []
+    if (parsedStudents.length === 0) return conflicts
+    const byRoll = new Map<number, number[]>()
+    parsedStudents.forEach((s, idx) => {
+      const r = Number(s.roll_no)
+      if (s.roll_no != null && String(s.roll_no).trim() !== "" && !isNaN(r) && r > 0) {
+        const arr = byRoll.get(r) || []
+        arr.push(idx)
+        byRoll.set(r, arr)
+      }
+    })
+    byRoll.forEach((idxs, roll) => {
+      const existing = existingRollMap.get(roll)
+      idxs.forEach((idx) => {
+        const s = parsedStudents[idx]
+        const reasons: string[] = []
+        if (idxs.length > 1) {
+          const others = idxs.filter(i => i !== idx).map(i => `#${i + 1} ${parsedStudents[i].name || "?"}`)
+          reasons.push(`একই ফাইলে একই রোল আছে: ${others.join(", ")}`)
+        }
+        if (existing) {
+          const same = !!existing.studentId && !!s.student_id && existing.studentId === String(s.student_id).trim()
+          if (!same) reasons.push(`ব্যাচে ইতিমধ্যে আছে: ${existing.name || "(নাম নেই)"} — রোল ${roll}`)
+        }
+        if (reasons.length > 0) conflicts.push({ studentId: s.id, rowNumber: idx + 1, name: s.name, roll, reasons })
+      })
+    })
+    return conflicts
+  }, [parsedStudents, existingRollMap])
+
+  const conflictingStudentIds = useMemo(() => new Set(rollConflicts.map(c => c.studentId)), [rollConflicts])
+
+  // Next non-conflicting roll: continue after the highest roll already in use
+  // (existing students + the other parsed rows), skipping anything taken.
+  const computeNextFreeRoll = (excludeStudentId: string): number => {
+    const used = new Set<number>()
+    existingRollsForBatch.forEach(e => used.add(e.roll))
+    parsedStudents.forEach(s => {
+      if (s.id === excludeStudentId) return
+      const r = Number(s.roll_no)
+      if (s.roll_no != null && String(s.roll_no).trim() !== "" && !isNaN(r) && r > 0) used.add(r)
+    })
+    let n = used.size > 0 ? Math.max(...used) + 1 : 1
+    while (used.has(n)) n++
+    return n
+  }
+
+  const handleAutoAssignRoll = (studentId: string) => {
+    const next = computeNextFreeRoll(studentId)
+    handleUpdateStudentCell(studentId, "roll_no", next)
+    setConflictRollInputs(prev => { const n = { ...prev }; delete n[studentId]; return n })
+  }
 
   // Download Sample CSV with "Due" column
   const handleDownloadSampleCSV = () => {
@@ -1021,6 +1117,11 @@ export default function BulkEnrollClient({
     const invalidCount = parsedStudents.filter(s => !s.isValid).length
     if (invalidCount > 0) {
       toast.error(`${invalidCount} জন শিক্ষার্থীর তথ্যে ত্রুটি রয়েছে। লাল চিহ্নিত ঘরগুলো ঠিক করুন।`)
+      return
+    }
+
+    if (rollConflicts.length > 0) {
+      toast.error(`রোল নম্বর সংঘর্ষ (${rollConflicts.length}টি) এখনো সমাধান হয়নি। লাল চিহ্নিত রোলগুলো ঠিক করুন।`)
       return
     }
 
@@ -1495,6 +1596,12 @@ export default function BulkEnrollClient({
                 <td className="py-2 px-3">শিক্ষার্থীর পুরো নাম (যেমন: আবাব হোসেন)</td>
               </tr>
               <tr>
+                <td className="py-2 px-3 font-mono font-bold text-slate-900">Roll / Roll No</td>
+                <td className="py-2 px-3 font-medium text-slate-800">রোল নম্বর</td>
+                <td className="py-2 px-3 text-slate-500">Optional</td>
+                <td className="py-2 px-3">রোল নম্বর (যেমন: 1, 2, 15)। না দিলে স্বয়ংক্রিয়ভাবে সিরিয়ালি বসবে। একই রোল ফাইলে বা ব্যাচে আগে থেকে থাকলে ভর্তির আগে সংঘর্ষ দেখিয়ে নিজে সমাধান করতে বলা হবে।</td>
+              </tr>
+              <tr>
                 <td className="py-2 px-3 font-mono font-bold text-slate-900">Guardian Phone</td>
                 <td className="py-2 px-3 font-medium text-slate-800">অভিভাবকের মোবাইল</td>
                 <td className="py-2 px-3"><span className="text-amber-700 font-bold">প্রয়োজনীয় (স্কিপ করা যাবে)</span></td>
@@ -1632,11 +1739,69 @@ export default function BulkEnrollClient({
               </div>
             )}
 
+            {rollConflicts.length > 0 && (
+              <div className="p-4 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-900 space-y-3 shadow-2xs">
+                <div className="flex items-start gap-2">
+                  <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-rose-950 text-sm">
+                      ⚠️ {rollConflicts.length}টি রোল নম্বর সংঘর্ষ (Roll conflicts) — ভর্তির আগে সমাধান করুন
+                    </p>
+                    <p className="text-rose-800 leading-relaxed">
+                      একই রোল একাধিক শিক্ষার্থীর জন্য ব্যবহার করা যাবে না। প্রতিটি সারির জন্য নতুন রোল লিখে <b>সেট</b> চাপুন, অথবা <b>পরবর্তী খালি</b> চেপে স্বয়ংক্রিয়ভাবে পরের খালি রোল দিন।
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  {rollConflicts.map((c) => (
+                    <div key={`${c.studentId}-${c.roll}`} className="flex flex-col sm:flex-row sm:items-center gap-2 bg-white border border-rose-200 rounded-lg p-2.5">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-bold text-slate-900">#{c.rowNumber} {c.name || "(নাম নেই)"}</span>
+                          <span className="font-mono text-rose-700 font-bold">রোল {c.roll}</span>
+                        </div>
+                        <div className="text-[11px] text-rose-700 mt-0.5">{c.reasons.join(" • ")}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          value={conflictRollInputs[c.studentId] ?? ""}
+                          placeholder="নতুন রোল"
+                          onChange={(e) => setConflictRollInputs(prev => ({ ...prev, [c.studentId]: e.target.value }))}
+                          className="w-24 px-2 py-1.5 border border-rose-300 rounded-lg text-xs font-mono text-slate-900 bg-white"
+                        />
+                        <button
+                          type="button"
+                          disabled={!conflictRollInputs[c.studentId]}
+                          onClick={() => {
+                            handleUpdateStudentCell(c.studentId, "roll_no", conflictRollInputs[c.studentId] ?? "")
+                            setConflictRollInputs(prev => { const n = { ...prev }; delete n[c.studentId]; return n })
+                          }}
+                          className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                        >
+                          সেট
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAutoAssignRoll(c.studentId)}
+                          className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold cursor-pointer whitespace-nowrap"
+                        >
+                          পরবর্তী খালি
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto max-h-[380px] border border-slate-200 rounded-xl overflow-y-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead className="bg-slate-100 text-slate-700 font-bold sticky top-0 z-10">
                   <tr>
                     <th className="py-2.5 px-3">#</th>
+                    <th className="py-2.5 px-3">রোল (Roll)</th>
                     <th className="py-2.5 px-3">নাম (Name) <span className="text-rose-500">*</span></th>
                     <th className="py-2.5 px-3">অভিভাবকের মোবাইল <span className="text-rose-500">*</span></th>
                     <th className="py-2.5 px-3 text-rose-700 bg-rose-50/70">বকেয়া (Due ৳)</th>
@@ -1650,8 +1815,23 @@ export default function BulkEnrollClient({
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
                   {parsedStudents.map((st, idx) => (
-                    <tr key={st.id} className={`h-11 ${!st.isValid ? "bg-rose-50/40" : "hover:bg-slate-50/60"}`}>
+                    <tr key={st.id} className={`h-11 ${(!st.isValid || conflictingStudentIds.has(st.id)) ? "bg-rose-50/40" : "hover:bg-slate-50/60"}`}>
                       <td className="py-1 px-3 font-mono text-slate-400 font-bold align-middle whitespace-nowrap">{idx + 1}</td>
+                      <td className="py-1 px-3 align-middle">
+                        <input
+                          type="number"
+                          min="1"
+                          value={st.roll_no ?? ""}
+                          placeholder="স্বয়ংক্রিয়"
+                          onChange={(e) => handleUpdateStudentCell(st.id, "roll_no", e.target.value)}
+                          title={conflictingStudentIds.has(st.id) ? "রোল সংঘর্ষ — ঠিক করুন" : "খালি রাখলে স্বয়ংক্রিয়ভাবে রোল বসবে"}
+                          className={`px-2 py-1 border rounded text-xs font-mono font-bold w-20 ${
+                            conflictingStudentIds.has(st.id)
+                              ? "border-rose-500 bg-rose-50 text-rose-700"
+                              : "border-slate-200 bg-transparent text-slate-900"
+                          }`}
+                        />
+                      </td>
                       <td className="py-1 px-3 align-middle">
                         <input
                           type="text"
@@ -1835,11 +2015,14 @@ export default function BulkEnrollClient({
           {totalParsedDue > 0 && (
             <span> • মোট বকেয়া: <b className="text-rose-600">৳{totalParsedDue.toLocaleString("en-BD")}</b></span>
           )}
+          {rollConflicts.length > 0 && (
+            <span> • <b className="text-rose-600">⚠️ {rollConflicts.length}টি রোল সংঘর্ষ বাকি</b></span>
+          )}
         </div>
 
         <button
           type="button"
-          disabled={isSubmitting || parsedStudents.length === 0 || !selectedBatchId}
+          disabled={isSubmitting || parsedStudents.length === 0 || !selectedBatchId || rollConflicts.length > 0}
           onClick={handleExecuteBulkEnroll}
           className="w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-3.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-black text-sm rounded-xl shadow-lg shadow-indigo-200 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
