@@ -3,7 +3,7 @@
 - **Created:** 2026-10-03
 - **Last updated:** 2026-10-19
 - **Base commit:** `ab6d812` (main) · **Re-verified at:** `854fe9a` (post-merge of `origin/main`)
-- **Status:** Read-only audit (security/infra **+** follow-up feature/UX audit). All items OPEN unless listed under "FIXES LANDED".
+- **Status:** Read-only audit (security/infra **+** follow-up feature/UX audit). All items are OPEN unless the status table or "FIXES LANDED" says otherwise.
 - **How to use this file (for humans or AI):**
   1. Pick ONE bug at a time, top-down by PRIORITY.
   2. Read the bug's section: symptoms → evidence (file:line) → root cause → fix plan → verification.
@@ -16,16 +16,16 @@
 | ID | Sev | Title | Area | Status |
 |----|-----|-------|------|--------|
 | B-01 | CRITICAL | Whole DB publicly readable/writable (40 `USING(true)` RLS policies) | Supabase/RLS | OPEN |
-| B-02 | HIGH | `POST /api/attendance/scan` has no authentication | API security | OPEN |
-| B-03 | HIGH | Desktop offline vault never syncs back to cloud on reconnect | Electron | OPEN |
+| B-02 | HIGH | `POST /api/attendance/scan` has no authentication | API security | FIXED (3784284) |
+| B-03 | HIGH | Desktop offline vault never syncs back to cloud on reconnect | Electron | FIXED (68a4ff2, b0ec909) |
 | B-04 | HIGH | Bengali text garbled in jsPDF receipts / ID cards | PDF | OPEN |
 | B-05 | MED | AudioContext leak kills scanner chimes after ~6–10 scans; biometric page has no audio at all | Attendance UI | OPEN |
-| B-06 | MED | Public `/api/enroll/submit` — no throttle/dedup (spam + ID-sequence abuse) | API abuse | OPEN |
-| B-07 | LOW-MED | No Unicode SMS segment counter on bulk-SMS page | SMS | OPEN |
-| B-08 | LOW | Float precision on fee math in display paths | Finance | OPEN |
+| B-06 | MED | Public `/api/enroll/submit` — no throttle/dedup (spam + ID-sequence abuse) | API abuse | FIXED (d422e3b) |
+| B-07 | LOW-MED | No Unicode SMS segment counter on bulk-SMS page | SMS | FIXED (65004bf) |
+| B-08 | LOW | Float precision on fee math in display paths | Finance | FIXED (3784284, 65004bf) |
 | B-09 | LOW | `requireAuthOrSelf()` silently passes any user when called with `undefined` | Auth lib | OPEN |
-| B-10 | LOW | Duplicate migration numbers (002/007/019/024) — setup ambiguity | DB setup docs | OPEN |
-| B-11 | HIGH | Vercel monthly-billing cron always 401s (staff-auth wall) → dues never auto-generate | CI/CD | OPEN |
+| B-10 | LOW | Duplicate migration numbers (002/007/019/024) — setup ambiguity | DB setup docs | FIXED (a663bd8) |
+| B-11 | HIGH | Vercel monthly-billing cron always 401s (staff-auth wall) → dues never auto-generate | CI/CD | FIXED (3784284) |
 | B-12 | MED | No CI at all — no lint/typecheck/build gates on PR, no test framework | CI/CD | OPEN |
 | B-13 | MED | DB schema managed by hand-run SQL — no migration pipeline, dev/prod drift | CI/CD / DB | OPEN |
 | B-14 | MED | Desktop app: no release pipeline, no signing, server URL hardcoded to production | CI/CD / Electron | OPEN |
@@ -37,12 +37,12 @@
 | B-20 | MED-HIGH | Payment approve/reject 403 for branch directors & designated approvers | Payments / RBAC | OPEN |
 | B-21 | MED | Notice save/delete 403 for branch directors | Notices / RBAC | OPEN |
 | B-22 | MED | Public QR verify page (`/verify`) requires login | Public / QR | OPEN |
-| B-23 | MED | Notification dropdown links all roles to owner-only URLs | Navigation | OPEN |
+| B-23 | MED | Notification dropdown links all roles to owner-only URLs | Navigation | FIXED (65004bf) |
 | B-24 | MED | Teacher area leaks all-branch exams; Courses/Results are dead stubs | Teacher portal | OPEN |
 | B-25 | MED | Enrollment ignores `discount_price` (overcharge); marketplace discount reversed | Enrollment / billing | OPEN |
-| B-26 | MED | Silent "success" on failed writes (student delete, feedback, profile save) | UX correctness | OPEN |
+| B-26 | MED | Silent "success" on failed writes (student delete, feedback, profile save) | UX correctness | FIXED (d422e3b) |
 | B-27 | LOW | Parent portal exact-match lookup → false "Student not found" | Parent portal | OPEN |
-| B-28 | LOW | Online-result login param mismatch (`returnUrl` vs `redirect`) | Auth / UX | OPEN |
+| B-28 | LOW | Online-result login param mismatch (`returnUrl` vs `redirect`) | Auth / UX | FIXED (65004bf) |
 
 | ID | Verdict | Note |
 |----|---------|------|
@@ -52,11 +52,11 @@
 | V-04 | VERIFIED-OK | SMS 880-prefix normalization already in live path; raw-number providers are dead code (claimed "bug 4.2") |
 
 Recommended fix order: **B-02 → B-11 → B-20 → B-21 → B-22 → B-01 → B-06 → B-12 → B-13 → B-03 → B-04 → B-05 → B-25 → B-26 → B-23 → B-24 → B-07 → B-08 → B-27 → B-28 → B-09 → B-14 → B-15 → B-10.**
-(B-16/B-17/B-18/B-19 are DONE — see FIXES LANDED. B-02/B-11 are ~30-minute security/availability fixes. B-01 is the biggest; everything client-side that writes via the anon key must move to server routes as part of it. B-12 unblocks all later work by catching regressions.)
+(B-02/B-03/B-06/B-07/B-08/B-10/B-11/B-16/B-17/B-18/B-19/B-23/B-26/B-28 are DONE — see FIXES LANDED. B-01 is the biggest; everything client-side that writes via the anon key must move to server routes as part of it. B-12 unblocks all later work by catching regressions.)
 
 ## FIXES LANDED (since base commit `ab6d812`)
 
-Already fixed on `main` (as of `854fe9a`) — do not redo.
+Already fixed on `main` (latest batch: 2026-10-19) — do not redo.
 
 | Fix | Commit | Note |
 |-----|--------|------|
@@ -68,6 +68,17 @@ Already fixed on `main` (as of `854fe9a`) — do not redo.
 | **B-17** student results: moved derived day values + `displayedLeaderboard`/`rank` `useMemo`s above the early returns (Rules of Hooks) | 766ba87 | `app/student/exam/[id]/results/page.tsx` |
 | **B-18** RBAC: `requireStaffRole` now normalizes `reception` → `receptionist`; call sites standardized to `receptionist` | c362e46 | `lib/api-auth.ts` + 6 routes |
 | **B-19** Fee-Dues SMS modal now POSTs to `/api/sms/send` with real success/error handling (was a mock toast) | b594f67 | `app/dashboard/owner/fee-dues/FeeDuesClient.tsx` |
+
+| **B-02** attendance QR scan requires a staff session | 3784284 | `app/api/attendance/scan/route.ts` |
+| **B-11** monthly billing now runs from a `CRON_SECRET`-guarded cron route | 3784284 | Shared `lib/billing/generate-monthly.ts`; **set `CRON_SECRET` in Vercel** and keep the staff endpoint for manual runs |
+| **B-06** public enrollment throttled per IP and phone | d422e3b | In-memory limiter (best-effort per serverless instance); DB pending/transaction checks remain the hard guard |
+| **B-26** failed writes are surfaced instead of silently "succeeding" | d422e3b | Student delete, homepage feedback, student profile |
+| **B-23** notification feed and dropdown are role-aware | 65004bf | Admin-only items filtered server-side; admin tabs/footer hidden for other roles |
+| **B-28** online-result login uses the `redirect` param | 65004bf | `app/online-result/page.tsx` |
+| **B-07** SMS composer shows correct GSM/Unicode segment counts | 65004bf | Fixed the multi-part formula (160/153 and 70/67) |
+| **B-08** fee math rounded to 2 decimals | 3784284 / 65004bf | `round2()` in `lib/utils.ts`, accountant previews, scan due totals |
+| **B-03** offline attendance queue syncs on reconnect | 68a4ff2 / b0ec909 | `POST /api/vault/sync`; **set the same `VAULT_SYNC_TOKEN` in Vercel and on each desktop PC** |
+| **B-10** migration ordering documented | a663bd8 | `supabase/migrations/README.md` |
 
 ---
 
@@ -115,7 +126,8 @@ Highest in this report. Wrong policy scoping silently breaks client reads → da
 ## B-02 — HIGH: `POST /api/attendance/scan` has no authentication
 
 **Area:** API security / attendance
-**Status:** OPEN
+**Status:** FIXED (3784284) — 2026-10-19
+**Impact (after fix):** Unauthenticated callers can no longer read student fee status or write attendance through the QR scan endpoint. A staff session is required, matching the sibling attendance routes.
 
 ### Symptom
 Any anonymous caller can:
@@ -147,7 +159,8 @@ Low. The UI page that calls it is already behind the middleware, so legit traffi
 ## B-03 — HIGH: Desktop offline vault never syncs back to cloud on reconnect
 
 **Area:** Electron desktop app
-**Status:** OPEN
+**Status:** FIXED (68a4ff2, b0ec909) — 2026-10-19
+**Impact (after fix):** Offline attendance saved in the desktop shell is persisted to `offline-queue.json` and retried on startup, reconnect and manual sync until the server acknowledges every entry. Queue size is visible in the shell. Payment entries are still not written offline (read-only in the vault) and remain a follow-up.
 
 ### Symptom
 Staff record attendance/payments in Offline Mode on the PC (saved to `local-vault.json`). When internet returns, the app just reloads the live website — **nothing flushes the offline data to Supabase**. The offline UI explicitly promises otherwise: `electron/offline/index.html:403` ("will auto-sync when internet is connected") and `:423` ("stays in continuous sync with the cloud server"). Data recorded offline is silently lost.
@@ -239,7 +252,8 @@ Low.
 ## B-06 — MED: Public `/api/enroll/submit` — no throttle / dedup (spam + ID-sequence abuse)
 
 **Area:** Public enrollment API
-**Status:** OPEN
+**Status:** FIXED (d422e3b) — 2026-10-19
+**Impact (after fix):** Enrollment submissions are throttled per IP and per phone number (HTTP 429), while the existing pending-submission and duplicate transaction-ID checks still apply.
 
 ### Symptom
 `POST /api/enroll/submit` is intentionally public (online enrollment). It creates `students` + `enrollments` + `fee_dues` rows and consumes the sequential `MS-####` student-ID sequence (`app/api/enroll/submit/route.ts:92-117`), with **no** rate limit, captcha, or dedup. An attacker can flood the DB with junk students, burn the ID sequence, and manufacture fake fee dues.
@@ -265,7 +279,8 @@ Low for 1+2; medium for 3 (UX change).
 ## B-07 — LOW-MED: No Unicode SMS segment counter on bulk-SMS page
 
 **Area:** Bulk SMS
-**Status:** OPEN
+**Status:** FIXED (65004bf) — 2026-10-19
+**Impact (after fix):** The SMS composer now shows accurate GSM (160/153) and Unicode (70/67) character/segment counts, and the campaign estimate multiplies recipients by the correct number of parts.
 
 ### Symptom
 Owner types a Bengali bulk SMS. Bengali is UCS-2 → 70 chars/segment (vs 160 GSM). A 75-char Bengali notice silently costs 2 gateway units per guardian (500 guardians → 1000 units). No preview, no cap, no warning.
@@ -290,7 +305,8 @@ Trivial.
 ## B-08 — LOW: Float precision on fee math in display paths
 
 **Area:** Finance display
-**Status:** OPEN
+**Status:** FIXED (3784284, 65004bf) — 2026-10-19
+**Impact (after fix):** Monetary previews, stored payment amounts and outstanding due totals are rounded to two decimals, so values no longer display floating-point artifacts.
 
 ### Symptom
 With decimal amounts, `due - paid` in JS can surface as `666.6700000000001` on screen / PDF. Real but low probability: fees are usually whole BDT, and the DB stores money as exact `NUMERIC(10,2)`.
@@ -337,7 +353,8 @@ Trivial.
 ## B-10 — LOW: Duplicate migration numbers (002 / 007 / 019 / 024 pairs)
 
 **Area:** DB setup docs
-**Status:** OPEN
+**Status:** FIXED (a663bd8) — 2026-10-19
+**Impact (after fix):** Operators have a documented, deterministic application order for the duplicated migration numbers and the status of recent migrations.
 
 ### Symptom
 `supabase/migrations/` contains two `002_*`, two `007_*`, two `019_*`, and two `024_*` files, so “run them in order” is ambiguous for fresh setups.
@@ -375,7 +392,8 @@ NOT in any pipeline:
 ## B-11 — HIGH: Vercel monthly-billing cron always 401s — dues never auto-generate
 
 **Area:** CI/CD (Vercel cron) + billing API
-**Status:** OPEN
+**Status:** FIXED (3784284) — 2026-10-19
+**Impact (after fix):** The Vercel cron now authenticates with `CRON_SECRET` and generates monthly dues without a staff session; staff can still trigger the same idempotent logic manually.
 
 ### Symptom
 `vercel.json` schedules `GET /api/billing/generate-monthly` at `0 0 1 * *` (1st of every month, 00:00 UTC). The route is guarded by `requireStaffRole(["owner", ...])` — a cron request carries **no user session**, so it gets **401/403 every single month**. Vercel's cron UI shows the invocation as delivered (it delivered a 401), so the failure is invisible. **Monthly `fee_dues` are not auto-created**; an owner must open the app and trigger generation manually.
@@ -691,7 +709,8 @@ Low. Confirm the verify page only exposes intended, non-sensitive fields.
 ## B-23 — MED: Notification dropdown dead-links non-owner roles
 
 **Area:** Navigation / notifications
-**Status:** OPEN
+**Status:** FIXED (65004bf) — 2026-10-19
+**Impact (after fix):** Non-admin roles no longer receive owner-only payment/deletion items, notice and exam links point to their own dashboard, and admin-only footer actions are hidden.
 
 ### Symptom
 Receptionist/teacher/accountant click a notification and are bounced back to their own dashboard (the click appears to do nothing).
@@ -765,7 +784,8 @@ Medium — money path; verify against how `/api/enroll/submit` records dues/amou
 ## B-26 — MED: Silent "success" on failed writes
 
 **Area:** UX correctness / data
-**Status:** OPEN
+**Status:** FIXED (d422e3b) — 2026-10-19
+**Impact (after fix):** Student deletion, homepage feedback and profile save now fail loudly and keep the UI consistent with the database instead of claiming success.
 
 ### Symptom
 Several actions report success even when the DB write failed, so UI and database disagree until reload.
@@ -813,7 +833,8 @@ Low. Handle a `NULL` guardian phone (now nullable — see FIXES LANDED).
 ## B-28 — LOW: Online-result "back to results" login param mismatch
 
 **Area:** Auth / UX
-**Status:** OPEN
+**Status:** FIXED (65004bf) — 2026-10-19
+**Impact (after fix):** The online-result login button now returns the user to the results page after authentication.
 
 ### Symptom
 Signing in from the online-result page drops the user on their dashboard instead of returning to the result they were viewing.

@@ -193,12 +193,16 @@ Create **`.env.local`** in the project root:
 | `SSL_WIRELESS_API_KEY` / `SSL_WIRELESS_SID` | — | Required when `SMS_PROVIDER=ssl_wireless` |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | — | Required when `SMS_PROVIDER=twilio` |
 | `APP_SERVER_URL` | — | Server URL the desktop app loads (defaults to the hosted app) |
+| `CRON_SECRET` | ✅ (prod) | Bearer secret Vercel Cron uses to call `/api/cron/billing`; the route returns `503` when unset |
+| `VAULT_SYNC_TOKEN` | — | Shared secret for `POST /api/vault/sync`; required for the desktop offline queue (use the same value on Vercel and each PC) |
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 SMS_PROVIDER=mock
+CRON_SECRET=your-cron-secret
+VAULT_SYNC_TOKEN=your-vault-sync-token
 ```
 
 ---
