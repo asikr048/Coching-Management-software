@@ -70,6 +70,42 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
   const [smsMessage, setSmsMessage] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
 
+  const handleSendDueSms = async () => {
+    const phone = smsModal?.student?.guardian_phone || smsModal?.student?.phone
+    if (!phone) {
+      toast.error("No phone or guardian phone number available for this student")
+      return
+    }
+    if (!smsMessage.trim()) return
+
+    setActionLoading(true)
+    try {
+      const res = await fetch("/api/sms/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipients: [{
+            phone,
+            message: smsMessage.trim(),
+            name: smsModal?.student?.name,
+            studentId: smsModal?.student?.student_id,
+          }],
+        }),
+      })
+      const result = await res.json()
+      if (result.success || res.ok) {
+        toast.success(`SMS reminder sent to ${phone}!`)
+        setSmsModal(null)
+      } else {
+        toast.error(result.error || "Failed to send SMS reminder via gateway")
+      }
+    } catch (e: any) {
+      toast.error(e.message || "SMS send failed")
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
   // Filter & Sort
   const filtered = dues.filter(d => {
     const pq = parseRollQuery(search)
@@ -780,8 +816,8 @@ export default function FeeDuesClient({ dues: initialDues, batches }: { dues: Du
               className="w-full px-3.5 py-2.5 text-sm text-slate-900 bg-white border border-slate-300 rounded-xl focus:outline-none focus:border-amber-500 mb-5" />
             <div className="flex gap-3">
               <button onClick={() => setSmsModal(null)} className="flex-1 py-2.5 border border-slate-300 text-slate-700 rounded-xl font-semibold hover:bg-slate-50 transition-colors">Cancel</button>
-              <button onClick={() => { toast.success("SMS sent (mock)!"); setSmsModal(null) }} className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-purple-500/20 transition-all">
-                <MessageSquare className="w-4 h-4" /> Send SMS
+              <button onClick={handleSendDueSms} disabled={actionLoading || !smsMessage.trim()} className="flex-1 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md shadow-purple-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageSquare className="w-4 h-4" />} Send SMS
               </button>
             </div>
           </div>
