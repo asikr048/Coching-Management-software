@@ -35,7 +35,7 @@ const BrandingContext = createContext<BrandingContextType>({
 const DB_SETTING_KEY = "institute_branding"
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
-  const [branding, setBranding] = useState<InstituteBranding>(() => getActiveBranding())
+  const [branding, setBranding] = useState<InstituteBranding>(DEFAULT_BRANDING)
   const [isLoaded, setIsLoaded] = useState(false)
   const supabase = createClient()
 
