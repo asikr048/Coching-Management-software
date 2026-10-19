@@ -340,7 +340,7 @@ export async function POST(req: NextRequest) {
       }
 
       const effectiveStudentPhone = studentPhone || guardianPhone
-      const effectiveGuardianPhone = guardianPhone || studentPhone || "+8801700000000"
+      const effectiveGuardianPhone = guardianPhone || studentPhone || null
       const guardianName = (row.guardian_name || "").trim()
       const address = (row.address || "").trim()
       const school = (row.school_college || "").trim()
@@ -479,6 +479,16 @@ export async function POST(req: NextRequest) {
           const retryS = await db.from("students").insert(studentPayload).select().single()
           createdStudent = retryS.data
           sErr = retryS.error
+        }
+
+        // Fallback for databases that still enforce the legacy NOT NULL on
+        // guardian_phone (migration 035 not yet applied): store an empty string
+        // instead of failing the row. Stores NULL once the column is nullable.
+        if (sErr && sErr.message?.includes("guardian_phone")) {
+          studentPayload.guardian_phone = ""
+          const retryG = await db.from("students").insert(studentPayload).select().single()
+          createdStudent = retryG.data
+          sErr = retryG.error
         }
 
         if (sErr || !createdStudent) {

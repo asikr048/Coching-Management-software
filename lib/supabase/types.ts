@@ -58,7 +58,7 @@ export interface Staff {
 
 export interface Student {
   id: string; branch_id?: string; student_id: string; name: string
-  email?: string; phone?: string; guardian_name?: string; guardian_phone: string
+  email?: string; phone?: string; guardian_name?: string; guardian_phone?: string | null
   guardian_relation: string; date_of_birth?: string; gender?: "male" | "female" | "other"
   address?: string; school_college?: string; class_level?: string; photo_url?: string
   biometric_enrolled: boolean; referral_code?: string; referred_by_code?: string

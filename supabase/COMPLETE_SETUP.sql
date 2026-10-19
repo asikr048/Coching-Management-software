@@ -81,7 +81,7 @@ CREATE TABLE IF NOT EXISTS public.students (
   email TEXT,
   phone TEXT,
   guardian_name TEXT,
-  guardian_phone TEXT NOT NULL,
+  guardian_phone TEXT,
   guardian_relation TEXT DEFAULT 'Parent',
   date_of_birth DATE,
   gender TEXT,
