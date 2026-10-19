@@ -339,6 +339,7 @@ CREATE TABLE IF NOT EXISTS public.exams (
   is_online BOOLEAN DEFAULT FALSE,
   time_limit_minutes INTEGER,
   show_results_immediately BOOLEAN DEFAULT TRUE,
+  show_all_results BOOLEAN DEFAULT TRUE,
   result_note TEXT,
   exam_schedule_type TEXT DEFAULT 'one_time',
   recurring_days JSONB DEFAULT '[]'::jsonb,
@@ -937,6 +938,7 @@ ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_published BOOLEAN DEFAULT F
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_online BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS time_limit_minutes INTEGER;
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS show_results_immediately BOOLEAN DEFAULT TRUE;
+ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS show_all_results BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS result_note TEXT;
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS exam_schedule_type TEXT DEFAULT 'one_time';
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS recurring_days JSONB DEFAULT '[]'::jsonb;
@@ -946,6 +948,16 @@ ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS schedule_notice_id UUID REFERE
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS published_days JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS is_weekly_published BOOLEAN DEFAULT FALSE;
 ALTER TABLE public.exams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+-- Older databases may still have subject/exam_date NOT NULL and a narrow
+-- exam_type check. Relax them so weekly/routine exams can be created.
+ALTER TABLE public.exams ALTER COLUMN subject DROP NOT NULL;
+ALTER TABLE public.exams ALTER COLUMN exam_date DROP NOT NULL;
+ALTER TABLE public.exams DROP CONSTRAINT IF EXISTS exams_exam_type_check;
+ALTER TABLE public.exams
+  ADD CONSTRAINT exams_exam_type_check
+  CHECK (exam_type IN ('mcq', 'written', 'mixed', 'routine', 'weekly', 'one_time'))
+  NOT VALID;
 
 -- 4.13 exam_results columns
 ALTER TABLE public.exam_results ADD COLUMN IF NOT EXISTS exam_id UUID;

@@ -304,7 +304,7 @@ export default function ExamsClient({
     }
 
     const noticeTitle = `📋 পরীক্ষার রুটিন নোটিশ: ${title}`
-    const noticeContent = `মেধাশিরী কোচিংয়ের সংশ্লিষ্ট শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, নিম্নোক্ত সূচি অনুযায়ী পরীক্ষা অনুষ্ঠিত হবে:
+    const noticeContent = `সংশ্লিষ্ট শিক্ষার্থীদের অবগতির জন্য জানানো যাচ্ছে যে, নিম্নোক্ত সূচি অনুযায়ী পরীক্ষা অনুষ্ঠিত হবে:
 
 📌 পরীক্ষার নাম: ${title}
 📚 বিষয়: ${subject}
@@ -1419,17 +1419,19 @@ export default function ExamsClient({
         ? activeRoutineDays.reduce((acc, d) => acc + (d.pass_marks || 20), 0)
         : parseInt(form.pass_marks)
 
+      const today = new Date().toISOString().split("T")[0]
+
       const finalSubject = form.exam_schedule_type === "weekly"
         ? (form.subject.trim() || activeWeeklyDays.map(d => d.subject).filter(Boolean).join(", ") || "সাপ্তাহিক বিষয়সমূহ")
         : form.exam_schedule_type === "routine"
         ? (form.subject.trim() || activeRoutineDays.map(d => d.subject).filter(Boolean).join(", ") || "রুটিন বিষয়সমূহ")
-        : (form.subject || null)
+        : (form.subject.trim() || form.title.trim() || "সাধারণ পরীক্ষা")
 
       const finalExamDate = form.exam_schedule_type === "one_time"
-        ? (form.exam_date || null)
+        ? (form.exam_date || today)
         : form.exam_schedule_type === "routine"
-        ? (activeRoutineDays[0]?.date || new Date().toISOString().split("T")[0])
-        : null
+        ? (activeRoutineDays.find(d => d.date)?.date || today)
+        : today
 
       // 1. UPDATE EXISTING EXAM
       if (editingExam) {
@@ -1485,6 +1487,7 @@ export default function ExamsClient({
             .single()
 
           if (sbErr) {
+            console.warn("Exam update failed; retrying without newer columns:", sbErr.message)
             const { 
               batch_ids: _b, 
               branch_id: _br, 
@@ -1664,6 +1667,7 @@ export default function ExamsClient({
         .insert(examData).select("*, batch:batches(name), branch:branches(id, name)").single()
       
       if (examErr) {
+        console.warn("Exam insert failed; retrying without newer columns:", examErr.message)
         // Fallback if column batch_ids/branch_id/exam_schedule_type doesn't exist yet
         const { 
           batch_ids: _b, 
@@ -1680,7 +1684,9 @@ export default function ExamsClient({
 
         const { data: fbExam, error: fbErr } = await supabase.from("exams")
           .insert(fallbackData).select("*, batch:batches(name)").single()
-        if (fbErr) throw fbErr
+        if (fbErr) {
+          throw new Error(`${examErr.message} | fallback: ${fbErr.message}`)
+        }
         newExam = { 
           ...fbExam, 
           batch_ids: selectedBatchIdsToUse, 
