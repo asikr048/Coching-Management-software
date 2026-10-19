@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="public/medhashiree-logo.jpg" alt="MedhaShiree" width="120" />
+<img src="public/icon.png" alt="Coaching Management System" width="120" />
 
-# MedhaShiree
+# Coaching Management System
 
-**Coaching Management System**
+**White-label platform for coaching centers**
 
-All-in-one platform to run a coaching center — students, batches, fees, exams, attendance, and communication — with multi-branch support, a student &amp; parent portal, bulk SMS, and a Windows desktop edition.
+All-in-one platform to run a coaching center — students, batches, fees, exams, attendance, and communication — with multi-branch support, a student &amp; parent portal, bulk SMS, and a Windows desktop edition. Each institute runs its own deployment with its own database and branding.
 
 > **Proprietary &amp; Closed-Source Software.** © 2026 MedhaShiree. All rights reserved.
 
@@ -17,11 +17,9 @@ All-in-one platform to run a coaching center — students, batches, fees, exams,
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3FCF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![Electron](https://img.shields.io/badge/Electron-44.2.0-47848F?logo=electron&logoColor=white)](https://www.electronjs.org)
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed-Vercel-000000?logo=vercel&logoColor=white)](https://medhashiree.vercel.app)
+[![Deployed on Vercel](https://img.shields.io/badge/Deployed-Vercel-000000?logo=vercel&logoColor=white)](https://vercel.com)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](#)
 [![Status](https://img.shields.io/badge/status-active-brightgreen.svg)](#-project-status)
-
-**[Live Demo](https://medhashiree.vercel.app)**
 
 </div>
 
@@ -36,6 +34,7 @@ All-in-one platform to run a coaching center — students, batches, fees, exams,
 - [Getting Started](#-getting-started)
 - [Environment Variables](#-environment-variables)
 - [Database & Migrations](#-database--migrations)
+- [Branding & White-labeling](#-branding--white-labeling)
 - [Scripts](#-scripts)
 - [User Roles](#-user-roles)
 - [SMS Providers](#-sms-providers)
@@ -98,6 +97,7 @@ All-in-one platform to run a coaching center — students, batches, fees, exams,
 
 **Site Management**
 - Slider, site content &amp; branch configuration
+- **Institute branding** — name, logo, favicon, tagline and theme colour, stored in the database
 
 </td></tr>
 </table>
@@ -111,7 +111,7 @@ All-in-one platform to run a coaching center — students, batches, fees, exams,
 | **Framework** | Next.js 16 (App Router) · React 19 · TypeScript |
 | **UI & Charts** | Tailwind CSS v4 · Radix UI · lucide-react · Recharts · sonner |
 | **Forms** | react-hook-form + Zod |
-| **Backend / DB** | Supabase (PostgreSQL, Auth, Storage) |
+| **Backend / DB** | Supabase (PostgreSQL, Auth) |
 | **Documents & Data** | jsPDF + jsPDF-autotable · xlsx |
 | **QR / Scanning** | html5-qrcode |
 | **Desktop** | Electron 44 (electron-builder → Windows NSIS + portable) |
@@ -127,7 +127,7 @@ flowchart LR
     P["Students &amp; Parents<br/>(portals · public pages)"] --> W
 
     W["Next.js 16 Web App<br/>proxy.ts session middleware"] --> A["API Routes<br/>(auth, payments, sms, ...)"]
-    W --> DB[("Supabase Postgres<br/>Auth · Storage")]
+    W --> DB[("Supabase Postgres<br/>Auth")]
     A --> DB
     A --> SMS["SMS Gateway<br/>SSL Wireless · Twilio · custom"]
     CRON["Vercel Cron<br/>monthly billing"] --> A
@@ -145,8 +145,8 @@ flowchart LR
 │   ├── student/              # Student portal
 │   ├── api/                  # Server routes (auth, attendance, payments, sms, ...)
 │   └── ...                   # Public pages: login, signup, enroll, marketplace, results
-├── components/               # Shared UI components
-├── lib/                      # Utilities, Supabase clients, SMS provider
+├── components/               # Shared UI components (incl. BrandingContext)
+├── lib/                      # Utilities, Supabase clients, branding, SMS provider
 ├── electron/                 # Desktop shell (main.js, preload.js, offline fallback)
 ├── supabase/                 # COMPLETE_SETUP.sql + incremental migrations
 ├── proxy.ts                  # Auth / session middleware (Next.js 16)
@@ -189,6 +189,8 @@ Create **`.env.local`** in the project root:
 | `NEXT_PUBLIC_SUPABASE_URL` | ✅ | Your Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | ✅ | Supabase anon (public) key |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service-role key (server-side only) |
+| `NEXT_PUBLIC_APP_NAME` | ✅ (prod) | Institute name used for metadata, SMS sender, export filenames and other fallbacks before the DB branding loads |
+| `NEXT_PUBLIC_APP_URL` | ✅ (prod) | Public origin of the deployment; used to build student QR verification links. Must match the Vercel URL in production |
 | `SMS_PROVIDER` | — | `mock` *(default)*, `ssl_wireless`, or `twilio` |
 | `SSL_WIRELESS_API_KEY` / `SSL_WIRELESS_SID` | — | Required when `SMS_PROVIDER=ssl_wireless` |
 | `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM_NUMBER` | — | Required when `SMS_PROVIDER=twilio` |
@@ -200,6 +202,8 @@ Create **`.env.local`** in the project root:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+NEXT_PUBLIC_APP_NAME=Your Coaching Center
+NEXT_PUBLIC_APP_URL=https://your-app.vercel.app
 SMS_PROVIDER=mock
 CRON_SECRET=your-cron-secret
 VAULT_SYNC_TOKEN=your-vault-sync-token
@@ -213,13 +217,21 @@ VAULT_SYNC_TOKEN=your-vault-sync-token
 
 ## Database & Migrations
 
+Each institute runs against its **own** Supabase project — the app never shares a database between deployments. Point `.env.local` (or the Vercel env vars) at that institute's project.
+
 **Option A — Fresh or catch-up (recommended).** In the Supabase **SQL Editor**, run the entire
-[`supabase/COMPLETE_SETUP.sql`](supabase/COMPLETE_SETUP.sql). It is idempotent and safe to re-run: it creates all
-tables, policies, and triggers, and links an existing Auth user as the **Owner**.
+[`supabase/COMPLETE_SETUP.sql`](supabase/COMPLETE_SETUP.sql). It is idempotent and safe to re-run in one
+go: it creates/retrofits every table, column, index, function, trigger and policy, backfills QR codes and
+roll numbers, links an existing Auth user as the **Owner**, and reloads the PostgREST schema cache. It
+contains no `DROP TABLE`/`DROP COLUMN`/`DELETE`, and `site_settings` inserts use `ON CONFLICT DO NOTHING`, so
+existing branding and data are preserved.
 
 **Option B — Incremental.** If your database is already provisioned, apply only the newer files in
 [`supabase/migrations/`](supabase/migrations) **in order**, running each one in the SQL Editor. Migrations are
-currently applied through `036_enrollment_roll_unique_per_batch.sql`.
+currently applied through `039_align_exams_schema.sql`.
+
+> The `COMPLETE_SETUP.sql` is the single source of truth and always includes the latest migration, so it is
+> usually the simplest path. Take a Supabase backup first if the database holds real data.
 
 ### Create the Owner account
 
@@ -228,6 +240,30 @@ currently applied through `036_enrollment_roll_unique_per_batch.sql`.
    (Or insert the `staff` row manually with `role = 'owner'`.)
 
 > Migrations are applied **manually** in the Supabase SQL Editor.
+
+### Auth URLs
+
+In **Authentication → URL Configuration**, set the **Site URL** to the deployment origin and add it to
+**Redirect URLs**, otherwise login and password-reset links will point at localhost.
+
+---
+
+## Branding & White-labeling
+
+The application has no hardcoded institute identity. Name, Bangla name, short name, tagline, logo, favicon and
+theme colour are read from the `institute_branding` row in the `site_settings` table:
+
+- **Server-side** — [`lib/branding-server.ts`](lib/branding-server.ts) supplies page metadata (title,
+  description, favicon) rendered by `app/layout.tsx`.
+- **Client-side** — `BrandingContext` loads the same setting, applies the theme palette and keeps the browser
+  title/favicon in sync.
+- **Editing** — log in as the Owner and open **Dashboard → Homepage Editor → Institute Name & Identity** to
+  change branding. Saving writes back to `site_settings`.
+- **Fallbacks** — `NEXT_PUBLIC_APP_NAME` and `NEXT_PUBLIC_APP_URL` are used only before the database value
+  loads (metadata, SMS sender prefix, export filenames, QR verification links).
+
+Synthetic login emails (`<id>@<domain>.local`) and a few `localStorage` keys are intentionally not branded, so
+existing accounts and cached state keep working across re-skins.
 
 ---
 
@@ -284,9 +320,13 @@ Point the desktop app at any server with `APP_SERVER_URL`. An offline fallback p
 
 ## Deployment
 
-1. Import this repository at [vercel.com](https://vercel.com).
-2. Add the environment variables above in **Project Settings → Environment Variables**.
-3. Deploy. [`vercel.json`](vercel.json) schedules `/api/billing/generate-monthly` to run monthly for automatic due generation.
+1. Create a **separate Supabase project per institute** and run `COMPLETE_SETUP.sql` against it.
+2. Import this repository at [vercel.com](https://vercel.com) and create one Vercel project per institute.
+3. Add the environment variables above in **Project Settings → Environment Variables** — including
+   `NEXT_PUBLIC_APP_NAME` and `NEXT_PUBLIC_APP_URL` set to that institute's name and domain.
+4. Set the Supabase **Auth Site URL / Redirect URLs** to the deployment domain.
+5. Deploy. [`vercel.json`](vercel.json) schedules `/api/cron/billing` to run monthly for automatic due
+   generation (requires `CRON_SECRET`; see [`docs/PENDING_SETUP.md`](docs/PENDING_SETUP.md)).
 
 ---
 
@@ -294,6 +334,9 @@ Point the desktop app at any server with `APP_SERVER_URL`. An offline fallback p
 
 This project is under active development. Known issues and the ongoing fix list are tracked in
 [`BUG_REPORT.md`](BUG_REPORT.md).
+
+Recent work: database-driven (white-label) branding, exam-schema alignment so weekly/routine exams save, a
+homepage batch-query fix, and small-viewport/zoom overflow hardening.
 
 This is a **private, proprietary repository**. Redistribution of the source code is not permitted — see [License](#-license).
 
@@ -311,9 +354,8 @@ This is a **private, proprietary repository**. Redistribution of the source code
 
 ## Support & Contact
 
-For support, deployment assistance, or licensing inquiries, please contact the MedhaShiree team.
-
-- **Live application:** [medhashiree.vercel.app](https://medhashiree.vercel.app)
+For support, deployment assistance, or licensing inquiries, contact the maintainers. Each institute's live
+application is hosted at its own domain (configured through `NEXT_PUBLIC_APP_URL`).
 
 ---
 
@@ -322,7 +364,7 @@ For support, deployment assistance, or licensing inquiries, please contact the M
 This product is built on excellent open-source software:
 
 - [Next.js](https://nextjs.org) · [React](https://react.dev) · [Tailwind CSS](https://tailwindcss.com)
-- [Supabase](https://supabase.com) — database, auth & storage
+- [Supabase](https://supabase.com) — database &amp; authentication
 - [Radix UI](https://www.radix-ui.com) · [Recharts](https://recharts.org) · [lucide](https://lucide.dev) · [Sonner](https://sonner.emilkowal.ski)
 - [Electron](https://www.electronjs.org) & [electron-builder](https://www.electron.build)
 
