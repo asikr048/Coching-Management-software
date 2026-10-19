@@ -68,7 +68,6 @@ Already fixed on `main` (latest batch: 2026-10-19) — do not redo.
 | **B-17** student results: moved derived day values + `displayedLeaderboard`/`rank` `useMemo`s above the early returns (Rules of Hooks) | 766ba87 | `app/student/exam/[id]/results/page.tsx` |
 | **B-18** RBAC: `requireStaffRole` now normalizes `reception` → `receptionist`; call sites standardized to `receptionist` | c362e46 | `lib/api-auth.ts` + 6 routes |
 | **B-19** Fee-Dues SMS modal now POSTs to `/api/sms/send` with real success/error handling (was a mock toast) | b594f67 | `app/dashboard/owner/fee-dues/FeeDuesClient.tsx` |
-
 | **B-02** attendance QR scan requires a staff session | 3784284 | `app/api/attendance/scan/route.ts` |
 | **B-11** monthly billing now runs from a `CRON_SECRET`-guarded cron route | 3784284 | Shared `lib/billing/generate-monthly.ts`; **set `CRON_SECRET` in Vercel** and keep the staff endpoint for manual runs |
 | **B-06** public enrollment throttled per IP and phone | d422e3b | In-memory limiter (best-effort per serverless instance); DB pending/transaction checks remain the hard guard |
