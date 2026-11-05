@@ -1404,6 +1404,32 @@ export default function BranchesClient({
                       className="w-full px-3.5 py-2 text-xs sm:text-sm bg-white border border-indigo-200/90 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition-all"
                     />
                   </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Branch Gateway URL Template (Optional - e.g. for BDWebs)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain?username=...&password=...&sender={sender_id}&text={msg}&to={to}"
+                      value={formData.sms_api_url}
+                      onChange={e => setFormData({ ...formData, sms_api_url: e.target.value })}
+                      className="w-full px-3.5 py-2 text-xs sm:text-sm bg-white border border-indigo-200/90 rounded-xl text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 shadow-2xs transition-all font-mono"
+                    />
+                    <div className="flex items-center justify-between text-[10px] text-slate-500 mt-1">
+                      <span>Leave blank to inherit the global default BDWebs SMS API.</span>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({
+                          ...formData,
+                          sms_api_key: "decentraforce:asikr048@gmail",
+                          sms_api_url: "https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain?username=decentraforce&password=asikr048@gmail&sender={sender_id}&text={msg}&to={to}"
+                        })}
+                        className="text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer"
+                      >
+                        ⚡ Autofill BDWebs Settings
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 

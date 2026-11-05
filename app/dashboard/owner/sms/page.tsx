@@ -132,9 +132,11 @@ interface CsvRecipient {
 }
 
 const defaultGatewayParams: ParamItem[] = [
-  { id: "p1", key: "api_key", value: "{api_key}", description: "Your API Key / Secret Token", isStandard: true },
-  { id: "p2", key: "msg", value: "{msg}", description: "URL-encoded SMS text content", isStandard: true },
-  { id: "p3", key: "to", value: "{to}", description: "Recipient mobile number", isStandard: true },
+  { id: "p1", key: "username", value: "decentraforce", description: "BDWebs Username", isStandard: true },
+  { id: "p2", key: "password", value: "asikr048@gmail", description: "BDWebs Password", isStandard: true },
+  { id: "p3", key: "sender", value: "{sender_id}", description: "Approved Sender ID (Masking/Non-Masking)", isStandard: true },
+  { id: "p4", key: "text", value: "{msg}", description: "SMS text message", isStandard: true },
+  { id: "p5", key: "to", value: "{to}", description: "Recipient mobile number", isStandard: true },
 ]
 
 export default function SmsPage() {
@@ -156,15 +158,11 @@ export default function SmsPage() {
   // GATEWAY & API BUILDER STATE
   // ==========================================
   const [gatewayConfig, setGatewayConfig] = useState<GatewayConfig>({
-    apiKey: "",
+    apiKey: "decentraforce:asikr048@gmail",
     callType: "GET",
-    baseUrl: "https://api.sms.net.bd/sendsms",
-    urlTemplate: "https://api.sms.net.bd/sendsms?api_key={api_key}&msg={msg}&to={to}",
-    params: [
-      { id: "p1", key: "api_key", value: "{api_key}", description: "Your API Key / Secret Token", isStandard: true },
-      { id: "p2", key: "msg", value: "{msg}", description: "URL-encoded SMS text content", isStandard: true },
-      { id: "p3", key: "to", value: "{to}", description: "Recipient mobile number", isStandard: true },
-    ],
+    baseUrl: "https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain",
+    urlTemplate: "https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain?username=decentraforce&password=asikr048@gmail&sender={sender_id}&text={msg}&to={to}",
+    params: defaultGatewayParams,
     senderId: "",
   })
   const [showApiKey, setShowApiKey] = useState(false)
@@ -173,6 +171,8 @@ export default function SmsPage() {
   const [testPhone, setTestPhone] = useState("")
   const [testResult, setTestResult] = useState<any>(null)
   const [hasMissingTable, setHasMissingTable] = useState(false)
+  const [checkingBalance, setCheckingBalance] = useState(false)
+  const [balanceInfo, setBalanceInfo] = useState<any>(null)
 
   // Branch Selection for Custom SMS Gateway API
   const [selectedGatewayBranches, setSelectedGatewayBranches] = useState<string[]>([])
@@ -260,10 +260,10 @@ export default function SmsPage() {
       console.warn("Could not reload default config:", e)
     }
     setGatewayConfig({
-      apiKey: "",
+      apiKey: "decentraforce:asikr048@gmail",
       callType: "GET",
-      baseUrl: "https://api.sms.net.bd/sendsms",
-      urlTemplate: syncUrlTemplate("https://api.sms.net.bd/sendsms", defaultGatewayParams),
+      baseUrl: "https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain",
+      urlTemplate: syncUrlTemplate("https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain", defaultGatewayParams),
       params: defaultGatewayParams,
       senderId: "",
     })
@@ -700,7 +700,26 @@ export default function SmsPage() {
   }
 
   // Apply Quick Gateway Preset
-  function applyGatewayPreset(preset: "sms_net_bd" | "greenweb" | "mimsms" | "ssl_wireless") {
+  function applyGatewayPreset(preset: "bdwebs" | "sms_net_bd" | "greenweb" | "mimsms" | "ssl_wireless") {
+    if (preset === "bdwebs") {
+      const base = "https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain"
+      const paramsList: ParamItem[] = [
+        { id: "p1", key: "username", value: "decentraforce", description: "BDWebs Username", isStandard: true },
+        { id: "p2", key: "password", value: "asikr048@gmail", description: "BDWebs Password", isStandard: true },
+        { id: "p3", key: "sender", value: "{sender_id}", description: "Approved Sender ID (Masking/Non-Masking)", isStandard: true },
+        { id: "p4", key: "text", value: "{msg}", description: "SMS text message", isStandard: true },
+        { id: "p5", key: "to", value: "{to}", description: "Recipient mobile number", isStandard: true },
+      ]
+      setGatewayConfig({
+        apiKey: "decentraforce:asikr048@gmail",
+        callType: "GET",
+        baseUrl: base,
+        params: paramsList,
+        urlTemplate: syncUrlTemplate(base, paramsList),
+        senderId: "",
+      })
+      toast.success("Applied BDWebs Gateway preset (bulksms.bdwebs.com)")
+    } else 
     if (preset === "sms_net_bd") {
       const base = "https://api.sms.net.bd/sendsms"
       const paramsList: ParamItem[] = [
@@ -880,6 +899,25 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
   }
 
   // Send Test SMS
+  async function handleCheckBalance() {
+    setCheckingBalance(true)
+    try {
+      const branchParam = testBranchId !== "custom" ? `?branchId=${testBranchId}` : ""
+      const res = await fetch(`/api/sms/balance${branchParam}`)
+      const data = await res.json()
+      if (data.success) {
+        setBalanceInfo(data)
+        toast.success(`Live Balance: ${data.balance} ${data.currency || "BDT"}`)
+      } else {
+        toast.error(data.error || "Failed to fetch gateway balance")
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to check balance")
+    } finally {
+      setCheckingBalance(false)
+    }
+  }
+
   async function handleSendTestSms() {
     if (!testPhone.trim()) {
       toast.error("Please enter a test recipient phone number")
@@ -1476,7 +1514,7 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
               </div>
 
               {/* Target Mode Navigation */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-7 gap-2">
                 {[
                   { id: "all", label: "All Active", icon: Users },
                   { id: "batch", label: "Batch-wise", icon: Layers },
@@ -2285,6 +2323,13 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                   <button
                     type="button"
+                    onClick={() => applyGatewayPreset("bdwebs")}
+                    className="p-3 rounded-xl border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 font-bold text-xs text-center transition-all cursor-pointer shadow-sm ring-1 ring-emerald-500/20"
+                  >
+                    ⚡ BDWebs (bulksms)
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => applyGatewayPreset("sms_net_bd")}
                     className="p-3 rounded-xl border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 font-bold text-xs text-center transition-all cursor-pointer shadow-sm"
                   >
@@ -2413,6 +2458,9 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     { token: "{msg}", label: "Message Content", desc: "Encoded SMS text", color: "amber" },
                     { token: "{to}", label: "Phone Number", desc: "Recipient mobile", color: "amber" },
                     { token: "{api_key}", label: "API Key", desc: "Your auth token", color: "amber" },
+                    { token: "{username}", label: "Username", desc: "Login Username", color: "amber" },
+                    { token: "{password}", label: "Password", desc: "Login Password", color: "amber" },
+                    { token: "{sender_id}", label: "Sender ID", desc: "Approved Sender ID", color: "amber" },
                   ].map((item) => (
                     <div
                       key={item.token}
@@ -2708,6 +2756,54 @@ CREATE POLICY "Staff manage settings" ON public.site_settings FOR ALL USING (tru
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <RefreshCw className="w-3.5 h-3.5 text-emerald-600" /> Live Gateway Balance
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCheckBalance}
+                    disabled={checkingBalance}
+                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-[11px] shadow-xs transition-all flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    {checkingBalance ? (
+                      <><Loader2 className="w-3 h-3 animate-spin" /> Checking...</>
+                    ) : (
+                      <><RefreshCw className="w-3 h-3" /> Check Balance</>
+                    )}
+                  </button>
+                </div>
+                {balanceInfo ? (
+                  <div className="pt-2 border-t border-slate-200/80 space-y-1 text-xs">
+                    <div className="flex items-center justify-between font-bold text-slate-900">
+                      <span>Current Balance:</span>
+                      <span className="text-sm text-emerald-600 font-extrabold">{balanceInfo.balance} {balanceInfo.currency || "BDT"}</span>
+                    </div>
+                    {balanceInfo.nonMaskingCredit && (
+                      <div className="flex items-center justify-between text-[11px] text-slate-600">
+                        <span>Non-Masking Credit:</span>
+                        <span className="font-semibold text-slate-800">{balanceInfo.nonMaskingCredit} BDT</span>
+                      </div>
+                    )}
+                    {balanceInfo.maskingCredit !== undefined && (
+                      <div className="flex items-center justify-between text-[11px] text-slate-600">
+                        <span>Masking Credit:</span>
+                        <span className="font-semibold text-slate-800">{balanceInfo.maskingCredit} BDT</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                      <span>Gateway:</span>
+                      <span className="font-mono uppercase">{balanceInfo.provider}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-slate-500">
+                    Click "Check Balance" to fetch live credits from the configured gateway (BDWebs, sms.net.bd, Greenweb).
+                  </p>
+                )}
               </div>
 
               <div>

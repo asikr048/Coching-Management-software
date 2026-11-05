@@ -298,6 +298,7 @@ existing accounts and cached state keep working across re-skins.
 | Provider | `SMS_PROVIDER` | Notes |
 | :--- | :--- | :--- |
 | Mock | `mock` *(default)* | Logs messages, no delivery — for development |
+| BDWebs | `bdwebs` | Integrated bulk SMS gateway (`bulksms.bdwebs.com`). Requires `BDWEBS_USERNAME` + `BDWEBS_PASSWORD` |
 | SSL Wireless | `ssl_wireless` | Requires `SSL_WIRELESS_API_KEY` + `SSL_WIRELESS_SID` |
 | Twilio | `twilio` | Requires `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER` |
 | Custom gateway | — | Configured per branch (API key + URL template) |

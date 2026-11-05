@@ -1582,8 +1582,9 @@ INSERT INTO public.site_settings (key, value) VALUES
   ('contact_label', 'WhatsApp Us'),
   ('institute_name', 'Prottasha Coaching Academy'),
   ('institute_name_bn', 'প্রত্যাশা কোচিং একাডেমি'),
-  ('theme_color', 'emerald')
-ON CONFLICT (key) DO NOTHING;
+  ('theme_color', 'emerald'),
+  ('sms_gateway_config', '{"apiKey":"decentraforce:asikr048@gmail","username":"decentraforce","password":"asikr048@gmail","callType":"GET","baseUrl":"https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain","urlTemplate":"https://smsapi.cloudex.top/api/v1/campaigns/sendsms/plain?username=decentraforce&password=asikr048@gmail&sender={sender_id}&text={msg}&to={to}","senderId":"","params":[{"id":"p1","key":"username","value":"decentraforce","description":"BDWebs Username","isStandard":true},{"id":"p2","key":"password","value":"asikr048@gmail","description":"BDWebs Password","isStandard":true},{"id":"p3","key":"sender","value":"{sender_id}","description":"Approved Sender ID (Masking/Non-Masking)","isStandard":true},{"id":"p4","key":"text","value":"{msg}","description":"SMS text message","isStandard":true},{"id":"p5","key":"to","value":"{to}","description":"Recipient mobile number","isStandard":true}]}')
+ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
 
 
 -- ==============================================================================
